@@ -1,0 +1,53 @@
+/* Styles relating to the radial map renderer */
+#chainMap .radial-map .node.top-level {
+	border-radius:200px;
+	padding: 10px;
+	border: 4px #004080 solid;
+	font-size: 120%;
+}
+
+#chainMap .radial-map .top-level .nodeIcons {
+    top: 0.9em;
+}
+
+.radial-map  {
+	position: relative;
+	width: 100%;
+}
+
+.radial-map  .map-chain-wrapper {
+	overflow:hidden;
+	display: inline-block;
+	vertical-align: middle;
+	margin: 0 10px;
+}
+
+.map-outer-container {
+	position: relative;
+}
+
+.map-inner-container {
+	position: absolute;
+}
+
+.map-inner-container .node-wrapper {
+	position:absolute;
+	width: 0; height: 0;
+}
+
+#chainMap .node-wrapper > div.node {
+	transform: translate(-50%, -50%);	/* centre around position */
+}
+
+.map-drawing {
+	position: absolute;
+}
+
+.temp { border-style: solid; }	/* Some border properties don't resolve if the element has no border */
+
+/* 'color' is used to cue the aura effect in canvas drawing */
+.temp { border-width: 2px; border-color: #004080; }
+.temp.jm-5kt, #guide .jm-5kt { border-width: 1px; color: #40e0ff; }
+.temp.jm-62kt, #guide .jm-62kt { border-width: 3px; color: #90ff90; }
+.temp.jm-375kt, #guide .jm-375kt { border-width: 5px; color: #909090; }
+.temp.jm-2000kt, #guide .jm-2000kt { border-width: 7px; color: #ffb060; }

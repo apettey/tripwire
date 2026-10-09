@@ -1,0 +1,1 @@
+This directory is used by cached_third_party for data to be pulled from third party data sources. The tripwire user should be given write access here.

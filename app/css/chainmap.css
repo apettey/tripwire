@@ -1,0 +1,310 @@
+#chainMap {
+	-webkit-user-select: none;  /* Chrome all / Safari all */
+	-moz-user-select: none;     /* Firefox all */
+	-ms-user-select: none;      /* IE 10+ */
+
+	/* No support for these yet, use at own risk */
+	-o-user-select: none;
+	user-select: none;
+}
+
+#chainMap .google-visualization-orgchart-table * {
+	padding: 0px;
+}
+
+#chainMap .google-visualization-orgchart-table {
+	padding: 0 5px;
+	padding-right: 0px;
+	width: 1px;
+	margin: 0 auto;
+}
+
+#chainMap td.node {
+	white-space: nowrap;
+	text-align: center;
+	vertical-align: middle;
+	font-family: verdana;
+	font-size: 1em;
+	cursor: default;
+	line-height: 1;
+	border: none;
+	background: none;
+}
+
+#chainMap div.node {
+	height: 30px;
+	min-width: 5em;
+	display: inline-block;
+	margin-left: auto; margin-right: auto;	/* centre horizontally within cell */
+	border: 2px solid #333;
+    border-top-left-radius: 15px 50px;
+    border-top-right-radius: 15px 50px;
+	border-bottom-left-radius: 15px 50px;
+    border-bottom-right-radius: 15px 50px;
+
+	background-color: #111;
+	background: linear-gradient(#222, #111);
+
+	box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+}
+
+#chainMap div.node.third-party {
+	background: #111;
+	font-style: italic;
+	filter: saturate(50%) brightness(80%)
+}
+
+#chainMap /*td.node >*/ div.node.loop {	/* more specific than others nearby, because we want these over flares/current node */
+	min-width: auto;
+/*	width: 30px;*/
+	border-radius: 100px;
+	border-color: #0070a0;
+}
+
+#chainMap div.loop {	/* less specific, so flares/current node works over this */
+	background: #000810;
+}
+
+div.loop .nodeIcons, div.loop .nodeType, div.loop .statics, div.loop .nodeActivity {
+	display:none;
+}
+	
+#chainMap .currentNode > div.node {
+	border-color: #00286E;
+	background: #001B47;
+
+	background: -moz-linear-gradient(top, #001B47 0%, #00286E 100%);
+	background: -webkit-gradient(linear, left top, left bottom, from(#001B47), to(#00286E));
+}
+
+#chainMap div.redNode.node {
+	border-color: #810;
+	background: #610;
+
+	background: -moz-linear-gradient(top, #610 0%, #810 100%);
+	background: -webkit-gradient(linear, left top, left bottom, from(#610), to(#810));
+}
+
+#chainMap div.yellowNode.node {
+	border-color: #8A4117;
+	background: #80370D;
+
+	background: -moz-linear-gradient(top, #80370D 0%, #8A4117 100%);
+	background: -webkit-gradient(linear, left top, left bottom, from(#80370D), to(#8A4117));
+}
+
+#chainMap div.greenNode.node {
+	border-color: #040;
+	background: #030;
+
+	background: -moz-linear-gradient(top, #030 0%, #040 100%);
+	background: -webkit-gradient(linear, left top, left bottom, from(#030), to(#040));
+}
+
+#chainMap div.node.frig-chain {
+	border-color: #0a0;
+	border-width: 1px;
+}
+
+#chainMap .node a {
+	font-weight: normal;
+}
+
+#chainMap span.badge {
+	display: inline-block;
+	color: #bbb;
+	background-color: #222;
+	box-shadow: 0px 0px 6px 2px #111;
+	font-family: monospace;
+	padding: 2px 2px;
+	min-width: 8px;
+	font-size: 9px;
+	font-weight: 300;
+	line-height: 1;
+	text-align: center;
+	white-space: nowrap;
+	vertical-align: middle;
+	border-radius: 10px;
+}
+
+#chainMap .nodeIcons {
+	position: absolute;
+	top: 0.1em;
+	width: 50px;
+	height: 0;	/* so it doesn't overlay the class text for tips */
+	right: 50%;
+	margin-right: -25px;
+}
+
+#chainMap [data-nodeid] {
+	position: relative;
+	text-align: center;
+}
+
+#chainMap [data-nodeid] h4 {
+	font-weight: normal;
+	white-space: nowrap;
+}
+
+#chainMap .nodeType {
+	text-transform: uppercase;
+}
+
+#chainMap .nodeActivity {
+	position: absolute;
+	bottom: 3px;
+	right: 50%;
+	width: 50px;
+	height: 1px;
+	margin-right: -25px;
+	pointer-events: none;	/* so it doesn't overlay the link */
+}
+
+#chainMap .nodeActivity * { pointer-events: initial }
+
+#chainMap .statics {
+	position: absolute;
+	bottom: -1.5em;
+}
+
+#chainMap .statics span {
+	display: inline-block;
+	background: navy;
+	border-radius: 0 0 50px 50px;
+	width: 8px;
+	height: 10px;
+	border: 2px solid #333;
+}
+
+#chainMap .statics span:nth-child(2) {
+	margin-right: 10px;	/* To leave a gap for the connection when 3+ statics */
+}
+
+#chainMap i[data-icon="user"] {
+	padding: 3px;
+	cursor: default;
+}
+
+#chainMap i.whEffect {
+	padding-left: 3px;
+	cursor: default;
+}
+
+#chainMap i.nodeActivity > span {
+	padding: 2px;
+}
+
+/* These styles need the specific selectors because they need to override presets */
+.critical, #chainMap .critical, #guide .critical { border-color: #FF4747; }
+.destab, #chainMap .destab, #guide .destab { border-color: #F5B544; }
+.gate, #chainMap .gate, #guide .gate { border-color: darkgray; }
+.eol, #chainMap .eol, #guide .eol { border-style: dashed; }
+.frig, #chainMap .frig, #guide .frig { border-color: #50D25A; }
+
+.tab {
+	display: inline-block;
+	min-width: 75px;
+	border-bottom: 2px solid #333;
+	cursor: pointer;
+	vertical-align: top;
+	text-align: right;
+}
+
+.tab:hover {
+	border-bottom-color: #666;
+}
+
+.tab.current {
+	border-bottom-color: #4399F0;
+}
+
+.tab .name {
+	padding-left: 4px;
+	float: left;
+}
+
+.tab .closeTab, .tab .editTab {
+	opacity: 0;
+	visibility: hidden;
+	float: right;
+	font-size: .8em;
+	padding: 2px 2px 0 4px;
+
+	transition: opacity .15s ease-out;
+	-moz-transition: opacity .15s ease-out;
+	-webkit-transition: opacity .15s ease-out;
+	-o-transition: opacity .15s ease-out;
+}
+
+.tab:hover .closeTab, .tab.current:hover .editTab {
+	opacity: 1;
+	visibility: visible;
+}
+
+#guide td:first-child {
+	width: 30px;
+}
+
+#guide div {
+	width: 20px;
+	border-width: 0;
+	border: 2px solid #38d;
+	border-top-style: none !important;	/* so we only get one border even when border style is overridden by eol */
+	border-left-style: none !important;
+	border-right-style: none !important;
+}
+
+#guide div.frig { border-width: 1px; }
+#guide div.aura { box-shadow: 0 0 5px 2px; }
+
+[data-icon="user"] + .badge {
+	position: absolute;
+	top: -5px;
+	right: -12px;
+}
+
+td.google-visualization-orgchart-linenode[data-signatureid] {
+	cursor: pointer;
+}
+
+/* Grid lines and flare text */
+#chainGrid .grid-default { color: #777;}
+.red { color: #FF4747;}
+.yellow { color: #F5B544;}
+.green { color: #50D25A;}
+
+#chainGrid {
+	position: absolute;
+	width: 100%;
+	z-index: -10;
+	margin-left: -3px;	
+}
+
+#chainGrid .top td {
+	height: 18px;
+}
+
+#chainGrid .line td {
+	height: 28px;
+	border-bottom: 1px solid #333;
+}
+
+#chainGrid .space td {
+	height: 13px;
+}
+
+#chainGrid .red td {
+	border-bottom-color: #FF4747;
+}
+
+#chainGrid .yellow td {
+	border-bottom-color: #F5B544;
+}
+
+#chainGrid .green td {
+	border-bottom-color: #50D25A;
+}
+
+#chainTabs {
+	padding-right: 10px;
+}

@@ -1,0 +1,49 @@
+.mask .corporate { color: green }
+.mask .alliance { color: #00a0ff;display: inline-block;transform: scaleY(-1) translateY(2px); }	/* need the block to make the transform work */
+.mask i { padding-right: 2px }
+
+#mask-menu a { display: block }
+
+/* Overlays etc on the mask panel */
+#masks label > img { margin-top: 3px; }
+#masks label { height: 69px; }
+.source_bar {
+    position: absolute;
+    top: 0; left: 0;
+	width: 100%;
+	height: 3px;
+    color: #ccc;
+    font-size: .8em;
+	border-radius: 3px 3px 0 0;
+}
+
+.source_bar.global { background: #777 }
+.source_bar.personal { background: #ccc }
+.source_bar.corporate { background: green }
+.source_bar.alliance { background: #00a0ff }
+
+.icon_bar {
+    position: absolute;
+    top: 3px; right: 0;
+}
+
+.icon_bar .icon {
+	border-radius: 1em;
+	opacity: 0.7;
+	font-size: 0.85em;
+	padding: 0.15em;
+	height: 1em;
+	width: 1em;
+	display: inline-block;
+	text-align: center;
+	text-decoration: none;
+}
+
+.icon_bar .icon:hover, .icon_bar .icon:focus {
+	opacity: 1;
+}
+
+.icon_bar .closeIcon { background: maroon }
+.icon_bar .joinIcon { background: green }
+
+#mask-explanation p { margin: 0.5em 0; }

@@ -1,0 +1,2278 @@
+{
+    "582": {
+        "typeName": "Bantam",
+        "mass": 1480000
+    },
+    "583": {
+        "typeName": "Condor",
+        "mass": 1100000
+    },
+    "584": {
+        "typeName": "Griffin",
+        "mass": 1056000
+    },
+    "585": {
+        "typeName": "Slasher",
+        "mass": 1075000
+    },
+    "586": {
+        "typeName": "Probe",
+        "mass": 1123000
+    },
+    "587": {
+        "typeName": "Rifter",
+        "mass": 1067000
+    },
+    "589": {
+        "typeName": "Executioner",
+        "mass": 1090000
+    },
+    "590": {
+        "typeName": "Inquisitor",
+        "mass": 1630000
+    },
+    "591": {
+        "typeName": "Tormentor",
+        "mass": 1080000
+    },
+    "592": {
+        "typeName": "Navitas",
+        "mass": 1450000
+    },
+    "593": {
+        "typeName": "Tristan",
+        "mass": 1044000
+    },
+    "594": {
+        "typeName": "Incursus",
+        "mass": 1028000
+    },
+    "595": {
+        "typeName": "Gallente Police Ship",
+        "mass": 2040000
+    },
+    "597": {
+        "typeName": "Punisher",
+        "mass": 1190000
+    },
+    "598": {
+        "typeName": "Breacher",
+        "mass": 1087000
+    },
+    "599": {
+        "typeName": "Burst",
+        "mass": 1420000
+    },
+    "600": {
+        "typeName": "Minmatar Peacekeeper Ship",
+        "mass": 1200000
+    },
+    "602": {
+        "typeName": "Kestrel",
+        "mass": 1113000
+    },
+    "603": {
+        "typeName": "Merlin",
+        "mass": 997000
+    },
+    "605": {
+        "typeName": "Heron",
+        "mass": 1150000
+    },
+    "607": {
+        "typeName": "Imicus",
+        "mass": 997000
+    },
+    "608": {
+        "typeName": "Atron",
+        "mass": 1050000
+    },
+    "609": {
+        "typeName": "Maulus",
+        "mass": 1063000
+    },
+    "613": {
+        "typeName": "Devourer",
+        "mass": 1200000
+    },
+    "614": {
+        "typeName": "Fury",
+        "mass": 1200000
+    },
+    "616": {
+        "typeName": "Medusa",
+        "mass": 1200000
+    },
+    "618": {
+        "typeName": "Lynx",
+        "mass": 1200000
+    },
+    "619": {
+        "typeName": "Swordspine",
+        "mass": 1047000
+    },
+    "1896": {
+        "typeName": "Concord Police Frigate",
+        "mass": 1200000
+    },
+    "1898": {
+        "typeName": "Concord SWAT Frigate",
+        "mass": 1200000
+    },
+    "1900": {
+        "typeName": "Concord Army Frigate",
+        "mass": 1200000
+    },
+    "1902": {
+        "typeName": "Concord Special Ops Frigate",
+        "mass": 1200000
+    },
+    "2161": {
+        "typeName": "Crucifier",
+        "mass": 1064000
+    },
+    "3532": {
+        "typeName": "Echelon",
+        "mass": 1124000
+    },
+    "3751": {
+        "typeName": "SOCT 1",
+        "mass": 1200000
+    },
+    "3753": {
+        "typeName": "SOCT 2",
+        "mass": 1200000
+    },
+    "3766": {
+        "typeName": "Vigil",
+        "mass": 1080000
+    },
+    "3768": {
+        "typeName": "Amarr Police Frigate",
+        "mass": 1265000
+    },
+    "11019": {
+        "typeName": "Cockroach",
+        "mass": 1170000
+    },
+    "11940": {
+        "typeName": "Gold Magnate",
+        "mass": 1500000
+    },
+    "11942": {
+        "typeName": "Silver Magnate",
+        "mass": 1500000
+    },
+    "17360": {
+        "typeName": "Immovable Enigma",
+        "mass": 1200000
+    },
+    "17619": {
+        "typeName": "Caldari Navy Hookbill",
+        "mass": 1081000
+    },
+    "17703": {
+        "typeName": "Imperial Navy Slicer",
+        "mass": 1003000
+    },
+    "17705": {
+        "typeName": "Khanid Navy Frigate",
+        "mass": 1450000
+    },
+    "17707": {
+        "typeName": "Mordus Frigate",
+        "mass": 1450000
+    },
+    "17812": {
+        "typeName": "Republic Fleet Firetail",
+        "mass": 1098000
+    },
+    "17841": {
+        "typeName": "Federation Navy Comet",
+        "mass": 970000
+    },
+    "17924": {
+        "typeName": "Succubus",
+        "mass": 965000
+    },
+    "17926": {
+        "typeName": "Cruor",
+        "mass": 1003000
+    },
+    "17928": {
+        "typeName": "Daredevil",
+        "mass": 823000
+    },
+    "17930": {
+        "typeName": "Worm",
+        "mass": 981000
+    },
+    "17932": {
+        "typeName": "Dramiel",
+        "mass": 950000
+    },
+    "29248": {
+        "typeName": "Magnate",
+        "mass": 1072000
+    },
+    "32880": {
+        "typeName": "Venture",
+        "mass": 1200000
+    },
+    "32983": {
+        "typeName": "Sukuuvestaa Heron",
+        "mass": 1150000
+    },
+    "32985": {
+        "typeName": "Inner Zone Shipping Imicus",
+        "mass": 997000
+    },
+    "32987": {
+        "typeName": "Sarum Magnate",
+        "mass": 1072000
+    },
+    "32989": {
+        "typeName": "Vherokior Probe",
+        "mass": 1123000
+    },
+    "33190": {
+        "typeName": "Tash-Murkon Magnate",
+        "mass": 1072000
+    },
+    "33468": {
+        "typeName": "Astero",
+        "mass": 975000
+    },
+    "33655": {
+        "typeName": "Punisher Kador Edition",
+        "mass": 1190000
+    },
+    "33657": {
+        "typeName": "Punisher Tash-Murkon Edition",
+        "mass": 1190000
+    },
+    "33659": {
+        "typeName": "Merlin Nugoeihuvi Edition",
+        "mass": 997000
+    },
+    "33661": {
+        "typeName": "Merlin Wiyrkomi Edition",
+        "mass": 997000
+    },
+    "33663": {
+        "typeName": "Rifter Nefantar Edition",
+        "mass": 1067000
+    },
+    "33665": {
+        "typeName": "Rifter Krusual Edition",
+        "mass": 1067000
+    },
+    "33667": {
+        "typeName": "Incursus Aliastra Edition",
+        "mass": 1028000
+    },
+    "33669": {
+        "typeName": "Incursus Inner Zone Shipping Edition",
+        "mass": 1028000
+    },
+    "33677": {
+        "typeName": "Police Pursuit Comet",
+        "mass": 970000
+    },
+    "33816": {
+        "typeName": "Garmur",
+        "mass": 987000
+    },
+    "34443": {
+        "typeName": "Tristan Quafe Edition",
+        "mass": 956000
+    },
+    "37453": {
+        "typeName": "Crucifier Navy Issue",
+        "mass": 1064000
+    },
+    "37454": {
+        "typeName": "Vigil Fleet Issue",
+        "mass": 1080000
+    },
+    "37455": {
+        "typeName": "Griffin Navy Issue",
+        "mass": 1056000
+    },
+    "37456": {
+        "typeName": "Maulus Navy Issue",
+        "mass": 1063000
+    },
+    "47269": {
+        "typeName": "Damavik",
+        "mass": 950000
+    },
+    "54731": {
+        "typeName": "Skybreaker",
+        "mass": 967090
+    },
+    "58745": {
+        "typeName": "AIR Civilian Astero",
+        "mass": 975000
+    },
+    "72903": {
+        "typeName": "Probe Fleet Issue",
+        "mass": 1123000
+    },
+    "72904": {
+        "typeName": "Heron Navy Issue",
+        "mass": 1150000
+    },
+    "72907": {
+        "typeName": "Magnate Navy Issue",
+        "mass": 1072000
+    },
+    "72913": {
+        "typeName": "Imicus Navy Issue",
+        "mass": 997000
+    },
+    "77114": {
+        "typeName": "Metamorphosis",
+        "mass": 1000000
+    },
+    "89648": {
+        "typeName": "Venture Consortium Issue",
+        "mass": 1200000
+    },
+    "620": {
+        "typeName": "Osprey",
+        "mass": 11100000
+    },
+    "621": {
+        "typeName": "Caracal",
+        "mass": 11910000
+    },
+    "622": {
+        "typeName": "Stabber",
+        "mass": 11400000
+    },
+    "623": {
+        "typeName": "Moa",
+        "mass": 12000000
+    },
+    "624": {
+        "typeName": "Maller",
+        "mass": 13150000
+    },
+    "625": {
+        "typeName": "Augoror",
+        "mass": 12870000
+    },
+    "626": {
+        "typeName": "Vexor",
+        "mass": 11100000
+    },
+    "627": {
+        "typeName": "Thorax",
+        "mass": 11280000
+    },
+    "628": {
+        "typeName": "Arbitrator",
+        "mass": 11200000
+    },
+    "629": {
+        "typeName": "Rupture",
+        "mass": 12200000
+    },
+    "630": {
+        "typeName": "Bellicose",
+        "mass": 11550000
+    },
+    "631": {
+        "typeName": "Scythe",
+        "mass": 11110000
+    },
+    "632": {
+        "typeName": "Blackbird",
+        "mass": 13190000
+    },
+    "633": {
+        "typeName": "Celestis",
+        "mass": 12070000
+    },
+    "634": {
+        "typeName": "Exequror",
+        "mass": 11020000
+    },
+    "1904": {
+        "typeName": "Concord Police Cruiser",
+        "mass": 12155000
+    },
+    "2006": {
+        "typeName": "Omen",
+        "mass": 13000000
+    },
+    "11011": {
+        "typeName": "Guardian-Vexor",
+        "mass": 10910000
+    },
+    "17634": {
+        "typeName": "Caracal Navy Issue",
+        "mass": 9600000
+    },
+    "17709": {
+        "typeName": "Omen Navy Issue",
+        "mass": 10850000
+    },
+    "17713": {
+        "typeName": "Stabber Fleet Issue",
+        "mass": 10810000
+    },
+    "17715": {
+        "typeName": "Gila",
+        "mass": 9600000
+    },
+    "17718": {
+        "typeName": "Phantasm",
+        "mass": 9600000
+    },
+    "17720": {
+        "typeName": "Cynabal",
+        "mass": 9047000
+    },
+    "17722": {
+        "typeName": "Vigilant",
+        "mass": 9830000
+    },
+    "17843": {
+        "typeName": "Vexor Navy Issue",
+        "mass": 9700000
+    },
+    "17922": {
+        "typeName": "Ashimmu",
+        "mass": 11010000
+    },
+    "29336": {
+        "typeName": "Scythe Fleet Issue",
+        "mass": 10910000
+    },
+    "29337": {
+        "typeName": "Augoror Navy Issue",
+        "mass": 13150000
+    },
+    "29340": {
+        "typeName": "Osprey Navy Issue",
+        "mass": 11780000
+    },
+    "29344": {
+        "typeName": "Exequror Navy Issue",
+        "mass": 11280000
+    },
+    "33470": {
+        "typeName": "Stratios",
+        "mass": 9350000
+    },
+    "33553": {
+        "typeName": "Stratios Emergency Responder",
+        "mass": 9350000
+    },
+    "33639": {
+        "typeName": "Omen Kador Edition",
+        "mass": 13000000
+    },
+    "33641": {
+        "typeName": "Omen Tash-Murkon Edition",
+        "mass": 13000000
+    },
+    "33643": {
+        "typeName": "Caracal Nugoeihuvi Edition",
+        "mass": 11910000
+    },
+    "33645": {
+        "typeName": "Caracal Wiyrkomi Edition",
+        "mass": 11910000
+    },
+    "33647": {
+        "typeName": "Stabber Nefantar Edition",
+        "mass": 11400000
+    },
+    "33649": {
+        "typeName": "Stabber Krusual Edition",
+        "mass": 11400000
+    },
+    "33651": {
+        "typeName": "Thorax Aliastra Edition",
+        "mass": 11280000
+    },
+    "33653": {
+        "typeName": "Thorax Inner Zone Shipping Edition",
+        "mass": 11280000
+    },
+    "33818": {
+        "typeName": "Orthrus",
+        "mass": 9362000
+    },
+    "34445": {
+        "typeName": "Vexor Quafe Edition",
+        "mass": 11100000
+    },
+    "34475": {
+        "typeName": "\u6bd2\u8725\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 9600000
+    },
+    "47270": {
+        "typeName": "Vedmak",
+        "mass": 9530000
+    },
+    "49712": {
+        "typeName": "Rodiva",
+        "mass": 10120000
+    },
+    "52267": {
+        "typeName": "Test Site Maller",
+        "mass": 13150000
+    },
+    "54732": {
+        "typeName": "Stormbringer",
+        "mass": 11640000
+    },
+    "638": {
+        "typeName": "Raven",
+        "mass": 99300000
+    },
+    "639": {
+        "typeName": "Tempest",
+        "mass": 99500000
+    },
+    "640": {
+        "typeName": "Scorpion",
+        "mass": 103600000
+    },
+    "641": {
+        "typeName": "Megathron",
+        "mass": 98400000
+    },
+    "642": {
+        "typeName": "Apocalypse",
+        "mass": 97100000
+    },
+    "643": {
+        "typeName": "Armageddon",
+        "mass": 105200000
+    },
+    "644": {
+        "typeName": "Typhoon",
+        "mass": 100600000
+    },
+    "645": {
+        "typeName": "Dominix",
+        "mass": 100250000
+    },
+    "1912": {
+        "typeName": "Concord Police Battleship",
+        "mass": 112903000
+    },
+    "1914": {
+        "typeName": "Concord Special Ops Battleship",
+        "mass": 112903000
+    },
+    "1916": {
+        "typeName": "Concord SWAT Battleship",
+        "mass": 112903000
+    },
+    "1918": {
+        "typeName": "Concord Army Battleship",
+        "mass": 112903000
+    },
+    "4005": {
+        "typeName": "Scorpion Ishukone Watch",
+        "mass": 103600000
+    },
+    "11936": {
+        "typeName": "Apocalypse Imperial Issue",
+        "mass": 99300000
+    },
+    "11938": {
+        "typeName": "Armageddon Imperial Issue",
+        "mass": 97100000
+    },
+    "13202": {
+        "typeName": "Megathron Federate Issue",
+        "mass": 105200000
+    },
+    "17636": {
+        "typeName": "Raven Navy Issue",
+        "mass": 97300000
+    },
+    "17726": {
+        "typeName": "Apocalypse Navy Issue",
+        "mass": 97100000
+    },
+    "17728": {
+        "typeName": "Megathron Navy Issue",
+        "mass": 98400000
+    },
+    "17732": {
+        "typeName": "Tempest Fleet Issue",
+        "mass": 103300000
+    },
+    "17736": {
+        "typeName": "Nightmare",
+        "mass": 99300000
+    },
+    "17738": {
+        "typeName": "Machariel",
+        "mass": 94680000
+    },
+    "17740": {
+        "typeName": "Vindicator",
+        "mass": 105200000
+    },
+    "17918": {
+        "typeName": "Rattlesnake",
+        "mass": 99300000
+    },
+    "17920": {
+        "typeName": "Bhaalgorn",
+        "mass": 97100000
+    },
+    "24688": {
+        "typeName": "Rokh",
+        "mass": 105300000
+    },
+    "24690": {
+        "typeName": "Hyperion",
+        "mass": 100200000
+    },
+    "24692": {
+        "typeName": "Abaddon",
+        "mass": 103200000
+    },
+    "24694": {
+        "typeName": "Maelstrom",
+        "mass": 103600000
+    },
+    "26840": {
+        "typeName": "Raven State Issue",
+        "mass": 99300000
+    },
+    "26842": {
+        "typeName": "Tempest Tribal Issue",
+        "mass": 103300000
+    },
+    "32305": {
+        "typeName": "Armageddon Navy Issue",
+        "mass": 105200000
+    },
+    "32307": {
+        "typeName": "Dominix Navy Issue",
+        "mass": 97100000
+    },
+    "32309": {
+        "typeName": "Scorpion Navy Issue",
+        "mass": 103600000
+    },
+    "32311": {
+        "typeName": "Typhoon Fleet Issue",
+        "mass": 102600000
+    },
+    "33472": {
+        "typeName": "Nestor",
+        "mass": 20000000
+    },
+    "33623": {
+        "typeName": "Abaddon Tash-Murkon Edition",
+        "mass": 103200000
+    },
+    "33625": {
+        "typeName": "Abaddon Kador Edition",
+        "mass": 103200000
+    },
+    "33627": {
+        "typeName": "Rokh Nugoeihuvi Edition",
+        "mass": 105300000
+    },
+    "33629": {
+        "typeName": "Rokh Wiyrkomi Edition",
+        "mass": 105300000
+    },
+    "33631": {
+        "typeName": "Maelstrom Nefantar Edition",
+        "mass": 103600000
+    },
+    "33633": {
+        "typeName": "Maelstrom Krusual Edition",
+        "mass": 103600000
+    },
+    "33635": {
+        "typeName": "Hyperion Aliastra Edition",
+        "mass": 100200000
+    },
+    "33637": {
+        "typeName": "Hyperion Inner Zone Shipping Edition",
+        "mass": 100200000
+    },
+    "33820": {
+        "typeName": "Barghest",
+        "mass": 98467000
+    },
+    "34118": {
+        "typeName": "Megathron Quafe Edition",
+        "mass": 98400000
+    },
+    "34151": {
+        "typeName": "Rattlesnake Victory Edition",
+        "mass": 99300000
+    },
+    "34213": {
+        "typeName": "Apocalypse Blood Raider Edition",
+        "mass": 97100000
+    },
+    "34215": {
+        "typeName": "Apocalypse Kador Edition",
+        "mass": 97100000
+    },
+    "34217": {
+        "typeName": "Apocalypse Tash-Murkon Edition",
+        "mass": 97100000
+    },
+    "34225": {
+        "typeName": "Raven Guristas Edition",
+        "mass": 99300000
+    },
+    "34227": {
+        "typeName": "Raven Kaalakiota Edition",
+        "mass": 99300000
+    },
+    "34229": {
+        "typeName": "Raven Nugoeihuvi Edition",
+        "mass": 99300000
+    },
+    "34237": {
+        "typeName": "Megathron Police Edition",
+        "mass": 98400000
+    },
+    "34239": {
+        "typeName": "Megathron Inner Zone Shipping Edition",
+        "mass": 98400000
+    },
+    "34247": {
+        "typeName": "Tempest Justice Edition",
+        "mass": 99500000
+    },
+    "34249": {
+        "typeName": "Tempest Krusual Edition",
+        "mass": 99500000
+    },
+    "34251": {
+        "typeName": "Tempest Nefantar Edition",
+        "mass": 99500000
+    },
+    "34441": {
+        "typeName": "Dominix Quafe Edition",
+        "mass": 100250000
+    },
+    "34457": {
+        "typeName": "\u672b\u65e5\u6c99\u573a\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 105200000
+    },
+    "34459": {
+        "typeName": "\u5730\u72f1\u5929\u4f7f\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 103200000
+    },
+    "34461": {
+        "typeName": "\u9a6c\u514b\u745e\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 94680000
+    },
+    "34463": {
+        "typeName": "\u54cd\u5c3e\u86c7\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 99300000
+    },
+    "34465": {
+        "typeName": "\u591a\u7c73\u5c3c\u514b\u65af\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 100250000
+    },
+    "34467": {
+        "typeName": "\u4e07\u738b\u5b9d\u5ea7\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 98400000
+    },
+    "34469": {
+        "typeName": "\u4e4c\u9e26\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 99300000
+    },
+    "34471": {
+        "typeName": "\u707e\u96be\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 97100000
+    },
+    "47271": {
+        "typeName": "Leshak",
+        "mass": 78000000
+    },
+    "47466": {
+        "typeName": "Praxis",
+        "mass": 87000000
+    },
+    "54733": {
+        "typeName": "Thunderchild",
+        "mass": 102141000
+    },
+    "648": {
+        "typeName": "Badger",
+        "mass": 10650000
+    },
+    "649": {
+        "typeName": "Tayra",
+        "mass": 13000000
+    },
+    "650": {
+        "typeName": "Nereus",
+        "mass": 11250000
+    },
+    "651": {
+        "typeName": "Hoarder",
+        "mass": 10625000
+    },
+    "652": {
+        "typeName": "Mammoth",
+        "mass": 11500000
+    },
+    "653": {
+        "typeName": "Wreathe",
+        "mass": 10000000
+    },
+    "654": {
+        "typeName": "Kryos",
+        "mass": 12625000
+    },
+    "655": {
+        "typeName": "Epithal",
+        "mass": 12800000
+    },
+    "656": {
+        "typeName": "Miasmos",
+        "mass": 12975000
+    },
+    "657": {
+        "typeName": "Iteron Mark V",
+        "mass": 13500000
+    },
+    "1944": {
+        "typeName": "Bestower",
+        "mass": 13500000
+    },
+    "2863": {
+        "typeName": "Primae",
+        "mass": 15000000
+    },
+    "2998": {
+        "typeName": "Noctis",
+        "mass": 14640000
+    },
+    "4363": {
+        "typeName": "Miasmos Quafe Ultra Edition",
+        "mass": 11250000
+    },
+    "4388": {
+        "typeName": "Miasmos Quafe Ultramarine Edition",
+        "mass": 11250000
+    },
+    "19744": {
+        "typeName": "Sigil",
+        "mass": 11000000
+    },
+    "32811": {
+        "typeName": "Miasmos Amastris Edition",
+        "mass": 11250000
+    },
+    "33689": {
+        "typeName": "Iteron Inner Zone Shipping Edition",
+        "mass": 13500000
+    },
+    "33691": {
+        "typeName": "Tayra Wiyrkomi Edition",
+        "mass": 13000000
+    },
+    "33693": {
+        "typeName": "Mammoth Nefantar Edition",
+        "mass": 11500000
+    },
+    "33695": {
+        "typeName": "Bestower Tash-Murkon Edition",
+        "mass": 13500000
+    },
+    "81008": {
+        "typeName": "Squall",
+        "mass": 12800000
+    },
+    "670": {
+        "typeName": "Capsule",
+        "mass": 32000
+    },
+    "33328": {
+        "typeName": "Capsule - Genolution 'Auroral' 197-variant",
+        "mass": 32000
+    },
+    "671": {
+        "typeName": "Erebus",
+        "mass": 2100000000
+    },
+    "3764": {
+        "typeName": "Leviathan",
+        "mass": 2300000000
+    },
+    "11567": {
+        "typeName": "Avatar",
+        "mass": 2400000000
+    },
+    "23773": {
+        "typeName": "Ragnarok",
+        "mass": 2200000000
+    },
+    "42126": {
+        "typeName": "Vanquisher",
+        "mass": 2100000000
+    },
+    "42241": {
+        "typeName": "Molok",
+        "mass": 2400000000
+    },
+    "45649": {
+        "typeName": "Komodo",
+        "mass": 2300000000
+    },
+    "78576": {
+        "typeName": "Azariel",
+        "mass": 2200000000
+    },
+    "672": {
+        "typeName": "Caldari Shuttle",
+        "mass": 1600000
+    },
+    "11129": {
+        "typeName": "Gallente Shuttle",
+        "mass": 1600000
+    },
+    "11132": {
+        "typeName": "Minmatar Shuttle",
+        "mass": 1600000
+    },
+    "11134": {
+        "typeName": "Amarr Shuttle",
+        "mass": 1600000
+    },
+    "21097": {
+        "typeName": "Goru's Shuttle",
+        "mass": 1600000
+    },
+    "21628": {
+        "typeName": "Guristas Shuttle",
+        "mass": 1600000
+    },
+    "27299": {
+        "typeName": "Civilian Amarr Shuttle",
+        "mass": 1600000
+    },
+    "27301": {
+        "typeName": "Civilian Caldari Shuttle",
+        "mass": 1600000
+    },
+    "27303": {
+        "typeName": "Civilian Gallente Shuttle",
+        "mass": 1600000
+    },
+    "27305": {
+        "typeName": "Civilian Minmatar Shuttle",
+        "mass": 1600000
+    },
+    "29266": {
+        "typeName": "Apotheosis",
+        "mass": 1600000
+    },
+    "29328": {
+        "typeName": "Amarr Media Shuttle",
+        "mass": 1600000
+    },
+    "29330": {
+        "typeName": "Caldari Media Shuttle",
+        "mass": 1600000
+    },
+    "29332": {
+        "typeName": "Gallente Media Shuttle",
+        "mass": 1600000
+    },
+    "29334": {
+        "typeName": "Minmatar Media Shuttle",
+        "mass": 1600000
+    },
+    "30842": {
+        "typeName": "InterBus Shuttle",
+        "mass": 1600000
+    },
+    "33513": {
+        "typeName": "Leopard",
+        "mass": 1600000
+    },
+    "34496": {
+        "typeName": "Council Diplomatic Shuttle",
+        "mass": 1600000
+    },
+    "64034": {
+        "typeName": "Boobook",
+        "mass": 1600000
+    },
+    "588": {
+        "typeName": "Reaper",
+        "mass": 1157000
+    },
+    "596": {
+        "typeName": "Impairor",
+        "mass": 1148000
+    },
+    "601": {
+        "typeName": "Ibis",
+        "mass": 1163000
+    },
+    "606": {
+        "typeName": "Velator",
+        "mass": 1148000
+    },
+    "615": {
+        "typeName": "Immolator",
+        "mass": 1148000
+    },
+    "617": {
+        "typeName": "Echo",
+        "mass": 1157000
+    },
+    "1233": {
+        "typeName": "Polaris Enigma Frigate",
+        "mass": 1000000
+    },
+    "9854": {
+        "typeName": "Polaris Inspector Frigate",
+        "mass": 1000000
+    },
+    "9858": {
+        "typeName": "Polaris Centurion TEST",
+        "mass": 1000000
+    },
+    "9860": {
+        "typeName": "Polaris Legatus Frigate",
+        "mass": 1000000
+    },
+    "9862": {
+        "typeName": "Polaris Centurion Frigate",
+        "mass": 1000000
+    },
+    "33079": {
+        "typeName": "Hematos",
+        "mass": 1148000
+    },
+    "33081": {
+        "typeName": "Taipan",
+        "mass": 1163000
+    },
+    "33083": {
+        "typeName": "Violator",
+        "mass": 1148000
+    },
+    "2834": {
+        "typeName": "Utu",
+        "mass": 1216000
+    },
+    "3516": {
+        "typeName": "Malice",
+        "mass": 1271000
+    },
+    "11365": {
+        "typeName": "Vengeance",
+        "mass": 1046700
+    },
+    "11371": {
+        "typeName": "Wolf",
+        "mass": 1178100
+    },
+    "11373": {
+        "typeName": "Blade",
+        "mass": 1200000
+    },
+    "11375": {
+        "typeName": "Erinye",
+        "mass": 2810000
+    },
+    "11379": {
+        "typeName": "Hawk",
+        "mass": 1095300
+    },
+    "11381": {
+        "typeName": "Harpy",
+        "mass": 1039500
+    },
+    "11383": {
+        "typeName": "Gatherer",
+        "mass": 5250000
+    },
+    "11389": {
+        "typeName": "Kishar",
+        "mass": 5125000
+    },
+    "11393": {
+        "typeName": "Retribution",
+        "mass": 1053900
+    },
+    "11400": {
+        "typeName": "Jaguar",
+        "mass": 1229400
+    },
+    "12036": {
+        "typeName": "Dagger",
+        "mass": 2810000
+    },
+    "12042": {
+        "typeName": "Ishkur",
+        "mass": 1094400
+    },
+    "12044": {
+        "typeName": "Enyo",
+        "mass": 1053900
+    },
+    "32207": {
+        "typeName": "Freki",
+        "mass": 1309000
+    },
+    "32788": {
+        "typeName": "Cambion",
+        "mass": 997000
+    },
+    "52250": {
+        "typeName": "Nergal",
+        "mass": 1043000
+    },
+    "74141": {
+        "typeName": "Geri",
+        "mass": 1309000
+    },
+    "78414": {
+        "typeName": "Shapash",
+        "mass": 1054000
+    },
+    "2836": {
+        "typeName": "Adrestia",
+        "mass": 11100000
+    },
+    "3518": {
+        "typeName": "Vangel",
+        "mass": 11890000
+    },
+    "11993": {
+        "typeName": "Cerberus",
+        "mass": 12720000
+    },
+    "11999": {
+        "typeName": "Vagabond",
+        "mass": 11590000
+    },
+    "12003": {
+        "typeName": "Zealot",
+        "mass": 12580000
+    },
+    "12005": {
+        "typeName": "Ishtar",
+        "mass": 10600000
+    },
+    "12011": {
+        "typeName": "Eagle",
+        "mass": 11720000
+    },
+    "12015": {
+        "typeName": "Muninn",
+        "mass": 11000000
+    },
+    "12019": {
+        "typeName": "Sacrilege",
+        "mass": 11750000
+    },
+    "12023": {
+        "typeName": "Deimos",
+        "mass": 11460000
+    },
+    "32209": {
+        "typeName": "Mimir",
+        "mass": 11650000
+    },
+    "34477": {
+        "typeName": "\u94f6\u9e70\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 11720000
+    },
+    "34479": {
+        "typeName": "\u4f0a\u4ec0\u5854\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 11100000
+    },
+    "52252": {
+        "typeName": "Ikitursa",
+        "mass": 11900000
+    },
+    "74316": {
+        "typeName": "Bestla",
+        "mass": 11650000
+    },
+    "77726": {
+        "typeName": "Cybele",
+        "mass": 11100000
+    },
+    "12731": {
+        "typeName": "Bustard",
+        "mass": 20000000
+    },
+    "12745": {
+        "typeName": "Occator",
+        "mass": 19000000
+    },
+    "12747": {
+        "typeName": "Mastodon",
+        "mass": 19200000
+    },
+    "12753": {
+        "typeName": "Impel",
+        "mass": 19500000
+    },
+    "81047": {
+        "typeName": "Torrent",
+        "mass": 19800000
+    },
+    "3756": {
+        "typeName": "Gnosis",
+        "mass": 10000000
+    },
+    "16227": {
+        "typeName": "Ferox",
+        "mass": 14250000
+    },
+    "16229": {
+        "typeName": "Brutix",
+        "mass": 11800000
+    },
+    "16231": {
+        "typeName": "Cyclone",
+        "mass": 12400000
+    },
+    "16233": {
+        "typeName": "Prophecy",
+        "mass": 15300000
+    },
+    "24696": {
+        "typeName": "Harbinger",
+        "mass": 15500000
+    },
+    "24698": {
+        "typeName": "Drake",
+        "mass": 13500000
+    },
+    "24700": {
+        "typeName": "Myrmidon",
+        "mass": 12700000
+    },
+    "24702": {
+        "typeName": "Hurricane",
+        "mass": 12800000
+    },
+    "33151": {
+        "typeName": "Brutix Navy Issue",
+        "mass": 11800000
+    },
+    "33153": {
+        "typeName": "Drake Navy Issue",
+        "mass": 13500000
+    },
+    "33155": {
+        "typeName": "Harbinger Navy Issue",
+        "mass": 15500000
+    },
+    "33157": {
+        "typeName": "Hurricane Fleet Issue",
+        "mass": 12800000
+    },
+    "33869": {
+        "typeName": "Brutix Serpentis Edition",
+        "mass": 12500000
+    },
+    "33871": {
+        "typeName": "Cyclone Thukker Tribe Edition",
+        "mass": 12500000
+    },
+    "33873": {
+        "typeName": "Ferox Guristas Edition",
+        "mass": 13250000
+    },
+    "33875": {
+        "typeName": "Prophecy Blood Raiders Edition",
+        "mass": 12900000
+    },
+    "34473": {
+        "typeName": "\u5e7c\u9f99\u7ea7YC117\u5e74\u7279\u522b\u7248",
+        "mass": 14810000
+    },
+    "49711": {
+        "typeName": "Drekavac",
+        "mass": 10700000
+    },
+    "72811": {
+        "typeName": "Cyclone Fleet Issue",
+        "mass": 12400000
+    },
+    "72812": {
+        "typeName": "Ferox Navy Issue",
+        "mass": 14250000
+    },
+    "72869": {
+        "typeName": "Myrmidon Navy Issue",
+        "mass": 12700000
+    },
+    "72872": {
+        "typeName": "Prophecy Navy Issue",
+        "mass": 15300000
+    },
+    "78366": {
+        "typeName": "Alligator",
+        "mass": 13500000
+    },
+    "78369": {
+        "typeName": "Khizriel",
+        "mass": 11520000
+    },
+    "85086": {
+        "typeName": "Cenotaph",
+        "mass": 13000000
+    },
+    "16236": {
+        "typeName": "Coercer",
+        "mass": 1650000
+    },
+    "16238": {
+        "typeName": "Cormorant",
+        "mass": 1700000
+    },
+    "16240": {
+        "typeName": "Catalyst",
+        "mass": 1550000
+    },
+    "16242": {
+        "typeName": "Thrasher",
+        "mass": 1600000
+    },
+    "32840": {
+        "typeName": "InterBus Catalyst",
+        "mass": 1550000
+    },
+    "32842": {
+        "typeName": "Intaki Syndicate Catalyst",
+        "mass": 1550000
+    },
+    "32844": {
+        "typeName": "Inner Zone Shipping Catalyst",
+        "mass": 1550000
+    },
+    "32846": {
+        "typeName": "Quafe Catalyst",
+        "mass": 1550000
+    },
+    "32848": {
+        "typeName": "Aliastra Catalyst",
+        "mass": 1550000
+    },
+    "32872": {
+        "typeName": "Algos",
+        "mass": 1600000
+    },
+    "32874": {
+        "typeName": "Dragoon",
+        "mass": 1700000
+    },
+    "32876": {
+        "typeName": "Corax",
+        "mass": 1750000
+    },
+    "32878": {
+        "typeName": "Talwar",
+        "mass": 1650000
+    },
+    "33099": {
+        "typeName": "Nefantar Thrasher",
+        "mass": 1600000
+    },
+    "33877": {
+        "typeName": "Catalyst Serpentis Edition",
+        "mass": 1550000
+    },
+    "33879": {
+        "typeName": "Coercer Blood Raiders Edition",
+        "mass": 1650000
+    },
+    "33881": {
+        "typeName": "Cormorant Guristas Edition",
+        "mass": 1700000
+    },
+    "33883": {
+        "typeName": "Thrasher Thukker Tribe Edition",
+        "mass": 1600000
+    },
+    "42685": {
+        "typeName": "Sunesis",
+        "mass": 1550000
+    },
+    "49710": {
+        "typeName": "Kikimora",
+        "mass": 1560000
+    },
+    "73789": {
+        "typeName": "Coercer Navy Issue",
+        "mass": 1650000
+    },
+    "73794": {
+        "typeName": "Thrasher Fleet Issue",
+        "mass": 1600000
+    },
+    "73795": {
+        "typeName": "Cormorant Navy Issue",
+        "mass": 1700000
+    },
+    "73796": {
+        "typeName": "Catalyst Navy Issue",
+        "mass": 1550000
+    },
+    "78333": {
+        "typeName": "Mekubal",
+        "mass": 1440000
+    },
+    "78367": {
+        "typeName": "Mamba",
+        "mass": 1750000
+    },
+    "85087": {
+        "typeName": "Tholos",
+        "mass": 1700000
+    },
+    "89240": {
+        "typeName": "Pioneer",
+        "mass": 1600000
+    },
+    "89647": {
+        "typeName": "Pioneer Consortium Issue",
+        "mass": 1600000
+    },
+    "91174": {
+        "typeName": "Perseverance",
+        "mass": 1600000
+    },
+    "91775": {
+        "typeName": "Dragoon Navy Issue",
+        "mass": 1700000
+    },
+    "91849": {
+        "typeName": "Algos Navy Issue",
+        "mass": 1600000
+    },
+    "91857": {
+        "typeName": "Corax Navy Issue",
+        "mass": 1750000
+    },
+    "91858": {
+        "typeName": "Talwar Fleet Issue",
+        "mass": 1650000
+    },
+    "17476": {
+        "typeName": "Covetor",
+        "mass": 15000000
+    },
+    "17478": {
+        "typeName": "Retriever",
+        "mass": 17500000
+    },
+    "17480": {
+        "typeName": "Procurer",
+        "mass": 20000000
+    },
+    "19720": {
+        "typeName": "Revelation",
+        "mass": 1290000000
+    },
+    "19722": {
+        "typeName": "Naglfar",
+        "mass": 1260000000
+    },
+    "19724": {
+        "typeName": "Moros",
+        "mass": 1250000000
+    },
+    "19726": {
+        "typeName": "Phoenix",
+        "mass": 1270000000
+    },
+    "34339": {
+        "typeName": "Moros Interbus Edition",
+        "mass": 1292500000
+    },
+    "34341": {
+        "typeName": "Naglfar Justice Edition",
+        "mass": 1127500000
+    },
+    "34343": {
+        "typeName": "Phoenix Wiyrkomi Edition",
+        "mass": 1320000000
+    },
+    "34345": {
+        "typeName": "Revelation Sarum Edition",
+        "mass": 1237500000
+    },
+    "42124": {
+        "typeName": "Vehement",
+        "mass": 1250000000
+    },
+    "42243": {
+        "typeName": "Chemosh",
+        "mass": 1290000000
+    },
+    "45647": {
+        "typeName": "Caiman",
+        "mass": 1270000000
+    },
+    "52907": {
+        "typeName": "Zirnitra",
+        "mass": 1100000000
+    },
+    "73787": {
+        "typeName": "Naglfar Fleet Issue",
+        "mass": 1260000000
+    },
+    "73790": {
+        "typeName": "Revelation Navy Issue",
+        "mass": 1290000000
+    },
+    "73792": {
+        "typeName": "Moros Navy Issue",
+        "mass": 1250000000
+    },
+    "73793": {
+        "typeName": "Phoenix Navy Issue",
+        "mass": 1270000000
+    },
+    "87381": {
+        "typeName": "Sarathiel",
+        "mass": 1130000000
+    },
+    "20183": {
+        "typeName": "Providence",
+        "mass": 900000000
+    },
+    "20185": {
+        "typeName": "Charon",
+        "mass": 960000000
+    },
+    "20187": {
+        "typeName": "Obelisk",
+        "mass": 940000000
+    },
+    "20189": {
+        "typeName": "Fenrir",
+        "mass": 820000000
+    },
+    "34328": {
+        "typeName": "Bowhead",
+        "mass": 400000000
+    },
+    "81040": {
+        "typeName": "Avalanche",
+        "mass": 960000000
+    },
+    "22442": {
+        "typeName": "Eos",
+        "mass": 12500000
+    },
+    "22444": {
+        "typeName": "Sleipnir",
+        "mass": 12800000
+    },
+    "22446": {
+        "typeName": "Vulture",
+        "mass": 14000000
+    },
+    "22448": {
+        "typeName": "Absolution",
+        "mass": 12300000
+    },
+    "22466": {
+        "typeName": "Astarte",
+        "mass": 12300000
+    },
+    "22468": {
+        "typeName": "Claymore",
+        "mass": 12500000
+    },
+    "22470": {
+        "typeName": "Nighthawk",
+        "mass": 13200000
+    },
+    "22474": {
+        "typeName": "Damnation",
+        "mass": 13500000
+    },
+    "22452": {
+        "typeName": "Heretic",
+        "mass": 1300000
+    },
+    "22456": {
+        "typeName": "Sabre",
+        "mass": 1285000
+    },
+    "22460": {
+        "typeName": "Eris",
+        "mass": 1000000
+    },
+    "22464": {
+        "typeName": "Flycatcher",
+        "mass": 1350000
+    },
+    "22544": {
+        "typeName": "Hulk",
+        "mass": 15000000
+    },
+    "22546": {
+        "typeName": "Skiff",
+        "mass": 20000000
+    },
+    "22548": {
+        "typeName": "Mackinaw",
+        "mass": 17500000
+    },
+    "33683": {
+        "typeName": "Mackinaw ORE Development Edition",
+        "mass": 20000000
+    },
+    "23757": {
+        "typeName": "Archon",
+        "mass": 1260000000
+    },
+    "23911": {
+        "typeName": "Thanatos",
+        "mass": 1220000000
+    },
+    "23915": {
+        "typeName": "Chimera",
+        "mass": 1240000000
+    },
+    "24483": {
+        "typeName": "Nidhoggur",
+        "mass": 1230000000
+    },
+    "42132": {
+        "typeName": "Vanguard",
+        "mass": 1220000000
+    },
+    "3514": {
+        "typeName": "Revenant",
+        "mass": 1600000000
+    },
+    "3628": {
+        "typeName": "Nation",
+        "mass": 1550000000
+    },
+    "22852": {
+        "typeName": "Hel",
+        "mass": 1650000000
+    },
+    "23913": {
+        "typeName": "Nyx",
+        "mass": 1600000000
+    },
+    "23917": {
+        "typeName": "Wyvern",
+        "mass": 1700000000
+    },
+    "23919": {
+        "typeName": "Aeon",
+        "mass": 1780000000
+    },
+    "42125": {
+        "typeName": "Vendetta",
+        "mass": 1600000000
+    },
+    "11172": {
+        "typeName": "Helios",
+        "mass": 1271000
+    },
+    "11182": {
+        "typeName": "Cheetah",
+        "mass": 1430000
+    },
+    "11188": {
+        "typeName": "Anathema",
+        "mass": 1147000
+    },
+    "11192": {
+        "typeName": "Buzzard",
+        "mass": 1270000
+    },
+    "33397": {
+        "typeName": "Chremoas",
+        "mass": 930000
+    },
+    "42246": {
+        "typeName": "Caedes",
+        "mass": 1200000
+    },
+    "44993": {
+        "typeName": "Pacifier",
+        "mass": 1400000
+    },
+    "48636": {
+        "typeName": "Hydra",
+        "mass": 950000
+    },
+    "85062": {
+        "typeName": "Sidewinder",
+        "mass": 1400000
+    },
+    "11176": {
+        "typeName": "Crow",
+        "mass": 1065000
+    },
+    "11178": {
+        "typeName": "Raptor",
+        "mass": 1050000
+    },
+    "11184": {
+        "typeName": "Crusader",
+        "mass": 1050000
+    },
+    "11186": {
+        "typeName": "Malediction",
+        "mass": 1140000
+    },
+    "11196": {
+        "typeName": "Claw",
+        "mass": 1100000
+    },
+    "11198": {
+        "typeName": "Stiletto",
+        "mass": 1010000
+    },
+    "11200": {
+        "typeName": "Taranis",
+        "mass": 1060000
+    },
+    "11202": {
+        "typeName": "Ares",
+        "mass": 950000
+    },
+    "33673": {
+        "typeName": "Whiptail",
+        "mass": 1000000
+    },
+    "35779": {
+        "typeName": "Imp",
+        "mass": 900000
+    },
+    "11978": {
+        "typeName": "Scimitar",
+        "mass": 12090000
+    },
+    "11985": {
+        "typeName": "Basilisk",
+        "mass": 13130000
+    },
+    "11987": {
+        "typeName": "Guardian",
+        "mass": 11980000
+    },
+    "11989": {
+        "typeName": "Oneiros",
+        "mass": 13160000
+    },
+    "32790": {
+        "typeName": "Etana",
+        "mass": 13130000
+    },
+    "42245": {
+        "typeName": "Rabisu",
+        "mass": 13000000
+    },
+    "49713": {
+        "typeName": "Zarmazd",
+        "mass": 10240000
+    },
+    "11957": {
+        "typeName": "Falcon",
+        "mass": 12230000
+    },
+    "11963": {
+        "typeName": "Rapier",
+        "mass": 11040000
+    },
+    "11965": {
+        "typeName": "Pilgrim",
+        "mass": 11370000
+    },
+    "11969": {
+        "typeName": "Arazu",
+        "mass": 11650000
+    },
+    "33395": {
+        "typeName": "Moracha",
+        "mass": 8700000
+    },
+    "33675": {
+        "typeName": "Chameleon",
+        "mass": 12000000
+    },
+    "44995": {
+        "typeName": "Enforcer",
+        "mass": 12500000
+    },
+    "45531": {
+        "typeName": "Victor",
+        "mass": 11650000
+    },
+    "48635": {
+        "typeName": "Tiamat",
+        "mass": 9530000
+    },
+    "85229": {
+        "typeName": "Cobra",
+        "mass": 12500000
+    },
+    "11377": {
+        "typeName": "Nemesis",
+        "mass": 1410000
+    },
+    "12032": {
+        "typeName": "Manticore",
+        "mass": 1470000
+    },
+    "12034": {
+        "typeName": "Hound",
+        "mass": 1455000
+    },
+    "12038": {
+        "typeName": "Purifier",
+        "mass": 1495000
+    },
+    "45530": {
+        "typeName": "Virtuoso",
+        "mass": 1410000
+    },
+    "28352": {
+        "typeName": "Rorqual",
+        "mass": 800000000
+    },
+    "33687": {
+        "typeName": "Rorqual ORE Development Edition",
+        "mass": 1180000000
+    },
+    "11174": {
+        "typeName": "Keres",
+        "mass": 1204500
+    },
+    "11190": {
+        "typeName": "Sentinel",
+        "mass": 1223200
+    },
+    "11194": {
+        "typeName": "Kitsune",
+        "mass": 1228700
+    },
+    "11387": {
+        "typeName": "Hyena",
+        "mass": 1191300
+    },
+    "60765": {
+        "typeName": "Raiju",
+        "mass": 987000
+    },
+    "11995": {
+        "typeName": "Onyx",
+        "mass": 15400000
+    },
+    "12013": {
+        "typeName": "Broadsword",
+        "mass": 15000000
+    },
+    "12017": {
+        "typeName": "Devoter",
+        "mass": 16200000
+    },
+    "12021": {
+        "typeName": "Phobos",
+        "mass": 14000000
+    },
+    "35781": {
+        "typeName": "Fiend",
+        "mass": 9000000
+    },
+    "60764": {
+        "typeName": "Laelaps",
+        "mass": 10298000
+    },
+    "22428": {
+        "typeName": "Redeemer",
+        "mass": 150300000
+    },
+    "22430": {
+        "typeName": "Sin",
+        "mass": 141700000
+    },
+    "22436": {
+        "typeName": "Widow",
+        "mass": 151100000
+    },
+    "22440": {
+        "typeName": "Panther",
+        "mass": 148800000
+    },
+    "44996": {
+        "typeName": "Marshal",
+        "mass": 150000000
+    },
+    "85236": {
+        "typeName": "Python",
+        "mass": 141700000
+    },
+    "28659": {
+        "typeName": "Paladin",
+        "mass": 160000000
+    },
+    "28661": {
+        "typeName": "Kronos",
+        "mass": 148000000
+    },
+    "28665": {
+        "typeName": "Vargur",
+        "mass": 150000000
+    },
+    "28710": {
+        "typeName": "Golem",
+        "mass": 157000000
+    },
+    "34219": {
+        "typeName": "Paladin Blood Raider Edition",
+        "mass": 92245000
+    },
+    "34221": {
+        "typeName": "Paladin Kador Edition",
+        "mass": 92245000
+    },
+    "34223": {
+        "typeName": "Paladin Tash-Murkon Edition",
+        "mass": 92245000
+    },
+    "34231": {
+        "typeName": "Golem Guristas Edition",
+        "mass": 94335000
+    },
+    "34233": {
+        "typeName": "Golem Kaalakiota Edition",
+        "mass": 94335000
+    },
+    "34235": {
+        "typeName": "Golem Nugoeihuvi Edition",
+        "mass": 94335000
+    },
+    "34241": {
+        "typeName": "Kronos Police Edition",
+        "mass": 93480000
+    },
+    "34243": {
+        "typeName": "Kronos Quafe Edition",
+        "mass": 93480000
+    },
+    "34245": {
+        "typeName": "Kronos Inner Zone Shipping Edition",
+        "mass": 93480000
+    },
+    "34253": {
+        "typeName": "Vargur Justice Edition",
+        "mass": 96520000
+    },
+    "34255": {
+        "typeName": "Vargur Krusual Edition",
+        "mass": 96520000
+    },
+    "34257": {
+        "typeName": "Vargur Nefantar Edition",
+        "mass": 96520000
+    },
+    "47727": {
+        "typeName": "GFX Test Vargur 1\/2",
+        "mass": 96520000
+    },
+    "47728": {
+        "typeName": "GFX Test Vargur 2\/2",
+        "mass": 96520000
+    },
+    "88001": {
+        "typeName": "Babaroga",
+        "mass": 143000000
+    },
+    "28844": {
+        "typeName": "Rhea",
+        "mass": 960000000
+    },
+    "28846": {
+        "typeName": "Nomad",
+        "mass": 820000000
+    },
+    "28848": {
+        "typeName": "Anshar",
+        "mass": 940000000
+    },
+    "28850": {
+        "typeName": "Ark",
+        "mass": 900000000
+    },
+    "11959": {
+        "typeName": "Rook",
+        "mass": 12730000
+    },
+    "11961": {
+        "typeName": "Huginn",
+        "mass": 11550000
+    },
+    "11971": {
+        "typeName": "Lachesis",
+        "mass": 12070000
+    },
+    "20125": {
+        "typeName": "Curse",
+        "mass": 11810000
+    },
+    "28606": {
+        "typeName": "Orca",
+        "mass": 150000000
+    },
+    "33685": {
+        "typeName": "Orca ORE Development Edition",
+        "mass": 250000000
+    },
+    "42244": {
+        "typeName": "Porpoise",
+        "mass": 4500000
+    },
+    "29984": {
+        "typeName": "Tengu",
+        "mass": 14400000
+    },
+    "29986": {
+        "typeName": "Legion",
+        "mass": 14500000
+    },
+    "29988": {
+        "typeName": "Proteus",
+        "mass": 13300000
+    },
+    "29990": {
+        "typeName": "Loki",
+        "mass": 13800000
+    },
+    "2078": {
+        "typeName": "Zephyr",
+        "mass": 5000
+    },
+    "4302": {
+        "typeName": "Oracle",
+        "mass": 14760000
+    },
+    "4306": {
+        "typeName": "Naga",
+        "mass": 15000000
+    },
+    "4308": {
+        "typeName": "Talos",
+        "mass": 15552000
+    },
+    "4310": {
+        "typeName": "Tornado",
+        "mass": 15228000
+    },
+    "89807": {
+        "typeName": "Anhinga",
+        "mass": 14760000
+    },
+    "12729": {
+        "typeName": "Crane",
+        "mass": 11000000
+    },
+    "12733": {
+        "typeName": "Prorator",
+        "mass": 10750000
+    },
+    "12735": {
+        "typeName": "Prowler",
+        "mass": 11200000
+    },
+    "12743": {
+        "typeName": "Viator",
+        "mass": 10000000
+    },
+    "81046": {
+        "typeName": "Deluge",
+        "mass": 10800000
+    },
+    "33697": {
+        "typeName": "Prospect",
+        "mass": 1400000
+    },
+    "37135": {
+        "typeName": "Endurance",
+        "mass": 1600000
+    },
+    "34317": {
+        "typeName": "Confessor",
+        "mass": 1800000
+    },
+    "34562": {
+        "typeName": "Svipul",
+        "mass": 1400000
+    },
+    "34828": {
+        "typeName": "Jackdaw",
+        "mass": 1100000
+    },
+    "35683": {
+        "typeName": "Hecate",
+        "mass": 1050000
+    },
+    "89808": {
+        "typeName": "Skua",
+        "mass": 1100000
+    },
+    "37457": {
+        "typeName": "Deacon",
+        "mass": 1630000
+    },
+    "37458": {
+        "typeName": "Kirin",
+        "mass": 1480000
+    },
+    "37459": {
+        "typeName": "Thalia",
+        "mass": 1450000
+    },
+    "37460": {
+        "typeName": "Scalpel",
+        "mass": 1420000
+    },
+    "37480": {
+        "typeName": "Bifrost",
+        "mass": 1235000
+    },
+    "37481": {
+        "typeName": "Pontifex",
+        "mass": 1250000
+    },
+    "37482": {
+        "typeName": "Stork",
+        "mass": 1300000
+    },
+    "37483": {
+        "typeName": "Magus",
+        "mass": 1150000
+    },
+    "52254": {
+        "typeName": "Draugur",
+        "mass": 1450000
+    },
+    "89649": {
+        "typeName": "Outrider",
+        "mass": 1300000
+    },
+    "37604": {
+        "typeName": "Apostle",
+        "mass": 1310000000
+    },
+    "37605": {
+        "typeName": "Minokawa",
+        "mass": 1300000000
+    },
+    "37606": {
+        "typeName": "Lif",
+        "mass": 1260000000
+    },
+    "37607": {
+        "typeName": "Ninazu",
+        "mass": 1250000000
+    },
+    "42133": {
+        "typeName": "Venerable",
+        "mass": 1250000000
+    },
+    "42242": {
+        "typeName": "Dagon",
+        "mass": 1310000000
+    },
+    "45645": {
+        "typeName": "Loggerhead",
+        "mass": 1300000000
+    },
+    "45534": {
+        "typeName": "Monitor",
+        "mass": 16000000
+    },
+    "48648": {
+        "typeName": "Citizen Venture",
+        "mass": 1200000
+    },
+    "77281": {
+        "typeName": "Hubris",
+        "mass": 1250000000
+    },
+    "77283": {
+        "typeName": "Bane",
+        "mass": 1290000000
+    },
+    "77284": {
+        "typeName": "Karura",
+        "mass": 1270000000
+    },
+    "77288": {
+        "typeName": "Valravn",
+        "mass": 1260000000
+    },
+    "89607": {
+        "typeName": "Odysseus",
+        "mass": 15000000
+    },
+    "635": {
+        "typeName": "Opux Luxury Yacht",
+        "mass": 13075000
+    },
+    "25560": {
+        "typeName": "Opux Dragoon Yacht",
+        "mass": 13075000
+    },
+    "34590": {
+        "typeName": "Victorieux Luxury Yacht",
+        "mass": 1000000
+    },
+    "92282": {
+        "typeName": "Tenzin YC128 Campaign Bus",
+        "mass": 1000000
+    },
+    "92283": {
+        "typeName": "Moreau YC128 Campaign Bus",
+        "mass": 1000000
+    },
+    "92284": {
+        "typeName": "Roden YC128 Campaign Bus",
+        "mass": 1000000
+    },
+    "92822": {
+        "typeName": "Salvation",
+        "mass": 1260000000
+    },
+    "92823": {
+        "typeName": "Simurgh",
+        "mass": 1270000000
+    },
+    "92824": {
+        "typeName": "Gaia",
+        "mass": 1220000000
+    },
+    "92825": {
+        "typeName": "Ymir",
+        "mass": 1230000000
+    }
+}

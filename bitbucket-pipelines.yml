@@ -1,0 +1,15 @@
+# Front end build - run gulp and check in result if different
+
+image: node:16
+
+pipelines:
+  custom:
+    build and deploy:
+        - step:
+            name: Build and push back deployed changes
+            caches:
+              - node
+            script:
+              - npm install gulp
+              - npx gulp js css
+              - ./push-changes-to-deploy.sh

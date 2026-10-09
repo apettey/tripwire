@@ -1,0 +1,2 @@
+0 * * * * docker exec -t php-fpm php /opt/app/system_activity.cron.php
+*/3 * * * * docker exec -t  php-fpm php /opt/app/account_update.cron.php

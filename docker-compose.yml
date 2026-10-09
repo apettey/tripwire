@@ -1,0 +1,122 @@
+services:
+  #################################################################
+  # TRAEFIK SERVICE
+  #################################################################
+  traefik:
+    image: traefik:v3.2.3
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - web
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik-data/acme.json:/acme.json
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.email=$ADM_EMAIL"
+      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+
+  #################################################################
+  # NGINX SERVICE
+  #################################################################
+  nginx:
+    build: .docker/nginx
+    container_name: nginx
+    networks:
+      - web
+      - tripwire
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=tripwire_web"
+
+      # Router rule for domain
+      - "traefik.http.routers.nginx.rule=Host(`$TRDOMAIN`)"
+      - "traefik.http.routers.nginx.entrypoints=websecure"
+      - "traefik.http.routers.nginx.tls.certresolver=myresolver"
+
+      # Fallback to plain HTTP -> redirect to HTTPS
+      - "traefik.http.routers.nginx_http.rule=Host(`$TRDOMAIN`)"
+      - "traefik.http.routers.nginx_http.entrypoints=web"
+      - "traefik.http.routers.nginx_http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+      # Let Traefik know container listens on port 80 internally
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
+    volumes:
+      - "./:/opt/app"
+
+  #################################################################
+  # PHP-FPM SERVICE
+  #################################################################
+  php-fpm:
+    build: .docker/php-fpm
+    container_name: php-fpm
+    networks:
+      - tripwire
+    volumes:
+      - "./:/opt/app"
+
+  #################################################################
+  # OFFICIAL MYSQL 8.0.40 SERVICE
+  #################################################################
+  mysql:
+    image: mysql:8.0.40
+    container_name: mysql
+    networks:
+      - tripwire
+    environment:
+      - MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD # do not use quotes
+      - MYSQL_DATABASE=tripwire_database
+      - MYSQL_USER=$MYSQL_USER # do not use quotes
+      - MYSQL_PASSWORD=$MYSQL_PASSWORD # do not use quotes
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  #################################################################
+  # ADMINER SERVICE (DB web UI)
+  #################################################################
+  adminer:
+    container_name: adminer
+    image: adminer
+    networks:
+      - tripwire
+    ports:
+      - 9000:8080
+
+  #################################################################
+  # DB-SEED SERVICE
+  #################################################################
+  db-seed:
+    build:
+      context: .docker/mysql
+      dockerfile: Dockerfile
+    container_name: db-seed
+    depends_on:
+      - mysql
+    networks:
+      - tripwire
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_ROOT_USER=root
+      - DB_ROOT_PASS=$MYSQL_ROOT_PASSWORD
+      - TRIPWIRE_DB=tripwire_database
+      - SDE_DB=eve_dump
+    # No need for volumes or ports
+    # The seed script will run once, then exit
+
+volumes:
+  mysql-data:
+
+networks:
+  web:
+  tripwire:

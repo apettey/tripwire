@@ -1,0 +1,131 @@
+#login {
+	position: relative;
+}
+
+#login #panel {
+	display: none;
+}
+
+#login img {
+    border-radius: 3px;
+}
+
+.triangle {
+	position: absolute;
+	top: -5px;
+	right: 15px;
+	border-left: 5px solid transparent;
+	border-right: 5px solid transparent;
+	border-bottom: 5px solid #444;
+}
+
+#login #content {
+	position: absolute;
+	top: 20px;
+	right: 0px;
+
+	font-size: 1.1em;
+
+	line-height: normal;
+	padding: 5px;
+}
+
+#login #content #track {
+	border-right: 1px solid gray;
+	padding-right: 2px;
+	min-width: 160px;
+}
+
+#login #content #track .tracking-clone {
+	border: 2px solid #888;
+    border-radius: 5px;
+    cursor: pointer;
+	opacity: .4;
+    transition: all 0.2s ease;
+
+	margin-bottom: 2px;
+}
+
+#login #content #track .tracking-clone:hover {
+	border-color: #555;
+    opacity: 1;
+}
+
+#login #content #track .tracking-clone.active {
+	border-color: darkorange;
+    opacity: 1;
+}
+
+#login #content table {
+	text-align: right;
+	width: 100%;
+}
+
+#login #content table th {
+	text-align: right;
+	padding-right: 5px;
+}
+
+#login #content table td {
+	text-align: left;
+}
+
+#login #content table .text {
+	padding: 0 10px 0 3px;
+	white-space: nowrap;
+}
+
+#login #content .avatar {
+	height: 1px;
+	width: 1px;
+}
+
+#login #content table td #logout {
+	float: right;
+}
+
+#login #content #error {
+	color: #FF4747;
+}
+
+#logo {
+	color: #CCC;
+}
+
+#logo > span > div > canvas {
+	vertical-align: middle;
+}
+
+#login #error {
+	font-weight: bold;
+	text-align: center;
+}
+
+#link, #account {
+	white-space: nowrap;
+	color: #666;
+}
+
+#link {
+	vertical-align: top;
+}
+
+#login #logoutTable tbody th {
+	text-align: center;
+	color: #CCC;
+	background: #555;
+}
+
+#logoutTable tbody tr td {
+	vertical-align: top;
+}
+
+#tracking {
+	display: block;
+	overflow-y: auto;
+	max-height: 332px;
+}
+
+#tracking [data-icon="red-giant"].stable:before {
+	color:  #50d25a;
+}

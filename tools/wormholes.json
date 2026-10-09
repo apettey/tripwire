@@ -1,0 +1,117 @@
+{
+"Z142": {"life": "16 Hours", "from": [ "Class-6", "Class-5" ], "leadsTo": "Null-Sec", "mass": 3300000000, "jump": 2000000000},
+"C140": {"life": "24 Hours", "from": [ "Class-6", "Class-5" ], "leadsTo": "Low-Sec", "mass": 3300000000, "jump": 2000000000},
+
+"C248": {"life": "16 Hours", "from": "Class-6", "leadsTo": "Null-Sec", "mass": 3300000000, "jump": 2000000000},
+"C391": {"life": "48 Hours", "from": "Class-6", "leadsTo": "Low-Sec", "mass": 3300000000, "jump": 2000000000},
+"B520": {"life": "48 Hours", "from": "Class-6", "leadsTo": "High-Sec", "mass": 3000000000, "jump": 1000000000},
+"W237": {"life": "24 Hours", "from": "Class-6", "leadsTo": "Class-6", "mass": 3300000000, "jump": 2000000000},
+"V911": {"life": "24 Hours", "from": "Class-6", "leadsTo": "Class-5", "mass": 3300000000, "jump": 2000000000},
+"Z457": {"life": "16 Hours", "from": "Class-6", "leadsTo": "Class-4", "mass": 2000000000, "jump": 375000000},
+"L477": {"life": "16 Hours", "from": "Class-6", "leadsTo": "Class-3", "mass": 2000000000, "jump": 375000000},
+"G024": {"life": "16 Hours", "from": "Class-6", "leadsTo": "Class-2", "mass": 2000000000, "jump": 375000000},
+"Q317": {"life": "16 Hours", "from": "Class-6", "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+"D792": {"life": "24 Hours", "from": "Class-5", "leadsTo": "High-Sec", "mass": 3000000000, "jump": 1000000000},
+"V753": {"life": "24 Hours", "from": "Class-5", "leadsTo": "Class-6", "mass": 3300000000, "jump": 2000000000},
+"H296": {"life": "24 Hours", "from": "Class-5", "leadsTo": "Class-5", "mass": 3300000000, "jump": 2000000000},
+"E175": {"life": "16 Hours", "from": "Class-5", "leadsTo": "Class-4", "mass": 2000000000, "jump": 375000000},
+"M267": {"life": "16 Hours", "from": "Class-5", "leadsTo": "Class-3", "mass": 1000000000, "jump": 375000000},
+"D364": {"life": "16 Hours", "from": "Class-5", "leadsTo": "Class-2", "mass": 1000000000, "jump": 375000000},
+"Y790": {"life": "16 Hours", "from": "Class-5", "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+"K329": {"life": "16 Hours", "from": "Class-4", "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 375000000},
+"N290": {"life": "24 Hours", "from": "Class-4", "leadsTo": "Low-Sec", "mass": 3000000000, "jump": 375000000},
+"S047": {"life": "24 Hours", "from": "Class-4", "leadsTo": "High-Sec", "mass": 3000000000, "jump": 375000000},
+"U574": {"life": "24 Hours", "from": "Class-4", "leadsTo": "Class-6", "mass": 3000000000, "jump": 375000000},
+"H900": {"life": "24 Hours", "from": "Class-4", "leadsTo": "Class-5", "mass": 3000000000, "jump": 375000000},
+"X877": {"life": "16 Hours", "from": "Class-4", "leadsTo": "Class-4", "mass": 2000000000, "jump": 375000000},
+"C247": {"life": "16 Hours", "from": "Class-4", "leadsTo": "Class-3", "mass": 2000000000, "jump": 375000000},
+"N766": {"life": "16 Hours", "from": "Class-4", "leadsTo": "Class-2", "mass": 2000000000, "jump": 375000000},
+"P060": {"life": "16 Hours", "from": "Class-4", "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+
+"K346": {"life": "16 Hours", "from": [ "Class-3", "Class-4", "Class-5", "Class-6" ], "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 375000000},
+"U210": {"life": "24 Hours", "from": [ "Class-3", "Class-4", "Class-5" ], "leadsTo": "Low-Sec", "mass": 3000000000, "jump": 375000000},
+"D845": {"life": "24 Hours", "from": [ "Class-3", "Class-4" ], "leadsTo": "High-Sec", "mass": 5000000000, "jump": 375000000},
+"A982": {"life": "24 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-6", "mass": 3000000000, "jump": 375000000},
+"N770": {"life": "24 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-5", "mass": 3000000000, "jump": 375000000},
+"T405": {"life": "16 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-4", "mass": 2000000000, "jump": 375000000},
+"N968": {"life": "16 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-3", "mass": 2000000000, "jump": 375000000},
+"I182": {"life": "16 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-2", "mass": 2000000000, "jump": 375000000},
+"V301": {"life": "16 Hours", "from": [ "Class-3", "Thera" ], "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+
+"E545": {"life": "16 Hours", "from": "Class-2", "leadsTo": "Null-Sec", "mass": 2000000000, "jump": 375000000},
+"A239": {"life": "24 Hours", "from": "Class-2", "leadsTo": "Low-Sec", "mass": 2000000000, "jump": 300000000},
+"B274": {"life": "24 Hours", "from": "Class-2", "leadsTo": "High-Sec", "mass": 2000000000, "jump": 375000000},
+"R474": {"life": "24 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-6", "mass": 3000000000, "jump": 375000000},
+"N062": {"life": "24 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-5", "mass": 3000000000, "jump": 375000000},
+"Y683": {"life": "16 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-4", "mass": 2000000000, "jump": 375000000},
+"O477": {"life": "16 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-3", "mass": 2000000000, "jump": 375000000},
+"D382": {"life": "16 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-2", "mass": 2000000000, "jump": 375000000},
+"Z647": {"life": "16 Hours", "from": [ "Class-2", "Class-14", "Class-15", "Class-16", "Class-17", "Class-18" ], "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+"N110": {"life": "24 Hours", "from": "Class-1", "leadsTo": "High-Sec", "mass": 1000000000, "jump": 62000000},
+"J244": {"life": "24 Hours", "from": "Class-1", "leadsTo": "Low-Sec", "mass": 1000000000, "jump": 62000000},
+"Z060": {"life": "16 Hours", "from": "Class-1", "leadsTo": "Null-Sec", "mass": 1000000000, "jump": 62000000},
+"S804": {"life": "24 Hours", "from": [ "Class-1", "Null-Sec" ], "leadsTo": "Class-6", "mass": 1000000000, "jump": 62000000},
+"L614": {"life": "24 Hours", "from": [ "Class-1", "Null-Sec" ], "leadsTo": "Class-5", "mass": 1000000000, "jump": 62000000},
+"M609": {"life": "16 Hours", "from": "Class-1", "leadsTo": "Class-4", "mass": 1000000000, "jump": 62000000},
+"O883": {"life": "16 Hours", "from": [ "Class-1", "Null-Sec" ], "leadsTo": "Class-3", "mass": 1000000000, "jump": 20000000},
+"C125": {"life": "16 Hours", "from": "Class-1", "leadsTo": "Class-2", "mass": 1000000000, "jump": 62000000},
+"H121": {"life": "16 Hours", "from": "Class-1", "leadsTo": "Class-1", "mass": 500000000, "jump": 62000000},
+
+
+"B041": {"life": "48 Hours", "from": "High-Sec", "leadsTo": "Class-6", "mass": 3000000000, "jump": 1000000000},
+"U319": {"life": "48 Hours", "from": [ "Low-Sec", "Null-Sec" ], "leadsTo": "Class-6", "mass": 3300000000, "jump": 2000000000},
+"M555": {"life": "24 Hours", "from": "High-Sec", "leadsTo": "Class-5", "mass": 3000000000, "jump": 1000000000},
+"N432": {"life": "24 Hours", "from": [ "Low-Sec", "Null-Sec" ], "leadsTo": "Class-5", "mass": 3300000000, "jump": 2000000000},
+"O128": {"life": "24 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-4", "mass": 1000000000, "jump": 375000000},
+"X702": {"life": "24 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-3", "mass": 1000000000, "jump": 375000000},
+"R943": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-2", "mass": 750000000, "jump": 375000000},
+"Z971": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-1", "mass": 100000000, "jump": 62000000},
+
+"N944": {"life": "24 Hours", "from": [ "Low-Sec", "Null-Sec" ], "leadsTo": "Low-Sec", "mass": 3300000000, "jump": 2000000000},
+"S199": {"life": "16 Hours", "from": [ "Low-Sec", "Null-Sec" ], "leadsTo": "Null-Sec", "mass": 3300000000, "jump": 2000000000},
+"B449": {"life": "16 Hours", "from": [ "Low-Sec", "Null-Sec" ], "leadsTo": "High-Sec", "mass": 2000000000, "jump": 1000000000},
+"V283": {"life": "16 Hours", "from": "High-Sec", "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 1000000000},
+"R051": {"life": "16 Hours", "from": "High-Sec", "leadsTo": "Low-Sec", "mass": 3000000000, "jump": 1000000000},
+"A641": {"life": "16 Hours", "from": "High-Sec", "leadsTo": "High-Sec", "mass": 2000000000, "jump": 1000000000},
+
+
+"Q003": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 5000000},
+"G008": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-6", "mass": 3000000000, "jump": 5000000},
+"C008": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-5", "mass": 3000000000, "jump": 5000000},
+"M001": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-4", "mass": 3000000000, "jump": 5000000},
+"Z006": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-3", "mass": 3000000000, "jump": 5000000},
+"L005": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-2", "mass": 3000000000, "jump": 5000000},
+"E004": {"life": "5 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera" ], "leadsTo": "Class-1", "mass": 3000000000, "jump": 5000000},
+"A009": {"life": "16 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6", "Thera", "Null-Sec" ], "leadsTo": "Class-13", "mass": 3000000000, "jump": 5000000},
+
+"L031": {"life": "16 Hours", "from": "Null-Sec", "leadsTo": "Thera", "mass": 3000000000, "jump": 1000000000},
+"M164": {"life": "16 Hours", "from": "Low-Sec", "leadsTo": "Thera", "mass": 2000000000, "jump": 1000000000},
+"T458": {"life": "16 Hours", "from": "High-Sec", "leadsTo": "Thera", "mass": 500000000, "jump": 62000000},
+"F353": {"life": "16 Hours", "from": "Class-1", "leadsTo": "Thera", "mass": 100000000, "jump": 62000000},
+"F135": {"life": "16 Hours", "from": [ "Class-2", "Class-3", "Class-4", "Class-5", "Class-6" ], "leadsTo": "Thera", "mass": 750000000, "jump": 375000000},
+
+"Q063": {"life": "16 Hours", "from": "Thera", "leadsTo": "High-Sec", "mass": 500000000, "jump": 62000000},
+"V898": {"life": "16 Hours", "from": "Thera", "leadsTo": "Low-Sec", "mass": 2000000000, "jump": 1000000000},
+"E587": {"life": "16 Hours", "from": "Thera", "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 1000000000},
+
+"S877": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J055520", "mass": 750000000, "jump": 375000000},
+"B735": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J110145", "mass": 750000000, "jump": 375000000},
+"V928": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J164710", "mass": 750000000, "jump": 375000000},
+"C414": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J200727", "mass": 750000000, "jump": 375000000},
+"R259": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J174618", "mass": 750000000, "jump": 375000000},
+
+"C729": {"life": "12 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec", "Triglavian" ], "leadsTo": "Triglavian", "mass": 1000000000, "jump": 410000000},
+"F216": {"life": "16 Hours", "from": [ "Class-2", "Class-3", "Class-4", "Class-5", "Class-6" ], "leadsTo": "Triglavian", "mass": 1000000000, "jump": 300000000},
+"U372": {"life": "16 Hours", "from": "Null-Sec", "leadsTo": "Triglavian", "mass": 1000000000, "jump": 375000000},
+"R081": {"life": "16 Hours", "from": "Triglavian", "leadsTo": "Class-4", "mass": 1000000000, "jump": 375000000},
+"X450": {"life": "16 Hours", "from": "Triglavian", "leadsTo": "Null-Sec", "mass": 1000000000, "jump": 375000000},
+
+"J377": {"life": "24 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4" ], "leadsTo": "Turnur", "mass": 1000000000, "jump": 62000000},
+"J492": {"life": "24 Hours", "from": [ "Class-1", "Class-2", "Class-3", "Class-4", "Class-5", "Class-6" ], "leadsTo": "Low-Sec", "mass": 1000000000, "jump": 62000000}
+
+}
