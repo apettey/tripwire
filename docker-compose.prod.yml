@@ -36,6 +36,7 @@ services:
       TZ: ${TZ:-}
     volumes:
       - cache:/opt/app/cache
+      - php-sessions:/var/lib/php/session   # keep users logged in across image updates
     depends_on:
       mysql:
         condition: service_healthy
@@ -61,5 +62,6 @@ services:
       retries: 30
 
 volumes:
+  php-sessions:
   mysql-data:
   cache:

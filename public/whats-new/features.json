@@ -1,0 +1,14 @@
+{
+  "features": [
+    {
+      "pr": 1,
+      "date": "2026-10-10",
+      "title": "What's New",
+      "description": "Tripwire now tells you about new features after they're added. This window opens once after each update; reopen it any time from Settings > General Preferences > What's new.",
+      "images": [
+        { "src": "whats-new/img/pr-1-settings.png", "caption": "Reopen from Settings" },
+        { "src": "whats-new/img/pr-1-popup.png", "caption": "The What's New window" }
+      ]
+    }
+  ]
+}

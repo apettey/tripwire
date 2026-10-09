@@ -31,8 +31,16 @@ docker compose -f docker-compose.dev.yml up --build
 - `assets` service (Node 20) rebuilds `public/js/app.min.js` / `public/css/app.min.css` when files
   under `app/` change. Upstream commits those bundles, so commit them along with your `app/` changes,
   and `git checkout --` them if the watcher touched them without a real change.
-- To log in, create an EVE SSO app with callback `http://localhost:8080/index.php?mode=sso`
+- Quick login without EVE SSO: `docker compose -f docker-compose.dev.yml exec app bash /opt/app/docker/dev-seed.sh`
+  creates user `dev` / `dev-password` (override with `DEV_USERNAME`, `DEV_PASSWORD`; `DEV_CHARACTER` picks
+  the public EVE character the account borrows). Log in on the "Tripwire" tab of the login page. There is
+  no ESI token, so location tracking doesn't run; simulate a jump from the browser console with
+  `tripwire.EVE({characterID: 1, characterName: 'Test', systemID: <from>})` followed by the same call with
+  the destination `systemID`.
+- Real login: create an EVE SSO app with callback `http://localhost:8080/index.php?mode=sso`
   and put its client ID/secret in `.env`.
+- PHP errors go to `docker compose -f docker-compose.dev.yml logs app`, not the page (upstream code
+  emits PHP 8 deprecation notices that would break JSON responses).
 - Reset the database: `docker compose -f docker-compose.dev.yml down -v`
 
 `docker/config.php` and `docker/db.inc.php` are mounted over `/opt/app/config.php` and
