@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.env
+node_modules
+config.php
+db.inc.php
+traefik-data
+cache/*
+!cache/readme.txt

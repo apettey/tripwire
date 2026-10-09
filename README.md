@@ -1,3 +1,11 @@
+> **About this repository:** the code here comes from the original Tripwire project at
+> [bitbucket.org/daimian/tripwire](https://bitbucket.org/daimian/tripwire) (`production` branch),
+> by Josh Glassmaker (Daimian Mercer), Astriania and contributors, MIT licensed.
+> It was imported as a snapshot without upstream's git history; `.github/upstream-base` records
+> the upstream commit it matches. This fork adds a Docker image
+> ([`petdog/tripwire`](https://hub.docker.com/r/petdog/tripwire)) and a local dev stack:
+> see [docker/README.md](docker/README.md). Fork changes are logged in [changes/](changes/).
+
 # README  
 
 ### Tripwire - EVE Online wormhole mapping web tool  

@@ -1,0 +1,59 @@
+# Checks upstream Tripwire (Bitbucket, production branch) for new commits and opens a PR
+# applying them (see .github/scripts/sync-upstream.sh). If they conflict with our changes
+# the job fails and the sync must be run locally.
+# Requires Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+env:
+  SYNC_BRANCH: upstream-sync
+  # Scheduled runs have no repository payload but always run on the default branch
+  BASE_BRANCH: ${{ github.event.repository.default_branch || github.ref_name }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+
+      - name: Apply upstream changes
+        id: apply
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$SYNC_BRANCH"
+          rc=0; .github/scripts/sync-upstream.sh || rc=$?
+          if [ "$rc" = 2 ]; then
+            echo "::error::Upstream changes conflict with ours. Run .github/scripts/sync-upstream.sh locally and resolve."
+            exit 1
+          fi
+          [ "$rc" = 0 ] || exit "$rc"
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "upstream=$(cat .github/upstream-base)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push branch and open PR
+        if: steps.apply.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_SHA: ${{ steps.apply.outputs.upstream }}
+        run: |
+          git commit -q -m "Sync upstream Tripwire ${UPSTREAM_SHA:0:7}"
+          git push --force origin "$SYNC_BRANCH"
+          if [ -z "$(gh pr list --head "$SYNC_BRANCH" --base "$BASE_BRANCH" --state open --json number -q '.[0].number')" ]; then
+            gh pr create --head "$SYNC_BRANCH" --base "$BASE_BRANCH" \
+              --title "Sync upstream Tripwire (${UPSTREAM_SHA:0:7})" \
+              --body "Applies changes from https://bitbucket.org/daimian/tripwire (production) up to \`$UPSTREAM_SHA\`. Add a change-log entry if this changes behaviour our features depend on."
+          fi

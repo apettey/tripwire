@@ -1,0 +1,65 @@
+# Production example using the published image.
+#
+#   cp .env.example .env        # fill in every value
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# The app listens on plain HTTP; put it behind a TLS-terminating proxy
+# (Traefik, Caddy, nginx, Cloudflare tunnel, ...). EVE SSO requires https.
+
+name: tripwire
+
+services:
+  app:
+    image: ${TRIPWIRE_IMAGE:-petdog/tripwire:latest}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    environment:
+      DB_HOST: mysql
+      DB_NAME: tripwire_database
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_WAIT_SECONDS: ${DB_WAIT_SECONDS:-}
+      TRIPWIRE_DOMAIN: ${TRIPWIRE_DOMAIN}
+      TRIPWIRE_HTTPS: ${TRIPWIRE_HTTPS:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      EVE_SSO_CLIENT: ${EVE_SSO_CLIENT}
+      EVE_SSO_SECRET: ${EVE_SSO_SECRET}
+      EVE_SSO_REDIRECT: ${EVE_SSO_REDIRECT:-}
+      CDN_DOMAIN: ${CDN_DOMAIN:-}
+      APP_NAME: ${APP_NAME:-}
+      TRIPWIRE_API: ${TRIPWIRE_API:-}
+      ENABLE_SEARCH_SCOPE: ${ENABLE_SEARCH_SCOPE:-}
+      DISCORD_WEB_HOOK: ${DISCORD_WEB_HOOK:-}
+      USER_AGENT: ${USER_AGENT:-}
+      TZ: ${TZ:-}
+    volumes:
+      - cache:/opt/app/cache
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0.40
+    restart: unless-stopped
+    command:
+      - --event-scheduler=ON
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      - --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: tripwire_database
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mysql-data:
+  cache:

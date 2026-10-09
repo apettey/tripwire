@@ -1,0 +1,85 @@
+# Local development stack: http://localhost:8080
+#
+#   cp .env.example .env        # optional; fill in EVE_SSO_CLIENT / EVE_SSO_SECRET to log in
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# The repo is bind-mounted into the container, so PHP edits are live.
+# The `assets` service watches app/js and app/css and rebuilds public/js/app.min.js
+# and public/css/app.min.css on change.
+
+name: tripwire-dev
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:${DEV_HTTP_PORT:-8080}:80"
+    environment:
+      DB_HOST: mysql
+      DB_NAME: tripwire_database
+      DB_USER: ${MYSQL_USER:-tripwire}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-tripwire}
+      TRIPWIRE_DOMAIN: localhost:${DEV_HTTP_PORT:-8080}
+      TRIPWIRE_HTTPS: "false"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      EVE_SSO_CLIENT: ${EVE_SSO_CLIENT:-}
+      EVE_SSO_SECRET: ${EVE_SSO_SECRET:-}
+      APP_NAME: ${APP_NAME:-}
+      TRIPWIRE_API: ${TRIPWIRE_API:-}
+      ENABLE_SEARCH_SCOPE: ${ENABLE_SEARCH_SCOPE:-}
+      DISCORD_WEB_HOOK: ${DISCORD_WEB_HOOK:-}
+      USER_AGENT: ${USER_AGENT:-}
+      TZ: ${TZ:-}
+    volumes:
+      - ./:/opt/app
+      # Docker creates empty (gitignored) config.php / db.inc.php in the repo as mount points
+      - ./docker/config.php:/opt/app/config.php:ro
+      - ./docker/db.inc.php:/opt/app/db.inc.php:ro
+      - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  assets:
+    image: node:20-bookworm-slim
+    working_dir: /src
+    environment:
+      DISABLE_NOTIFIER: "true"
+    command: sh -c "npm ci --no-audit --no-fund && npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src watch"
+    volumes:
+      - ./:/src
+      - node_modules:/src/node_modules
+
+  mysql:
+    image: mysql:8.0.40
+    command:
+      - --event-scheduler=ON
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      - --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: tripwire_database
+      MYSQL_USER: ${MYSQL_USER:-tripwire}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-tripwire}
+    ports:
+      - "127.0.0.1:${DEV_MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  adminer:
+    image: adminer
+    ports:
+      - "127.0.0.1:${DEV_ADMINER_PORT:-9000}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+
+volumes:
+  mysql-data:
+  node_modules:

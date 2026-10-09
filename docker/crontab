@@ -1,0 +1,3 @@
+# Same schedule as upstream crontab-tw.txt; runs as www-data, output goes to the container log
+0 * * * * cd /opt/app && php system_activity.cron.php 2>&1
+*/3 * * * * cd /opt/app && php account_update.cron.php 2>&1
