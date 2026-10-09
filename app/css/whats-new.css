@@ -1,0 +1,76 @@
+/* What's New dialog (fork-owned, see app/js/whats-new.js) */
+#dialog-whatsNew {
+	overflow-y: auto;
+	text-align: left;
+}
+
+#dialog-whatsNew .whats-new-item {
+	padding: 8px 4px 10px 4px;
+	border-bottom: 1px solid #555;
+}
+
+#dialog-whatsNew .whats-new-item:last-child {
+	border-bottom: none;
+}
+
+#dialog-whatsNew .whats-new-title {
+	margin: 0 0 2px 0;
+	font-size: 1.1em;
+	color: #FFF;
+}
+
+#dialog-whatsNew .whats-new-title a {
+	color: #4399F0;
+	text-decoration: none;
+}
+
+#dialog-whatsNew .whats-new-title a:hover {
+	text-decoration: underline;
+}
+
+#dialog-whatsNew .whats-new-badge {
+	display: inline-block;
+	padding: 1px 5px;
+	margin-right: 2px;
+	border-radius: 3px;
+	background: #F58504;
+	color: #000;
+	font-size: 0.75em;
+	font-weight: bold;
+	vertical-align: middle;
+}
+
+#dialog-whatsNew .whats-new-date {
+	color: #888;
+	font-size: 0.85em;
+	margin-bottom: 6px;
+}
+
+#dialog-whatsNew .whats-new-description {
+	margin: 0 0 6px 0;
+	color: #CCC;
+	line-height: 1.4;
+}
+
+#dialog-whatsNew .whats-new-image {
+	margin: 6px 0 4px 0;
+}
+
+#dialog-whatsNew .whats-new-image img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border: 1px solid #555;
+	cursor: zoom-in;
+}
+
+#dialog-whatsNew .whats-new-image figcaption {
+	color: #888;
+	font-size: 0.85em;
+	font-style: italic;
+	margin-top: 2px;
+}
+
+#dialog-whatsNew .whats-new-empty {
+	color: #888;
+}

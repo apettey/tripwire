@@ -24,7 +24,26 @@ same commit or PR. No entry, no merge.
 
 Keep entries short. They are a log, not documentation.
 
-## 2. Stay easy to sync with upstream
+## 2. Announce user-facing features in What's New
+
+Users learn about new features from the What's New window, which opens once after each update and can be
+reopened from Settings > General Preferences > What's new. Its content is
+[public/whats-new/features.json](public/whats-new/features.json).
+
+- Every PR that adds or changes something users can see adds an entry to `features.json`, newest first.
+  Open the PR first to get its number, then push the entry.
+  - `pr`: the PR number (unique, it decides what counts as "new")
+  - `date`: `YYYY-MM-DD`
+  - `title`: the feature name
+  - `description`: one to three sentences of plain text (no HTML) saying what it does and how to find it;
+    a blank line starts a new paragraph
+  - `images` (optional, ideally 1–2): screenshots showing where to find it, saved as
+    `public/whats-new/img/pr-<number>-<name>.png` and referenced as
+    `{ "src": "whats-new/img/pr-<number>-<name>.png", "caption": "..." }`
+- Internal-only changes (Docker, CI, docs, refactoring) don't get an entry.
+- Keep wording consistent with the existing entries: plain language, written for the user.
+
+## 3. Stay easy to sync with upstream
 
 Upstream changes are applied as a 3-way diff (`.github/scripts/sync-upstream.sh`). Every line we change
 in an upstream file is a line that can conflict later.
@@ -41,7 +60,7 @@ in an upstream file is a line that can conflict later.
 - New settings belong in `docker/config.php` (read from env) and `.env.example`; also update
   `docker/README.md`.
 
-## 3. Develop against the local stack
+## 4. Develop against the local stack
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
@@ -54,12 +73,12 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 - Before opening a PR, make sure the image still builds: `docker build -f docker/Dockerfile -t tripwire:local .`
 - JS tests: `npx gulp test` (from the `assets` container or with Node locally).
 
-## 4. Commits and PRs
+## 5. Commits and PRs
 
 - One feature per PR, branched from `main`. Describe what changed and link the change-log entry.
 - Pushing to `main` publishes `petdog/tripwire:latest` to Docker Hub, so `main` must always build and run.
 
-## 5. Security
+## 6. Security
 
 Upstream has known weaknesses (CSRF on options/masks/comments endpoints, comment XSS, a fixed OAuth
 `state`, no session regeneration on login). Don't make them worse. When you fix one, log it like any

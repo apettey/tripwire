@@ -38,6 +38,7 @@ services:
       - ./docker/config.php:/opt/app/config.php:ro
       - ./docker/db.inc.php:/opt/app/db.inc.php:ro
       - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+      - php-sessions:/var/lib/php/session   # stay logged in across rebuilds
     depends_on:
       mysql:
         condition: service_healthy
@@ -81,5 +82,6 @@ services:
       ADMINER_DEFAULT_SERVER: mysql
 
 volumes:
+  php-sessions:
   mysql-data:
   node_modules:
