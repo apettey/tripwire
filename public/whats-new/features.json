@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 43,
+      "date": "2026-10-10",
+      "title": "D-scan and local scans on the map",
+      "description": "Paste a directional scan or the local member list into Tripwire and share a summary with your mask, pinned to the system. Click \"Paste d-scan / local\" in the system info panel, or right-click a system on the chain map. The system panel shows each scan as a chip (for example \"D-scan 2 min ago · 14 ships · 1 HIC\"); click it for ships by class, on grid and off grid, lit cynos and nearby structures. Systems with a fresh scan get a small dot on the chain map (cyan for d-scan, green for local).\n\nTurn it off, or change how long scans stay fresh and the on-grid range, in Settings > General Preferences > D-scan & local intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-43-dscan-local.png",
+          "caption": "D-scan summary in the system panel and the marker on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 33,
       "date": "2026-10-10",
       "title": "Clearing the rally point strikes through its Discord message",
