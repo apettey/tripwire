@@ -373,5 +373,19 @@ check('breaker: corporation trips at 400', discord_breaker_record(404, $tc + 10,
 check('breaker: other corporations and everyone else go on', [discord_scope_wait('corp:98000002', $tc + 10), discord_wait('webhook:any', $tc + 10)], [0.0, 0.0]);
 discord_limits_reset();
 
+// --- review round 4: a corporation breaker shows on every Discord-enabled mask of the corporation ---
+$st->exec("CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)");
+$st->exec("INSERT INTO discord_settings VALUES ('98000001.2', '{}'), ('5.0', '{}'), ('6.0', '{}'), ('7.0', '{}')");
+$st->exec("DELETE FROM discord_sent WHERE kind = 'breaker'");
+check('corp breaker notes: every mask of the corporation', discord_breaker_notes($st, '5.0', 'corp:98000001', 300, $nowTs), ['5.0', '98000001.2']);
+check('corp breaker notes: written with the end of the pause', $st->query("SELECT maskID || '|' || ref || '|' || createdAt FROM discord_sent WHERE kind = 'breaker' ORDER BY maskID")->fetchAll(PDO::FETCH_COLUMN),
+    ['5.0|corp:98000001|2026-10-10 12:05:00', '98000001.2|corp:98000001|2026-10-10 12:05:00']);
+check('corp breaker notes: shown on the corp mask page', discord_outbox_status($st, '98000001.2', $nowTs)['paused'], [['scope' => 'corp', 'webhookID' => null, 'until' => '2026-10-10T12:05:00Z']]);
+check('corp breaker notes: not on other corporations or personal masks', [discord_outbox_status($st, '6.0', $nowTs)['paused'], discord_outbox_status($st, '7.0', $nowTs)['paused']], [[], []]);
+discord_breaker_notes($st, '5.0', 'corp:98000001', 600, $nowTs);
+check('corp breaker notes: a new trip replaces the note', (int) $st->query("SELECT COUNT(*) FROM discord_sent WHERE kind = 'breaker' AND maskID = '5.0'")->fetchColumn(), 1);
+check('corp breaker notes: expire with time', discord_outbox_status($st, '98000001.2', $nowTs + 601)['paused'], []);
+check('webhook breaker note: only its own mask', discord_breaker_notes($st, '98000001.2', 'webhook:4', 300, $nowTs), ['98000001.2']);
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

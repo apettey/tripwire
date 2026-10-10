@@ -308,7 +308,7 @@ timeout per request, 50 ms between requests):
   webhook, 150 for one mask pause that mask, 400 for one corporation (all its masks together) pause that corporation,
   2000 overall pause **all** sending (last resort; Cloudflare bans an IP
   from Discord's API at 10,000 per 10 minutes), each until its oldest refusal leaves the window. Logged as
-  `CIRCUIT BREAKER (<scope>)`; a paused mask or webhook is shown on the mask's settings page. Per mask, at most 5 test
+  `CIRCUIT BREAKER (<scope>)`; a paused mask or webhook is shown on that mask's settings page, a paused corporation on the page of each of its Discord-enabled masks. Per mask, at most 5 test
   messages per minute and 10 webhook URLs added or replaced per hour (recorded first, then counted, so concurrent
   requests can't slip past the limit);
 - queued messages older than 6 h expire; sent rows are deleted after 7 days, failed ones after 14, dedupe rows after

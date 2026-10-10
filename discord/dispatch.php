@@ -68,12 +68,31 @@ function discord_breaker_record($status, $now = null, array $scopes = []) {
 }
 
 /**
- * Remember a tripped mask/webhook breaker for the mask's settings page (discord_sent, kind 'breaker', ref = scope,
- * createdAt = until when it is paused, UTC).
+ * Remember a tripped mask/webhook/corporation breaker for the mask's settings page (discord_sent, kind 'breaker',
+ * ref = scope, createdAt = until when it is paused, UTC). Like every discord_sent row it is pruned after 7 days; the
+ * page only shows notes whose time is still ahead.
  */
-function discord_breaker_note(PDO $db, $maskID, $scope, $seconds) {
-    $db->prepare("INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, 'breaker', ?, UTC_TIMESTAMP() + INTERVAL ? SECOND)
-        ON DUPLICATE KEY UPDATE createdAt = VALUES(createdAt)")->execute([$maskID, substr($scope, 0, 64), (int) ceil($seconds)]);
+function discord_breaker_note(PDO $db, $maskID, $scope, $seconds, $now = null) {
+    $until = gmdate('Y-m-d H:i:s', ($now ?? time()) + (int) ceil($seconds));
+    $ref = substr($scope, 0, 64);
+    $db->prepare("DELETE FROM discord_sent WHERE maskID = ? AND kind = 'breaker' AND ref = ?")->execute([$maskID, $ref]);
+    $db->prepare("INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, 'breaker', ?, ?)")->execute([$maskID, $ref, $until]);
+}
+
+/**
+ * Note a tripped breaker where admins will see it: a corporation breaker on every Discord-enabled mask of that
+ * corporation (masks with settings that still send for it), a mask or webhook breaker on the mask itself.
+ */
+function discord_breaker_notes(PDO $db, $maskID, $scope, $seconds, $now = null) {
+    $masks = [(string) $maskID];
+    if (strpos($scope, 'corp:') === 0) {
+        $corporationID = (int) substr($scope, 5);
+        foreach ($db->query('SELECT maskID FROM discord_settings')->fetchAll(PDO::FETCH_COLUMN) as $other) {
+            if (discord_mask_sending_corporation($db, (string) $other) === $corporationID) $masks[] = (string) $other;
+        }
+    }
+    foreach (array_unique($masks) as $mask) discord_breaker_note($db, $mask, $scope, $seconds, $now);
+    return array_values(array_unique($masks));
 }
 
 /** Seconds a breaker scope ('mask:<id>', 'webhook:<id>') stays paused */
@@ -272,7 +291,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
         [$status, $body, $headers] = discord_http_post(discord_webhook_send_url($url), discord_payload($context));
         $decision = discord_handle_response($bucket, $status, $headers, $body, (int) $row['attempts']);
         foreach (discord_breaker_record($status, null, $scopes) as $scope) {
-            if ($scope !== 'global') discord_breaker_note($db, $row['maskID'], $scope, discord_scope_wait($scope));
+            if ($scope !== 'global') discord_breaker_notes($db, $row['maskID'], $scope, discord_scope_wait($scope));
         }
         switch ($decision['result']) {
             case 'sent':

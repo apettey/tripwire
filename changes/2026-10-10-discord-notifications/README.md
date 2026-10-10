@@ -48,7 +48,7 @@ Director within the same corporation isn't detected).
   `public/js/combine.js`, `discord/tools/generate-gate-graph.js`) for server-side safe-route BFS, outbox + dedupe
   tables, and the dispatcher (per-webhook and global 429s, `X-RateLimit-*`, 5xx/network backoff, broken webhooks on
   401/403/404, new/replaced URLs unverified until a successful send, circuit breakers on refused requests per
-  10 minutes: 50 pause a webhook, 150 a mask, 400 a corporation (shown on the mask's page), 2000 everything; queued
+  10 minutes: 50 pause a webhook, 150 a mask, 400 a corporation (shown on the affected masks' pages), 2000 everything; queued
   messages of masks that no longer qualify fail instead of being sent; expiry and pruning). Per mask: 5 test messages per minute, 10 webhook URLs per
   hour, no duplicate webhooks.
 - `discord_notify.worker.php` (new supervisord program `discord-notify`): polls the chain maps for new k-space
@@ -58,7 +58,7 @@ Director within the same corporation isn't detected).
   blocks the stream; no new zKillboard/ESI callers, names from the existing cache).
 - Dev stack: fake Discord service `discord-mock` (`docker/dev/discord-mock.php`, simulates 404/401/429/500) with
   `DISCORD_API_BASE` (accepted for local hosts only), `docker/dev/discord-fake-kill.php` to feed a made-up kill.
-- Tests: `discord/tests/discord_test.php` (163 checks: webhook validation, crypto, escaping, mentions, safe-route BFS
+- Tests: `discord/tests/discord_test.php` (170 checks: webhook validation, crypto, escaping, mentions, safe-route BFS
   with low-sec ends, Zarzakh and Pochven, hub range, kill classification and filters, settings validation, Discord
   responses with a fake transport) and `app/js-test/fork/discord-notifications.test.js`.
 - Docs: `docker/README.md#discord-notifications`, `docker/sql/discord.sql`, `.env.example`, `docker/config.php`,
