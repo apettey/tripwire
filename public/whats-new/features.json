@@ -81,6 +81,18 @@
       ]
     },
     {
+      "pr": 39,
+      "date": "2026-10-10",
+      "title": "High-sec region instead of hole type",
+      "description": "Holes into high-sec now show the system's region (for example \"The Forge\") on the chain map where the hole type used to be, so you can see at a glance where an exit lands. Hover the name to see the full region and the hole type.\n\nTurn it off in Settings > Chain Map Settings > High-sec region.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-39-highsec-region-label.png",
+          "caption": "High-sec exits labelled with their region"
+        }
+      ]
+    },
+    {
       "pr": 37,
       "date": "2026-10-10",
       "title": "Routes through Thera and Turnur",
