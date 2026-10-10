@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 33,
+      "date": "2026-10-10",
+      "title": "Clearing the rally point strikes through its Discord message",
+      "description": "Clearing the rally point no longer posts a new message that pings everyone. The rally message itself is struck through and says who cleared it and when, shown in each reader's own time zone. When the rally moves after 30 seconds, a new message is posted and the old one is struck through with where it moved.\n\nCorporation admins can change the cleared text in Mask Admin > Discord with the new {rally} and {time} placeholders. Masks still using the default texts get the new ones automatically.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-33-rally-clear-edits.png",
+          "caption": "Mask Admin > Discord: the rally point preview, cleared and moved"
+        }
+      ]
+    },
+    {
       "pr": 32,
       "date": "2026-10-10",
       "title": "Hole size on the connection",
