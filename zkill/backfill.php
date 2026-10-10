@@ -63,6 +63,14 @@ function zk_backfill_decision($backfill, $streamSince, $windowSeconds, $now, $pr
 }
 
 /**
+ * Whether a queue row with this status is being worked on (queued or running). Never while the feed is off: the
+ * worker doesn't drain the queue then, so leftover rows would look pending forever.
+ */
+function zk_backfill_in_progress($status, $feedEnabled = true) {
+    return $feedEnabled && ($status === 'queued' || $status === 'running');
+}
+
+/**
  * Whether a new queue entry may be added.
  * @param int $queued queued + running rows overall; @param int $queuedByUser of them added by this user
  */
@@ -98,7 +106,7 @@ function zk_backfill_covered_from($started, $pastSeconds, $listCount, array $ent
 /**
  * Coverage of the window [now - windowSeconds, now] for each system, queueing a back-fill for systems whose history
  * is not covered (see zk_backfill_decision()), unless the queue limits are reached.
- * @param array $options queue (bool), source ('panel'|'chain'), userID (int)
+ * @param array $options queue (bool), source ('panel'|'chain'), userID (int), feedEnabled (bool, default: the setting)
  * @return array systemID => ['complete' => bool, 'coveredFrom' => unix|null, 'coveredTo' => unix|null, 'pending' => bool,
  *                            'queueFull' => bool, 'status' => queue status|null, 'error' => string]
  */
@@ -172,6 +180,9 @@ function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, array $o
                 if ($status !== 'running') $status = 'queued';
             }
             $pending = $decision['pending'];
+        } elseif (!$historyCovered) {
+            // Read-only request (queue=0): still report a back-fill someone else queued as pending
+            $pending = zk_backfill_in_progress($status, $options['feedEnabled'] ?? zk_feed_enabled());
         }
         $result[$systemID] = [
             'complete' => $complete,
