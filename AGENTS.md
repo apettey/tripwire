@@ -49,6 +49,20 @@ reopened from Settings > General Preferences > What's new. Its content is
 - Internal-only changes (Docker, CI, docs, refactoring) don't get an entry.
 - Keep wording consistent with the existing entries: plain language, written for the user.
 
+### Ask for every feature: does it need a Settings toggle?
+
+Every user-facing feature must answer this question before it is built, and the answer goes in the PR
+(the PR template asks it) and in the change-log entry.
+
+- **Default: yes, add a toggle** wherever someone could reasonably prefer to work without the feature
+  (visual additions, pop-ups, automatic behaviour). Bug fixes and pure improvements usually don't need one;
+  say why in the PR.
+- **On by default**, so users see the feature exists; the toggle lets them turn it off.
+- Store it per user in `options.<feature>.enabled` (a missing key means on), add a row to the matching
+  Settings section (Chain Map Settings, General Preferences, ...) from the feature's own JS, apply it on
+  Save like the neighbouring settings, and make sure it survives Settings > Reset.
+- Mention the toggle in the feature's What's New description ("turn it off in Settings > ...").
+
 ## 3. Stay easy to sync with upstream
 
 Upstream changes are applied as a 3-way diff (`.github/scripts/sync-upstream.sh`). Every line we change

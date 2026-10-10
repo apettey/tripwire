@@ -12,6 +12,9 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] `git checkout main && git pull && git checkout -b feature/<name>` (one feature per branch/PR).
 - [ ] Start the dev stack: `docker compose -f docker-compose.dev.yml up --build` (http://127.0.0.1:8080).
 - [ ] Take the **before** screenshot now, before editing (see step 5).
+- [ ] Answer **"does it need a Settings toggle?"** (AGENTS.md section 2). Default yes for user-facing
+      features: on by default, `options.<feature>.enabled` (missing = on), a row in the matching Settings
+      section injected from your JS, applied on Save, surviving Reset. Write the answer in the PR.
 
 ## 2. Code in fork-owned files
 - [ ] JS in `app/js/fork/<feature>.js`, CSS in `app/css/fork/<feature>.css`. Gulp bundles
@@ -32,7 +35,7 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
       no comment or other `const` above it, or the object won't be global.
 - [ ] Other helpers: `fake$`, `fakeAjax`, `loadJSON` in `app/js-test/helpers/helpers.js`; test data
       in `app/js-test/testdata/`. Code that needs `appData` must have it faked in the test.
-- [ ] Run: `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp test`
+- [ ] Run: `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx mocha --recursive app/js-test`
       (`MSYS_NO_PATHCONV` stops Git Bash on Windows mangling paths). All tests must pass.
 
 ## 4. Bundles
