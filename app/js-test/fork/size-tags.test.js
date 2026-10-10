@@ -65,17 +65,293 @@ describe('Chain map size tags', () => {
 		};
 		const types = { wh2: 'H296', wh4: 'D792' };
 		const result = sizeTags.decorate(makeResult(), id => types[id]);
+		const tag = i => result.map.rows[i].c[0].sizeTag;
 		const html = i => result.map.rows[i].c[0].f;
 
-		it('does not tag the root', () => assert.ok(html(0).indexOf('size-tag') < 0));
-		it('tags a known hole after the type text', () => assert.ok(html(1).indexOf("H296</a><span class=\"size-tag size-xl\"") > 0));
-		it('tags an unknown K162 as likely', () => assert.ok(html(2).indexOf('>XL?</span></h4>') > 0));
-		it('uses the wormhole type for the K162 side', () => assert.ok(html(3).indexOf('>VL</span></h4>') > 0));
-		it('skips destination nodes', () => assert.ok(html(4).indexOf('size-tag') < 0));
-		it('skips calculated route nodes', () => assert.ok(html(5).indexOf('size-tag') < 0));
-		it('decorating twice does not add a second tag', () => {
+		it('does not tag the root', () => assert.equal(tag(0), undefined));
+		it('tags a known hole', () => assert.deepEqual(tag(1), { size: 'XL', certain: true, jump: 2000000000 }));
+		it('tags an unknown K162 as likely', () => assert.deepEqual(tag(2), { size: 'XL', certain: false, jump: 2000000000 }));
+		it('uses the wormhole type for the K162 side', () => assert.equal(tag(3).size, 'VL'));
+		it('skips destination nodes', () => assert.equal(tag(4), undefined));
+		it('skips calculated route nodes', () => assert.equal(tag(5), undefined));
+		it('leaves the node markup alone (the tag goes on the connection)', () => {
+			for (let i = 0; i < 6; i++) { assert.ok(html(i).indexOf('size-tag') < 0, 'row ' + i); }
+		});
+		it('decorating twice keeps one tag per node', () => {
 			sizeTags.decorate(result, id => types[id]);
-			assert.equal(html(1).split('size-tag').length, 2);
+			assert.equal(tag(1).size, 'XL');
+			assert.equal(tag(0), undefined);
+		});
+		it('tagsByNodeId maps child node ids to their tags', () => {
+			const tags = sizeTags.tagsByNodeId(result.map);
+			assert.deepEqual(Object.keys(tags).sort(), ['2', '3', '4']);
+			assert.equal(tags[4].size, 'VL');
+			assert.deepEqual(sizeTags.tagsByNodeId(undefined), {});
+		});
+	});
+
+	describe('connector geometry', () => {
+		const line = (x0, y0, x1, y1, n) => Array.from({ length: n + 1 }, (_, i) => ({ x: x0 + (x1 - x0) * i / n, y: y0 + (y1 - y0) * i / n }));
+		const near = (p, x, y, eps) => assert.ok(Math.abs(p.x - x) <= (eps || 0.01) && Math.abs(p.y - y) <= (eps || 0.01), JSON.stringify(p) + ' vs ' + x + ',' + y);
+
+		it('cubicPoint: ends and middle', () => {
+			const p0 = { x: 0, y: 0 }, p1 = { x: 0, y: 10 }, p2 = { x: 10, y: 10 }, p3 = { x: 10, y: 0 };
+			near(sizeTags.cubicPoint(p0, p1, p2, p3, 0), 0, 0);
+			near(sizeTags.cubicPoint(p0, p1, p2, p3, 1), 10, 0);
+			near(sizeTags.cubicPoint(p0, p1, p2, p3, 0.5), 5, 7.5);
+		});
+
+		it('tracePath records lines from the node position', () => {
+			const renderer = {};
+			const draw = function(ctx, node) { assert.equal(this, renderer); ctx.lineTo(node.parent.position.x, node.parent.position.y); };
+			const pts = sizeTags.tracePath(draw, renderer, { position: { x: 0, y: 0 }, parent: { position: { x: 10, y: 20 } } }, 4);
+			assert.equal(pts.length, 5);
+			near(pts[0], 0, 0); near(pts[2], 5, 10); near(pts[4], 10, 20);
+		});
+
+		it('tracePath follows bezier and quadratic curves', () => {
+			// the org chart (top) curve: up from the child, then across to the parent
+			const draw = (ctx, node) => ctx.bezierCurveTo(node.position.x, -50, node.position.x, -50, 0, -50);
+			const pts = sizeTags.tracePath(draw, {}, { position: { x: 100, y: 0 } }, 10);
+			assert.equal(pts.length, 11);
+			near(pts[10], 0, -50);
+			near(pts[5], 87.5, -43.75);
+			const quad = sizeTags.tracePath((ctx) => ctx.quadraticCurveTo(0, 10, 10, 10), {}, { position: { x: 0, y: 0 } }, 2);
+			near(quad[1], 2.5, 7.5); near(quad[2], 10, 10);
+		});
+
+		it('nodeRect is centred on the position', () => {
+			assert.deepEqual(sizeTags.nodeRect({ position: { x: 10, y: 20 }, requestedSize: { width: 40, height: 30 } }), { x0: -10, x1: 30, y0: 5, y1: 35 });
+		});
+
+		it('visibleMidpoint: middle of the line between the node boxes', () => {
+			// child box covers x up to 20, parent box from 60 on a line from 0 to 100: visible 20..60
+			const pts = line(0, 0, 100, 0, 100);
+			near(sizeTags.visibleMidpoint(pts, [{ x0: -10, x1: 20, y0: -5, y1: 5 }, { x0: 60, x1: 110, y0: -5, y1: 5 }]), 40, 0, 0.5);
+		});
+
+		it('visibleMidpoint: without rects it is the middle of the whole line', () => {
+			near(sizeTags.visibleMidpoint(line(0, 0, 0, 80, 8), []), 0, 40);
+		});
+
+		it('visibleMidpoint: falls back to the middle when the boxes cover the whole line', () => {
+			near(sizeTags.visibleMidpoint(line(0, 0, 100, 0, 10), [{ x0: -10, x1: 110, y0: -5, y1: 5 }]), 50, 0);
+		});
+
+		it('visibleMidpoint: null below minVisible, or for an empty path', () => {
+			const pts = line(0, 0, 100, 0, 100);
+			assert.equal(sizeTags.visibleMidpoint(pts, [{ x0: -10, x1: 49, y0: -5, y1: 5 }, { x0: 51, x1: 110, y0: -5, y1: 5 }], 4), null);
+			assert.equal(sizeTags.visibleMidpoint([], []), null);
+			near(sizeTags.visibleMidpoint([{ x: 3, y: 4 }], []), 3, 4);
+		});
+
+		it('growRect and inRect', () => {
+			const r = sizeTags.growRect({ x0: 0, y0: 0, x1: 10, y1: 10 }, 2);
+			assert.deepEqual(r, { x0: -2, y0: -2, x1: 12, y1: 12 });
+			assert.ok(sizeTags.inRect({ x: 11, y: 0 }, r));
+			assert.ok(!sizeTags.inRect({ x: 12, y: 0 }, r));
+		});
+
+		it('outsideRects keeps only rects sticking out of the box', () => {
+			const box = { left: 0, top: 0, right: 50, bottom: 30 };
+			const inside = { left: 5, top: 5, right: 20, bottom: 15 }, badge = { left: -4, top: -4, right: 10, bottom: 8 }, empty = { left: -9, top: -9, right: -9, bottom: 2 };
+			assert.deepEqual(sizeTags.outsideRects(box, [inside, badge, empty, null]), [badge]);
+		});
+
+		it('toMapRect converts screen px to map px (zoom)', () => {
+			assert.deepEqual(sizeTags.toMapRect({ left: 120, top: 80, right: 160, bottom: 110 }, { left: 100, top: 50 }, 2), { x0: 10, y0: 15, x1: 30, y1: 30 });
+			assert.deepEqual(sizeTags.toMapRect({ left: 1, top: 2, right: 3, bottom: 4 }, { left: 0, top: 0 }, 0), { x0: 1, y0: 2, x1: 3, y1: 4 });
+		});
+
+		it('overlapArea', () => {
+			assert.equal(sizeTags.overlapArea({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 5, y0: 8, x1: 20, y1: 20 }), 10);
+			assert.equal(sizeTags.overlapArea({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 10, y0: 0, x1: 20, y1: 10 }), 0);
+		});
+
+		it('leastCoveredPoint: off badges first, text counts more, then nearest the target', () => {
+			const pts = line(0, 0, 100, 0, 100);
+			// nothing in the way: the target
+			near(sizeTags.leastCoveredPoint(pts, { x: 50, y: 0 }, [], [], []), 50, 0);
+			// a badge around the target: just off it (tag half-width 10)
+			near(sizeTags.leastCoveredPoint(pts, { x: 50, y: 0 }, [], [{ x0: 45, x1: 55, y0: -3, y1: 3 }], []), 35, 0);
+			// text one side, a badge the other: covering a little badge beats covering text
+			const p = sizeTags.leastCoveredPoint(line(0, 0, 40, 0, 40), { x: 20, y: 0 }, [],
+				[{ x0: 28, x1: 40, y0: -3, y1: 3 }], [{ x0: 0, x1: 12, y0: -3, y1: 3 }]);
+			assert.ok(p.x > 20, JSON.stringify(p));
+			assert.equal(sizeTags.leastCoveredPoint([], null, [], [], []), null);
+		});
+
+		describe('pointOnPath', () => {
+			const pts = line(0, 0, 200, 0, 200);
+			const child = { x0: -30, x1: 30, y0: -20, y1: 20 }, parent = { x0: 170, x1: 230, y0: -20, y1: 20 };
+			it('middle of the free line', () => near(sizeTags.pointOnPath(pts, [child, parent], [], []), 100, 0, 0.5));
+			it('keeps clear of a badge on the line', () => {
+				// badge over x 60..100: with margins the free line is 35..50 and 110..165
+				const p = sizeTags.pointOnPath(pts, [child, parent], [{ x0: 60, x1: 100, y0: -6, y1: 6 }], []);
+				assert.ok(p.x >= 110 || p.x <= 50, JSON.stringify(p));
+			});
+			it('nodes nearly touching: between the borders, off the badges and the text', () => {
+				const a = { x0: -30, x1: 30, y0: -20, y1: 20 }, b = { x0: 40, x1: 100, y0: -20, y1: 20 };
+				near(sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], [], []), 35, 0, 0.5);
+				// a badge on the gap and text on the child: no free spot, so the tag avoids the text first
+				const p = sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], [{ x0: 31, x1: 39, y0: -3, y1: 3 }], [{ x0: -20, x1: 28, y0: -4, y1: 4 }]);
+				assert.ok(p.x - sizeTags.TAG_HALF.x >= 28, JSON.stringify(p));
+			});
+		});
+	});
+
+	describe('tagHtml on a connector', () => {
+		it('adds the extra class and position style', () => {
+			const html = sizeTags.tagHtml({ size: 'M', certain: true, jump: 62e6 }, 'size-tag-connector', 'left: 3px; top: -4px');
+			assert.equal(html, '<span class="size-tag size-m size-tag-connector" style="left: 3px; top: -4px" title="Max ship 62 kt (up to battlecruisers)">M</span>');
+		});
+	});
+
+	describe('installRenderer', () => {
+		const withStub = (name, fn, body) => { const orig = sizeTags[name]; sizeTags[name] = fn; try { body(); } finally { sizeTags[name] = orig; } };
+
+		it('canvas renderers: tags are placed after draw and collapse, from the drawn connections', () => {
+			const nodes = [{ id: 2 }, { id: 3 }];
+			const ctx = { calls: [] };
+			const drawConnection = function(c, node) { c.calls.push(node.id); };
+			const renderer = {
+				drawConnection: drawConnection,
+				draw: function() { nodes.forEach(n => { this.drawConnection(ctx, n); this.drawConnection(ctx, n); }); return 'drawn'; },
+				collapse: function() { this.drawConnection(ctx, nodes[0]); }
+			};
+			const placed = [];
+			withStub('placeOnDrawnMap', (r, dc, ns) => placed.push({ r: r, dc: dc, ids: ns.map(n => n.id) }), () => {
+				sizeTags.installRenderer(renderer);
+				sizeTags.installRenderer(renderer);	// idempotent
+				assert.equal(renderer.draw(), 'drawn');
+				renderer.collapse();
+			});
+			assert.deepEqual(ctx.calls, [2, 2, 3, 3, 2]);	// the real drawing still happens
+			assert.deepEqual(placed.map(p => p.ids), [[2, 3], [2]]);	// each connection once (auras draw twice)
+			assert.equal(placed[0].r, renderer);
+			assert.equal(placed[0].dc, drawConnection);	// traced with the original, not the hook
+			assert.equal(renderer.sizeTagsNodes, null);
+		});
+
+		it('canvas renderers: tags are placed even if drawing throws', () => {
+			const renderer = { drawConnection: () => {}, draw: () => { throw new Error('boom'); }, collapse: () => {} };
+			let calls = 0;
+			withStub('placeOnDrawnMap', () => calls++, () => {
+				sizeTags.installRenderer(renderer);
+				assert.throws(() => renderer.draw(), /boom/);
+			});
+			assert.equal(calls, 1);
+		});
+
+		it('old org chart: tags are placed after draw with the drawn map', () => {
+			const map = { rows: [] };
+			const renderer = { collapseHandler: () => {}, draw: function(m) { this.lastLineData = { map: m }; } };
+			const maps = [];
+			withStub('placeOnOrgChart', m => maps.push(m), () => {
+				sizeTags.installRenderer(renderer);
+				renderer.draw(map);
+			});
+			assert.deepEqual(maps, [map]);
+			assert.ok(renderer.sizeTagsOrgChart);
+		});
+
+		it('while the chain draws, canvas tags wait for chain.draw to finish (badges shown after the renderer)', () => {
+			const order = [];
+			const radial = { drawConnection: () => {}, collapse: () => {},
+				draw: function() { this.drawConnection({}, { id: 2 }); order.push('renderer'); } };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				draw: function() { this.drawing = true; this.renderer.draw(); this.drawing = false; this.activity(); order.push('draw done'); },
+				activity: function() { order.push('activity'); }
+			};
+			withStub('placeOnDrawnMap', (r, dc, ns) => order.push('place ' + ns.map(n => n.id)), () => {
+				sizeTags.installRenderers(fakeChain);
+				fakeChain.draw();
+				assert.deepEqual(order, ['renderer', 'activity', 'draw done', 'place 2']);
+				order.length = 0;
+				fakeChain.activity();	// activity arriving later (ESI): tags placed again
+				assert.deepEqual(order, ['activity', 'place 2']);
+				order.length = 0;
+				radial.collapse();	// not in a chain draw: placed straight away
+				assert.deepEqual(order, ['place ']);
+			});
+		});
+
+		it('a chain draw with only new occupied/activity data places the tags again once', () => {
+			const order = [];
+			const radial = { drawConnection: () => {}, collapse: () => {}, draw: () => {} };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				draw: function(data) { if (data.map) { this.renderer.draw(); } this.occupied(); this.activity(); },
+				activity: () => order.push('activity'), occupied: () => order.push('occupied')
+			};
+			withStub('placeAgain', () => order.push('placeAgain'), () => {
+				sizeTags.installRenderers(fakeChain);
+				fakeChain.draw({ map: null, occupied: [] });
+			});
+			assert.deepEqual(order, ['occupied', 'activity', 'placeAgain']);
+		});
+
+		it('placeAgain skips the old org chart, a renderer mid-collapse, and replaces the tags otherwise', () => {
+			const removed = [], placed = [];
+			const container = { id: 'inner' };
+			const nodes = [{ domNode: { parentNode: container } }, { domNode: { parentNode: container } }];
+			const r = { sizeTagsLast: { drawConnection: 'dc', nodes: nodes } };
+			const saved$ = global.$;
+			global.$ = el => ({ children: sel => ({ remove: () => removed.push([el.id, sel]) }) });
+			try {
+				withStub('placeOnDrawnMap', (rr, dc, ns) => placed.push([dc, ns.length]), () => {
+					sizeTags.placeAgain({ renderer: { sizeTagsOrgChart: true } });
+					sizeTags.placeAgain({ renderer: Object.assign({ sizeTagsBusy: true }, r) });
+					assert.equal(placed.length, 0);
+					sizeTags.placeAgain({ renderer: r });
+				});
+			} finally { global.$ = saved$; }
+			assert.deepEqual(removed, [['inner', '.size-tag-connector']]);
+			assert.deepEqual(placed, [['dc', 2]]);
+		});
+
+		it('a canvas collapse places the tags once, after its redraw', () => {
+			const calls = [];
+			const radial = { drawConnection: () => {}, draw: () => {},
+				collapse: function() { fakeChain.updateCollapsed(); calls.push('redraw'); } };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				updateCollapsed: function() { this.activity(); this.occupied(); },
+				activity: () => {}, occupied: () => {}
+			};
+			withStub('placeOnDrawnMap', () => calls.push('place'), () => {
+				sizeTags.installRenderers(fakeChain);
+				radial.sizeTagsLast = { drawConnection: () => {}, nodes: [] };	// as after an earlier draw
+				radial.collapse();
+			});
+			assert.deepEqual(calls, ['redraw', 'place']);
+		});
+
+		it('installRenderers hooks the current renderer, renderer switches and the org chart collapse', () => {
+			const legacy = { collapseHandler: () => {}, draw: () => {}, lastLineData: { map: { rows: ['x'] } } };
+			const radial = { drawConnection: () => {}, draw: () => {}, collapse: () => {} };
+			const fakeChain = {
+				renderer: radial,
+				useRenderer: function(name) { this.renderer = name == 'orgChart' ? legacy : radial; },
+				updateCollapsed: function(c) { this.collapsed = c; }
+			};
+			const maps = [];
+			withStub('placeOnOrgChart', m => maps.push(m), () => {
+				sizeTags.installRenderers(fakeChain);
+				sizeTags.installRenderers(fakeChain);	// idempotent
+				assert.ok(radial.sizeTagsHooked);
+				fakeChain.updateCollapsed([1]);	// canvas renderers redraw themselves on collapse
+				assert.equal(maps.length, 0);
+				fakeChain.useRenderer('orgChart');
+				assert.ok(legacy.sizeTagsHooked);
+				fakeChain.updateCollapsed([2]);
+				assert.deepEqual(fakeChain.collapsed, [2]);
+				assert.deepEqual(maps, [legacy.lastLineData.map]);
+				legacy.drawing = true;	// collapses re-applied during a draw are covered by the draw hook
+				fakeChain.updateCollapsed([3]);
+				assert.equal(maps.length, 1);
+			});
 		});
 	});
 
@@ -98,9 +374,9 @@ describe('Chain map size tags', () => {
 			sizeTags.install(fakeChain);
 			global.options = { sizeTags: { enabled: false } };
 			try {
-				assert.equal(fakeChain.nodes().map.rows[1].c[0].f, node.f);
+				assert.equal(fakeChain.nodes().map.rows[1].c[0].sizeTag, undefined);
 				global.options.sizeTags.enabled = true;
-				assert.ok(fakeChain.nodes().map.rows[1].c[0].f.indexOf('size-xl') >= 0);
+				assert.equal(fakeChain.nodes().map.rows[1].c[0].sizeTag.size, 'XL');
 			} finally { delete global.options; }
 		});
 
