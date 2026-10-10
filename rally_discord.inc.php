@@ -74,10 +74,12 @@ function rally_discord_system_label($system, $region) {
 	return $system['name'] . ($parts ? ' (' . implode(', ', $parts) . ')' : '');
 }
 
-/** "AABCA · J152820" / "J152820": the system's chain label (discord_chain_label) before it, when it has one */
-function rally_discord_with_label($chainLabel, $text) {
-	$chainLabel = trim((string)$chainLabel);
-	return $chainLabel !== '' ? $chainLabel . ' · ' . $text : (string)$text;
+/** "AABCA · J152820" / "J152820", cleaned: the system's chain label (discord_chain_label) before it, when it has one.
+	The label is a signature name (user text): also no links (':' escaped, as discord_escape does) */
+function rally_discord_with_label($chainLabel, $text, $max = 150) {
+	$label = str_replace(':', '\\:', rally_discord_clean(trim((string)$chainLabel), 100));
+	$text = rally_discord_clean($text, $max);
+	return $label !== '' ? $label . ' · ' . $text : $text;
 }
 
 /** Webhook payload. $action 'set' or 'clear'. All text is cleaned here; allowed_mentions blocks pings
@@ -88,9 +90,9 @@ function rally_discord_payload($action, $who, $systemLabel = null, $systemName =
 	$who = rally_discord_clean($who !== null && $who !== '' ? $who : 'someone');
 	if ($action === 'clear') {
 		$content = 'Tripwire rally point cleared by *' . $who . '*';
-		if ($systemName !== null && $systemName !== '') $content .= ' (was on ' . rally_discord_clean(rally_discord_with_label($chainLabel, $systemName), 260) . ')';
+		if ($systemName !== null && $systemName !== '') $content .= ' (was on ' . rally_discord_with_label($chainLabel, $systemName) . ')';
 	} else {
-		$content = 'Tripwire rally point from *' . $who . '*: **' . rally_discord_clean(rally_discord_with_label($chainLabel, $systemLabel), 260) . '**';
+		$content = 'Tripwire rally point from *' . $who . '*: **' . rally_discord_with_label($chainLabel, $systemLabel) . '**';
 		$urlBase = preg_replace('/[<>\s]+/', '', (string)$urlBase);	// can't break out of the <autolink>
 		if ($urlBase !== '' && $systemName !== null && $systemName !== '') {
 			$content .= "\n<" . $urlBase . '/?system=' . rawurlencode($systemName) . '>';

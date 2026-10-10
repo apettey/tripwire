@@ -347,7 +347,7 @@ and more, listed in the UI) plus an embed (kills: victim, final blow, attackers,
 wormhole systems show their class instead of a security value).
 `{label}` (k-space and rally point) is the system's chain label, the name the chain map shows for it: the name of the
 wormhole signature leading into the system, on the far side of the hole (`discord_chain_label` in `discord/rally.php`:
-a wormhole of the mask whose far-side signature has a name and whose near-side signature is unnamed or a return
+a wormhole of the mask whose far-side signature has a name starting with a letter or digit and whose near-side signature is unnamed or a return
 bookmark `<...`; reached more than once, the shortest leading name token wins, then the lowest wormhole id; empty for
 home or a system without a named hole). `{labelSystem}` is "AABCA · J152820", or only "J152820" without a label.
 The legacy `DISCORD_WEB_HOOK` rally posts show the label the same way. Labels are signature names (user text), escaped

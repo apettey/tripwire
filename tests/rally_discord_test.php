@@ -59,7 +59,7 @@ check('clear with system and label', rally_discord_payload('clear', 'A', null, '
 check('clear with system, no label', rally_discord_payload('clear', 'A', null, 'J152820')['content'], 'Tripwire rally point cleared by *A* (was on J152820)');
 $evilLabel = rally_discord_payload('set', 'A', 'J152820', 'J152820', null, "@everyone <@&42> **x** [l](https://e.example)\n");
 check('hostile label', [$evilLabel['content'], $evilLabel['allowed_mentions']],
-	array("Tripwire rally point from *A*: **@{$zw}everyone @{$zw}&42 \\*\\*x\\*\\* \\[l\\](https://e.example) · J152820**", array('parse' => array())));
+	array("Tripwire rally point from *A*: **@{$zw}everyone @{$zw}&42 \\*\\*x\\*\\* \\[l\\](https\\://e.example) · J152820**", array('parse' => array())));
 check('hostile label when cleared', strpos(rally_discord_payload('clear', 'A', null, 'J152820', null, '@here <@1>')['content'], "(was on @{$zw}here @{$zw}1 · J152820)") !== false, true);
 check('chain label helper without a database', rally_discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
 check('json has allowed_mentions', json_encode($set['allowed_mentions']), '{"parse":[]}');

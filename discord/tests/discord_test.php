@@ -141,6 +141,8 @@ $row = ['wormholeID' => 7, 'type' => 'N110', 'parent' => 'initial',
     'aID' => 1, 'aSys' => 31000123, 'aSig' => 'abc123', 'aBy' => 'Scout', 'aName' => ' AB ', 'bID' => 2, 'bSys' => 30000142, 'bSig' => 'xyz789', 'bBy' => 'Jumper', 'bName' => ''];
 check('candidates: k-space side, hole in the J-space system', discord_kspace_candidates($row),
     [['systemID' => 30000142, 'sigRowID' => 2, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'N110', 'mapper' => 'Jumper', 'label' => 'AB']]);
+check('candidates: no label when the k-space side is named (a hole out) or the far side is a return bookmark',
+    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '<A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB']);
 check('candidates: no label without a name on the far side', discord_kspace_candidates(['aName' => null] + $row)[0]['label'], '');
 check('candidates: K162 side', discord_kspace_candidates(['parent' => 'secondary'] + $row)[0]['hole'], 'K162');
 check('candidates: unknown far side', discord_kspace_candidates(['bSys' => 3] + $row), []);
@@ -552,6 +554,9 @@ check('chain label pick: same token length, lowest wormhole id', discord_chain_l
     ['wormholeID' => 9, 'nearName' => '', 'farName' => 'BA', 'farSystem' => 1], ['wormholeID' => 4, 'nearName' => null, 'farName' => 'AB', 'farSystem' => 2]], 3), 'AB');
 check('chain label pick: a hole out (named near side) and a hole to itself are not in', discord_chain_label_pick([
     ['wormholeID' => 1, 'nearName' => 'C', 'farName' => 'Z', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => 'Y', 'farSystem' => 3]], 3), '');
+check('chain label pick: a far name without a name token (return bookmark "<H", "?") is not a label', discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => '', 'farName' => '<H', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => '?', 'farSystem' => 2],
+    ['wormholeID' => 3, 'nearName' => '', 'farName' => 'AB - drifter', 'farSystem' => 4]], 3), 'AB - drifter');
 check('chain label: one line, at most 100 characters', [discord_chain_label_clean("A\nB"), mb_strlen(discord_chain_label_clean(str_repeat('x', 300)))], ['A B', 100]);
 
 // --- rally messages with the chain label ---
@@ -581,6 +586,9 @@ check('rally cleared: system unknown (queued before this version)', discord_payl
     'Tripwire rally point cleared by *Chribba*');
 check('rally cleared: by someone else, no system', discord_payload(discord_rally_context(['action' => 'set', 'who' => 'S', 'systemID' => 31001880] + $rbase, null, $labelled))['content'],
     'Tripwire rally point cleared by *someone*');
+check('rally cleared: the label kept at clear time wins over a lookup now', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880, 'label' => 'AAB'] + $rbase, null, $labelled))['content'],
+    'Tripwire rally point cleared by *C* (was on AAB · J152820)');
+check('rally cleared: an empty kept label stays empty', discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880, 'label' => ''] + $rbase, null, $labelled)['label'], '');
 check('rally cleared: unreadable rally, the clear still names it', discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880] + $rbase, false, $labelled)['label'], 'AABCA');
 check('rally set message: {was} is empty', discord_payload(discord_rally_context(['action' => 'set', 'template' => 'x{was}y'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $labelled))['content'], 'xy');
 check('rally data: a clear keeps the system it was on, a set does not', [discord_rally_data($rtype, 'Corp', 'clear', 'C', 2000, 31001880)['systemID'] ?? null,

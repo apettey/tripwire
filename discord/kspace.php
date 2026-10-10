@@ -42,8 +42,10 @@ function discord_kspace_candidates(array $row) {
             'viaSig' => discord_sig_text($row[$other . 'Sig']),
             'hole' => $hole,
             'mapper' => (string) ($row[$side . 'By'] ?: $row[$other . 'By']),
-            // The chain label (as discord_chain_label): the name of the hole leading in, i.e. the other side's signature
-            'label' => discord_chain_label_clean($row[$other . 'Name'] ?? ''),
+            // The chain label, by discord_chain_label's rule applied to this hole (the system's only one: it is new on
+            // the chain): the other side's signature name, unless it is no name token or this side is named (a hole out)
+            'label' => discord_chain_label_pick([['wormholeID' => (int) $row['wormholeID'], 'nearName' => $row[$side . 'Name'] ?? '',
+                'farName' => $row[$other . 'Name'] ?? '', 'farSystem' => (int) $row[$other . 'Sys']]], $systemID),
         ];
     }
     return $out;

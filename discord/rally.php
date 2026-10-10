@@ -61,6 +61,8 @@ function discord_rally_data(array $type, $maskName, $action, $who, $now = null, 
 function discord_rally_enqueue(PDO $db, $maskID, array $type, $action, $who, $previousSystemID = 0) {
     $data = discord_rally_data($type, discord_mask_name($db, $maskID), $action, $who, null, $previousSystemID);
     if ($data === null) return null;
+    // A clear: the label of the system it was on as it is now (the hole may be gone by the time the message is sent)
+    if (isset($data['systemID'])) $data['label'] = discord_chain_label($db, $maskID, $data['systemID']);
     return discord_enqueue($db, (string) $maskID, $type['webhookID'], 'rally', $data, DISCORD_PRIORITY_RALLY);
 }
 
@@ -85,7 +87,8 @@ function discord_rally_current(PDO $db, $maskID) {
  * The chain map picks the inbound hole by walking out from the active chain tab's home system(s), which are each
  * user's own option, so the server can't repeat that walk. It uses the rule the Add Signature dialog uses without a
  * home tab (holeNaming.incomingFromWormholes, app/js/fork/hole-naming.js): a wormhole of the mask touching the system
- * leads into it when its far-side signature has a name and its near-side signature (in the system) has none or is a
+ * leads into it when its far-side signature has a name starting with a letter or digit (its leading token, so not a
+ * return bookmark) and its near-side signature (in the system) has none or is a
  * return bookmark ("<C"); a named near side is a hole out of the system. With several (a system reached more than
  * once, loops) the one closest to home wins: the shortest leading name token ("AB" before "ABC"), then the lowest
  * wormhole id. One query (both directions of the wormhole, UNION ALL), prepared.
@@ -115,7 +118,8 @@ function discord_chain_label_pick(array $rows, $systemID) {
         if ($far === '') continue;
         $near = discord_chain_label_clean($row['nearName']);
         if ($near !== '' && $near[0] !== '<') continue;   // a hole out of the system
-        $rank = [preg_match('/^[A-Za-z0-9]+/', $far, $m) ? strlen($m[0]) : mb_strlen($far), (int) $row['wormholeID']];
+        if (!preg_match('/^[A-Za-z0-9]+/', $far, $m)) continue;   // no name token (e.g. a return bookmark "<C"), as holeNaming
+        $rank = [strlen($m[0]), (int) $row['wormholeID']];
         if ($best === null || $rank < $best[0]) $best = [$rank, $far];
     }
     return $best ? $best[1] : '';
@@ -146,7 +150,9 @@ function discord_rally_context(array $data, $rally, ?callable $labelOf = null) {
         // their own message)
         $clear = ($data['action'] ?? '') === 'clear';
         $who = $clear && ($data['who'] ?? '') !== '' ? $data['who'] : 'someone';
-        $was = $clear && (int) ($data['systemID'] ?? 0) > 0 ? discord_rally_system((int) $data['systemID'], $labelOf) : [];
+        // The label as it was when cleared (discord_rally_enqueue), else looked up now
+        $known = array_key_exists('label', $data) ? function () use ($data) { return (string) $data['label']; } : $labelOf;
+        $was = $clear && (int) ($data['systemID'] ?? 0) > 0 ? discord_rally_system((int) $data['systemID'], $known) : [];
         return $base + ['cleared' => true, 'who' => $who] + $was;
     }
     return $base + ['cleared' => false, 'who' => ($rally['setBy'] ?? '') !== '' ? $rally['setBy'] : 'someone']
