@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [System Threat](2026-10-10-system-threat/README.md) | Kill-activity heat badge on chain map nodes (7-day kills) and a Threat & residents block in the system info panel; zKillboard per-system stats fetched only by the feed worker (pooled client, lowest priority, 12 h cache), toggles in Chain Map Settings and General Preferences |
 | 2026-10-10 | [Chain Kill Feed](2026-10-10-chain-killfeed/README.md) | "Chain kills" panel: one live feed of recent kills in every wormhole, low-sec and null-sec system on the chain map, last hour back-filled when a system joins; built on `system_kills.php`, no new zKillboard callers |
 | 2026-10-10 | [Infra deploy: pass the environment secret](2026-10-10-infra-deploy-secret/README.md) | Release path called `infra-deploy.yml` without secrets, so the environment's `INFRA_REPO_TOKEN` was empty and v1.9.0 opened no infra PR; now `secrets: inherit` |
 | 2026-10-10 | [System Kill Feed](2026-10-10-system-killfeed/README.md) | Kills panel with the 20 latest kills in the viewed system; all zKillboard/ESI access pooled in one server module (`zkill/`) used only by the feed worker, with back-fill and name queues |
