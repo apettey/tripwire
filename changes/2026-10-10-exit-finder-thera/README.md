@@ -6,8 +6,8 @@
 
 The Favourites panel's routes and the Destinations window can now go through Thera and Turnur, using the public
 connections EVE-Scout publishes (the same list upstream's chain map overlay already loads). When such a route has fewer
-jumps it is shown instead, with the systems and signature IDs to warp to; filters for hub, ship size and hole life are in
-Settings.
+jumps it is shown instead, as jump markers (built on the Favourites route strip, #40) with Thera / Turnur hops as coloured
+circles and the signature IDs to warp to as small chips; filters for hub, ship size and hole life are in Settings.
 
 ## Before / After
 
@@ -17,10 +17,35 @@ Settings.
 | ![before](before-destinations.png) | ![after](after-destinations.png) |
 
 Same chain (home J132401 with a hole to Amamake) and favourites, taken on the dev stack with EVE-Scout's live list of
-2026-10-10. Before: Jita `1wh → 15g`, Amarr has no high-sec only route. After: Jita `Turnur → 11g` (J132401 itself had a
-Turnur hole, KYY-030), Amarr safe `Turnur → 9g → Thera → 4g`; the yellow line names the systems and signatures. The
-Destinations window shows the same Turnur route for Jita (13 jumps: 11 gates plus the two holes). Settings row:
-![settings](settings.png)
+2026-10-10. Before: Jita `1wh → 15g`. After: Jita goes through Turnur (J132401 itself had a Turnur hole, KYY-030): two
+pink circles (into and out of Turnur), then 11 gate squares coloured by security, 13 jumps, chips `KYY-030` `TVG-265`;
+Amarr is a normal route (`1wh → 8g`: one circle into low-sec Amamake, then gates). The Destinations window shows the same
+markers (Jita through Turnur, 13 jumps; Amarr gates from Amamake). The What's New image also has a safe route through both
+Turnur and Thera (yellow circles). Settings row: ![settings](settings.png)
+
+## Jump markers (after user feedback on the PR)
+
+The first version showed routes as text ("1wh → 5g → Thera → 7g") plus a yellow line of systems and signatures. The user
+asked for Wanderer-style markers instead, so this builds on the Favourites route strip (#40, `favouritesRouteStrip`):
+
+- One marker per jump, EVE-Scout hops included (`theraRoute.stripSteps`, from the plan's own edges, so the markers are
+  exactly the route that was counted). Gates are squares in CCP's security colour, the chain's wormholes circles in the
+  colour of the system entered (class colour in J-space, security in k-space), as #40 does.
+- Thera / Turnur hops (into or out of the hub, EVE-Scout hole or a mapped wormhole) are circles in the hub's colour with
+  a thin white ring: Thera `#ffc800` (its C12 colour in `app/css/base.css`), Turnur `#FF4DFF` (no security step or class
+  uses it). This replaces #40's triangle for hub hops, as the user asked for circles.
+- Hovering a Thera / Turnur marker: "Jump 3 of 13: Thera hole (EVE-Scout) → Thera · warp to EWM-864 in Meirakulf · Q063,
+  max medium, 16h left" (hole type, signature, max ship size, life left; all escaped). The strip's tooltip keeps the text
+  route and the full walk-through, as #40 does.
+- Warp line: dropped. Its information is in the markers' tooltips, and the signatures you must warp to are small chips at
+  the end of the strip (yellow border for Thera, pink for Turnur; tooltip "In Meirakulf warp to EWM-864 into Thera
+  (...)", click copies the ID). Chips stay readable at a glance, which is what you need in space, while the systems are
+  one hover away: the least clutter that still lets you warp without opening anything.
+- Destinations window: each route is a marker strip too (gate routes under the exit system, Thera / Turnur routes with
+  chips), the jump count stays in the Jumps column; rows are built as HTML, so the strip is fitted to 230 px and long
+  routes compress to "…+N".
+- With #40's "Show routes as jump markers" off, both places show the text route and the yellow line as before.
+- The two "Set route in game" leg buttons are unchanged.
 
 ## Settings
 
@@ -80,6 +105,12 @@ Settings > Reset removes the key (back to the defaults).
 - `app/css/fork/thera-route.css` (new), `app/js-test/fork/thera-route.test.js` (new, 62 tests: Thera beats gates; skipped
   when too small, EOL, disabled or only reachable straight back; Thera in the chain; safe variant; Avoid NS / Avoid HS /
   Prefer HS rules; Turnur; texts; legs; Favourites integration with hubs on and off), new tests in `route-destinations.test.js`; rebuilt bundles.
+- `app/js/fork/favourites-route-strip.js` (#40's file): `steps()` takes `scout` plans, `markers()` knows EVE-Scout steps
+  and hub colours (`HUB_COLOURS`), new `pathSteps`, `sigChipsHtml`, `stripHtml` (Destinations); chips in the panel's
+  strip and click-to-copy. `app/css/fork/favourites-route-strip.css`: marker rules no longer scoped to the panel (the
+  Destinations window uses them), hub marker is a ringed circle. `route-destinations.js`: `stripHtml`, markers in the
+  window. `favourites-panel.js`: no yellow line while the markers are on. Tests: Thera plan → steps → markers (kinds,
+  colours, tooltips, chips), Turnur colour, Destinations rows as markers and as text with markers off.
 - Upstream files touched: none (besides the rebuilt bundles).
 
 ## Limitations

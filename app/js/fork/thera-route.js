@@ -351,6 +351,36 @@ const theraRoute = {
 		}).join(" · ");
 	},
 
+	/** Every jump of a plan for the route strip (favouritesRouteStrip.markers), in order:
+	[{from, to, kind: "gate" | "wormhole" (the chain's, with lineIndex) | "scout", hubName, sig (to warp to, in sigSystemID),
+	sigSystemID, hole ("Q063, max large, 10h left")}] */
+	stripSteps: function(plan, now) {
+		if (!plan || plan.kind !== "scout" || !Array.isArray(plan.edges)) { return null; }
+		return plan.edges.map(function(e) {
+			const step = { from: String(e.from), to: String(e.to), kind: e.kind === "gate" ? "gate" : e.kind === "chain" ? "wormhole" : "scout" };
+			if (e.kind === "chain") { step.lineIndex = e.line; }
+			if (e.kind === "scout") {
+				step.hubName = theraRoute.HUBS[e.hub];
+				step.sig = theraRoute.sigIn(e.link, e.from);
+				step.sigSystemID = String(e.from);
+				step.hole = theraRoute.holeText(e.link, now);
+			}
+			return step;
+		});
+	},
+
+	/** The signatures to warp to on a plan, in order: [{sig, where (system you warp in), to, hubName, into (true: into
+	the hub), hole}]. name: function(systemID) -> system name */
+	warpSigs: function(plan, name, now) {
+		if (!plan || plan.kind !== "scout" || !Array.isArray(plan.edges)) { return []; }
+		return plan.edges.filter(function(e) { return e.kind === "scout"; }).map(function(e) {
+			return {
+				sig: theraRoute.sigIn(e.link, e.from), where: name(e.from), to: name(e.to), hubName: theraRoute.HUBS[e.hub],
+				into: e.to === e.hub, hole: theraRoute.holeText(e.link, now)
+			};
+		});
+	},
+
 	/** Whether a route through Thera/Turnur beats another plan: the other has no route, or this one has fewer jumps */
 	better: function(other, scout) {
 		if (!scout || scout.status !== "ok") { return false; }

@@ -4,6 +4,7 @@ include('app/js/fork/rally');
 include('app/js/fork/favourites-panel');
 include('app/js/fork/autopilot-route');
 include('app/js/fork/thera-route');
+include('app/js/fork/favourites-route-strip');
 
 const tr = theraRoute;
 const THERA = 31000005, TURNUR = 30002086;
@@ -195,6 +196,38 @@ describe('Thera route', () => {
 			assert.deepEqual(autopilotRoute.scoutLeg(p, 1), { path: [Y, H], from: Y, to: H });
 			assert.equal(autopilotRoute.scoutLeg(p, 5).error, 'No such leg');
 			assert.equal(autopilotRoute.scoutLeg({ status: 'ok', kind: 'chain' }, 0).error, 'No route');
+		});
+	});
+
+	describe('Route strip (jump markers)', () => {
+		const rs = favouritesRouteStrip;
+		const p = route({ sources: [J1], connections: [[String(J1), String(A), [], 3]] });	// 1wh → 1g → Thera → 1g
+		const steps = tr.stripSteps(p, NOW);
+		const lookup = id => systems[id] || null;
+		const m = rs.markers(steps, lookup, () => '', () => ({ label: 'B274' }));
+		it('One step per jump, EVE-Scout hops included', () => assert.deepEqual(steps.map(s => s.kind), ['wormhole', 'gate', 'scout', 'scout', 'gate']));
+		it('Scout steps carry the sig to warp to and where', () => {
+			assert.deepEqual([steps[2].hubName, steps[2].sig, steps[2].sigSystemID], ['Thera', 'OUT-1', String(X)]);
+			assert.deepEqual([steps[3].sig, steps[3].sigSystemID], ['HUB-2', String(THERA)]);
+		});
+		it('The plan through the strip: same steps', () => assert.deepEqual(rs.steps(p, J1, H, null, []).map(s => s.kind), steps.map(s => s.kind)));
+		it('Markers: coloured by the system entered, Thera hops as yellow circles', () => {
+			assert.deepEqual(m.map(x => x.kind), ['wormhole', 'gate', 'hub', 'hub', 'gate']);
+			assert.deepEqual(m.map(x => x.colour), ['#399AEB', '#399AEB', '#ffc800', '#ffc800', '#399AEB']);
+		});
+		it('Thera marker tooltip: hole type, sig to warp to, size, life', () => {
+			assert.equal(m[2].title, 'Jump 3 of 5: Thera hole (EVE-Scout) → Thera · warp to OUT-1 in X · Q063, max large, 10h left');
+			assert.equal(m[3].title, 'Jump 4 of 5: Thera hole (EVE-Scout) → Y 0.9 · warp to HUB-2 in Thera · Q063, max large, 10h left');
+		});
+		it('Turnur hops in the Turnur colour', () => {
+			const t = rs.markers(tr.stripSteps(route({ sources: [LOW], links: [LT] }), NOW), lookup, () => '');
+			assert.deepEqual([t[0].kind, t[0].colour], ['hub', '#FF4DFF']);
+		});
+		it('Signature chips in order', () => assert.deepEqual(tr.warpSigs(p, name, NOW).map(c => [c.sig, c.where, c.into, c.to]),
+			[['OUT-1', 'X', true, 'Thera'], ['HUB-2', 'Thera', false, 'Y']]));
+		it('Not a scout plan', () => {
+			assert.equal(tr.stripSteps({ kind: 'chain' }, NOW), null);
+			assert.deepEqual(tr.warpSigs(null, name, NOW), []);
 		});
 	});
 

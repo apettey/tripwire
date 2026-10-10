@@ -15,6 +15,56 @@
 	cursor: help;
 }
 
+/* Signature chips of a route through Thera / Turnur (route strip), click to copy */
+.fav-sigs {
+	flex: 0 0 auto;
+	display: inline-flex;
+	gap: 3px;
+}
+
+.fav-sig {
+	display: inline-block;
+	padding: 0 3px;
+	border: 1px solid #ffc800;
+	border-radius: 3px;
+	color: #E8E8E8;
+	font-size: 0.85em;
+	line-height: 12px;
+	white-space: nowrap;
+	cursor: copy;
+}
+
+.fav-sig-turnur {
+	border-color: #FF4DFF;
+}
+
+.fav-sig:hover {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+/* Destinations window: route as jump markers under the exit */
+#dialog-routeDestinations .route-dest-strip {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 0 1px 0;
+}
+
+#dialog-routeDestinations .route-dest-strip .fav-strip-markers {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 2px;	/* 9px marker + 2px = favouritesRouteStrip.MARKER_STEP */
+	min-height: 12px;
+}
+
+#dialog-routeDestinations .route-dest-strip .fav-mk-gap {
+	color: #999;
+	font-size: 0.85em;
+	padding: 0 2px;
+	line-height: 12px;
+}
+
 /* Numbered "Set route in game" buttons, one per gate leg */
 .autopilot-route-btn.autopilot-route-leg sup {
 	font-family: Verdana, Arial, sans-serif;

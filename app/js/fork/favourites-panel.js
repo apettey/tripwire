@@ -639,6 +639,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function scoutLine(info) {
 			const plan = info ? info[info.mode] : null;
 			if (!plan || plan.kind !== "scout" || typeof theraRoute === "undefined") { return ""; }
+			// Jump markers on: the route strip shows the hops and the signatures as chips instead
+			if (typeof favouritesRouteStrip !== "undefined" && favouritesRouteStrip.enabled(options)) { return ""; }
 			return "<span class='fav-scout-line' title='" + fp.escape(theraRoute.planDetail(plan, "", systemName, Date.now())) + "'>"
 				+ fp.escape(theraRoute.lineText(plan, systemName)) + "</span>";
 		}

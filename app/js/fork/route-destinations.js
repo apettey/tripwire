@@ -261,6 +261,20 @@ const routeDestinations = {
 		return "<span class='" + esc(system.systemTypeClass) + "'>" + esc(system.name) + "</span>";
 	},
 
+	STRIP_WIDTH: 230,	// px of jump markers in the "Best exit from chain" column (rows are built as HTML, not measured)
+
+	/** The route as jump markers (favouritesRouteStrip, when its "Show routes as jump markers" setting is on), or ""
+	@param steps favouritesRouteStrip steps; chips: theraRoute.warpSigs (signature chips); title: tooltip of the strip */
+	stripHtml: function(steps, chips, title) {
+		if (typeof favouritesRouteStrip === "undefined" || !steps || !steps.length
+			|| !favouritesRouteStrip.enabled(typeof options !== "undefined" ? options : null)) return "";
+		const rs = favouritesRouteStrip;
+		const lookup = rs.lookup || function(id) { return appData.systems[id] || null; };
+		const regionName = rs.regionName || function() { return ""; };
+		return "<div class='route-dest-strip'" + (title ? " title='" + routeDestinations.escape(title) + "'" : "") + ">"
+			+ rs.stripHtml(steps, lookup, regionName, routeDestinations.STRIP_WIDTH, chips) + "</div>";
+	},
+
 	/** Table rows for the Destinations window */
 	renderRows: function(list, exits, limit) {
 		const esc = routeDestinations.escape;
@@ -275,7 +289,8 @@ const routeDestinations = {
 			if (ev.scout && typeof theraRoute !== "undefined") {
 				const name = function(id) { return (appData.systems[id] || {}).name || String(id); };
 				const detail = theraRoute.planDetail(ev.scout, system.name, name, Date.now());
-				exitCell = "<span class='route-dest-scout' title='" + esc(detail) + "'><span class='route-dest-scout-text'>" + esc(theraRoute.planText(ev.scout)) + "</span> "
+				const strip = routeDestinations.stripHtml(theraRoute.stripSteps(ev.scout, Date.now()), theraRoute.warpSigs(ev.scout, name, Date.now()), detail);
+				exitCell = strip || "<span class='route-dest-scout' title='" + esc(detail) + "'><span class='route-dest-scout-text'>" + esc(theraRoute.planText(ev.scout)) + "</span> "
 					+ "<span class='route-dest-scout-line'>" + esc(theraRoute.lineText(ev.scout, name)) + "</span></span>";
 				jumpsCell = "<span title='" + esc(detail) + "'>" + ev.scout.total + "</span>";
 			} else if (!(exits || []).length) {
@@ -287,7 +302,8 @@ const routeDestinations = {
 				jumpsCell = "0";
 			} else {
 				exitCell = routeDestinations.systemLabel(ev.best.exit.systemID)
-					+ (ev.best.exit.holeName ? " <span class='route-dest-hole'>(" + esc(ev.best.exit.holeName) + ")</span>" : "");
+					+ (ev.best.exit.holeName ? " <span class='route-dest-hole'>(" + esc(ev.best.exit.holeName) + ")</span>" : "")
+					+ (typeof favouritesRouteStrip !== "undefined" ? routeDestinations.stripHtml(favouritesRouteStrip.pathSteps(ev.best.path), []) : "");
 				jumpsCell = String(ev.best.jumps);
 			}
 			return "<tr data-systemid='" + d.systemID + "'>"
