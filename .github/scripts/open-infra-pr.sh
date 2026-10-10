@@ -100,6 +100,15 @@ echo "eve-infrastructure: $image_change"
 
 cd "$INFRA_DIR"
 
+# Fetch only main and the branches we look at, quietly and with full history: a full-depth
+# actions/checkout would list every infra branch name in this public log.
+fetch_branch() { git fetch -q origin "+refs/heads/$1:refs/remotes/origin/$1"; }
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+	git fetch -q --unshallow origin "+refs/heads/main:refs/remotes/origin/main"
+else
+	fetch_branch main
+fi
+
 # Commits made by this script carry $MARKER; a branch with any other commit belongs to a human.
 bot_only() { # <remote branch>: true if every commit on it that is not on main is ours
 	local all ours
@@ -113,7 +122,7 @@ supersede=() keep_open=()
 while IFS=$'\t' read -r num head; do
 	[ -n "$num" ] || continue
 	[ "$head" != "$PREFIX$VERSION" ] || continue
-	if git fetch -q origin "$head" 2> /dev/null && bot_only "$head"; then
+	if fetch_branch "$head" 2> /dev/null && bot_only "$head"; then
 		supersede+=("$num:$head")
 	else
 		keep_open+=("$num")
@@ -139,7 +148,7 @@ fi
 branch="$PREFIX$VERSION"
 push=true
 if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-	git fetch -q origin "$branch"
+	fetch_branch "$branch"
 	if git merge-base --is-ancestor origin/main "origin/$branch" &&
 		git diff --quiet "origin/$branch" -- stacks/tripwire/compose.yaml; then
 		push=false # up to date: keep it (and anything pushed on top)
@@ -147,7 +156,7 @@ if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
 		echo "::warning::$branch has human commits and is outdated; using a new branch"
 		old_pr=$(infra_gh pr list --repo "$INFRA_REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
 		if [ -n "$old_pr" ]; then keep_open+=("$old_pr"); fi
-		branch="$branch-run${GITHUB_RUN_ID:-$(date +%s)}"
+		branch="$branch-run${GITHUB_RUN_ID:-$(date +%s)}-${GITHUB_RUN_ATTEMPT:-1}"
 	fi
 fi
 
@@ -228,6 +237,8 @@ summary "- $verb [$INFRA_REPO#$pr]($pr_url): $image_change"
 
 for s in "${supersede[@]}"; do
 	old="${s%%:*}"
+	# never our own PR/branch (a re-run can find the -run branch it made before)
+	if [ "$old" = "$pr" ] || [ "${s#*:}" = "$branch" ]; then continue; fi
 	infra_gh pr close "$old" --repo "$INFRA_REPO" --delete-branch \
 		--comment "Superseded by #$pr (Tripwire $VERSION), which deploys these changes too." > /dev/null || true
 	summary "- Closed superseded #$old"

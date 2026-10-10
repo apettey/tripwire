@@ -130,7 +130,9 @@ jobs:
           ref: main
           token: ${{ secrets.INFRA_REPO_TOKEN }}
           path: .infra
-          fetch-depth: 0 # full history: the branch checks compare against main
+          # Shallow on purpose: fetch-depth 0 would print every infra branch name in this public
+          # log. The script fetches main and the bump branches it needs, quietly, with full history.
+          fetch-depth: 1
 
       - name: Bump Tripwire in eve-infrastructure and open the PR
         if: steps.token.outputs.present == 'true'
