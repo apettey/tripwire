@@ -74,3 +74,15 @@
 #dialog-whatsNew .whats-new-empty {
 	color: #888;
 }
+
+#dialog-whatsNew .whats-new-version {
+	padding: 8px 4px 0 4px;
+	border-top: 1px solid #555;
+	color: #888;
+	font-size: 0.85em;
+	text-align: right;
+}
+
+.whats-new-version-inline {
+	color: #888;
+}

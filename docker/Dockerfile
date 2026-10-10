@@ -57,6 +57,14 @@ COPY docker/db.inc.php /opt/app/db.inc.php
 
 RUN chown -R www-data:www-data /opt/app/cache
 
+# Fork release version (CI passes the vX.Y.Z tag without the v), shown in the What's New dialog via
+# public/version.json. Generated in the image only; the dev stack bind-mounts the repo over it ("dev").
+ARG TRIPWIRE_FORK_VERSION=dev
+ENV TRIPWIRE_FORK_VERSION=$TRIPWIRE_FORK_VERSION
+RUN upstream=$(sed -n "s/.*define('VERSION', *'\([^']*\)').*/\1/p" settings.php | head -n1) \
+ && UPSTREAM="${upstream:-unknown}" php -r 'echo json_encode(["version" => getenv("TRIPWIRE_FORK_VERSION") ?: "dev", "upstream" => getenv("UPSTREAM")], JSON_UNESCAPED_SLASHES), "\n";' > public/version.json \
+ && cat public/version.json
+
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
