@@ -1,6 +1,22 @@
 {
   "features": [
     {
+      "pr": 36,
+      "date": "2026-10-10",
+      "title": "Preserve mass on a connection",
+      "description": "Mark a wormhole as \"preserve mass\" so nobody rolls it or burns its mass, for example your home static or the hole a fleet needs to come back through. Right-click the system on the chain map and choose \"Preserve mass…\", or use the link in the Mass dialog, and add a reason if you like.\n\nEveryone on your mask sees a violet ⊘ marker next to the connection's size tag (hover it to see who set it, when and why) and a \"don't roll this hole\" warning above the rolling guidance in the Mass dialog. Clear it from the same menu or the warning. The flag disappears when the wormhole is deleted. Hide the markers in Settings > Chain Map Settings > Preserve mass.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-36-preserve-mass.png",
+          "caption": "The marker on the chain map and the warning in the Mass dialog"
+        },
+        {
+          "src": "whats-new/img/pr-36-preserve-mass-menu.png",
+          "caption": "Right-click a system: Preserve mass…"
+        }
+      ]
+    },
+    {
       "pr": 33,
       "date": "2026-10-10",
       "title": "Clearing the rally point strikes through its Discord message",
