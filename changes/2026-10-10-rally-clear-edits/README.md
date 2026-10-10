@@ -81,7 +81,9 @@ to Discord".
   message and still sends the old one its "Moved to" edit, and a failed clear edit is not retried; the time is when
   the request ran.
 - Re-setting the rally to exactly what the live message shows sends nothing within 30 s; later it is posted again
-  (pinged) like a move.
+  (pinged) like a move, and the old message gets the same "Moved to" edit even though the system didn't change. This
+  is rare by design: `public/rally.php` only queues a set when the rally's system changes, so it needs a change that
+  wasn't posted in between (e.g. someone moving it with "Also post to Discord" unticked and back).
 - An ending edit keeps the cleared / moved line whole: a struck rally text that doesn't fit Discord's 2000 characters
   is cut instead.
 - UI (`app/js/fork/discord-notifications.js`): help texts, preview renders `~~strike~~` and `<t:…>` and shows the
