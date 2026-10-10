@@ -36,7 +36,7 @@ jobs:
         env:
           DISABLE_NOTIFIER: "true"
         run: |
-          npx gulp js css
+          npx gulp js && npx gulp css
           # Source maps embed the sources (line endings differ per OS), so only the bundles are compared
           if ! git diff --quiet -- public/js/app.min.js public/css/app.min.css; then
             echo "::error::public/js/app.min.js or public/css/app.min.css is out of date. Rebuild (the dev 'assets' service, or 'npx gulp js css') and commit them."
