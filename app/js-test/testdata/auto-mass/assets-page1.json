@@ -1,0 +1,12 @@
+[
+	{"is_singleton": true, "item_id": 1040000000001, "location_flag": "Hangar", "location_id": 31001880, "location_type": "solar_system", "quantity": 1, "type_id": 641},
+	{"is_singleton": true, "item_id": 1040000000101, "location_flag": "MedSlot0", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 12068},
+	{"is_singleton": true, "item_id": 1040000000102, "location_flag": "LoSlot0", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 20353},
+	{"is_singleton": true, "item_id": 1040000000103, "location_flag": "LoSlot1", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 20353},
+	{"is_singleton": true, "item_id": 1040000000104, "location_flag": "LoSlot2", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 2048},
+	{"is_singleton": true, "item_id": 1040000000105, "location_flag": "RigSlot0", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 34306},
+	{"is_singleton": true, "item_id": 1040000000106, "location_flag": "HiSlot0", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 3146},
+	{"is_singleton": false, "item_id": 1040000000107, "location_flag": "Cargo", "location_id": 1040000000001, "location_type": "item", "quantity": 2, "type_id": 20353},
+	{"is_singleton": false, "item_id": 1040000000108, "location_flag": "DroneBay", "location_id": 1040000000001, "location_type": "item", "quantity": 5, "type_id": 2454},
+	{"is_singleton": false, "item_id": 1040000000109, "location_flag": "HiSlot1", "location_id": 1040000000001, "location_type": "item", "quantity": 1, "type_id": 3146}
+]

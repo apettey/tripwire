@@ -14,6 +14,12 @@ describe('Rolling calculator', () => {
 		it('Higgs doubles', () => assert.equal(rollingCalc.passMass(kt(100), { higgs: true }), kt(200)));
 		it('Higgs doubles the hot mass too', () => assert.equal(rollingCalc.passMass(kt(100), { prop: true, higgs: true }), kt(300)));
 		it('matches the mass log for a hot Paladin', () => assert.equal(rollingCalc.passMass(160000000, { prop: true }), 210000000));
+		it('a fitted prop module replaces the 50kt rule', () => {
+			assert.equal(rollingCalc.passMass(kt(15.4), { prop: true, propKg: kt(5) }), kt(20.4));
+			assert.equal(rollingCalc.passMass(kt(100), { prop: true, propKg: 0 }), kt(100));
+			assert.equal(rollingCalc.passMass(kt(100), { prop: false, propKg: kt(50) }), kt(100));
+			assert.equal(rollingCalc.passMass(kt(105.9), { prop: true, propKg: kt(50), higgs: true }), kt(311.8));
+		});
 		it('unknown hull is null', () => {
 			assert.equal(rollingCalc.passMass(undefined), null);
 			assert.equal(rollingCalc.passMass(0), null);
@@ -275,6 +281,17 @@ describe('Rolling calculator', () => {
 			]);
 			assert.deepEqual(list.map(s => s.name), ['Raven', 'Paladin']);
 			assert.equal(list[0].current, true); assert.equal(list[1].current, false);
+		});
+		it('logged fits are separate choices with their prop module and Higgs', () => {
+			const list = rollingCalc.shipChoices({ typeName: 'Onyx (fitted)', mass: kt(15.4), propKg: kt(5), higgs: false }, [
+				{ shipName: 'Megathron', characterName: 'Roller', originalMass: kt(98.4), fit: { source: 'assets', base: kt(105.9), propMass: kt(50), multiplier: 2 } },
+				{ shipName: 'Megathron', originalMass: kt(98.4), fit: { source: 'hull' } }
+			]);
+			assert.deepEqual(list, [
+				{ name: 'Onyx (fitted)', mass: kt(15.4), current: true, propKg: kt(5), higgs: false },
+				{ name: "Megathron (Roller's fit)", mass: kt(105.9), current: false, propKg: kt(50), higgs: true },
+				{ name: 'Megathron', mass: kt(98.4), current: false }
+			]);
 		});
 		it('skips ships without a mass and copes with nothing', () => {
 			assert.deepEqual(rollingCalc.shipChoices(null, [{ shipName: 'X' }]), []);
