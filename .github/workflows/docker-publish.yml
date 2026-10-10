@@ -243,8 +243,8 @@ jobs:
           echo "Released **$TAG**: \`${IMAGE}:${VERSION}\`, \`latest\`, \`upstream-${UPSTREAM}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # Deploy: open the eve-infrastructure PR that pins this release (auto-merged unless a PR in the
-  # release has the deploy:manual label). The token comes from the infra-deploy environment (main
-  # only), not from here; without it the job is skipped with a warning.
+  # release has the deploy:manual label). The token is a secret of the infra-deploy environment (main
+  # only); without it the job is skipped with a warning.
   infra:
     needs: [version, release]
     if: needs.version.outputs.push == 'true' && github.ref == 'refs/heads/main'
@@ -254,3 +254,7 @@ jobs:
     uses: ./.github/workflows/infra-deploy.yml
     with:
       version: ${{ needs.version.outputs.version }}
+    # Required even for environment secrets: a called workflow only sees secrets its caller passes;
+    # otherwise the environment secret silently resolves to an empty string (GitHub docs, "Reuse
+    # workflows" > environment secrets). The caller has no environment, so it can't pass it by name.
+    secrets: inherit
