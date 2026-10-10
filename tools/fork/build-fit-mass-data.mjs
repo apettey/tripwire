@@ -14,7 +14,8 @@
 // - Abyssal (mutated) props and plates have no massAddition on their type: each item's value is rolled by its
 //   mutaplasmid (only /dogma/dynamic/items/{type}/{item} knows it). They get the heaviest base value their mutaplasmid
 //   can apply to (same size and kind; plates: Small = up to 200mm, Medium = up to 800mm, Large = 1600mm), marked
-//   m: 1, so an abyssal prop still counts as a prop and the log errs towards more mass used, not less.
+//   m: 1, so an abyssal prop still makes a hot jump. The logged mass can still be below the real one by the module's
+//   mutation roll (a roll that raises the mass addition isn't seen); the UI shows these as "(base value)".
 const ESI = 'https://esi.evetech.net/latest';
 const UA = 'Tripwire fork fit-mass-data builder';
 const GROUPS = { prop: 46, plate: 329, rigAnchor: 1308 };

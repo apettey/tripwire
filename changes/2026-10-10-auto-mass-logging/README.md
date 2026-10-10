@@ -52,8 +52,9 @@ Off: no asset requests and no reports; upstream still logs the jump with the hul
 - **Abyssal (mutated) props and plates** have no `massAddition` on their type (each item's value is rolled by its
   mutaplasmid). They are listed with the heaviest base value of the modules their mutaplasmid applies to (same size
   and kind; plates: Small = up to 200mm, Medium = up to 800mm, Large = 1600mm) and shown as "(base value)", so an
-  abyssal prop still makes a hot jump and the log errs towards more mass used rather than less. A roll above the
-  base is not seen.
+  abyssal prop now makes a hot jump. The logged mass can still be below the real one by the module's mutation roll
+  (a roll that raises the mass addition isn't seen; props of one size share a single base value, so there is no
+  headroom).
 - `app/js/fork/fit-mass-data.js`: static list of the ~190 modules that change mass, generated once from public ESI
   by `tools/fork/build-fit-mass-data.mjs` (not in the image); no type lookups at runtime.
 - `app/js/fork/auto-mass.js` (`autoMass`): pure maths (assets -> fit, fit -> cold/hot mass, logged row -> jump mass,
