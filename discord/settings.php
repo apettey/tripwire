@@ -37,22 +37,42 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
 }
 
 /**
- * Masks that can have Discord notifications: corporation ('<corp>.2'), alliance ('<alliance>.3') and custom masks
- * ('<id>.0'). Not the Public mask (0.0) and not Private masks ('<character>.1'): a chain shared with others, run by
- * its admins.
+ * Discord notifications belong to a corporation and its Tripwire admins (the corp admin flag, checkAdmin): the
+ * corporation mask ('<corp>.2') and custom masks ('<id>.0') owned by a corporation. Never Public (0.0), Private
+ * ('<character>.1'), alliance masks or custom masks owned by a character (anyone can create those).
+ * By the ID alone: 'corp', 'custom' (still needs its owner checked) or null.
  */
-function discord_mask_allowed($maskID) {
-    return (bool) preg_match('/^[1-9]\d*\.[023]$/', (string) $maskID);
+function discord_mask_kind($maskID) {
+    if (!preg_match('/^([1-9]\d*)\.([02])$/', (string) $maskID, $m)) return null;
+    return $m[2] === '2' ? 'corp' : 'custom';
 }
 
-/** "Our" side of a mask by default: corp mask -> that corporation, alliance mask -> that alliance, else the admin's corp */
-function discord_mask_entities($maskID, $sessionCorporationID) {
-    $parts = explode('.', (string) $maskID);
-    $owner = (int) ($parts[0] ?? 0);
-    $type = $parts[1] ?? '';
-    if ($type === '2' && $owner > 0) return [$owner, 0];
-    if ($type === '3' && $owner > 0) return [0, $owner];
-    return [(int) $sessionCorporationID, 0];
+/**
+ * The corporation a mask belongs to for Discord notifications, or null when the mask can't have them.
+ * $customOwner: [ownerID, ownerType] of a custom mask from the masks table (null = no such mask).
+ */
+function discord_mask_corporation($maskID, ?array $customOwner = null) {
+    $kind = discord_mask_kind($maskID);
+    if ($kind === 'corp') return (int) explode('.', (string) $maskID)[0];
+    if ($kind === 'custom' && $customOwner && (int) $customOwner[1] === 2 && (int) $customOwner[0] > 0) return (int) $customOwner[0];
+    return null;
+}
+
+/** discord_mask_corporation() with the custom mask's owner read from the masks table */
+function discord_mask_corporation_db(PDO $db, $maskID) {
+    $owner = null;
+    if (discord_mask_kind($maskID) === 'custom') {
+        $stmt = $db->prepare('SELECT ownerID, ownerType FROM masks WHERE maskID = ?');
+        $stmt->execute([(string) $maskID]);
+        $row = $stmt->fetch(PDO::FETCH_NUM);
+        $owner = $row ? [(int) $row[0], (int) $row[1]] : null;
+    }
+    return discord_mask_corporation($maskID, $owner);
+}
+
+/** "Our" side of a mask by default: the corporation the mask belongs to */
+function discord_mask_entities($maskCorporationID) {
+    return [(int) $maskCorporationID, 0];
 }
 
 function discord_int_list($value, $max, callable $valid) {
@@ -152,11 +172,23 @@ function discord_settings_save(PDO $db, $maskID, array $settings, $by) {
     $stmt->execute([$maskID, json_encode($settings), substr((string) $by, 0, 100)]);
 }
 
-/** Worker: every mask with at least one enabled type: maskID => settings (defaults without "our" side) */
+/** Whether a corporation still has at least one Tripwire admin (characters.admin) */
+function discord_corporation_has_admin(PDO $db, $corporationID) {
+    $stmt = $db->prepare('SELECT 1 FROM characters WHERE corporationID = ? AND admin = 1 LIMIT 1');
+    $stmt->execute([(int) $corporationID]);
+    return (bool) $stmt->fetchColumn();
+}
+
+/**
+ * Worker: every mask with at least one enabled type: maskID => settings (defaults without "our" side). Masks that can
+ * no longer have notifications are skipped: not a corporation or corporation-owned custom mask (any more), or their
+ * corporation has no Tripwire admin left. Settings stay stored; an admin of the corporation can change them again.
+ */
 function discord_active_settings(PDO $db) {
     $out = [];
     foreach ($db->query('SELECT maskID, settings FROM discord_settings')->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        if (!discord_mask_allowed($row['maskID'])) continue;
+        $corporationID = discord_mask_corporation_db($db, $row['maskID']);
+        if ($corporationID === null || !discord_corporation_has_admin($db, $corporationID)) continue;
         $settings = discord_settings_normalise(json_decode($row['settings'], true), discord_settings_defaults())[0];
         foreach (DISCORD_KINDS as $kind) {
             if ($settings['types'][$kind]['enabled'] && $settings['types'][$kind]['webhookID'] > 0) { $out[(string) $row['maskID']] = $settings; break; }

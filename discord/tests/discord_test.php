@@ -161,8 +161,7 @@ check('settings: enabling needs a webhook', $s['types']['chainKill']['enabled'],
 check('settings: unknown webhook refused', [$s['types']['corpLoss']['webhookID'], $s['types']['corpLoss']['enabled']], [0, false]);
 check('settings: bad ping refused', $s['types']['corpLoss']['ping'], '');
 check('settings: errors reported (unknown webhook, two without a webhook, bad ping)', count($errors), 4);
-check('mask entities', [discord_mask_entities('98000001.2', 5), discord_mask_entities('99000001.3', 5), discord_mask_entities('9000.1', 98000002), discord_mask_entities('1234.0', 98000002)],
-    [[98000001, 0], [0, 99000001], [98000002, 0], [98000002, 0]]);
+check('mask entities: the mask\'s corporation', discord_mask_entities(98000001), [98000001, 0]);
 
 // --- kills ---
 $now = time();
@@ -287,22 +286,50 @@ check('app time: other zone', discord_app_time(1791633600, 'Europe/Berlin'), '20
 check('k-space change after enable', [discord_kspace_after_enable('2026-10-10 12:00:01', 1791633600, 'UTC'),
     discord_kspace_after_enable('2026-10-10 11:59:59', 1791633600, 'UTC'), discord_kspace_after_enable('2000-01-01 00:00:00', 0, 'UTC')], [true, false, true]);
 
-// Only corporation, alliance and custom masks
-check('masks allowed', array_map('discord_mask_allowed', ['98000001.2', '99000001.3', '12345.0', '196379789.1', '0.0', '', 'x.2', '98000001.2 ']),
-    [true, true, true, false, false, false, false, false]);
+// Only corporation masks and corporation-owned custom masks (review round 2)
+check('mask kind', array_map('discord_mask_kind', ['98000001.2', '12345.0', '99000001.3', '196379789.1', '0.0', '', 'x.2', '98000001.2 ']),
+    ['corp', 'custom', null, null, null, null, null, null]);
+check('mask corporation: corp mask', discord_mask_corporation('98000001.2'), 98000001);
+check('mask corporation: custom mask owned by a corporation', discord_mask_corporation('12345.0', [98000001, 2]), 98000001);
+check('mask corporation: personal custom mask refused', discord_mask_corporation('12345.0', [90000001, 1373]), null);
+check('mask corporation: alliance-owned custom mask refused', discord_mask_corporation('12345.0', [99000001, 3]), null);
+check('mask corporation: unknown custom mask refused', discord_mask_corporation('12345.0', null), null);
+check('mask corporation: alliance, private, public refused', [discord_mask_corporation('99000001.3'), discord_mask_corporation('196379789.1'), discord_mask_corporation('0.0')], [null, null, null]);
 
-// Circuit breaker: refusals over 10 minutes pause everything
+// Circuit breakers: per webhook (50), per mask (150), everything (2000) over 10 minutes
 discord_limits_reset();
 $logged = [];
 $t0 = 50000.0;
-for ($i = 0; $i < DISCORD_BREAKER_LIMIT - 1; $i++) discord_breaker_record($i % 2 ? 404 : 429, $t0 + $i * 0.1);
-check('breaker: below the limit', [discord_wait('webhook:x', $t0 + 60), count($logged)], [0.0, 0]);
-check('breaker: 5xx and successes do not count', [discord_breaker_record(503, $t0 + 60), discord_breaker_record(204, $t0 + 60)], [false, false]);
-check('breaker: trips at the limit', discord_breaker_record(400, $t0 + 60), true);
-check('breaker: everything paused until the oldest refusal is 10 min old', round(discord_wait('webhook:any', $t0 + 60), 1), 540.0);
-check('breaker: logged loudly', count($logged) === 1 && strpos($logged[0], 'CIRCUIT BREAKER') === 0, true);
-check('breaker: refusals leave the window', discord_breaker_record(404, $t0 + 700), false);
+$hookA = ['mask:98000001.2', 'webhook:1'];
+for ($i = 0; $i < 49; $i++) discord_breaker_record($i % 2 ? 404 : 429, $t0 + $i * 0.1, $hookA);
+check('breaker: below the webhook limit', [discord_scope_wait('webhook:1', $t0 + 60), count($logged)], [0.0, 0]);
+check('breaker: 5xx and successes do not count', [discord_breaker_record(503, $t0 + 60, $hookA), discord_breaker_record(204, $t0 + 60, $hookA)], [[], []]);
+check('breaker: webhook trips at 50', discord_breaker_record(400, $t0 + 60, $hookA), ['webhook:1']);
+check('breaker: that webhook paused until its oldest refusal is 10 min old', round(discord_scope_wait('webhook:1', $t0 + 60), 1), 540.0);
+check('breaker: other webhooks, the mask and everyone else go on', [discord_scope_wait('webhook:2', $t0 + 60), discord_scope_wait('mask:98000001.2', $t0 + 60), discord_wait('webhook:any', $t0 + 60)], [0.0, 0.0, 0.0]);
+check('breaker: logged loudly', count($logged) === 1 && strpos($logged[0], 'CIRCUIT BREAKER (webhook:1)') === 0, true);
+for ($w = 2; $w <= 4; $w++) for ($i = 0; $i < 33; $i++) discord_breaker_record(404, $t0 + 61 + $i * 0.01, ['mask:98000001.2', "webhook:$w"]);
+check('breaker: the mask trips at 150 over its webhooks', discord_breaker_record(404, $t0 + 62, ['mask:98000001.2', 'webhook:5']), ['mask:98000001.2']);
+check('breaker: mask paused, another mask not', [discord_scope_wait('mask:98000001.2', $t0 + 62) > 500, discord_scope_wait('mask:98000002.2', $t0 + 62), discord_wait('webhook:x', $t0 + 62)], [true, 0.0, 0.0]);
+check('breaker: refusals leave the window', discord_breaker_record(404, $t0 + 700, $hookA), []);
 discord_limits_reset();
+for ($i = 0; $i < 1999; $i++) discord_breaker_record(429, $t0 + $i * 0.01, ['mask:m' . ($i % 40) . '.2', 'webhook:' . $i]);
+check('breaker: global last resort at 2000', [discord_wait('webhook:x', $t0 + 30), discord_breaker_record(429, $t0 + 30, ['mask:new.2', 'webhook:new'])], [0.0, ['global']]);
+check('breaker: global pauses everything', discord_wait('webhook:x', $t0 + 30) > 500, true);
+discord_limits_reset();
+
+// Rate limit: record first, count, take back when over (SQLite stands in for MySQL)
+$rl = new PDO('sqlite::memory:');
+$rl->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$rl->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$rl->exec('CREATE TABLE discord_sent (maskID TEXT, kind TEXT, ref TEXT, createdAt TEXT, PRIMARY KEY (maskID, kind, ref))');
+$taken = [];
+for ($i = 0; $i < 7; $i++) $taken[] = discord_rate_take($rl, '98000001.2', 'rl:test', 5, 60);
+check('rate limit: 5 per window', $taken, [true, true, true, true, true, false, false]);
+check('rate limit: refused attempts leave no record', (int) $rl->query("SELECT COUNT(*) FROM discord_sent")->fetchColumn(), 5);
+check('rate limit: per mask', discord_rate_take($rl, '98000002.2', 'rl:test', 5, 60), true);
+$rl->exec("UPDATE discord_sent SET createdAt = '2000-01-01 00:00:00'");
+check('rate limit: window passes', discord_rate_take($rl, '98000001.2', 'rl:test', 5, 60), true);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

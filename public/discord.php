@@ -4,7 +4,8 @@
 //	Author: 	Tripwire fork
 //
 //	Purpose:	Discord notification settings of the current mask (see docker/README.md#discord-notifications).
-//				Only admins/owners of the session's mask (the same check as Mask Admin) get anything; everyone
+//				Only Tripwire admins of the corporation that owns the session's mask (its corp mask or a
+//				corporation-owned custom mask, checkAdmin) get anything; everyone
 //				else gets 403, on every request.
 //
 //				GET  ?mode=get                      -> settings, webhooks (never their URLs), outbox status, CSRF token
@@ -40,27 +41,26 @@ function discord_fail($code, $message) {
 
 $mask = (string) $_SESSION['mask'];
 if (!isset($mysql) || !($mysql instanceof PDO)) discord_fail(500, 'Database error');
-// Corporation, alliance and custom masks only (not Public, not Private), and only their admins/owners
-if (!discord_mask_allowed($mask)) discord_fail(403, 'Discord notifications are for corporation, alliance and custom masks');
-if (!(checkOwner($mask) || checkAdmin($mask))) discord_fail(403, 'Only admins of this mask can change its Discord notifications');
+// Corporation admins only: the corporation mask or a custom mask owned by the user's corporation, and the user must
+// be a Tripwire admin of that corporation (checkAdmin). Mask owners without the admin flag (anyone can create a
+// personal custom mask) and Public / Private / alliance masks get nothing.
+$maskCorporation = discord_mask_corporation_db($mysql, $mask);
+$sessionCorporation = isset($_SESSION['corporationID']) ? (int) $_SESSION['corporationID'] : 0;
+if ($maskCorporation === null || $maskCorporation !== $sessionCorporation) discord_fail(403, 'Discord notifications are for your corporation\'s masks');
+if (!checkAdmin($mask)) discord_fail(403, 'Only your corporation\'s Tripwire admins can change Discord notifications');
 
 if (empty($_SESSION['discordCsrf'])) $_SESSION['discordCsrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['discordCsrf'];
 $characterName = isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : '';
-[$defaultCorporation, $defaultAlliance] = discord_mask_entities($mask, isset($_SESSION['corporationID']) ? (int) $_SESSION['corporationID'] : 0);
+[$defaultCorporation, $defaultAlliance] = discord_mask_entities($maskCorporation);
 session_write_close();
 
 const DISCORD_MAX_WEBHOOKS     = 10;
 const DISCORD_TESTS_PER_MIN    = 5;    // test messages per mask per minute
 const DISCORD_URLS_PER_HOUR    = 10;   // webhook URLs added or replaced per mask per hour
 
-/** Per-mask rate limit on actions that make Discord requests: false when over $max in the last $seconds, else records one */
 function discord_action_allowed(PDO $db, $mask, $kind, $max, $seconds) {
-	$stmt = $db->prepare('SELECT COUNT(*) FROM discord_sent WHERE maskID = ? AND kind = ? AND createdAt >= UTC_TIMESTAMP() - INTERVAL ' . (int) $seconds . ' SECOND');
-	$stmt->execute(array($mask, $kind));
-	if ((int) $stmt->fetchColumn() >= $max) return false;
-	$db->prepare('INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, ?, ?, UTC_TIMESTAMP())')->execute(array($mask, $kind, bin2hex(random_bytes(8))));
-	return true;
+	return discord_rate_take($db, $mask, $kind, $max, $seconds);
 }
 
 /** Another webhook of the mask with the same URL (decrypted for comparison; at most DISCORD_MAX_WEBHOOKS rows) */
@@ -246,6 +246,13 @@ try {
 		LEFT JOIN discord_webhooks w ON w.id = o.webhookID
 		WHERE o.maskID = ? AND o.status = 'failed' ORDER BY o.id DESC LIMIT 5");
 	$stmt->execute(array($mask));
+	// Circuit breakers of this mask or its webhooks that are open now (discord_breaker_note)
+	$stmt = $mysql->prepare("SELECT ref, createdAt FROM discord_sent WHERE maskID = ? AND kind = 'breaker' AND createdAt > UTC_TIMESTAMP()");
+	$stmt->execute(array($mask));
+	$paused = array_map(function ($r) {
+		$scope = explode(':', $r['ref'], 2);
+		return array('scope' => $scope[0], 'webhookID' => $scope[0] === 'webhook' ? (int) $scope[1] : null, 'until' => zk_iso($r['createdAt']));
+	}, $stmt->fetchAll(PDO::FETCH_ASSOC));
 	$failures = array_map(function ($r) {
 		return array('id' => (int) $r['id'], 'kind' => $r['kind'], 'error' => $r['lastError'], 'createdAt' => zk_iso($r['createdAt']), 'webhook' => $r['webhook']);
 	}, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -260,7 +267,8 @@ try {
 			'corporations' => $defaults['corporations'], 'alliances' => $defaults['alliances']),
 		'placeholders' => discord_placeholders(),
 		'names' => (object) $names,
-		'outbox' => array('queued' => (int) $counts['queued'], 'sent24h' => (int) $counts['sent24h'], 'failed24h' => (int) $counts['failed24h'], 'failures' => $failures),
+		'outbox' => array('queued' => (int) $counts['queued'], 'sent24h' => (int) $counts['sent24h'], 'failed24h' => (int) $counts['failed24h'], 'failures' => $failures,
+			'paused' => $paused),
 	);
 	echo json_encode($output);
 } catch (PDOException $e) {

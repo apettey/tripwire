@@ -97,9 +97,25 @@ describe('Discord notifications', function() {
 	});
 
 	describe('maskAllowed', function() {
-		it('only corporation, alliance and custom masks', function() {
-			assert.deepStrictEqual(['98000001.2', '99000001.3', '12345.0', '196379789.1', '0.0', '', null, undefined].map(dn.maskAllowed),
-				[true, true, true, false, false, false, false, false]);
+		it('corporation mask and corporation-owned custom masks, for admins only', function() {
+			const m = (mask, ownerType, admin) => ({ mask: mask, ownerType: ownerType, admin: admin });
+			assert.deepStrictEqual([
+				m('98000001.2', 'corporate', true), m('98000001.2', 'corporate', false),
+				m('12345.0', 'corporation', true), m('12345.0', 'character', true), m('12345.0', 'alliance', true),
+				m('99000001.3', 'alliance', true), m('196379789.1', 'personal', true), m('0.0', 'global', true), null
+			].map(dn.maskAllowed), [true, false, true, false, false, false, false, false, false]);
+		});
+	});
+
+	describe('pausedText', function() {
+		it('explains open circuit breakers', function() {
+			const now = Date.parse('2026-10-10T12:00:00Z');
+			assert.deepStrictEqual(dn.pausedText([{ scope: 'mask', until: '2026-10-10T12:08:00Z' }, { scope: 'webhook', webhookID: 2, until: '2026-10-10T12:03:00Z' }],
+				[{ id: 2, name: '#kills' }], now), [
+				'All Discord messages of this mask are paused for about 8 min: Discord refused too many requests. Check the webhooks below.',
+				'Messages to #kills are paused for about 3 min: Discord refused too many requests. Check the webhooks below.'
+			]);
+			assert.deepStrictEqual(dn.pausedText(undefined, [], now), []);
 		});
 	});
 

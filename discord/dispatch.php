@@ -10,6 +10,8 @@
 //     DISCORD_MAX_ATTEMPTS;
 //   - 401 / 403 / 404 (unknown webhook, invalid token): the webhook is marked broken (shown in the settings) and its
 //     queued messages fail; nothing more is sent to it until an admin replaces the URL. Other 4xx: that message fails.
+// Circuit breakers (refusals per 10 min): 50 pause that webhook, 150 that mask (shown on the mask's settings page),
+// 2000 everything; all logged as CIRCUIT BREAKER.
 // A pass sends at most $limit messages and stops after $budget seconds, so the worker loop stays responsive.
 
 const DISCORD_HTTP_TIMEOUT   = 10;
@@ -17,38 +19,67 @@ const DISCORD_SPACING        = 0.05;   // seconds between any two requests (Disc
 const DISCORD_NAMES_WAIT     = 90;     // seconds a kill message waits for names before it is sent with fallbacks
 
 const DISCORD_BREAKER_WINDOW = 600;   // seconds
-const DISCORD_BREAKER_LIMIT  = 500;   // refused requests (401/403/404/429/other 4xx) per window before all sending stops;
-                                      // Cloudflare bans an IP from Discord's API at 10,000 per 10 minutes
+// Circuit breakers: requests Discord refused (any 4xx, 429 included) per rolling window before sending pauses. One
+// webhook or one mask trips its own breaker long before the instance-wide one (last resort; Cloudflare bans an IP
+// from Discord's API at 10,000 refusals per 10 minutes).
+const DISCORD_BREAKER_LIMITS = ['webhook' => 50, 'mask' => 150, 'global' => 2000];
 
-/** In-process limiter state: ['global' => unix, 'buckets' => key => unix, 'last' => unix, 'refused' => [unix...]] */
+/**
+ * In-process limiter state: ['global' => unix, 'buckets' => key => unix, 'last' => unix,
+ * 'refused' => scope => [unix...], 'paused' => scope => unix]; scopes 'global', 'mask:<id>', 'webhook:<id>'.
+ */
 function &discord_limits() {
-    static $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => []];
+    static $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => [], 'paused' => []];
     return $limits;
 }
 
 function discord_limits_reset() {
     $limits = &discord_limits();
-    $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => []];
+    $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => [], 'paused' => []];
 }
 
 /**
- * Circuit breaker: count requests Discord refused (any 4xx, 429 included) over a rolling window. At the limit, every
- * request is paused until the oldest refusal leaves the window, and it is logged loudly. Returns true when it trips.
+ * Circuit breakers: count a refused request (any 4xx, 429 included) for the instance and the given scopes
+ * ('mask:<maskID>', 'webhook:<webhookRowID>'). A scope over its limit is paused until its oldest refusal leaves the
+ * window (the global one pauses everything) and it is logged loudly. Returns the scopes that tripped now.
  */
-function discord_breaker_record($status, $now = null) {
+function discord_breaker_record($status, $now = null, array $scopes = []) {
     $now = $now ?? microtime(true);
     $limits = &discord_limits();
-    $limits['refused'] = array_values(array_filter($limits['refused'], function ($t) use ($now) { return $t > $now - DISCORD_BREAKER_WINDOW; }));
-    if ($status < 400 || $status >= 500) return false;
-    $limits['refused'][] = $now;
-    if (count($limits['refused']) < DISCORD_BREAKER_LIMIT) return false;
-    $until = $limits['refused'][0] + DISCORD_BREAKER_WINDOW;
-    if ($until > $limits['global']) {
-        $limits['global'] = $until;
-        discord_log('CIRCUIT BREAKER: Discord refused ' . count($limits['refused']) . ' requests in the last '
-            . (DISCORD_BREAKER_WINDOW / 60) . ' min; ALL sending paused for ' . round(($until - $now) / 60, 1) . ' min');
+    $tripped = [];
+    foreach (array_merge(['global'], $scopes) as $scope) {
+        $list = array_values(array_filter($limits['refused'][$scope] ?? [], function ($t) use ($now) { return $t > $now - DISCORD_BREAKER_WINDOW; }));
+        if ($status >= 400 && $status < 500) $list[] = $now;
+        if ($list) $limits['refused'][$scope] = $list; else unset($limits['refused'][$scope]);
+        $limit = DISCORD_BREAKER_LIMITS[$scope === 'global' ? 'global' : explode(':', $scope)[0]] ?? DISCORD_BREAKER_LIMITS['global'];
+        if ($status < 400 || $status >= 500 || count($list) < $limit) continue;
+        $until = $list[0] + DISCORD_BREAKER_WINDOW;
+        $current = $scope === 'global' ? $limits['global'] : ($limits['paused'][$scope] ?? 0.0);
+        if ($until > $current) {
+            if ($scope === 'global') $limits['global'] = $until; else $limits['paused'][$scope] = $until;
+            discord_log('CIRCUIT BREAKER (' . $scope . '): Discord refused ' . count($list) . ' requests in the last '
+                . (DISCORD_BREAKER_WINDOW / 60) . ' min; ' . ($scope === 'global' ? 'ALL sending' : 'sending for ' . $scope)
+                . ' paused for ' . round(($until - $now) / 60, 1) . ' min');
+            $tripped[] = $scope;
+        }
     }
-    return true;
+    return $tripped;
+}
+
+/**
+ * Remember a tripped mask/webhook breaker for the mask's settings page (discord_sent, kind 'breaker', ref = scope,
+ * createdAt = until when it is paused, UTC).
+ */
+function discord_breaker_note(PDO $db, $maskID, $scope, $seconds) {
+    $db->prepare("INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, 'breaker', ?, UTC_TIMESTAMP() + INTERVAL ? SECOND)
+        ON DUPLICATE KEY UPDATE createdAt = VALUES(createdAt)")->execute([$maskID, substr($scope, 0, 64), (int) ceil($seconds)]);
+}
+
+/** Seconds a breaker scope ('mask:<id>', 'webhook:<id>') stays paused */
+function discord_scope_wait($scope, $now = null) {
+    $now = $now ?? microtime(true);
+    $limits = &discord_limits();
+    return max(0.0, ($limits['paused'][$scope] ?? 0.0) - $now);
 }
 
 /** Seconds until a request to this bucket is allowed */
@@ -113,7 +144,6 @@ function discord_error_text($status, $body) {
 function discord_handle_response($bucket, $status, array $headers, $body, $attempts, $now = null) {
     $now = $now ?? microtime(true);
     $limits = &discord_limits();
-    discord_breaker_record($status, $now);
     // Bucket headers come with successes and 429s alike
     if (isset($headers['x-ratelimit-remaining'], $headers['x-ratelimit-reset-after']) && is_numeric($headers['x-ratelimit-reset-after'])
         && (int) $headers['x-ratelimit-remaining'] <= 0) {
@@ -205,10 +235,12 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             continue;
         }
         $bucket = discord_webhook_bucket_key($url);
-        $wait = discord_wait($bucket);
+        $scopes = ['mask:' . $row['maskID'], 'webhook:' . (int) $webhook['id']];
+        $wait = max(discord_wait($bucket), discord_scope_wait($scopes[0]), discord_scope_wait($scopes[1]));
         if ($limits['global'] > microtime(true)) break;
-        if ($wait > 0) {   // this webhook is paused; try again when its bucket resets
-            discord_outbox_mark($db, $row['id'], 'queued', 'waiting for the rate limit', $wait, false);
+        if ($wait > 0) {   // this webhook (or mask) is paused; try again when its bucket resets / its breaker closes
+            $why = discord_scope_wait($scopes[0]) > 0 || discord_scope_wait($scopes[1]) > 0 ? 'paused: Discord refused too many requests' : 'waiting for the rate limit';
+            discord_outbox_mark($db, $row['id'], 'queued', $why, $wait, false);
             $counts['deferred']++;
             continue;
         }
@@ -228,6 +260,9 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
         $limits['last'] = microtime(true);
         [$status, $body, $headers] = discord_http_post(discord_webhook_send_url($url), discord_payload($context));
         $decision = discord_handle_response($bucket, $status, $headers, $body, (int) $row['attempts']);
+        foreach (discord_breaker_record($status, null, $scopes) as $scope) {
+            if ($scope !== 'global') discord_breaker_note($db, $row['maskID'], $scope, discord_scope_wait($scope));
+        }
         switch ($decision['result']) {
             case 'sent':
                 discord_outbox_mark($db, $row['id'], 'sent');

@@ -42,6 +42,21 @@ function discord_enqueue(PDO $db, $maskID, $webhookID, $kind, array $data, $prio
 }
 
 /**
+ * Per-mask rate limit (test messages, webhook URL changes), race-free: record the action first, then count the
+ * records in the window including it; over $max, take the record back and refuse. Two concurrent requests can both
+ * be refused at the edge, never both let through.
+ */
+function discord_rate_take(PDO $db, $maskID, $kind, $max, $seconds) {
+    $ref = bin2hex(random_bytes(8));
+    $db->prepare('INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, ?, ?, UTC_TIMESTAMP())')->execute([$maskID, $kind, $ref]);
+    $stmt = $db->prepare('SELECT COUNT(*) FROM discord_sent WHERE maskID = ? AND kind = ? AND createdAt >= ?');
+    $stmt->execute([$maskID, $kind, gmdate('Y-m-d H:i:s', time() - (int) $seconds)]);
+    if ((int) $stmt->fetchColumn() <= $max) return true;
+    $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ? AND ref = ?')->execute([$maskID, $kind, $ref]);
+    return false;
+}
+
+/**
  * Queue a message only if $claim() records its dedupe row (returns true), in one transaction: the dedupe row exists
  * exactly when the message was queued (a full queue rolls both back), and two processes can't both queue it (the
  * dedupe row's primary key decides). Returns the outbox id or null.

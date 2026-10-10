@@ -105,9 +105,26 @@ const discordNotifications = {
 		return { text: "OK", cls: "dn-good", title: "Discord accepted a message" };
 	},
 
-	/** Masks that can have Discord notifications (same rule as the server): corporation, alliance and custom masks */
-	maskAllowed: function(maskID) {
-		return /^[1-9]\d*\.[023]$/.test(String(maskID === undefined || maskID === null ? "" : maskID));
+	/**
+	 * Whether the page is offered for a mask entry of init.masks (same rule as the server, which checks again): the
+	 * corporation mask or a corporation-owned custom mask, and the user is a Tripwire admin of the corporation.
+	 * Personal custom masks, Private, Public and alliance masks never.
+	 */
+	maskAllowed: function(mask) {
+		if (!mask || !mask.admin) { return false; }
+		const id = String(mask.mask === undefined || mask.mask === null ? "" : mask.mask);
+		if (/^[1-9]\d*\.2$/.test(id)) { return true; }
+		return /^[1-9]\d*\.0$/.test(id) && mask.ownerType === "corporation";
+	},
+
+	/** Banner text for open circuit breakers of this mask: [{scope: 'mask'|'webhook', webhookID, until}] */
+	pausedText: function(paused, webhooks, now) {
+		return (paused || []).map(function(p) {
+			const minutes = Math.max(1, Math.round((Date.parse(p.until) - (now || Date.now())) / 60000));
+			const w = (webhooks || []).filter(function(x) { return x.id === p.webhookID; })[0];
+			const what = p.scope === "mask" ? "All Discord messages of this mask are" : "Messages to " + (w ? w.name : "a webhook") + " are";
+			return what + " paused for about " + minutes + " min: Discord refused too many requests. Check the webhooks below.";
+		});
 	},
 
 	/** <option>s of the webhook pickers */
@@ -208,7 +225,7 @@ const discordNotifications = {
 	},
 
 	errorText: function(xhr) {
-		if (xhr && xhr.status === 403) { return (xhr.responseJSON && xhr.responseJSON.error) || "Only admins of this mask can change its Discord notifications."; }
+		if (xhr && xhr.status === 403) { return (xhr.responseJSON && xhr.responseJSON.error) || "Only your corporation's Tripwire admins can change Discord notifications."; }
 		return (xhr && xhr.responseJSON && xhr.responseJSON.error) || "Request failed" + (xhr && xhr.status ? " (HTTP " + xhr.status + ")" : "");
 	},
 
@@ -287,7 +304,8 @@ const discordNotifications = {
 
 		return "<div class='dn-page'>"
 			+ "<h2>Discord notifications for the " + esc(state.mask ? state.mask.name : "") + " mask</h2>"
-			+ "<p class='dn-small'>Only admins of this mask see this page. Nothing is posted until you add a webhook, pick it for a notification and turn the notification on.</p>"
+			+ "<p class='dn-small'>Only your corporation's Tripwire admins see this page. Nothing is posted until you add a webhook, pick it for a notification and turn the notification on.</p>"
+			+ dn.pausedText(outbox.paused, webhooks, now).map(function(t) { return "<p class='dn-bad'>" + esc(t) + "</p>"; }).join("")
 			+ (state.encrypted ? "" : "<p class='dn-small dn-bad'>Webhook URLs are stored unencrypted on this server (DISCORD_SECRET_KEY is not set). They are still never shown again.</p>")
 			+ "<h3>Webhooks (one per channel)</h3>"
 			+ "<table class='dn-webhooks'><thead><tr><th>Name</th><th>URL</th><th>Status</th><th></th></tr></thead><tbody>" + webhookRows + "</tbody></table>"
@@ -502,8 +520,7 @@ const discordNotifications = {
 		if (!$dialog.length || !$("#admin").length || $("#admin").css("display") === "none") { return; }
 		// Not for the Public and Private masks (the server refuses them too)
 		const active = (typeof init !== "undefined" && init && Array.isArray(init.masks) ? init.masks.filter(function(m) { return m.active; })[0] : null);
-		const maskID = active ? active.mask : (typeof options !== "undefined" && options.masks ? options.masks.active : null);
-		if (!dn.maskAllowed(maskID)) { return; }
+		if (!dn.maskAllowed(active)) { return; }
 		if (!$dialog.find(".menu li[data-window='discord']").length) {
 			$dialog.find(".menu ul").append("<li data-window='discord'><a href='#'>Discord</a></li>");
 			$dialog.find(".window").append("<div data-window='discord' class='hidden'></div>");

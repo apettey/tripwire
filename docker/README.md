@@ -121,7 +121,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
 | `DISCORD_API_BASE` | `https://discord.com/api` | `discord/` (environment) | Dev only: base URL of a local fake Discord; only `localhost`, `127.0.0.0/8`, `::1` and the dev stack's `discord-mock` are accepted, anything else is ignored |
-| `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
+| `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone. Keep `UTC` (recommended): signature times are stored in it, and the [Discord notifications](#discord-notifications) compare them across daylight-saving changes |
 | `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
 | `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
 | `TRIPWIRE_FORK_VERSION` | build arg (`dev` for local builds) | `settings.php` (`VERSION`), `public/version.json` (generated at build time) | Fork release version, the app's version everywhere (see [Versions](#versions)); set by CI, don't override at runtime. Anything but letters, digits and `.+_-` becomes `dev` |
@@ -242,10 +242,15 @@ systems join the chain, then one shared `since` cursor polled every 20 s (4 s wh
 
 ### Discord notifications
 
-Mask admins can have Tripwire post to their Discord (Mask Admin > Discord). All of it is fork-owned: `discord/`,
+Corporation admins can have Tripwire post to their Discord (Mask Admin > Discord). All of it is fork-owned: `discord/`,
 `discord_notify.worker.php`, `public/discord.php`, `app/js/fork/discord-notifications.js`, tables `discord_*` (DDL in
-`discord/schema.php`, reference copy `docker/sql/discord.sql`). Only corporation, alliance and custom masks have it (not
-Public or Private masks), and only their admins/owners see and change it. Nothing is sent until an admin adds a
+`discord/schema.php`, reference copy `docker/sql/discord.sql`). It belongs to a corporation: only its corporation mask
+(`<corp>.2`) and custom masks owned by the corporation (`<id>.0`, owner type corporation) have it, and only the
+corporation's Tripwire admins (the admin flag, `checkAdmin`) see and change it. Not the Public or Private masks,
+alliance masks, or custom masks owned by a character (anyone can create those). If a mask stops qualifying, or its
+corporation has no Tripwire admin left, the worker ignores its settings (they stay stored). A member who loses the admin
+flag can't change anything any more, but what the corporation set up keeps running until another admin turns it off.
+Nothing is sent until an admin adds a
 webhook, picks it for a notification type and turns the type on; nothing that happened before a type was turned on is
 announced (each type stores `enabledAt`, set by the server).
 
@@ -262,15 +267,15 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
 
-"Our" corporations/alliances default to the mask's corporation (corp mask), alliance (alliance mask) or the admin's
-corporation (custom masks). Kill types can skip NPC kills (default), pods and kills under an ISK value.
+"Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
 change time and wormhole ID; it starts at the newest existing change and keeps moving with it while no mask has the type
 on, and changes older than the type's `enabledAt` are skipped, so nothing old is announced; no upstream file is
-hooked). Gate distances are a BFS
+hooked). `signatures.modifiedTime` is written in the app's local time (`TZ`), so **`TZ=UTC` (the default) is
+recommended**: with a zone that has daylight saving time, the hour when clocks go back can be skipped or seen twice. Gate distances are a BFS
 in PHP over `discord/gate_graph.php`, generated from the browser's own `appData` (`systems`, `regions`, `map.shortest`)
 in `public/js/combine.js`; regenerate after upstream changes that file:
 `docker compose -f docker-compose.dev.yml exec -T assets node discord/tools/generate-gate-graph.js`.
@@ -296,9 +301,12 @@ timeout per request, 50 ms between requests):
 - 401/403/404 (deleted webhook, bad token): the webhook is marked **broken** (shown in Mask Admin with Discord's
   message), its queued messages fail and nothing more is sent to it until an admin replaces the URL; other 4xx fail
   that message only. A new or replaced URL is "not verified" (`pending`) until Discord accepts a message for it;
-- circuit breaker: 500 refused requests (any 4xx, 429 included) within 10 minutes pause **all** sending until the
-  oldest leaves the window, logged as `CIRCUIT BREAKER` (Cloudflare bans an IP from Discord's API at 10,000 per 10
-  minutes). Per mask, at most 5 test messages per minute and 10 webhook URLs added or replaced per hour;
+- circuit breakers on refused requests (any 4xx, 429 included) within 10 minutes: 50 for one webhook pause that
+  webhook, 150 for one mask pause that mask, 2000 overall pause **all** sending (last resort; Cloudflare bans an IP
+  from Discord's API at 10,000 per 10 minutes), each until its oldest refusal leaves the window. Logged as
+  `CIRCUIT BREAKER (<scope>)`; a paused mask or webhook is shown on the mask's settings page. Per mask, at most 5 test
+  messages per minute and 10 webhook URLs added or replaced per hour (recorded first, then counted, so concurrent
+  requests can't slip past the limit);
 - queued messages older than 6 h expire; sent rows are deleted after 7 days, failed ones after 14, dedupe rows after
   7 days; at most 500 queued messages per mask (more are dropped and logged).
 
@@ -311,9 +319,10 @@ wormhole systems show their class instead of a security value).
 `@here`/`@everyone`), and game data (pilot, corp, ship, mapper names) has Discord markdown escaped and `@` defused, so
 a kill can never ping anyone by itself.
 
-**Settings endpoint** `public/discord.php`: every request checks that the user is admin or owner of the session's mask
-(`checkAdmin` / `checkOwner`, the same check as Mask Admin) and that it is a corporation, alliance or custom mask, else
-403; the menu entry only appears there. Changes are JSON POSTs that need the per-session `X-CSRF-Token` (from
+**Settings endpoint** `public/discord.php`: every request checks that the session's mask belongs to the user's
+corporation (its corp mask, or a custom mask with owner type corporation and owner = the user's corporation) and that
+the user is a Tripwire admin of it (`checkAdmin`; mask ownership alone, `checkOwner`, is not enough), else 403. The
+menu entry only appears in that case too. Changes are JSON POSTs that need the per-session `X-CSRF-Token` (from
 `mode=get`), `X-Requested-With: XMLHttpRequest` and, when the browser sends `Origin`, this host. Webhook URLs are
 validated (`https://discord.com/api/webhooks/<id>/<token>`, `discordapp.com`, `canary.`/`ptb.`, optional `/vN` and
 `?thread_id=`), refused when the mask already has that webhook, and never returned: the UI shows a name,

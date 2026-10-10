@@ -4,7 +4,8 @@
 
 ## Description
 
-Admins of corporation, alliance and custom masks can have Tripwire post to their Discord through channel webhooks: new
+Corporation admins (Tripwire's admin flag) can have Tripwire post to their Discord for the corp mask and the
+corporation's custom masks, through channel webhooks: new
 k-space connections within a safe (high-sec only) gate range of trade hubs, kills in the chain (wormhole, low-sec and
 null-sec systems; high-sec optional), kills by and losses of their corporation.
 Each type has its own channel, mentions and message template; delivery goes through a durable outbox and one sender
@@ -22,26 +23,30 @@ Kill notifications with their filters, and a message preview (as Discord shows i
 | --- | --- |
 | ![chain kills](after-chain-kills.jpg) | ![preview](after-preview.jpg) |
 
+When Discord keeps refusing one webhook (or the mask's messages), its circuit breaker pauses it and the page says so:
+
+![paused](after-paused.jpg)
+
 ## Settings
 
 No per-user toggle: the feature is opt-in per mask. Nothing is posted until an admin of the mask adds a webhook,
 picks it for a notification type and turns that type on (Mask Admin > Discord); each type can be turned off there, and
-nothing from before a type was turned on is announced. Users who aren't admins of the mask, and Public/Private masks,
-see nothing.
+nothing from before a type was turned on is announced. Users who aren't Tripwire admins of the corporation see nothing,
+nor do the Public, Private, alliance and personal custom masks.
 
 ## Change
 
 - New page **Mask Admin > Discord** (`app/js/fork/discord-notifications.js`, `app/css/fork/discord-notifications.css`),
-  only where the Mask Admin link is shown; `public/discord.php` checks mask admin/owner rights on every request (403
-  otherwise), needs a per-session CSRF token header on every change, never returns webhook URLs (name, `…/1234` and
+  only on the corp mask and corporation-owned custom masks for the corporation's Tripwire admins; `public/discord.php`
+  checks that (`checkAdmin`, not mask ownership) on every request (403 otherwise), needs a per-session CSRF token header on every change, never returns webhook URLs (name, `…/1234` and
   status instead) and validates them as Discord webhook URLs.
 - `discord/` (fork-owned module): settings per mask, webhook URLs encrypted at rest with `DISCORD_SECRET_KEY`
   (new env var; plain text without it, still never shown), templates with escaped game data and `allowed_mentions`
   built only from what the admin wrote, a generated static gate graph (`discord/gate_graph.php` from
   `public/js/combine.js`, `discord/tools/generate-gate-graph.js`) for server-side safe-route BFS, outbox + dedupe
   tables, and the dispatcher (per-webhook and global 429s, `X-RateLimit-*`, 5xx/network backoff, broken webhooks on
-  401/403/404, new/replaced URLs unverified until a successful send, a circuit breaker that pauses all sending after
-  500 refused requests in 10 minutes, expiry and pruning). Per mask: 5 test messages per minute, 10 webhook URLs per
+  401/403/404, new/replaced URLs unverified until a successful send, circuit breakers on refused requests per
+  10 minutes: 50 pause a webhook, 150 a mask (shown on its page), 2000 everything; expiry and pruning). Per mask: 5 test messages per minute, 10 webhook URLs per
   hour, no duplicate webhooks.
 - `discord_notify.worker.php` (new supervisord program `discord-notify`): polls the chain maps for new k-space
   connections and is the only process that calls Discord; with several containers, MySQL named locks pick one poller
@@ -50,7 +55,7 @@ see nothing.
   blocks the stream; no new zKillboard/ESI callers, names from the existing cache).
 - Dev stack: fake Discord service `discord-mock` (`docker/dev/discord-mock.php`, simulates 404/401/429/500) with
   `DISCORD_API_BASE` (accepted for local hosts only), `docker/dev/discord-fake-kill.php` to feed a made-up kill.
-- Tests: `discord/tests/discord_test.php` (142 checks: webhook validation, crypto, escaping, mentions, safe-route BFS
+- Tests: `discord/tests/discord_test.php` (157 checks: webhook validation, crypto, escaping, mentions, safe-route BFS
   with low-sec ends, Zarzakh and Pochven, hub range, kill classification and filters, settings validation, Discord
   responses with a fake transport) and `app/js-test/fork/discord-notifications.test.js`.
 - Docs: `docker/README.md#discord-notifications`, `docker/sql/discord.sql`, `.env.example`, `docker/config.php`,
