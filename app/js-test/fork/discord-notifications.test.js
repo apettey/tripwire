@@ -80,6 +80,39 @@ describe('Discord notifications', function() {
 		});
 	});
 
+	describe('home system', function() {
+		it('takes any known system by name or ID, wormhole space too', function() {
+			assert.deepStrictEqual(dn.pickHomeSystem('j160650', SYSTEMS, byName), { id: 31000880, error: null });
+			assert.deepStrictEqual(dn.pickHomeSystem(' 30002813 ', SYSTEMS, byName), { id: 30002813, error: null });
+			assert.deepStrictEqual(dn.pickHomeSystem('Thera', SYSTEMS, byName), { id: 31000005, error: null });
+		});
+		it('refuses unknown systems and empty input', function() {
+			assert.deepStrictEqual(dn.pickHomeSystem('Nowhere', SYSTEMS, byName), { id: 0, error: 'Unknown system "Nowhere"' });
+			assert.deepStrictEqual(dn.pickHomeSystem('31999999', SYSTEMS, byName), { id: 0, error: 'Unknown system "31999999"' });
+			assert.strictEqual(dn.pickHomeSystem('  ', SYSTEMS, byName).error, 'Type a system name');
+		});
+		it('warns only when chain kills are on without a home', function() {
+			const s = home => ({ homeSystemID: home, types: { chainKill: { enabled: true } } });
+			assert.strictEqual(dn.homeWarning(s(0)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(undefined)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(31000880)), '');
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { chainKill: { enabled: false } } }), '');
+			assert.ok(/Set a home system so Tripwire knows which chain is yours/.test(dn.NO_HOME));
+		});
+		it('is sent with the settings (0 = not set)', function() {
+			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: 31000880 })).settings.homeSystemID, 31000880);
+			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: '31000880' })).settings.homeSystemID, 31000880);
+			assert.strictEqual(dn.collectSettings(formValues()).settings.homeSystemID, 0);
+			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: -5 })).settings.homeSystemID, 0);
+		});
+		it('saving chain kills without a home is allowed (the page warns instead)', function() {
+			const v = formValues();
+			v.types.chainKill.enabled = true;
+			v.types.chainKill.webhookID = '1';
+			assert.deepStrictEqual(dn.collectSettings(v).errors, []);
+		});
+	});
+
 	describe('webhookStatus', function() {
 		const now = Date.parse('2026-10-10T12:00:00Z');
 		it('shows broken webhooks with the reason', function() {
@@ -239,6 +272,27 @@ describe('Discord notifications', function() {
 			const html = dn.pageHtml(state, settings);
 			assert.ok(html.indexOf('…/1111') > 0);
 			assert.ok(html.indexOf('discord.com/api/webhooks/1') < 0);
+		});
+		it('shows the home system, and warns when chain kills are on without one', function() {
+			const saved = global.appData;
+			global.appData = { systems: { 31000880: { name: 'J160650 <x>' } } };
+			try {
+				const s = JSON.parse(JSON.stringify(settings));
+				s.homeSystemID = 31000880;
+				s.types.chainKill.enabled = true;
+				let html = dn.pageHtml(state, s);
+				assert.ok(html.indexOf("<span class='dn-chip dn-home' data-system='31000880'>J160650 &lt;x&gt; ") > 0);
+				assert.ok(html.indexOf(dn.NO_HOME) < 0);
+				assert.ok(html.indexOf(dn.HELP.chainKill) > 0 && /connected to your home system/.test(dn.HELP.chainKill));
+				s.homeSystemID = 0;
+				html = dn.pageHtml(state, s);
+				assert.ok(html.indexOf("data-system='0'>Not set</span>") > 0);
+				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME + '</p>') > 0);
+				s.types.chainKill.enabled = false;
+				assert.ok(dn.pageHtml(state, s).indexOf(dn.NO_HOME) < 0);
+			} finally {
+				global.appData = saved;
+			}
 		});
 		it('escapes the mask name, warns about plain-text storage and shows broken webhooks', function() {
 			const html = dn.pageHtml(state, settings);

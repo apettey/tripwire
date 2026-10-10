@@ -1,6 +1,62 @@
 {
   "features": [
     {
+      "pr": 46,
+      "date": "2026-10-10",
+      "title": "Kill messages show the chain label",
+      "description": "Discord kill messages (kills in the chain, corp kills and corp losses) now name the system the way the chain map does, with the name of the hole leading into it, for example \"AABCA · J105246\". Systems without a name on your chain look as before.\n\nTo leave the label out, edit the message text in Mask Admin > Discord and use {system} instead of {labelSystem}.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-46-kill-discord-chain-label.png",
+          "caption": "Mask Admin > Discord preview of a chain kill with its label"
+        }
+      ]
+    },
+    {
+      "pr": 45,
+      "date": "2026-10-10",
+      "title": "Discord chain kills: set your home system",
+      "description": "Discord \"Any kill in our chain\" notifications now only post kills in systems connected to your home system through live wormholes, re-checked every minute, so an old chain no longer pings after its connecting hole collapses or expires.\n\nAdmins: set the home system in Mask Admin > Discord. Until a home is set, no chain kills are posted and the page shows a warning. Chain kills can still be turned off on the same page.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-45-chain-kills-connected.png",
+          "caption": "Mask Admin > Discord: the new Home system setting"
+        }
+      ]
+    },
+    {
+      "pr": 43,
+      "date": "2026-10-10",
+      "title": "D-scan and local scans on the map",
+      "description": "Paste a directional scan or the local member list into Tripwire and share a summary with your mask, pinned to the system. The new Intel panel follows the system you are viewing: click \"Paste d-scan / local\" at its top (or right-click a system on the chain map). Each scan shows as a chip (for example \"D-scan 2 min ago · 14 ships · 1 HIC\"); click it for ships by class, on grid and off grid, lit cynos and nearby structures. Systems with a fresh scan get a small dot on the chain map (cyan for d-scan, green for local). Move or resize the panel with Customize layout.\n\nTurn it off, or change how long scans stay fresh and the on-grid range, in Settings > General Preferences > D-scan & local intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-43-dscan-local.png",
+          "caption": "The Intel panel next to the chain map, with a d-scan summary opened, and the dot on the system"
+        }
+      ]
+    },
+    {
+      "pr": 41,
+      "date": "2026-10-10",
+      "title": "Watchlist: get told when the chain has what you're looking for",
+      "description": "Your corporation's Tripwire admins can now set up a watchlist for the mask in Mask Admin > Watchlist: filters for a specific J-code or system, a region or constellation, a wormhole class, an effect such as Wolf-Rayet, a static (e.g. \"has a C5 static\"), a hole type such as H296 or a minimum hole size, and how many jumps it may be from you or from home. Everyone on the mask sees the filters in the Watchlist panel.\n\nWhen something new on the chain map matches, you get a pop-up and a sound, the system gets an eye marker, the hole into it is highlighted, and its signature is marked in the signature table so you know which one to warp to. Admins can also have matches posted to Discord (Mask Admin > Discord > Watchlist match). Turn the sound, pop-ups, markers or the panel off in Settings > General Preferences > Watchlist.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-41-watchlist.png",
+          "caption": "The Watchlist panel, matching systems and their highlighted holes on the chain map"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-admin.png",
+          "caption": "Admins set the mask's filters in Mask Admin > Watchlist"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-editor.png",
+          "caption": "Creating a filter"
+        }
+      ]
+    },
+    {
       "pr": 40,
       "date": "2026-10-10",
       "title": "Favourites: route as jump markers",
@@ -33,6 +89,22 @@
         {
           "src": "whats-new/img/pr-37-exit-finder-thera.png",
           "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
+        }
+      ]
+    },
+    {
+      "pr": 36,
+      "date": "2026-10-10",
+      "title": "Preserve mass on a connection",
+      "description": "Mark a wormhole as \"preserve mass\" so nobody rolls it or burns its mass, for example your home static or the hole a fleet needs to come back through. Right-click the system on the chain map and choose \"Preserve mass…\", or use the link in the Mass dialog, and add a reason if you like.\n\nEveryone on your mask sees a violet ⊘ marker next to the connection's size tag (hover it to see who set it, when and why) and a \"don't roll this hole\" warning above the rolling guidance in the Mass dialog. Clear it from the same menu or the warning. The flag disappears when the wormhole is deleted. Hide the markers in Settings > Chain Map Settings > Preserve mass.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-36-preserve-mass.png",
+          "caption": "The marker on the chain map and the warning in the Mass dialog"
+        },
+        {
+          "src": "whats-new/img/pr-36-preserve-mass-menu.png",
+          "caption": "Right-click a system: Preserve mass…"
         }
       ]
     },

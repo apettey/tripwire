@@ -7,8 +7,10 @@
 //     chainKill: {enabled, webhookID, template, ping, minIsk, includeNpc, excludePods},
 //     corpKill:  {...same as chainKill}, corpLoss: {...same as chainKill},
 //     rally:     {enabled, webhookID, template (set / moved), templateClear (cleared), ping}   (discord/rally.php)
+//     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
+//   homeSystemID: systemID or 0   (where the chain starts: chainKill counts only systems connected to it, discord/chain.php)
 // }
 // Everything is off until an admin enables a type and picks a webhook.
 
@@ -33,9 +35,11 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
             'corpLoss' => $kill('corpLoss'),
             'rally' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['rally'], 'templateClear' => $templates['rallyClear'],
                 'ping' => '', 'enabledAt' => 0],
+            'watchlist' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['watchlist'], 'ping' => '', 'enabledAt' => 0],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
+        'homeSystemID' => 0,
     ];
 }
 
@@ -132,8 +136,8 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if (array_key_exists('maxJumps', $in)) $type['maxJumps'] = max(1, min(50, (int) $in['maxJumps']));
             if (array_key_exists('cooldownHours', $in)) $type['cooldownHours'] = max(1, min(48, (int) $in['cooldownHours']));
             if ($type['enabled'] && !$type['pingSystems']) { $errors[] = 'kspace: add at least one ping system'; $type['enabled'] = false; }
-        } elseif ($kind === 'rally') {
-            // Nothing else: on/off, webhook, ping and the two templates
+        } elseif ($kind === 'rally' || $kind === 'watchlist') {
+            // Nothing else: on/off, webhook, ping and the template(s); the watchlist's filters are in Mask Admin > Watchlist
         } else {
             if (array_key_exists('minIsk', $in)) $type['minIsk'] = max(0, min(1e15, (float) (is_numeric($in['minIsk']) ? $in['minIsk'] : 0)));
             foreach (['includeNpc', 'excludePods', 'includeHighsec'] as $flag) {
@@ -144,6 +148,13 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
     }
     if (array_key_exists('corporations', $input)) $out['corporations'] = discord_int_list($input['corporations'], DISCORD_MAX_ENTITIES, function ($id) { return $id >= 1000000 && $id < 2147483647; });
     if (array_key_exists('alliances', $input)) $out['alliances'] = discord_int_list($input['alliances'], DISCORD_MAX_ENTITIES, function ($id) { return $id >= 1000000 && $id < 2147483647; });
+    if (array_key_exists('homeSystemID', $input)) {
+        $home = $input['homeSystemID'];
+        $home = is_int($home) || (is_string($home) && ctype_digit($home)) ? (int) $home : -1;
+        if ($home !== 0 && discord_system($home) === null) { $errors[] = 'home system: unknown system'; $home = 0; }
+        $out['homeSystemID'] = $home;
+    }
+    // Chain kills without a home are allowed (saved, nothing posted; the page warns): discord/chain.php
     if (($out['types']['corpKill']['enabled'] || $out['types']['corpLoss']['enabled']) && !$out['corporations'] && !$out['alliances']) {
         $errors[] = 'corporation kills/losses need at least one corporation or alliance';
         $out['types']['corpKill']['enabled'] = $out['types']['corpLoss']['enabled'] = false;
