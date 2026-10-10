@@ -1,0 +1,51 @@
+## Mask Admin > Discord (outbox)
+
+### set, clear within 30 s
+- @here Tripwire rally point cleared by *Commander Tyrael* (was on J163701)  (edited)  [pinged]
+
+### set, clear after 30 s (55 min)
+- @here Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)
+  <http://localhost:8097/?system=J163701>  [pinged]
+- @here Tripwire rally point cleared by *Aashai Modor* (was on J163701)  [pinged]
+
+### set, move within 30 s
+- @here Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\-R00024)
+  <http://localhost:8097/?system=J152820>  (edited)  [pinged]
+
+### set, move after 30 s
+- @here Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)
+  <http://localhost:8097/?system=J163701>  [pinged]
+- @here Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\-R00024)
+  <http://localhost:8097/?system=J152820>  [pinged]
+
+### ... then clear
+- @here Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)
+  <http://localhost:8097/?system=J163701>  [pinged]
+- @here Tripwire rally point cleared by *Kytus Bos* (was on J152820)  (edited)  [pinged]
+
+### clear with no rally message (never posted)
+- @here Tripwire rally point cleared by *Aashai Modor* (was on J163701)  (edited)  [pinged]
+
+### production sequence: Tyrael set + clear in 30 s, Kytus set, Aashai clear 55 min later
+- @here Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)
+  <http://localhost:8097/?system=J163701>  (edited)  [pinged]
+- @here Tripwire rally point cleared by *Aashai Modor* (was on J163701)  [pinged]
+
+## DISCORD_WEB_HOOK (legacy)
+
+### legacy: set, clear within 30 s
+- Tripwire rally point cleared by *Commander Tyrael* (was on J163701)  (edited)
+
+### legacy: set, clear after 30 s
+- Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**
+- Tripwire rally point cleared by *Aashai Modor* (was on J163701)
+
+### legacy: set, move within 30 s
+- Tripwire rally point from *Aashai Modor*: **J152820 (C5, E-R00024)**  (edited)
+
+### legacy: set, move after 30 s
+- Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**
+- Tripwire rally point from *Aashai Modor*: **J152820 (C5, E-R00024)**
+
+### legacy: clear with no rally message
+- Tripwire rally point cleared by *Aashai Modor*

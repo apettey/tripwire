@@ -15,10 +15,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY gulpfile.js ./
+COPY docker/gulpfile.dev.js ./docker/
 COPY app ./app
 RUN mkdir -p public/js public/css
 ENV DISABLE_NOTIFIER=true
-RUN npx gulp js css
+# The fork's gulpfile wrapper: script order matters and upstream's gulpfile leaves it to the file system
+RUN npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
 
 ############################################################
 # Stage 2: app files only (no repo/dev files in /opt/app)
@@ -45,7 +47,7 @@ RUN rm -rf \
       bitbucket-pipelines.yml crontab-tw.txt composer.json 403.html 404.html \
       config.example.php db.inc.example.php db.inc.docker.example.php config.php db.inc.php \
       analytics.inc.php donation_panel.inc public/donate.html \
-      app gulpfile.js package.json package-lock.json node_modules tools zkill/tests zkill/tools discord/tests discord/tools \
+      app gulpfile.js package.json package-lock.json node_modules tools tests zkill/tests zkill/tools discord/tests discord/tools \
  && mv .docker/mysql/tripwire.sql /tmp/tripwire.sql \
  && rm -rf .docker \
  && mkdir -p .docker/mysql \

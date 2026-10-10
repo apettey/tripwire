@@ -175,6 +175,25 @@ const rally = {
 		return info.jumps + (info.jumps == 1 ? " jump" : " jumps");
 	},
 
+	// ---- Discord (server side: public/rally.php; the channel is the "Rally point" type corp admins set up in
+	// Mask Admin > Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK) ----
+	DISCORD_COMMAND: "rallyDiscord",
+	DISCORD_HELP: "Rally changes go to the Discord channel your corporation's admins chose in Mask Admin > Discord.",
+	// Whether rally changes of this mask go to Discord at all (from rally.php's "discord")
+	discordAvailable: false,
+
+	/** "Also post to Discord" choice: options.rallyDiscord.enabled, a missing key means on */
+	discordEnabled: function(opts) {
+		return !(opts && opts.rallyDiscord && opts.rallyDiscord.enabled === false);
+	},
+
+	/** POST body for a rally change: adds discord=1 when the mask has a webhook and the user wants it */
+	changePayload: function(payload, available, opts) {
+		const result = Object.assign({}, payload);
+		result.discord = available && rally.discordEnabled(opts) ? 1 : 0;
+		return result;
+	},
+
 	escape: function(text) {
 		return String(text === undefined || text === null ? "" : text)
 			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -232,15 +251,16 @@ const rally = {
 
 	fetch: function() {
 		return $.ajax({ url: rally.URL, type: "GET", dataType: "JSON", cache: false })
-			.done(function(data) { if (data) { rally.apply(data.rally, true); } });
+			.done(function(data) { if (data) { rally.discordAvailable = !!data.discord; rally.apply(data.rally, true); } });
 	},
 
 	post: function(payload) {
 		return $.ajax({
-			url: rally.URL, type: "POST", data: payload, dataType: "JSON",
+			url: rally.URL, type: "POST", dataType: "JSON",
+			data: rally.changePayload(payload, rally.discordAvailable, typeof options !== "undefined" ? options : null),
 			headers: { "X-Requested-With": "XMLHttpRequest" }
 		}).done(function(data) {
-			if (data) { rally.apply(data.rally, false); }
+			if (data) { rally.discordAvailable = !!data.discord; rally.apply(data.rally, false); }
 		}).fail(function() {
 			if (typeof Notify !== "undefined") { Notify.trigger("Couldn't update the rally point", "red"); }
 			rally.fetch();
@@ -262,8 +282,56 @@ const rally = {
 		return String(rally.state.systemID) === String(systemID) ? rally.clear() : rally.set(systemID);
 	},
 
+	renderDiscordEntry: function() {
+		const on = rally.discordEnabled(options);
+		$("#rallyDiscordMenuItem .rally-discord-check").html(on ? "&#9745;" : "&#9744;").toggleClass("on", on);
+	},
+
+	/** Remember the "Also post to Discord" choice for this user (saved with the other options) */
+	setDiscordEnabled: function(enabled) {
+		options.rallyDiscord = { enabled: !!enabled };
+		$("#rallyDiscord-enabled").prop("checked", !!enabled);
+		rally.renderDiscordEntry();
+		if (typeof options.save === "function") { options.save(); }
+	},
+
+	setupSettings: function() {
+		if (typeof options === "undefined") { return; }
+		// Settings > Chain Map Settings row (before the renderer footnote); takes effect on Save like its neighbours
+		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
+		if ($table.length && !$("#rallyDiscord-enabled").length) {
+			const $row = $("<tr><th>Rally point:</th><td><label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my rally changes to Discord</label>"
+				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord.</div></td></tr>");
+			const $footnote = $table.find("td[colspan]").last().closest("tr");
+			if ($footnote.length) { $row.insertBefore($footnote); } else { $table.append($row); }
+		}
+		$(document).on("dialogopen", "#dialog-options", function() {
+			$("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(options));
+		});
+		// Capture phase so the value is in place before upstream's Save handler saves the options
+		document.addEventListener("click", function(e) {
+			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
+			if (!button || $.trim($(button).text()) !== "Save") { return; }
+			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#rallyDiscord-enabled").length) { return; }
+			options.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") };
+		}, true);
+		// Settings > Reset: a missing key means on
+		if (typeof options.reset === "function" && !options.reset.rallyDiscordWrapped) {
+			const reset = options.reset;
+			const wrapped = function() {
+				const result = reset.apply(this, arguments);
+				delete this.rallyDiscord;
+				return result;
+			};
+			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
+			wrapped.rallyDiscordWrapped = true;
+			options.reset = wrapped;
+		}
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain || typeof chain.nodes !== "function") { return; }
+		rally.setupSettings();
 
 		// Decorate every chain build (chain.draw and chain.redraw both go through chain.nodes) so the
 		// highlight is part of the node markup and line modifiers, and survives redraws and collapses.
@@ -288,6 +356,7 @@ const rally = {
 		try {
 			const chainParent = $("#chainParent");
 			$("#chainMenu").append("<li data-command='" + rally.MENU_COMMAND + "'><a id='rallyMenuItem'>Rally here</a></li>");
+			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='" + rally.escape("Post your rally changes too. " + rally.DISCORD_HELP) + "'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
 			$("#chainMenu").menu("refresh");
 
 			const originalSelect = chainParent.contextmenu("option", "select");
@@ -295,6 +364,10 @@ const rally = {
 				if (ui.cmd === rally.MENU_COMMAND) {
 					rally.toggle($(ui.target[0]).closest("[data-nodeid]").data("nodeid"));
 					return;
+				}
+				if (ui.cmd === rally.DISCORD_COMMAND) {
+					rally.setDiscordEnabled(!rally.discordEnabled(options));
+					return false;	// keep the menu open
 				}
 				return originalSelect ? originalSelect.apply(this, arguments) : undefined;
 			});
@@ -305,6 +378,8 @@ const rally = {
 				try {
 					$(this).contextmenu("showEntry", rally.MENU_COMMAND, rally.isRealSystemID(systemID));
 					$("#rallyMenuItem").text(String(rally.state.systemID) === String(systemID) ? "Clear rally" : "Rally here");
+					$(this).contextmenu("showEntry", rally.DISCORD_COMMAND, rally.isRealSystemID(systemID) && rally.discordAvailable);
+					rally.renderDiscordEntry();
 				} catch (err) { console.error("rally: menu update failed", err); }
 				return originalBeforeOpen ? originalBeforeOpen.apply(this, arguments) : undefined;
 			});

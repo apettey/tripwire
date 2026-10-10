@@ -1,0 +1,111 @@
+/* Routes through Thera and Turnur (fork-owned, see app/js/fork/thera-route.js) */
+
+/* Favourites panel: second line under a row routed through Thera/Turnur */
+#favouritesWidget .fav-row:has(.fav-scout-line) {
+	flex-wrap: wrap;
+	row-gap: 1px;
+}
+
+#favouritesWidget .fav-scout-line {
+	flex: 1 0 100%;
+	padding-left: 18px;
+	color: #E8C266;
+	font-size: 0.9em;
+	white-space: normal;
+	cursor: help;
+}
+
+/* Signature chips of a route through Thera / Turnur (route strip), click to copy */
+.fav-sigs {
+	flex: 0 0 auto;
+	display: inline-flex;
+	gap: 3px;
+}
+
+.fav-sig {
+	display: inline-block;
+	padding: 0 3px;
+	border: 1px solid #ffc800;
+	border-radius: 3px;
+	color: #E8E8E8;
+	font-size: 0.85em;
+	line-height: 12px;
+	white-space: nowrap;
+	cursor: copy;
+}
+
+.fav-sig-turnur {
+	border-color: #FF4DFF;
+}
+
+.fav-sig:hover {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+/* Destinations window: route as jump markers under the exit */
+#dialog-routeDestinations .route-dest-strip {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 0 1px 0;
+}
+
+#dialog-routeDestinations .route-dest-strip .fav-strip-markers {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 2px;	/* 9px marker + 2px = favouritesRouteStrip.MARKER_STEP */
+	min-height: 12px;
+}
+
+#dialog-routeDestinations .route-dest-strip .fav-mk-gap {
+	color: #999;
+	font-size: 0.85em;
+	padding: 0 2px;
+	line-height: 12px;
+}
+
+/* Numbered "Set route in game" buttons, one per gate leg */
+.autopilot-route-btn.autopilot-route-leg sup {
+	font-family: Verdana, Arial, sans-serif;
+	font-size: 8px;
+	font-weight: bold;
+	margin-left: 1px;
+	vertical-align: super;
+}
+
+/* Destinations window */
+#dialog-routeDestinations .route-dest-scout {
+	cursor: help;
+}
+
+#dialog-routeDestinations .route-dest-scout-text {
+	color: #CCC;
+	white-space: nowrap;
+}
+
+#dialog-routeDestinations .route-dest-scout-line {
+	display: block;
+	color: #E8C266;
+	font-size: 0.9em;
+}
+
+/* Settings > General Preferences */
+#theraRoute-row label {
+	margin-left: 6px;
+	white-space: nowrap;
+}
+
+#theraRoute-row td > div {
+	margin: 1px 0;
+}
+
+#theraRoute-row select {
+	width: auto;
+}
+
+#theraRoute-row .theraRoute-hint {
+	color: #888;
+	font-size: 0.9em;
+	margin-top: 2px;
+}

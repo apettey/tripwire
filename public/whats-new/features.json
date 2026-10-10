@@ -1,6 +1,114 @@
 {
   "features": [
     {
+      "pr": 37,
+      "date": "2026-10-10",
+      "title": "Routes through Thera and Turnur",
+      "description": "Favourite routes and the Destinations window now also look at the public Thera and Turnur connections from EVE-Scout. When going through Thera or Turnur is shorter, the route uses it: every jump is a small marker, Thera hops are yellow circles and Turnur hops pink ones, and the signatures to warp to are listed next to the route (click one to copy it). Hover a Thera or Turnur marker for the hole type, the signature, the largest ship it takes and the life left. By default holes with under 4 hours left (EOL) are skipped.\n\nSet route in game sends each gate stretch separately: the first one now, the next once you are out of Thera. Choose Thera, Turnur, your ship size and which holes to skip in Settings > General Preferences > Routes through; untick both Thera and Turnur to turn it off.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-37-exit-finder-thera.png",
+          "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
+        }
+      ]
+    },
+    {
+      "pr": 40,
+      "date": "2026-10-10",
+      "title": "Favourites: route as jump markers",
+      "description": "Each favourite with a route now shows it as a strip of small markers, one per jump: squares are stargates, circles are wormholes, and hops into or out of Thera or Turnur are ringed circles (yellow for Thera, pink for Turnur). The colour shows the security or wormhole class of each system. Hover a marker to see the system, its region and how you get there; long routes are shortened to fit the panel.\n\nPrefer the old \"1g → 2wh → 6g\" text? Turn it off in Settings > General Preferences > Show routes as jump markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-40-favourites-route-strip.png",
+          "caption": "Routes in the Favourites panel as jump markers"
+        }
+      ]
+    },
+    {
+      "pr": 34,
+      "date": "2026-10-10",
+      "title": "Up-to-date ship and Pochven wormhole data",
+      "description": "Marauder and Black Ops battleship masses now match their lighter hulls from the September 22 patch, so the mass log and rolling calculator count them correctly.\n\nPochven wormholes now show a 12-hour life. The new Pochven-to-Pochven holes (I078, L687, O546) and the new holes into Pochven (O753, R327) now show their life and mass when you hover the wormhole type.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-34-game-data.png",
+          "caption": "Hovering a Pochven wormhole type shows its life and mass"
+        }
+      ]
+    },
+    {
+      "pr": 33,
+      "date": "2026-10-10",
+      "title": "Clearing the rally point strikes through its Discord message",
+      "description": "Clearing the rally point no longer posts a new message that pings everyone. The rally message itself is struck through and says who cleared it and when, shown in each reader's own time zone. When the rally moves after 30 seconds, a new message is posted and the old one is struck through with where it moved.\n\nCorporation admins can change the cleared text in Mask Admin > Discord with the new {rally} and {time} placeholders. Masks still using the default texts get the new ones automatically.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-33-rally-clear-edits.png",
+          "caption": "Mask Admin > Discord: the rally point preview, cleared and moved"
+        }
+      ]
+    },
+    {
+      "pr": 32,
+      "date": "2026-10-10",
+      "title": "Hole size on the connection",
+      "description": "The hole size tag (S, M, L, VL or XL: the largest ship that fits through) now sits on the line between two systems on the chain map, because it describes the wormhole, not the system. It works in every chain renderer and keeps its tooltip; a dimmed tag with a ? is still a guess from the system classes.\n\nTurn the tags off in Settings > Chain Map Settings > Hole size tags.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-32-size-tags-connector.png",
+          "caption": "Size tags on the connections of the radial chain map"
+        }
+      ]
+    },
+    {
+      "pr": 31,
+      "date": "2026-10-10",
+      "title": "Rally point message shows the chain label",
+      "description": "The rally point message in Discord now names the system the way your chain map does, with the name of the hole leading into it, e.g. AABCA · J152820. When the rally is cleared, the message says which system it was on.\n\nCorporation admins can use the new {label} and {labelSystem} placeholders in their own texts in Mask Admin > Discord. Masks still using the default texts get the new ones automatically.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-31-rally-chain-label.png",
+          "caption": "Mask Admin > Discord: the rally point preview with the chain label"
+        }
+      ]
+    },
+    {
+      "pr": 30,
+      "date": "2026-10-10",
+      "title": "Rally point channel in Mask Admin > Discord",
+      "description": "Corporation admins can now choose which Discord channel rally point changes go to: turn on Rally point in Mask Admin > Discord, pick the channel's webhook and, if you like, a role to ping and your own text for when the rally is set or cleared. Changes within half a minute still update the same message.\n\nAs before, you can keep your own rally changes off Discord with \"Also post to Discord\" in the chain map's right-click menu or in Settings > Chain Map Settings.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-30-rally-discord-settings.png",
+          "caption": "Mask Admin > Discord: the Rally point notification with its channel and texts"
+        }
+      ]
+    },
+    {
+      "pr": 29,
+      "date": "2026-10-10",
+      "title": "Threat badges and system residents",
+      "description": "Each system on the chain map now shows a small badge with its kills in the last 7 days, coloured from grey (quiet) to red (busy), with a glow after a kill in the last hour. Hover it for the last hour, day, week, month and 90 days.\n\nThe system info panel shows the system's threat level and the corporations active there, with likely residents and lost structures marked. Turn the badges off in Settings > Chain Map Settings, and the info panel part in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-29-system-threat.png",
+          "caption": "Threat badges on the chain map and residents in the system info panel"
+        }
+      ]
+    },
+    {
+      "pr": 28,
+      "date": "2026-10-10",
+      "title": "Rally point to Discord",
+      "description": "When you set, move or clear the rally point, Tripwire also posts it to your mask's Discord channel (the same one chain map pings go to), with the system, its class and region, who set it and a link back to the map. Several changes within half a minute update the same Discord message instead of posting new ones.\n\nUntick \"Also post to Discord\" in the chain map's right-click menu to keep a rally change off Discord; Tripwire remembers your choice. You can also turn it off in Settings > Chain Map Settings.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-28-rally-discord.png",
+          "caption": "Right-click a system: Rally here, and Also post to Discord"
+        }
+      ]
+    },
+    {
       "pr": 27,
       "date": "2026-10-10",
       "title": "Discord notifications",
@@ -21,6 +129,22 @@
         {
           "src": "whats-new/img/pr-26-sig-age.png",
           "caption": "Stale signature with its tooltip"
+        }
+      ]
+    },
+    {
+      "pr": 25,
+      "date": "2026-10-10",
+      "title": "Set route in game",
+      "description": "Send a route straight to your in-game autopilot. In the Favourites panel (for favourites with Route on) and in the Destinations window, click the blue autopilot button next to the route: Tripwire sets the gate part of the route it worked out as waypoints, so the autopilot flies exactly that route, including the safe, high-sec only one, instead of picking its own.\n\nA small window asks which of your tracked characters get the route: tick them, or use Select all, then press Send (or Enter). Your tracked character is ticked the first time, and Tripwire remembers your choice after that. Characters whose EVE SSO login has expired are greyed out until you log in with them again.\n\nTake the wormholes to the exit yourself; the autopilot takes it from there.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-25-autopilot-route.png",
+          "caption": "The autopilot button in the Favourites panel and the Destinations window"
+        },
+        {
+          "src": "whats-new/img/pr-25-autopilot-characters.png",
+          "caption": "Choose which tracked characters get the route"
         }
       ]
     },

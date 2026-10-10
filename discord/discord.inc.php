@@ -14,7 +14,10 @@
 //   discord/outbox.php      outbox + dedupe tables: enqueue, claim, prune
 //   discord/kspace.php      type 1: new k-space systems near the ping systems (polls signatures/wormholes)
 //   discord/kills.php       types 2-4: kills in the chain / by the corporation / losses, fed by zkill_feed.worker.php
+//   discord/rally.php       type 5: the chain map's rally point, queued by public/rally.php; edits its last message
 //   discord/dispatch.php    the sender: rate limits (429, X-RateLimit-*, global), retries, broken webhooks
+// (The rally point's first version still posts directly to upstream's DISCORD_WEB_HOOK for masks without type 5,
+// see rally_discord.inc.php.)
 //
 // Kills come from the pooled zKillboard integration (zkill/): zkill_feed.worker.php hands every live streamed
 // killmail to discord_on_killmail(). This module never calls zKillboard or ESI.
@@ -28,6 +31,7 @@ require_once(__DIR__ . '/routes.php');
 require_once(__DIR__ . '/outbox.php');
 require_once(__DIR__ . '/kspace.php');
 require_once(__DIR__ . '/kills.php');
+require_once(__DIR__ . '/rally.php');
 require_once(__DIR__ . '/dispatch.php');
 
 /** String setting from a config.php constant or the environment ('' when unset) */

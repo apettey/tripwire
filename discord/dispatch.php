@@ -14,6 +14,9 @@
 // shown on the mask's settings page), 2000 everything; all logged as CIRCUIT BREAKER. Messages of masks that no
 // longer qualify (discord_mask_sending_corporation) fail instead of being sent.
 // A pass sends at most $limit messages and stops after $budget seconds, so the worker loop stays responsive.
+// Rally point messages (discord/rally.php) are the only ones that are edited (PATCH) instead of posted: a change may
+// edit the live rally message or post a new one, a 'rallyEdit' row ends an old one; a queued change is skipped
+// (deleted) when a newer one of the same mask is queued, or when there is nothing to send (a clear without a message).
 
 const DISCORD_HTTP_TIMEOUT   = 10;
 const DISCORD_SPACING        = 0.05;   // seconds between any two requests (Discord's global limit is 50/s)
@@ -110,7 +113,7 @@ function discord_wait($bucket, $now = null) {
 }
 
 /**
- * Test hook: callable($url, $jsonBody) returning [status, body, headers (lower-case keys)] replaces the network.
+ * Test hook: callable($url, $jsonBody, $method) returning [status, body, headers (lower-case keys)] replaces the network.
  */
 function discord_http_transport(?callable $set = null, $clear = false) {
     static $transport = null;
@@ -119,17 +122,19 @@ function discord_http_transport(?callable $set = null, $clear = false) {
     return $transport;
 }
 
-/** POST a payload. @return array [status (0 = network error), body or error text, headers] */
-function discord_http_post($url, array $payload) {
+/** POST (or PATCH: edit a message) a payload. @return array [status (0 = network error), body or error text, headers] */
+function discord_http_post($url, array $payload, $method = 'POST') {
+    $method = $method === 'PATCH' ? 'PATCH' : 'POST';
     $body = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     $transport = discord_http_transport();
-    if ($transport) return $transport($url, $body);
+    if ($transport) return $transport($url, $body, $method);
     $headers = [];
     $version = defined('VERSION') ? VERSION : 'dev';
     $curl = curl_init($url);
     curl_setopt_array($curl, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
+        CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
         CURLOPT_USERAGENT      => 'Tripwire (https://github.com/apettey/tripwire, ' . $version . ')',
@@ -203,6 +208,10 @@ function discord_row_context(PDO $db, array $row) {
         if ($pending > 0 && (int) $row['age'] < DISCORD_NAMES_WAIT) return null;
         return discord_kill_context($data, $names);
     }
+    if ($row['kind'] === 'rally') {
+        $labelOf = function ($systemID) use ($db, $row) { return discord_chain_label($db, $row['maskID'], $systemID); };
+        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf) ?? [];
+    }
     return $data;
 }
 
@@ -221,7 +230,7 @@ function discord_webhook_mark(PDO $db, $id, $status, $message) {
  */
 function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
     $started = microtime(true);
-    $counts = ['sent' => 0, 'retry' => 0, 'ratelimited' => 0, 'failed' => 0, 'broken' => 0, 'deferred' => 0];
+    $counts = ['sent' => 0, 'retry' => 0, 'ratelimited' => 0, 'failed' => 0, 'broken' => 0, 'deferred' => 0, 'repost' => 0, 'superseded' => 0, 'skipped' => 0];
     $limits = &discord_limits();
     if ($limits['global'] > microtime(true)) return $counts;
     $rows = discord_outbox_due($db, $limit);
@@ -263,6 +272,12 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             discord_log("webhook {$webhook['id']} broken: $reason");
             continue;
         }
+        if ($row['kind'] === 'rally' && discord_rally_superseded($db, $row)) {
+            // A newer rally change of this mask is queued and will show the rally as it is then: this one is not needed
+            $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
+            $counts['superseded']++;
+            continue;
+        }
         $bucket = discord_webhook_bucket_key($url);
         $scopes = ['mask:' . $row['maskID'], 'webhook:' . (int) $webhook['id'], 'corp:' . $corporations[$maskKey]];
         $scopeWait = max(discord_scope_wait($scopes[0]), discord_scope_wait($scopes[1]), discord_scope_wait($scopes[2]));
@@ -285,11 +300,20 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             $counts['failed']++;
             continue;
         }
+        $rally = in_array($row['kind'], ['rally', 'rallyEdit'], true);
+        $request = $rally ? discord_rally_request($db, $row, $url, $context)
+            : ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => discord_payload($context)];
+        if (isset($request['skip'])) {   // e.g. a rally cleared without a message to edit: nothing to send
+            $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
+            $counts['skipped']++;
+            continue;
+        }
         $spacing = DISCORD_SPACING - (microtime(true) - $limits['last']);
         if ($spacing > 0) usleep((int) ($spacing * 1e6));
         $limits['last'] = microtime(true);
-        [$status, $body, $headers] = discord_http_post(discord_webhook_send_url($url), discord_payload($context));
+        [$status, $body, $headers] = discord_http_post($request['url'], $request['payload'], $request['method']);
         $decision = discord_handle_response($bucket, $status, $headers, $body, (int) $row['attempts']);
+        if ($rally) $decision = discord_rally_after_send($db, $row, $request, $status, $body, $decision);
         foreach (discord_breaker_record($status, null, $scopes) as $scope) {
             if ($scope !== 'global') discord_breaker_notes($db, $row['maskID'], $scope, discord_scope_wait($scope));
         }
@@ -301,6 +325,12 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             case 'ratelimited':
                 discord_outbox_mark($db, $row['id'], 'queued', $decision['error'], $decision['delay'], false);
                 discord_log("webhook {$webhook['id']}: {$decision['error']}");
+                break;
+            case 'repost':   // an edit of a deleted rally message: send it again as a new message, no attempt counted
+                discord_outbox_mark($db, $row['id'], 'queued', $decision['error'], 0, false);
+                break;
+            case 'skipped':   // an edit that ends a rally message deleted in Discord: nothing left to do
+                $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
                 break;
             case 'retry':
                 discord_outbox_mark($db, $row['id'], 'queued', $decision['error'], $decision['delay']);

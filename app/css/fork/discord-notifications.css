@@ -84,3 +84,5 @@
 
 #dialog-admin .dn-save-row { margin: 8px 0; }
 #dialog-admin .dn-failures { margin: 2px 0 0 16px; }
+/* Rally point type: note while upstream's server-wide DISCORD_WEB_HOOK still gets the rally changes */
+#dialog-admin .dn-legacy { color: #e6b450; }
