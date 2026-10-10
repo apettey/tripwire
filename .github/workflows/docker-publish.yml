@@ -1,38 +1,173 @@
+# Versioning, releases and the Docker image (see docker/README.md#publishing).
+#
+# pull_request:       computes the version the PR would release (job summary). No image is built.
+# push to main:       computes the next version (.github/scripts/next-version.sh); if it is a release,
+#                     builds and pushes petdog/tripwire, then tags vX.Y.Z and creates the GitHub Release.
+#                     Docs-only changes (or the semver:skip label) release nothing.
+# workflow_dispatch:  forces a major/minor/patch release of main.
+#
+# Tags pushed with GITHUB_TOKEN don't start other workflows, so tagging and the image push happen
+# in this one run.
 name: Docker image
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for the release
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+# One release at a time, in merge order; PR runs only cancel older runs of the same PR
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release-main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE: petdog/tripwire
 
 jobs:
-  build:
+  version:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      release: ${{ steps.next.outputs.release }}
+      push: ${{ steps.next.outputs.push }}
+      tag: ${{ steps.next.outputs.tag }}
+      minor: ${{ steps.next.outputs.minor }}
+      major: ${{ steps.next.outputs.major }}
+      build_version: ${{ steps.next.outputs.build_version }}
+      upstream: ${{ steps.upstream.outputs.upstream }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags and history for the version calculation
 
-      - name: Read Tripwire version
-        id: version
+      - name: Read upstream Tripwire version
+        id: upstream
         run: |
           v=$(sed -n "s/.*define('VERSION', *'\([^']*\)').*/\1/p" settings.php | head -n1)
           if [ -z "$v" ]; then
             echo "::error file=settings.php::Could not read define('VERSION', ...) from settings.php"
             exit 1
           fi
-          echo "tripwire=${v}" >> "$GITHUB_OUTPUT"
+          echo "upstream=${v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute version
+        id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          next=.github/scripts/next-version.sh
+          semver='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          latest=$(git tag -l 'v*' --sort=-v:refname | grep -E "$semver" | head -n1 || true)
+          summary() { echo "$*" >> "$GITHUB_STEP_SUMMARY"; }
+          pr_files() { gh api --paginate "repos/$REPO/pulls/$1/files" --jq '.[].filename'; }
+          summary "### Version"
+          summary ""
+
+          # Rerun on a commit that already has a release tag: reuse it instead of bumping again
+          existing=""
+          if [ "$EVENT" != pull_request ]; then
+            existing=$(git tag -l 'v*' --points-at "$GITHUB_SHA" --sort=-v:refname | grep -E "$semver" | head -n1 || true)
+          fi
+
+          if [ -n "$existing" ]; then
+            result=$(printf 'bump=existing\nrelease=true\nversion=%s\nreason=commit is already tagged %s\n' "${existing#v}" "$existing")
+          elif [ "$EVENT" = pull_request ]; then
+            labels=$(jq -r '[.pull_request.labels[].name] | join(",")' "$GITHUB_EVENT_PATH")
+            result=$(pr_files "$PR_NUMBER" | bash "$next" -t "$latest" -l "$labels")
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+              echo "::error::Manual releases run on $DEFAULT_BRANCH only (got $GITHUB_REF)"
+              exit 1
+            fi
+            result=$(bash "$next" -t "$latest" -b "$INPUT_BUMP" < /dev/null)
+          else
+            # Push: every first-parent commit since the last release counts (a queued run can be
+            # superseded by a newer one). Biggest bump wins; skip only if all of them are skip.
+            if [ -n "$latest" ]; then range="$latest..$GITHUB_SHA"; else range="-1 $GITHUB_SHA"; fi
+            # shellcheck disable=SC2086 # range is intentionally split
+            commits=$(git rev-list --first-parent --max-count=100 $range)
+            summary "| Commit | PR | Bump | Why |"
+            summary "| --- | --- | --- | --- |"
+            best=skip
+            for c in $commits; do
+              pr=$(gh api "repos/$REPO/commits/$c/pulls" \
+                --jq "[.[] | select(.merged_at != null and .base.ref == \"$DEFAULT_BRANCH\")][0] | select(.) | \"\(.number) \([.labels[].name] | join(\",\"))\"")
+              if [ -n "$pr" ]; then
+                read -r num labels <<< "$pr"
+                one=$(pr_files "$num" | bash "$next" -t "$latest" -l "${labels:-}")
+                ref="#$num"
+              else
+                one=$(bash "$next" -t "$latest" -d < /dev/null)
+                ref="(direct push)"
+              fi
+              b=$(sed -n 's/^bump=//p' <<< "$one")
+              summary "| ${c:0:7} | $ref | $b | $(sed -n 's/^reason=//p' <<< "$one") |"
+              case "$best:$b" in
+                *:major|skip:minor|patch:minor|skip:patch) best=$b ;;
+              esac
+            done
+            summary ""
+            result=$(bash "$next" -t "$latest" -b "$best" < /dev/null)
+          fi
+
+          echo "$result"
+          get() { sed -n "s/^$1=//p" <<< "$result"; }
+          version=$(get version)
+          release=$(get release)
+          push=false
+          if [ "$EVENT" != pull_request ] && [ "$release" = true ]; then push=true; fi
+          {
+            echo "version=$version"
+            echo "release=$release"
+            echo "push=$push"
+            echo "tag=v$version"
+            echo "minor=${version%.*}"
+            echo "major=${version%%.*}"
+            if [ "$push" = true ]; then echo "build_version=$version"; else echo "build_version=dev"; fi
+          } >> "$GITHUB_OUTPUT"
+
+          summary "- Latest release: \`${latest:-none}\`"
+          summary "- Bump: \`$(get bump)\` ($(get reason))"
+          if [ "$release" != true ]; then
+            summary "- **No release**: nothing to publish for this change, no tag and no image push."
+          elif [ "$EVENT" = pull_request ]; then
+            summary "- Merging this PR would release **v$version** (current labels; add a \`semver:*\` label to change it)."
+          else
+            summary "- Releasing **v$version**"
+          fi
+
+  build:
+    needs: version
+    # Images are only built (and pushed) from main; PRs just get the version summary
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: needs.version.outputs.push == 'true'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -42,21 +177,60 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.version.outputs.tripwire }},enable={{is_default_branch}}
+            type=raw,value=${{ needs.version.outputs.version || 'none' }},enable=${{ needs.version.outputs.push }}
+            type=raw,value=${{ needs.version.outputs.minor || 'none' }},enable=${{ needs.version.outputs.push }}
+            type=raw,value=${{ needs.version.outputs.major || 'none' }},enable=${{ needs.version.outputs.push }}
+            type=raw,value=latest,enable=${{ needs.version.outputs.push }}
+            type=raw,value=upstream-${{ needs.version.outputs.upstream }},enable=${{ needs.version.outputs.push }}
             type=sha,prefix=sha-
-            type=semver,pattern={{version}}
-            type=ref,event=pr
 
-      - name: Build (and push on main / tags)
+      - name: Build (and push on release)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ needs.version.outputs.push == 'true' }}
+          build-args: |
+            TRIPWIRE_FORK_VERSION=${{ needs.version.outputs.build_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # After the image is pushed, so a release always has its image (a failed build leaves no tag,
+  # and the next run picks those commits up again)
+  release:
+    needs: [version, build]
+    if: needs.version.outputs.push == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag and create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          UPSTREAM: ${{ needs.version.outputs.upstream }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "Tag $TAG already exists"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" \
+              --notes "Docker image: \`${IMAGE}:${VERSION}\` (upstream Tripwire ${UPSTREAM})"
+          fi
+          echo "Released **$TAG**: \`${IMAGE}:${VERSION}\`, \`latest\`, \`upstream-${UPSTREAM}\`" >> "$GITHUB_STEP_SUMMARY"
