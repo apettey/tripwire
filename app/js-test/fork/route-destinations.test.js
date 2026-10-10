@@ -95,6 +95,35 @@ describe('Route destinations', () => {
 		));
 		it('K-space root', () => assert.deepEqual(routeDestinations.chainExits([root(1, '' + AMARR)]), [{ systemID: AMARR, nodeID: 1, holeName: '' }]));
 		it('Ignores synthetic rows', () => assert.deepEqual(routeDestinations.chainExits([{ c: [{ v: 'dest-1-1', systemID: 0 }, { v: 1 }], destination: {} }]), []));
+		it('Ignores systems drawn through an EVE-Scout link', () => assert.deepEqual(
+			routeDestinations.chainExits(rows, [[2, 1, [], 11], [5, 4, [], 'ES-123']]),
+			[{ systemID: RENS, nodeID: 2, holeName: 'Exit R' }]));
+		it('Chain systems: k-space and J-space, no calculated, EVE-Scout or unknown ones', () => assert.deepEqual(
+			routeDestinations.chainSystems(rows, [[5, 4, [], 'ES-123']]), [J152820, RENS, sid('J135100')]));
+	});
+
+	describe('Through Thera', () => {
+		const exits = [{ systemID: RENS, nodeID: 2, holeName: 'R' }];
+		afterEach(() => { delete routeDestinations.scoutRoute; });
+		it('Shown when it has fewer jumps than the gates', () => {
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: 5 });
+			const ev = routeDestinations.evaluate(exits, JITA, 15);
+			assert.equal(ev.scout.total, 5);
+			assert.equal(ev.best.exit.systemID, RENS, 'the gate route stays for the map');
+		});
+		it('Not when the gates are as short', () => {
+			const gates = routeDestinations.evaluate(exits, JITA, 15).best.jumps;
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: gates });
+			assert.equal(routeDestinations.evaluate(exits, JITA, 15).scout, null);
+		});
+		it('Not asked when the destination is on the chain', () => {
+			routeDestinations.scoutRoute = () => { throw new Error('asked'); };
+			assert.equal(routeDestinations.evaluate(exits, RENS, 15).scout, null);
+		});
+		it('Shown when there is no gate route', () => {
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: 9 });
+			assert.equal(routeDestinations.evaluate([], JITA, 15).scout.total, 9);
+		});
 	});
 
 	describe('Best exit', () => {
@@ -179,5 +208,41 @@ describe('Route destinations', () => {
 			assert.ok(html.indexOf(' checked') >= 0);
 		});
 		it('No exits on the chain', () => assert.ok(/No k-space exit/.test(routeDestinations.renderRows([{ systemID: JITA, show: false }], [], 15))));
+	});
+
+	describe('Window rows as jump markers', () => {
+		before(() => { include('app/js/fork/favourites-route-strip'); include('app/js/fork/thera-route'); });
+		afterEach(() => { delete routeDestinations.scoutRoute; });
+		const exits = [{ systemID: RENS, nodeID: 2, holeName: 'R' }];
+		it('Gate route: exit plus one gate marker per jump', () => {
+			const html = routeDestinations.renderRows([{ systemID: JITA, show: false }], exits, 15);
+			const jumps = routeDestinations.evaluate(exits, JITA, 15).best.jumps;
+			assert.ok(html.indexOf("<span class='hisec'>Rens</span>") >= 0);
+			assert.equal((html.match(/fav-mk fav-mk-gate/g) || []).length + (/…\+(\d+)/.exec(html) ? Number(/…\+(\d+)/.exec(html)[1]) : 0), jumps);
+		});
+		it('Thera route: markers with Thera circles and signature chips, no text route', () => {
+			const JITA_ = JITA, P = PERIMETER;
+			const link = { id: '9', wh_type: 'Q063', max_ship_size: 'large', out_system_id: THERA, out_signature: 'HUB-9', in_system_id: P, in_signature: 'ABC-123' };
+			const link2 = { id: '8', wh_type: 'T458', max_ship_size: 'large', out_system_id: THERA, out_signature: 'HUB-8', in_system_id: RENS, in_signature: 'XYZ-789' };
+			const plan = theraRoute.plan([
+				{ kind: 'scout', from: RENS, to: THERA, link: link2, hub: THERA },
+				{ kind: 'scout', from: THERA, to: P, link: link, hub: THERA },
+				{ kind: 'gate', from: P, to: JITA_ }], 'shortest');
+			routeDestinations.scoutRoute = () => plan;
+			const html = routeDestinations.renderRows([{ systemID: JITA, show: false }], exits, 15);
+			assert.equal((html.match(/fav-mk fav-mk-hub fav-mk-hub-thera/g) || []).length, 2);
+			assert.equal((html.match(/fav-mk fav-mk-gate/g) || []).length, 1);
+			assert.ok(html.indexOf("data-sig='XYZ-789'") >= 0 && html.indexOf("data-sig='HUB-9'") >= 0);
+			assert.ok(html.indexOf('route-dest-scout-text') < 0, 'no text route');
+			assert.ok(html.indexOf("<td class='route-dest-jumps'><span title=") >= 0 && html.indexOf('>3</span></td>') >= 0);
+		});
+		it('Markers off (Settings): the text route as before', () => {
+			options.favouritesRouteStrip = { enabled: false };
+			const link = { id: '9', out_system_id: THERA, out_signature: 'HUB-9', in_system_id: PERIMETER, in_signature: 'ABC-123' };
+			routeDestinations.scoutRoute = () => theraRoute.plan([{ kind: 'scout', from: PERIMETER, to: THERA, link: link, hub: THERA }, { kind: 'scout', from: THERA, to: PERIMETER, link: link, hub: THERA }], 'shortest');
+			const html = routeDestinations.renderRows([{ systemID: JITA, show: false }], [], 15);
+			assert.ok(html.indexOf('route-dest-scout-text') >= 0);
+			assert.ok(html.indexOf('fav-mk') < 0);
+		});
 	});
 });

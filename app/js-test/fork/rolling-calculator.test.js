@@ -13,7 +13,7 @@ describe('Rolling calculator', () => {
 		it('500kt exactly is not a capital', () => assert.equal(rollingCalc.passMass(kt(500), { prop: true }), kt(550)));
 		it('Higgs doubles', () => assert.equal(rollingCalc.passMass(kt(100), { higgs: true }), kt(200)));
 		it('Higgs doubles the hot mass too', () => assert.equal(rollingCalc.passMass(kt(100), { prop: true, higgs: true }), kt(300)));
-		it('matches the mass log for a hot Paladin', () => assert.equal(rollingCalc.passMass(160000000, { prop: true }), 210000000));
+		it('matches the mass log for a hot Paladin', () => assert.equal(rollingCalc.passMass(128000000, { prop: true }), 178000000));
 		it('a fitted prop module replaces the 50kt rule', () => {
 			assert.equal(rollingCalc.passMass(kt(15.4), { prop: true, propKg: kt(5) }), kt(20.4));
 			assert.equal(rollingCalc.passMass(kt(100), { prop: true, propKg: 0 }), kt(100));
@@ -277,7 +277,7 @@ describe('Rolling calculator', () => {
 	describe('shipChoices', () => {
 		it('current ship first, then unique logged ships', () => {
 			const list = rollingCalc.shipChoices({ typeName: 'Raven', mass: kt(99) }, [
-				{ shipName: 'Paladin', originalMass: kt(160) }, { shipName: 'Raven', originalMass: kt(99) }, { shipName: 'Paladin', originalMass: kt(160) }
+				{ shipName: 'Paladin', originalMass: kt(128) }, { shipName: 'Raven', originalMass: kt(99) }, { shipName: 'Paladin', originalMass: kt(128) }
 			]);
 			assert.deepEqual(list.map(s => s.name), ['Raven', 'Paladin']);
 			assert.equal(list[0].current, true); assert.equal(list[1].current, false);

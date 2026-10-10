@@ -37,7 +37,11 @@ git log --oneline --no-decorate "$base..$target"
 echo "$target" > "$BASE_FILE"
 git add "$BASE_FILE"
 
-if git diff --binary "$base" "$target" | git apply --3way --index --whitespace=nowarn; then
+# Upstream commits its built bundles; we build ours from app/ and don't track them
+if git diff --binary "$base" "$target" -- . \
+    ':(exclude)public/js/app.min.js' ':(exclude)public/js/app.min.js.map' \
+    ':(exclude)public/css/app.min.css' ':(exclude)public/css/app.min.css.map' \
+    | git apply --3way --index --whitespace=nowarn; then
   echo "Applied cleanly. Review with 'git diff --cached', then commit."
   exit 0
 else
