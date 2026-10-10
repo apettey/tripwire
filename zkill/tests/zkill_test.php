@@ -86,13 +86,65 @@ check('decision: done before a stream restart, old', zk_backfill_decision(['stat
 
 // --- zk_backfill_covered_from ---
 $started = 100000;
-check('covered: short answer covers the whole window', zk_backfill_covered_from($started, 3600, 10, [0 => $started - 60, 9 => $started - 3000], null), $started - 3600);
-check('covered: full page starts at its oldest kill', zk_backfill_covered_from($started, 86400, 200, [0 => $started - 60, 199 => $started - 7000], null), $started - 7000);
-check('covered: ESI cap / budget skipped entries: up to the first gap only',
-    zk_backfill_covered_from($started, 86400, 50, [0 => $started - 60, 1 => $started - 120, 2 => $started - 600, 4 => $started - 9000], 3), $started - 600);
-check('covered: gap at the start covers nothing', zk_backfill_covered_from($started, 86400, 50, [1 => $started - 120], 0), $started);
-check('covered: nothing returned', zk_backfill_covered_from($started, 3600, 0, [], null), $started - 3600);
+check('covered: short answer covers the whole window', zk_backfill_covered_from($started, 3600, 10, [510 => $started - 60, 501 => $started - 3000], null), $started - 3600);
+check('covered: full page starts at its oldest kill', zk_backfill_covered_from($started, 86400, 200, [700 => $started - 60, 501 => $started - 7000]), $started - 7000);
+check('covered: skipped entries (ESI cap / budget / failure): up to the first gap by killID only',
+    zk_backfill_covered_from($started, 86400, 50, [905 => $started - 60, 904 => $started - 120, 903 => $started - 600, 902 => null, 901 => $started - 9000]), $started - 600);
+check('covered: does not rely on the answer order',
+    zk_backfill_covered_from($started, 86400, 50, [901 => $started - 9000, 903 => $started - 600, 902 => null, 905 => $started - 60, 904 => $started - 120]), $started - 600);
+check('covered: gap at the newest kill covers nothing', zk_backfill_covered_from($started, 86400, 50, [905 => null, 904 => $started - 120]), $started);
+check('covered: nothing returned', zk_backfill_covered_from($started, 3600, 0, []), $started - 3600);
 check('covered: ESI cap reaches the page size', ZK_BACKFILL_ESI_MAX >= 200, true);
+
+// --- zk_backfill_admit: chain back-fills keep room when panel clicks fill the queue ---
+check('admit: panel below its cap', zk_backfill_admit(799, 0, 'panel', 1), true);
+check('admit: panel at its cap', zk_backfill_admit(800, 0, 'panel', 1), false);
+check('admit: chain still fits above the panel cap', zk_backfill_admit(800, 0, 'chain', 1), true);
+check('admit: chain at the global cap', zk_backfill_admit(1000, 0, 'chain', 1), false);
+check('admit: per-user panel cap', zk_backfill_admit(10, 250, 'panel', 1), false);
+check('admit: per-user chain cap is higher', [zk_backfill_admit(10, 250, 'chain', 1), zk_backfill_admit(10, 500, 'chain', 1)], [true, false]);
+check('admit: unknown source counts as panel', zk_backfill_admit(800, 0, 'other', 1), false);
+check('admit: no user, no per-user cap', zk_backfill_admit(10, 9999, 'panel', 0), true);
+
+// --- zk_names_resolve: converges with an invalid ID in the queue (fake ESI, SQLite) ---
+$namesDb = new PDO('sqlite::memory:');
+$namesDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$namesDb->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$namesDb->exec("CREATE TABLE zkill_names (id INTEGER PRIMARY KEY, name TEXT NULL, category TEXT NOT NULL DEFAULT '',
+    requestedAt TEXT NOT NULL, resolvedAt TEXT NULL, attempts INTEGER NOT NULL DEFAULT 0)");
+$bad = 1000137;
+$insert = $namesDb->prepare("INSERT INTO zkill_names (id, requestedAt) VALUES (?, '2026-10-10 00:00:00')");
+for ($id = 1000001; $id <= 1000600; $id++) $insert->execute([$id]);   // 600 queued, one of them invalid
+$esiCalls = 0;
+$esiErrors = 0;
+zk_http_transport(function ($method, $url, $body) use ($bad, &$esiCalls, &$esiErrors) {
+    $esiCalls++;
+    $ids = json_decode($body, true);
+    if (in_array($bad, $ids, true)) { $esiErrors++; return [404, '{"error":"Ensure all IDs are valid before resolving"}', []]; }
+    return [200, json_encode(array_map(function ($id) { return ['id' => $id, 'name' => "Name $id", 'category' => 'character']; }, $ids)), []];
+});
+$passes = 0;
+while ($passes < 100 && (int) $namesDb->query('SELECT COUNT(*) FROM zkill_names WHERE name IS NULL')->fetchColumn() > 0) {
+    zk_names_paused_until(0);   // the worker waits ZK_NAMES_ERROR_PAUSE between rejected passes; skip that here
+    zk_http_pause('esi.evetech.net', 0);
+    zk_names_resolve($namesDb, 3);
+    $passes++;
+}
+$pending = (int) $namesDb->query('SELECT COUNT(*) FROM zkill_names WHERE name IS NULL')->fetchColumn();
+check('names: queue drains despite an invalid ID', $pending, 0);
+check('names: drains in a bounded number of passes', $passes <= 25, true);
+check('names: the invalid ID costs at most 3 ESI errors', $esiErrors <= 3, true);
+check('names: invalid ID stored as unresolvable', $namesDb->query("SELECT name || '/' || category FROM zkill_names WHERE id = $bad")->fetchColumn(), '/invalid');
+check('names: the others resolved', (int) $namesDb->query("SELECT COUNT(*) FROM zkill_names WHERE name LIKE 'Name %'")->fetchColumn(), 599);
+// A rejected pass pauses name passes
+$namesDb->exec("UPDATE zkill_names SET name = NULL, attempts = 0 WHERE id = $bad");
+zk_names_paused_until(0);
+zk_http_pause('esi.evetech.net', 0);
+zk_names_resolve($namesDb, 3);
+check('names: a rejected batch pauses name passes', zk_names_paused_until() > microtime(true), true);
+check('names: nothing is asked while paused', zk_names_resolve($namesDb, 3), null);
+zk_http_transport(null, true);
+check('names: batches by tier', zk_names_batches([[1, 0], [2, 0], [3, 2], [4, 1], [5, 1]]), [[1, 2], [3], [4, 5]]);
 
 // --- rate limiter ---
 check('limiter: fresh host is ready', zk_http_ready('example.test'), true);

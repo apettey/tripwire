@@ -9,7 +9,8 @@
 //   GET system_kills.php?systems=<id,id,...>               up to 200 systems (may be combined with systemID)
 //       &pastSeconds=<n>   window, 60..retention (default and upper bound: ZKILL_RETENTION_HOURS; longer is clamped)
 //       &limit=<n>         kills returned over all systems, 1..50 (default 20)
-//       &since=<cursor>    incremental: only kills stored after this cursor, oldest first (cursor from the last answer)
+//       &since=<cursor>    incremental: only kills stored after this cursor, in stored order (by id, not kill time:
+//                          sort by killTime yourself); continue with `cursor` from the answer
 //       &source=panel|chain  back-fill priority (chain outranks panel; default panel)
 //       &queue=0|1         0 = read only, queue nothing (default 1)
 //

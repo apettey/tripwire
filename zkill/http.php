@@ -126,6 +126,17 @@ function zk_http_header_collector(array &$headers) {
 }
 
 /**
+ * Test hook: a callable($method, $url, $body) returning [status, body, headers] replaces the network for
+ * zk_http_request() (rate limiting and blocking still apply). null = real requests.
+ */
+function zk_http_transport(?callable $set = null, $clear = false) {
+    static $transport = null;
+    if ($clear) $transport = null;
+    elseif ($set !== null) $transport = $set;
+    return $transport;
+}
+
+/**
  * One request. Waits for the host's rate limit when $wait is true, otherwise returns status -1 if not ready.
  * @return array [status (0 = network error, -1 = rate limited, not sent), body or error text, headers]
  */
@@ -137,6 +148,12 @@ function zk_http_request($method, $url, $body = null, $wait = true, $timeout = 3
         usleep((int) ceil($delay * 1e6));
     }
     zk_http_reserve($host);
+    $transport = zk_http_transport();
+    if ($transport) {
+        [$status, $response, $headers] = $transport($method, $url, $body);
+        zk_http_record($host, $status, $headers);
+        return [$status, $response, $headers];
+    }
     $headers = [];
     $curl = curl_init($url);
     curl_setopt_array($curl, zk_http_options($url, $method, $body, $timeout));
@@ -168,8 +185,8 @@ function zk_http_get_json($url, $wait = true, $timeout = 30) {
 
 /**
  * Several GETs to one host with bounded concurrency (curl_multi). Each request keeps the host's spacing; no new
- * request starts once the host is paused (429/5xx/403/ESI limits) or after $deadline (unix time). URLs that were
- * not requested come back with status -1.
+ * request starts once the host is paused (429/5xx/403/ESI limits/non-JSON answer) or after $deadline (unix time).
+ * URLs that were not requested come back with status -1, non-JSON 200 answers with -2.
  * @return array url => [status, body]
  */
 function zk_http_get_many(array $urls, $concurrency = 5, $timeout = 10, $deadline = null) {
@@ -209,6 +226,11 @@ function zk_http_get_many(array $urls, $concurrency = 5, $timeout = 10, $deadlin
             $body = curl_multi_getcontent($handle);
             $status = $info['result'] === CURLE_OK ? (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE) : 0;
             zk_http_record($host, $status, $entry['headers']);
+            if ($status === 200 && json_decode((string) $body) === null) {
+                // A challenge / maintenance page instead of JSON: stop calling the host (403 is handled by record)
+                zk_http_block($host, 0, 'HTTP 200 without JSON: ' . substr(preg_replace('/\s+/', ' ', strip_tags((string) $body)), 0, 80));
+                $status = -2;
+            }
             $results[$entry['url']] = [$status, $status === 0 ? curl_error($handle) : $body];
             curl_multi_remove_handle($multi, $handle);
             curl_close($handle);
