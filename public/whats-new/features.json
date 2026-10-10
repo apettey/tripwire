@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 30,
+      "date": "2026-10-10",
+      "title": "Rally point channel in Mask Admin > Discord",
+      "description": "Corporation admins can now choose which Discord channel rally point changes go to: turn on Rally point in Mask Admin > Discord, pick the channel's webhook and, if you like, a role to ping and your own text for when the rally is set or cleared. Changes within half a minute still update the same message.\n\nAs before, you can keep your own rally changes off Discord with \"Also post to Discord\" in the chain map's right-click menu or in Settings > Chain Map Settings.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-30-rally-discord-settings.png",
+          "caption": "Mask Admin > Discord: the Rally point notification with its channel and texts"
+        }
+      ]
+    },
+    {
       "pr": 28,
       "date": "2026-10-10",
       "title": "Rally point to Discord",
