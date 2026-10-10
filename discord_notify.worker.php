@@ -7,7 +7,8 @@
 //   - prunes the outbox and dedupe tables every 10 minutes.
 // Kill notifications are queued by zkill_feed.worker.php (discord_on_killmail), which sees every streamed killmail.
 // A separate process keeps Discord's latency and outages away from the zKillboard stream, and keeps k-space
-// notifications working with ZKILL_FEED_ENABLED=false.
+// notifications working with ZKILL_FEED_ENABLED=false. With several containers on one database, MySQL named locks
+// ('discord-kspace', 'discord-dispatch', see discord_leader_lock) make sure only one of them polls and one sends.
 //
 //   php discord_notify.worker.php
 
@@ -54,7 +55,7 @@ function dn_connect() {
 /** Masks with k-space notifications on and a working webhook */
 function dn_kspace_masks(PDO $db) {
     $ok = [];
-    foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status = 'ok'")->fetchAll(PDO::FETCH_ASSOC) as $row) $ok[(int) $row['id']] = (string) $row['maskID'];
+    foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status IN ('ok', 'pending')")->fetchAll(PDO::FETCH_ASSOC) as $row) $ok[(int) $row['id']] = (string) $row['maskID'];
     return array_filter(discord_active_settings($db), function ($s, $maskID) use ($ok) {
         $type = $s['types']['kspace'];
         return $type['enabled'] && ($ok[$type['webhookID']] ?? null) === (string) $maskID;
@@ -71,6 +72,7 @@ function dn_run() {
     $lastHeartbeat = time();
     $backoff = 0;
     $totals = ['sent' => 0, 'failed' => 0, 'kspace' => 0];
+    $leaders = ['kspace' => null, 'dispatch' => null];
 
     while (true) {
         try {
@@ -80,15 +82,25 @@ function dn_run() {
                 dn_log("connected to the database; watching signature changes after $highWater");
             }
             $now = microtime(true);
+            // Several containers on one database: only the lock holder polls / sends, the others stand by
             if ($now - $lastKspace >= DN_KSPACE_EVERY) {
                 $lastKspace = $now;
-                $totals['kspace'] += discord_kspace_poll($db, dn_kspace_masks($db), $highWater);
+                $leader = discord_leader_lock($db, 'discord-kspace');
+                if ($leader !== $leaders['kspace']) dn_log($leader ? 'k-space poller: active' : 'k-space poller: standby (another process holds the lock)');
+                $leaders['kspace'] = $leader;
+                if ($leader) $totals['kspace'] += discord_kspace_poll($db, dn_kspace_masks($db), $highWater);
+                else $highWater = discord_kspace_start($db);   // take over from about now (the poll re-reads an overlap)
             }
             if ($now - $lastDispatch >= DN_DISPATCH_EVERY) {
                 $lastDispatch = $now;
-                $counts = discord_dispatch($db, 20, 5.0);
-                $totals['sent'] += $counts['sent'];
-                $totals['failed'] += $counts['failed'] + $counts['broken'];
+                $leader = discord_leader_lock($db, 'discord-dispatch');
+                if ($leader !== $leaders['dispatch']) dn_log($leader ? 'sender: active' : 'sender: standby (another process holds the lock)');
+                $leaders['dispatch'] = $leader;
+                if ($leader) {
+                    $counts = discord_dispatch($db, 20, 5.0);
+                    $totals['sent'] += $counts['sent'];
+                    $totals['failed'] += $counts['failed'] + $counts['broken'];
+                }
             }
             if ($now - $lastPrune >= DN_PRUNE_EVERY) {
                 $lastPrune = $now;
@@ -105,7 +117,7 @@ function dn_run() {
         } catch (Throwable $error) {
             $backoff = $backoff ? min($backoff * 2, DN_BACKOFF_MAX) : 5;
             dn_log('error: ' . $error->getMessage() . "; retrying in {$backoff}s");
-            if ($error instanceof PDOException) $db = null;
+            if ($error instanceof PDOException) { $db = null; $leaders = ['kspace' => null, 'dispatch' => null]; }   // locks go with the connection
             sleep($backoff);
         }
     }

@@ -16,15 +16,39 @@ const DISCORD_HTTP_TIMEOUT   = 10;
 const DISCORD_SPACING        = 0.05;   // seconds between any two requests (Discord's global limit is 50/s)
 const DISCORD_NAMES_WAIT     = 90;     // seconds a kill message waits for names before it is sent with fallbacks
 
-/** In-process limiter state: ['global' => unix, 'buckets' => key => unix, 'last' => unix] */
+const DISCORD_BREAKER_WINDOW = 600;   // seconds
+const DISCORD_BREAKER_LIMIT  = 500;   // refused requests (401/403/404/429/other 4xx) per window before all sending stops;
+                                      // Cloudflare bans an IP from Discord's API at 10,000 per 10 minutes
+
+/** In-process limiter state: ['global' => unix, 'buckets' => key => unix, 'last' => unix, 'refused' => [unix...]] */
 function &discord_limits() {
-    static $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0];
+    static $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => []];
     return $limits;
 }
 
 function discord_limits_reset() {
     $limits = &discord_limits();
-    $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0];
+    $limits = ['global' => 0.0, 'buckets' => [], 'last' => 0.0, 'refused' => []];
+}
+
+/**
+ * Circuit breaker: count requests Discord refused (any 4xx, 429 included) over a rolling window. At the limit, every
+ * request is paused until the oldest refusal leaves the window, and it is logged loudly. Returns true when it trips.
+ */
+function discord_breaker_record($status, $now = null) {
+    $now = $now ?? microtime(true);
+    $limits = &discord_limits();
+    $limits['refused'] = array_values(array_filter($limits['refused'], function ($t) use ($now) { return $t > $now - DISCORD_BREAKER_WINDOW; }));
+    if ($status < 400 || $status >= 500) return false;
+    $limits['refused'][] = $now;
+    if (count($limits['refused']) < DISCORD_BREAKER_LIMIT) return false;
+    $until = $limits['refused'][0] + DISCORD_BREAKER_WINDOW;
+    if ($until > $limits['global']) {
+        $limits['global'] = $until;
+        discord_log('CIRCUIT BREAKER: Discord refused ' . count($limits['refused']) . ' requests in the last '
+            . (DISCORD_BREAKER_WINDOW / 60) . ' min; ALL sending paused for ' . round(($until - $now) / 60, 1) . ' min');
+    }
+    return true;
 }
 
 /** Seconds until a request to this bucket is allowed */
@@ -89,6 +113,7 @@ function discord_error_text($status, $body) {
 function discord_handle_response($bucket, $status, array $headers, $body, $attempts, $now = null) {
     $now = $now ?? microtime(true);
     $limits = &discord_limits();
+    discord_breaker_record($status, $now);
     // Bucket headers come with successes and 429s alike
     if (isset($headers['x-ratelimit-remaining'], $headers['x-ratelimit-reset-after']) && is_numeric($headers['x-ratelimit-reset-after'])
         && (int) $headers['x-ratelimit-remaining'] <= 0) {
@@ -165,7 +190,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             $counts['failed']++;
             continue;
         }
-        if ($webhook['status'] !== 'ok') {
+        if ($webhook['status'] === 'broken') {
             discord_outbox_mark($db, $row['id'], 'failed', 'webhook is broken');
             $counts['failed']++;
             continue;

@@ -27,11 +27,6 @@ function discord_dedupe_cooldown(PDO $db, $maskID, $kind, $ref, $seconds) {
     return $stmt->rowCount() > 0;
 }
 
-/** Undo a cooldown record (nothing was queued after all, e.g. the outbox cap was hit) */
-function discord_dedupe_forget(PDO $db, $maskID, $kind, $ref) {
-    $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ? AND ref = ?')->execute([$maskID, $kind, substr((string) $ref, 0, 64)]);
-}
-
 /** Queue a message. Returns the outbox id, or null when the mask's queue is full. */
 function discord_enqueue(PDO $db, $maskID, $webhookID, $kind, array $data, $priority = DISCORD_PRIORITY_DEFAULT) {
     $stmt = $db->prepare("SELECT COUNT(*) FROM discord_outbox WHERE maskID = ? AND status = 'queued'");
@@ -44,6 +39,24 @@ function discord_enqueue(PDO $db, $maskID, $webhookID, $kind, array $data, $prio
         VALUES (?, ?, ?, ?, ?, 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
     $stmt->execute([$maskID, (int) $webhookID, $kind, (int) $priority, json_encode($data)]);
     return (int) $db->lastInsertId();
+}
+
+/**
+ * Queue a message only if $claim() records its dedupe row (returns true), in one transaction: the dedupe row exists
+ * exactly when the message was queued (a full queue rolls both back), and two processes can't both queue it (the
+ * dedupe row's primary key decides). Returns the outbox id or null.
+ */
+function discord_enqueue_once(PDO $db, $maskID, $webhookID, $kind, array $data, callable $claim, $priority = DISCORD_PRIORITY_DEFAULT) {
+    $db->beginTransaction();
+    try {
+        $id = $claim() ? discord_enqueue($db, $maskID, $webhookID, $kind, $data, $priority) : null;
+        if ($id === null) { $db->rollBack(); return null; }
+        $db->commit();
+        return $id;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
 }
 
 /** Due messages, highest priority first, at most $limit */

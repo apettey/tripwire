@@ -20,20 +20,29 @@ const DISCORD_TEMPLATE_MAX = 1500;
 function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
     $templates = discord_default_templates();
     $kill = function ($kind) use ($templates) {
-        return ['enabled' => false, 'webhookID' => 0, 'template' => $templates[$kind], 'ping' => '',
+        return ['enabled' => false, 'webhookID' => 0, 'template' => $templates[$kind], 'ping' => '', 'enabledAt' => 0,
             'minIsk' => 0, 'includeNpc' => false, 'excludePods' => false];
     };
     return [
         'types' => [
-            'kspace' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['kspace'], 'ping' => '',
+            'kspace' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['kspace'], 'ping' => '', 'enabledAt' => 0,
                 'pingSystems' => DISCORD_DEFAULT_PING_SYSTEMS, 'maxJumps' => 10, 'cooldownHours' => 6],
-            'chainKill' => $kill('chainKill'),
+            'chainKill' => $kill('chainKill') + ['includeHighsec' => false],
             'corpKill' => $kill('corpKill'),
             'corpLoss' => $kill('corpLoss'),
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
     ];
+}
+
+/**
+ * Masks that can have Discord notifications: corporation ('<corp>.2'), alliance ('<alliance>.3') and custom masks
+ * ('<id>.0'). Not the Public mask (0.0) and not Private masks ('<character>.1'): a chain shared with others, run by
+ * its admins.
+ */
+function discord_mask_allowed($maskID) {
+    return (bool) preg_match('/^[1-9]\d*\.[023]$/', (string) $maskID);
 }
 
 /** "Our" side of a mask by default: corp mask -> that corporation, alliance mask -> that alliance, else the admin's corp */
@@ -85,6 +94,8 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             $type['ping'] = $ping;
         }
         if ($type['enabled'] && $type['webhookID'] <= 0) { $errors[] = "$kind: pick a webhook to enable it"; $type['enabled'] = false; }
+        // Set by the server (discord_settings_stamp); kept as stored
+        if (isset($in['enabledAt']) && is_numeric($in['enabledAt'])) $type['enabledAt'] = max(0, (int) $in['enabledAt']);
         if ($kind === 'kspace') {
             if (array_key_exists('pingSystems', $in)) {
                 $type['pingSystems'] = discord_int_list($in['pingSystems'], DISCORD_MAX_PING_SYSTEMS, function ($id) {
@@ -97,8 +108,8 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if ($type['enabled'] && !$type['pingSystems']) { $errors[] = 'kspace: add at least one ping system'; $type['enabled'] = false; }
         } else {
             if (array_key_exists('minIsk', $in)) $type['minIsk'] = max(0, min(1e15, (float) (is_numeric($in['minIsk']) ? $in['minIsk'] : 0)));
-            foreach (['includeNpc', 'excludePods'] as $flag) {
-                if (array_key_exists($flag, $in)) $type[$flag] = $in[$flag] === true || $in[$flag] === 1 || $in[$flag] === '1' || $in[$flag] === 'true';
+            foreach (['includeNpc', 'excludePods', 'includeHighsec'] as $flag) {
+                if (array_key_exists($flag, $in) && array_key_exists($flag, $type)) $type[$flag] = $in[$flag] === true || $in[$flag] === 1 || $in[$flag] === '1' || $in[$flag] === 'true';
             }
         }
         $out['types'][$kind] = $type;
@@ -113,6 +124,20 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
 }
 
 /** Stored settings of a mask merged over the defaults (null row = defaults) */
+/**
+ * enabledAt of each type, from the server's clock only: when a type goes from off to on it is now, while it stays on
+ * it is kept, off is 0. Nothing that happened before a type was turned on is announced (old connections and kills).
+ */
+function discord_settings_stamp(array $new, array $old, $now = null) {
+    $now = $now ?? time();
+    foreach (DISCORD_KINDS as $kind) {
+        $was = $old['types'][$kind] ?? [];
+        $new['types'][$kind]['enabledAt'] = !$new['types'][$kind]['enabled'] ? 0
+            : (!empty($was['enabled']) && !empty($was['enabledAt']) ? (int) $was['enabledAt'] : (int) $now);
+    }
+    return $new;
+}
+
 function discord_settings_load(PDO $db, $maskID, array $defaults) {
     $stmt = $db->prepare('SELECT settings FROM discord_settings WHERE maskID = ?');
     $stmt->execute([$maskID]);
@@ -131,6 +156,7 @@ function discord_settings_save(PDO $db, $maskID, array $settings, $by) {
 function discord_active_settings(PDO $db) {
     $out = [];
     foreach ($db->query('SELECT maskID, settings FROM discord_settings')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (!discord_mask_allowed($row['maskID'])) continue;
         $settings = discord_settings_normalise(json_decode($row['settings'], true), discord_settings_defaults())[0];
         foreach (DISCORD_KINDS as $kind) {
             if ($settings['types'][$kind]['enabled'] && $settings['types'][$kind]['webhookID'] > 0) { $out[(string) $row['maskID']] = $settings; break; }

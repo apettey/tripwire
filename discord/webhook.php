@@ -2,6 +2,7 @@
 // Fork-owned: Discord webhook URLs (see discord/discord.inc.php).
 
 const DISCORD_API_BASE_DEFAULT = 'https://discord.com/api';
+const DISCORD_API_BASE_HOSTS   = ['localhost', '::1', 'discord-mock'];   // DISCORD_API_BASE hosts besides 127.0.0.0/8
 const DISCORD_WEBHOOK_PATTERN  = '~^https://(?:(?:canary|ptb)\.)?discord(?:app)?\.com/api(?:/v(\d{1,2}))?/webhooks/(\d{17,21})/([A-Za-z0-9_-]{30,120})/?(?:\?thread_id=(\d{17,21}))?$~';
 
 /**
@@ -29,8 +30,8 @@ function discord_webhook_hint($url) {
 
 /**
  * Base URL requests go to: https://discord.com/api, or DISCORD_API_BASE for a local fake in development. The
- * override is only honoured for local hosts (localhost, 127.x, ::1 or a single-label name such as a compose
- * service), so a misconfiguration can never send webhook secrets to another public host.
+ * override is only honoured for localhost, 127.0.0.0/8, ::1 and the dev stack's fake ('discord-mock'), so a
+ * misconfiguration can never send webhook secrets to another host.
  */
 function discord_api_base($override = null) {
     $base = rtrim($override !== null ? $override : discord_config('DISCORD_API_BASE'), '/');
@@ -38,8 +39,8 @@ function discord_api_base($override = null) {
     $parts = parse_url($base);
     $host = strtolower(trim((string) ($parts['host'] ?? ''), '[]'));
     $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-    $local = $host === 'localhost' || $host === '::1' || preg_match('/^127\.\d+\.\d+\.\d+$/', $host)
-        || preg_match('/^[a-z0-9][a-z0-9-]*$/', $host);
+    $local = in_array($host, DISCORD_API_BASE_HOSTS, true)
+        || (preg_match('/^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/', $host, $ip) && max($ip[1], $ip[2], $ip[3]) <= 255);
     if (!in_array($scheme, ['http', 'https'], true) || !$local || isset($parts['query']) || isset($parts['user'])) {
         return DISCORD_API_BASE_DEFAULT;
     }

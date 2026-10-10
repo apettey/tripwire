@@ -87,9 +87,19 @@ describe('Discord notifications', function() {
 			assert.strictEqual(s.text, 'Broken');
 			assert.ok(s.title.indexOf('Unknown Webhook') >= 0);
 		});
+		it('shows a new or replaced URL as not verified until Discord accepted a message', function() {
+			assert.strictEqual(dn.webhookStatus({ status: 'pending' }, now).text, 'Not verified yet');
+		});
 		it('shows when it last worked', function() {
 			assert.deepStrictEqual(dn.webhookStatus({ status: 'ok', lastSentAt: '2026-10-10T11:55:00Z' }, now), { text: 'OK', cls: 'dn-good', title: 'Last message 5 min ago' });
-			assert.strictEqual(dn.webhookStatus({ status: 'ok', lastSentAt: null }, now).text, 'Not used yet');
+			assert.strictEqual(dn.webhookStatus({ status: 'ok', lastSentAt: null }, now).text, 'OK');
+		});
+	});
+
+	describe('maskAllowed', function() {
+		it('only corporation, alliance and custom masks', function() {
+			assert.deepStrictEqual(['98000001.2', '99000001.3', '12345.0', '196379789.1', '0.0', '', null, undefined].map(dn.maskAllowed),
+				[true, true, true, false, false, false, false, false]);
 		});
 	});
 
@@ -112,6 +122,13 @@ describe('Discord notifications', function() {
 			assert.deepStrictEqual(r.settings.types.kspace, { enabled: true, webhookID: 3, template: 'T kspace', ping: '<@&123456789012345678> @here', pingSystems: [30000142, 30002659], maxJumps: 50, cooldownHours: 6 });
 			assert.deepStrictEqual(r.settings.types.corpLoss, { enabled: true, webhookID: 4, template: 'T corpLoss', ping: '', minIsk: 1000000, includeNpc: false, excludePods: true });
 			assert.deepStrictEqual(r.settings.corporations, [98000001]);
+			assert.strictEqual(r.settings.types.chainKill.includeHighsec, false);
+			assert.strictEqual('includeHighsec' in r.settings.types.corpLoss, false);
+		});
+		it('includes high-sec chain kills only when ticked', function() {
+			const v = formValues();
+			v.types.chainKill.includeHighsec = true;
+			assert.strictEqual(dn.collectSettings(v).settings.types.chainKill.includeHighsec, true);
 		});
 		it('reports what would stop the server from saving', function() {
 			const v = formValues({ corporations: 'x', alliances: '' });

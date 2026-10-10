@@ -240,5 +240,69 @@ check('transport: url', $sent[0][0], "https://discord.com/api/webhooks/$id/$toke
 check('transport: allowed_mentions sent', $sent[0][1]['allowed_mentions'], ['parse' => [], 'roles' => ['111111111111111111']]);
 discord_http_transport(null, true);
 
+// --- review round 1 ---
+// Dev API base: only localhost, 127.0.0.0/8, ::1 and the dev fake's service name
+check('api base: integer IP refused', discord_api_base('http://2130706433/api'), 'https://discord.com/api');
+check('api base: short 127 form refused', discord_api_base('http://127.1/api'), 'https://discord.com/api');
+check('api base: other single-label name refused', discord_api_base('http://collector:8080/api'), 'https://discord.com/api');
+check('api base: bad octet refused', discord_api_base('http://127.0.0.300/api'), 'https://discord.com/api');
+check('api base: ::1', discord_api_base('http://[::1]:9095/api'), 'http://[::1]:9095/api');
+check('api base: localhost', discord_api_base('http://localhost:9095/api'), 'http://localhost:9095/api');
+
+// @here / @everyone only as words of their own
+check('mentions: address is not @here', discord_allowed_mentions('mail ops@here.com or x@everyone'), ['parse' => []]);
+check('mentions: @here at the end of a sentence', discord_allowed_mentions('Heads up @here.'), ['parse' => ['everyone']]);
+check('mentions: @everyone, in a line', discord_allowed_mentions("Kill!\n@everyone, form up"), ['parse' => ['everyone']]);
+
+// J-space: no security value, the class instead
+$jp = discord_payload(['kind' => 'chainKill', 'template' => '{system} {class} [{security}]', 'ping' => '', 'mask' => 'Corp', 'system' => 'J160650',
+    'security' => null, 'class' => 'C3', 'region' => 'R', 'killID' => 1, 'value' => 1, 'time' => 1791633600]);
+check('J-space: embed shows the class only', $jp['embeds'][0]['description'], 'J160650 (C3), R');
+check('J-space: {security} is empty', $jp['content'], 'J160650 C3 []');
+check('J-space: kill context has no security', discord_kill_context(discord_kill_data('chainKill', $facts, $ks['types']['chainKill'], 'Corp'), [])['security'], null);
+check('k-space: kill context keeps security', discord_kill_context(['systemID' => 30000142] + discord_kill_data('chainKill', $facts, $ks['types']['chainKill'], 'Corp'), [])['security'], 0.946);
+
+// Chain kills: high-sec only when asked
+$hsKill = ['systemID' => 30000142] + $facts;
+$hsChain = [30000142 => true];
+check('chain kill in high-sec: skipped by default', discord_classify_kill($hsKill, $ks, $hsChain), ['corpKill' => 2]);
+$withHs = $ks; $withHs['types']['chainKill']['includeHighsec'] = true;
+check('chain kill in high-sec: when asked', discord_classify_kill($hsKill, $withHs, $hsChain), ['corpKill' => 2, 'chainKill' => 1]);
+check('chain kill in low-sec: always', discord_classify_kill(['systemID' => 30002813] + $facts, $ks, [30002813 => true]), ['corpKill' => 2, 'chainKill' => 1]);
+check('settings: includeHighsec only on chain kills', [array_key_exists('includeHighsec', discord_settings_defaults()['types']['chainKill']),
+    array_key_exists('includeHighsec', discord_settings_normalise(['types' => ['corpKill' => ['includeHighsec' => true]]], discord_settings_defaults())[0]['types']['corpKill'])], [true, false]);
+
+// enabledAt: nothing from before a type was turned on
+$late = $ks; $late['types']['corpKill']['enabledAt'] = $facts['time'] + 10;
+check('kill from before the type was turned on', discord_classify_kill($facts, $late, $chain), ['chainKill' => 1]);
+$off = discord_settings_defaults(98000001);
+$on = $off; $on['types']['kspace']['enabled'] = true; $on['types']['kspace']['webhookID'] = 1;
+$stamped = discord_settings_stamp($on, $off, 5000);
+check('stamp: turned on now', [$stamped['types']['kspace']['enabledAt'], $stamped['types']['chainKill']['enabledAt']], [5000, 0]);
+check('stamp: staying on keeps the time', discord_settings_stamp($on, $stamped, 9000)['types']['kspace']['enabledAt'], 5000);
+check('stamp: browser cannot set it', discord_settings_stamp(discord_settings_normalise(['types' => ['kspace' => ['enabled' => true, 'webhookID' => 1, 'enabledAt' => 1]]], $off)[0], $off, 7000)['types']['kspace']['enabledAt'], 7000);
+check('stamp: off is 0', discord_settings_stamp($off, $stamped, 9000)['types']['kspace']['enabledAt'], 0);
+check('app time: UTC', discord_app_time(1791633600, 'UTC'), '2026-10-10 12:00:00');
+check('app time: other zone', discord_app_time(1791633600, 'Europe/Berlin'), '2026-10-10 14:00:00');
+check('k-space change after enable', [discord_kspace_after_enable('2026-10-10 12:00:01', 1791633600, 'UTC'),
+    discord_kspace_after_enable('2026-10-10 11:59:59', 1791633600, 'UTC'), discord_kspace_after_enable('2000-01-01 00:00:00', 0, 'UTC')], [true, false, true]);
+
+// Only corporation, alliance and custom masks
+check('masks allowed', array_map('discord_mask_allowed', ['98000001.2', '99000001.3', '12345.0', '196379789.1', '0.0', '', 'x.2', '98000001.2 ']),
+    [true, true, true, false, false, false, false, false]);
+
+// Circuit breaker: refusals over 10 minutes pause everything
+discord_limits_reset();
+$logged = [];
+$t0 = 50000.0;
+for ($i = 0; $i < DISCORD_BREAKER_LIMIT - 1; $i++) discord_breaker_record($i % 2 ? 404 : 429, $t0 + $i * 0.1);
+check('breaker: below the limit', [discord_wait('webhook:x', $t0 + 60), count($logged)], [0.0, 0]);
+check('breaker: 5xx and successes do not count', [discord_breaker_record(503, $t0 + 60), discord_breaker_record(204, $t0 + 60)], [false, false]);
+check('breaker: trips at the limit', discord_breaker_record(400, $t0 + 60), true);
+check('breaker: everything paused until the oldest refusal is 10 min old', round(discord_wait('webhook:any', $t0 + 60), 1), 540.0);
+check('breaker: logged loudly', count($logged) === 1 && strpos($logged[0], 'CIRCUIT BREAKER') === 0, true);
+check('breaker: refusals leave the window', discord_breaker_record(404, $t0 + 700), false);
+discord_limits_reset();
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

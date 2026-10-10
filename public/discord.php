@@ -40,7 +40,9 @@ function discord_fail($code, $message) {
 
 $mask = (string) $_SESSION['mask'];
 if (!isset($mysql) || !($mysql instanceof PDO)) discord_fail(500, 'Database error');
-if ($mask === '0.0' || !(checkOwner($mask) || checkAdmin($mask))) discord_fail(403, 'Only admins of this mask can change its Discord notifications');
+// Corporation, alliance and custom masks only (not Public, not Private), and only their admins/owners
+if (!discord_mask_allowed($mask)) discord_fail(403, 'Discord notifications are for corporation, alliance and custom masks');
+if (!(checkOwner($mask) || checkAdmin($mask))) discord_fail(403, 'Only admins of this mask can change its Discord notifications');
 
 if (empty($_SESSION['discordCsrf'])) $_SESSION['discordCsrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['discordCsrf'];
@@ -48,7 +50,30 @@ $characterName = isset($_SESSION['characterName']) ? (string) $_SESSION['charact
 [$defaultCorporation, $defaultAlliance] = discord_mask_entities($mask, isset($_SESSION['corporationID']) ? (int) $_SESSION['corporationID'] : 0);
 session_write_close();
 
-const DISCORD_MAX_WEBHOOKS = 10;
+const DISCORD_MAX_WEBHOOKS     = 10;
+const DISCORD_TESTS_PER_MIN    = 5;    // test messages per mask per minute
+const DISCORD_URLS_PER_HOUR    = 10;   // webhook URLs added or replaced per mask per hour
+
+/** Per-mask rate limit on actions that make Discord requests: false when over $max in the last $seconds, else records one */
+function discord_action_allowed(PDO $db, $mask, $kind, $max, $seconds) {
+	$stmt = $db->prepare('SELECT COUNT(*) FROM discord_sent WHERE maskID = ? AND kind = ? AND createdAt >= UTC_TIMESTAMP() - INTERVAL ' . (int) $seconds . ' SECOND');
+	$stmt->execute(array($mask, $kind));
+	if ((int) $stmt->fetchColumn() >= $max) return false;
+	$db->prepare('INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, ?, ?, UTC_TIMESTAMP())')->execute(array($mask, $kind, bin2hex(random_bytes(8))));
+	return true;
+}
+
+/** Another webhook of the mask with the same URL (decrypted for comparison; at most DISCORD_MAX_WEBHOOKS rows) */
+function discord_duplicate_url(PDO $db, $mask, $url, $exceptID = 0) {
+	$stmt = $db->prepare('SELECT id, url FROM discord_webhooks WHERE maskID = ? AND id <> ?');
+	$stmt->execute(array($mask, (int) $exceptID));
+	$wanted = discord_webhook_parse($url);
+	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+		$other = discord_webhook_parse((string) discord_unseal($row['url']));
+		if ($other && $wanted && $other['id'] === $wanted['id'] && $other['threadID'] === $wanted['threadID']) return true;
+	}
+	return false;
+}
 
 function discord_webhook_rows(PDO $db, $mask) {
 	$stmt = $db->prepare('SELECT id, name, urlHint, status, statusMessage, lastSentAt, lastErrorAt FROM discord_webhooks WHERE maskID = ? ORDER BY id');
@@ -78,7 +103,7 @@ function discord_sample_context($kind, $template, $ping, $maskName) {
 			'map' => discord_map_url(30002659), 'dotlan' => discord_dotlan_url(30002659), 'hubs' => array(array('Jita', 6), array('Amarr', 9)),
 			'sig' => 'ABC-123', 'hole' => 'K162', 'from' => 'J123456', 'mapper' => 'Example Pilot');
 	}
-	return $base + array('systemID' => 31000005, 'system' => 'J123456', 'security' => -0.99, 'class' => 'C3', 'region' => 'C-R00023',
+	return $base + array('systemID' => 31000005, 'system' => 'J123456', 'security' => null, 'class' => 'C3', 'region' => 'C-R00023',
 		'map' => discord_map_url(31000005), 'dotlan' => discord_dotlan_url(31000005), 'killID' => 123456789,
 		'victimID' => 2112625428, 'victim' => 'Example Victim', 'shipTypeID' => 11377, 'ship' => 'Nemesis',
 		'corp' => 'Example Corp', 'alliance' => 'Example Alliance', 'finalblow' => 'Example Hunter', 'attackercorp' => 'Hunter Corp',
@@ -128,20 +153,25 @@ try {
 			$url = isset($input['url']) ? trim((string) $input['url']) : '';
 			$parsed = $url === '' ? null : discord_webhook_parse($url);
 			if ($url !== '' && !$parsed) discord_fail(400, 'That is not a Discord webhook URL (https://discord.com/api/webhooks/<id>/<token>)');
+			if ($mode === 'webhook-add' && !$parsed) discord_fail(400, 'Paste the webhook URL from Discord (channel settings > Integrations > Webhooks > Copy Webhook URL)');
+			$webhook = $mode === 'webhook-update' ? discord_webhook_of_mask($mysql, $mask, isset($input['id']) ? $input['id'] : 0) : null;
+			if ($mode === 'webhook-update' && !$webhook) discord_fail(404, 'No such webhook');
+			if ($parsed) {
+				if (discord_duplicate_url($mysql, $mask, $parsed['url'], $webhook ? $webhook['id'] : 0)) discord_fail(409, 'This mask already has that webhook');
+				if (!discord_action_allowed($mysql, $mask, 'rl:url', DISCORD_URLS_PER_HOUR, 3600)) discord_fail(429, 'Too many webhook URLs added or replaced in the last hour; try again later');
+			}
+			// A new or replaced URL is 'pending' until Discord accepts a message for it (then 'ok', or 'broken')
 			if ($mode === 'webhook-add') {
-				if (!$parsed) discord_fail(400, 'Paste the webhook URL from Discord (channel settings > Integrations > Webhooks > Copy Webhook URL)');
 				$stmt = $mysql->prepare('SELECT COUNT(*) FROM discord_webhooks WHERE maskID = ?');
 				$stmt->execute(array($mask));
 				if ((int) $stmt->fetchColumn() >= DISCORD_MAX_WEBHOOKS) discord_fail(400, 'At most ' . DISCORD_MAX_WEBHOOKS . ' webhooks per mask');
 				$stmt = $mysql->prepare("INSERT INTO discord_webhooks (maskID, name, url, urlHint, status, createdBy, createdAt, updatedAt)
-					VALUES (?, ?, ?, ?, 'ok', ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+					VALUES (?, ?, ?, ?, 'pending', ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
 				$stmt->execute(array($mask, $name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), substr($characterName, 0, 100)));
 				$output['id'] = (int) $mysql->lastInsertId();
 			} else {
-				$webhook = discord_webhook_of_mask($mysql, $mask, isset($input['id']) ? $input['id'] : 0);
-				if (!$webhook) discord_fail(404, 'No such webhook');
 				if ($parsed) {
-					$stmt = $mysql->prepare("UPDATE discord_webhooks SET name = ?, url = ?, urlHint = ?, status = 'ok', statusMessage = '', updatedAt = UTC_TIMESTAMP() WHERE id = ?");
+					$stmt = $mysql->prepare("UPDATE discord_webhooks SET name = ?, url = ?, urlHint = ?, status = 'pending', statusMessage = '', updatedAt = UTC_TIMESTAMP() WHERE id = ?");
 					$stmt->execute(array($name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), $webhook['id']));
 				} else {
 					$stmt = $mysql->prepare('UPDATE discord_webhooks SET name = ?, updatedAt = UTC_TIMESTAMP() WHERE id = ?');
@@ -166,7 +196,8 @@ try {
 		} else if ($mode === 'webhook-test') {
 			$webhook = discord_webhook_of_mask($mysql, $mask, isset($input['id']) ? $input['id'] : 0);
 			if (!$webhook) discord_fail(404, 'No such webhook');
-			if ($webhook['status'] !== 'ok') discord_fail(409, 'This webhook is broken: replace its URL first');
+			if ($webhook['status'] === 'broken') discord_fail(409, 'This webhook is broken: replace its URL first');
+			if (!discord_action_allowed($mysql, $mask, 'rl:test', DISCORD_TESTS_PER_MIN, 60)) discord_fail(429, 'Too many test messages; wait a minute');
 			$id = discord_enqueue($mysql, $mask, $webhook['id'], 'test',
 				array('kind' => 'test', 'webhook' => $webhook['name'], 'mask' => $maskName, 'ping' => '', 'time' => time()), DISCORD_PRIORITY_TEST);
 			if ($id === null) discord_fail(429, 'Too many messages are waiting for this mask');
@@ -179,6 +210,8 @@ try {
 				echo json_encode(array('error' => implode('; ', $errors), 'errors' => $errors));
 				exit();
 			}
+			// enabledAt comes from the server's clock, never from the browser
+			$settings = discord_settings_stamp($settings, discord_settings_load($mysql, $mask, $defaults));
 			discord_settings_save($mysql, $mask, $settings, $characterName);
 		} else if ($mode === 'preview') {
 			$kind = isset($input['kind']) ? $input['kind'] : '';

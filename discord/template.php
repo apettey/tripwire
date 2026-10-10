@@ -45,7 +45,8 @@ function discord_mentions_in($text) {
     return [
         'roles'    => array_values(array_unique($roles[1])),
         'users'    => array_values(array_unique($users[1])),
-        'everyone' => (bool) preg_match('/@(everyone|here)\b/', $text),
+        // Only as a word of its own: not inside an address like ops@here.com
+        'everyone' => (bool) preg_match('/(?<![\w@.])@(everyone|here)(?![\w@]|\.\w)/', $text),
     ];
 }
 
@@ -142,7 +143,7 @@ function discord_payload(array $ctx) {
     $raw = ['pings', 'map', 'dotlan', 'zkill'];
     $embed = ['color' => discord_colour($kind, $ctx['class'] ?? null)];
     if (!empty($ctx['time'])) $embed['timestamp'] = gmdate('Y-m-d\TH:i:s\Z', (int) $ctx['time']);
-    $where = discord_escape($ctx['system'] ?? '?') . ' (' . discord_escape(($ctx['class'] ?? '') . ' ' . $values['security']) . ')'
+    $where = discord_escape($ctx['system'] ?? '?') . ' (' . discord_escape(trim(($ctx['class'] ?? '') . ' ' . $values['security'])) . ')'
         . (!empty($ctx['region']) ? ', ' . discord_escape($ctx['region']) : '');
 
     if ($kind === 'kspace') {

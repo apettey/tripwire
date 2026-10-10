@@ -62,7 +62,8 @@ function discord_is_ours(array $party, array $settings) {
 
 /**
  * Types to send for a kill and one mask: kind => webhookID. $chainSystems: systemID => true (the mask's chain).
- * Applies each type's filters (NPC kills, pods, minimum value) and the one-message-per-webhook rule.
+ * Applies each type's filters (NPC kills, pods, minimum value, high-sec for chain kills, nothing from before the type
+ * was turned on) and the one-message-per-webhook rule.
  */
 function discord_classify_kill(array $facts, array $settings, array $chainSystems) {
     $matches = [];
@@ -70,15 +71,19 @@ function discord_classify_kill(array $facts, array $settings, array $chainSystem
     $victimOurs = $ours($facts['victim']);
     $attackerOurs = false;
     foreach ($facts['attackers'] as $a) { if ($ours($a)) { $attackerOurs = true; break; } }
+    // Chain kills: wormhole, low-sec and null-sec systems like the Chain Kill Feed; high-sec only when asked
+    // (a hole into Jita or Uedama would otherwise post every gank there)
+    $highsec = discord_passable($facts['systemID']);
     $candidates = [
         'corpLoss' => $victimOurs,
         'corpKill' => $attackerOurs && !$victimOurs,
-        'chainKill' => isset($chainSystems[$facts['systemID']]),
+        'chainKill' => isset($chainSystems[$facts['systemID']]) && (!$highsec || !empty($settings['types']['chainKill']['includeHighsec'])),
     ];
     $usedWebhooks = [];
     foreach ($candidates as $kind => $match) {   // most specific first
         $type = $settings['types'][$kind];
         if (!$match || !$type['enabled'] || $type['webhookID'] <= 0) continue;
+        if (!empty($type['enabledAt']) && $facts['time'] < $type['enabledAt']) continue;
         if ($facts['npc'] && !$type['includeNpc']) continue;
         if ($type['excludePods'] && in_array($facts['victim']['ship'], DISCORD_POD_TYPES, true)) continue;
         if ($facts['value'] < $type['minIsk']) continue;
@@ -115,7 +120,8 @@ function discord_kill_context(array $data, array $names) {
     return [
         'kind' => $data['kind'], 'template' => $data['template'], 'ping' => $data['ping'], 'mask' => $data['mask'],
         'systemID' => $data['systemID'], 'system' => $system ? $system[0] : (string) $data['systemID'],
-        'security' => $system ? $system[1] : 0, 'class' => discord_system_class($data['systemID']),
+        // Wormhole space has no meaningful security status: the class is shown instead
+        'security' => $system && !$system[4] ? $system[1] : null, 'class' => discord_system_class($data['systemID']),
         'region' => $system ? discord_region_name($system[2]) : '',
         'map' => discord_map_url($data['systemID']), 'dotlan' => discord_dotlan_url($data['systemID']),
         'killID' => $data['killID'], 'time' => $data['time'],
@@ -136,7 +142,7 @@ function discord_kill_state(PDO $db, $force = false) {
     $state = ['masks' => [], 'chains' => []];
     $loaded = time();
     $webhooks = [];
-    foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status = 'ok'")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status IN ('ok', 'pending')")->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $webhooks[(int) $row['id']] = (string) $row['maskID'];
     }
     foreach (discord_active_settings($db) as $maskID => $settings) {
@@ -173,10 +179,10 @@ function discord_on_killmail(PDO $db, array $kill) {
         $queued = 0;
         foreach ($state['masks'] as $maskID => $settings) {
             foreach (discord_classify_kill($facts, $settings, $state['chains'][$maskID] ?? []) as $kind => $webhookID) {
-                if (!discord_dedupe_once($db, $maskID, 'kill:' . $kind, (string) $facts['killID'])) continue;
                 $data = discord_kill_data($kind, $facts, $settings['types'][$kind], discord_mask_name($db, $maskID));
-                if (function_exists('zk_names_lookup')) zk_names_lookup($db, discord_kill_name_ids($data));   // the worker resolves them meanwhile
-                if (discord_enqueue($db, $maskID, $webhookID, $kind, $data) !== null) {
+                $claim = function () use ($db, $maskID, $kind, $facts) { return discord_dedupe_once($db, $maskID, 'kill:' . $kind, (string) $facts['killID']); };
+                if (discord_enqueue_once($db, $maskID, $webhookID, $kind, $data, $claim) !== null) {
+                    if (function_exists('zk_names_lookup')) zk_names_lookup($db, discord_kill_name_ids($data));   // the worker resolves them meanwhile
                     $queued++;
                     discord_log("queued $kind {$facts['killID']} for mask $maskID");
                 }

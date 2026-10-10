@@ -13,7 +13,7 @@ const discordNotifications = {
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
-		chainKill: "A kill in any system on this mask's chain map.",
+		chainKill: "A kill in a wormhole, low-sec or null-sec system on this mask's chain map (high-sec systems only if you tick them below).",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below."
 	},
@@ -93,13 +93,21 @@ const discordNotifications = {
 
 	/** Status of a webhook for the table: {text, cls, title} */
 	webhookStatus: function(webhook, now) {
-		if (webhook.status !== "ok") {
+		if (webhook.status === "broken") {
 			return { text: "Broken", cls: "dn-bad", title: (webhook.statusMessage || "Discord refused this webhook") + ". Replace the URL to use it again." };
+		}
+		if (webhook.status === "pending") {
+			return { text: "Not verified yet", cls: "", title: "New or replaced URL: it counts as working once Discord accepts a message. Send a test message to check it." };
 		}
 		if (webhook.lastSentAt) {
 			return { text: "OK", cls: "dn-good", title: "Last message " + discordNotifications.ago(webhook.lastSentAt, now) };
 		}
-		return { text: "Not used yet", cls: "", title: "Send a test message to check it" };
+		return { text: "OK", cls: "dn-good", title: "Discord accepted a message" };
+	},
+
+	/** Masks that can have Discord notifications (same rule as the server): corporation, alliance and custom masks */
+	maskAllowed: function(maskID) {
+		return /^[1-9]\d*\.[023]$/.test(String(maskID === undefined || maskID === null ? "" : maskID));
 	},
 
 	/** <option>s of the webhook pickers */
@@ -107,7 +115,7 @@ const discordNotifications = {
 		const esc = discordNotifications.escape;
 		return "<option value='0'>(choose a webhook)</option>" + (webhooks || []).map(function(w) {
 			return "<option value='" + Number(w.id) + "'" + (Number(selected) === Number(w.id) ? " selected" : "") + ">"
-				+ esc(w.name) + (w.status !== "ok" ? " (broken)" : "") + "</option>";
+				+ esc(w.name) + (w.status === "broken" ? " (broken)" : "") + "</option>";
 		}).join("");
 	},
 
@@ -139,6 +147,7 @@ const discordNotifications = {
 				type.minIsk = Math.max(0, isk);
 				type.includeNpc = !!v.includeNpc;
 				type.excludePods = !!v.excludePods;
+				if (kind === "chainKill") { type.includeHighsec = !!v.includeHighsec; }
 			}
 			settings.types[kind] = type;
 		});
@@ -224,8 +233,8 @@ const discordNotifications = {
 				+ "<td class='dn-name'>" + esc(w.name) + "</td>"
 				+ "<td class='dn-hint' title='The URL is stored on the server and never shown again'>" + esc(w.hint) + "</td>"
 				+ "<td><span class='dn-status " + status.cls + "' title='" + esc(status.title) + "'>" + esc(status.text) + "</span>"
-				+ (w.status !== "ok" && w.statusMessage ? "<div class='dn-small dn-bad'>" + esc(w.statusMessage) + "</div>" : "") + "</td>"
-				+ "<td class='dn-actions'><button type='button' class='dn-test'" + (w.status !== "ok" ? " disabled" : "") + ">Send test</button>"
+				+ (w.status === "broken" && w.statusMessage ? "<div class='dn-small dn-bad'>" + esc(w.statusMessage) + "</div>" : "") + "</td>"
+				+ "<td class='dn-actions'><button type='button' class='dn-test'" + (w.status === "broken" ? " disabled" : "") + ">Send test</button>"
 				+ "<button type='button' class='dn-edit'>Replace</button><button type='button' class='dn-delete'>Delete</button>"
 				+ "<span class='dn-test-result dn-small'></span></td>"
 				+ "</tr>";
@@ -250,7 +259,10 @@ const discordNotifications = {
 			} else {
 				extra = "<tr><th>Filters:</th><td>at least <input type='text' class='dn-minIsk' size='12' value='" + esc(t.minIsk || 0) + "' /> ISK"
 					+ " <label><input type='checkbox' class='dn-includeNpc'" + (t.includeNpc ? " checked" : "") + " /> include NPC kills</label>"
-					+ " <label><input type='checkbox' class='dn-excludePods'" + (t.excludePods ? " checked" : "") + " /> skip pods</label></td></tr>";
+					+ " <label><input type='checkbox' class='dn-excludePods'" + (t.excludePods ? " checked" : "") + " /> skip pods</label>"
+					+ (kind === "chainKill" ? " <label title='Off: kills in high-sec systems on the chain (e.g. ganks in a trade hub) are not posted'><input type='checkbox' class='dn-includeHighsec'"
+						+ (t.includeHighsec ? " checked" : "") + " /> include high-sec systems</label>" : "")
+					+ "</td></tr>";
 			}
 			return "<fieldset class='dn-type' data-kind='" + kind + "'>"
 				+ "<legend><label><input type='checkbox' class='dn-enabled'" + (t.enabled ? " checked" : "") + " /> " + esc(dn.LABELS[kind]) + "</label></legend>"
@@ -316,7 +328,8 @@ const discordNotifications = {
 				cooldownHours: $t.find(".dn-cooldownHours").val(),
 				minIsk: $t.find(".dn-minIsk").val(),
 				includeNpc: $t.find(".dn-includeNpc").prop("checked"),
-				excludePods: $t.find(".dn-excludePods").prop("checked")
+				excludePods: $t.find(".dn-excludePods").prop("checked"),
+				includeHighsec: $t.find(".dn-includeHighsec").prop("checked")
 			};
 		});
 		return values;
@@ -487,6 +500,10 @@ const discordNotifications = {
 		const $dialog = $("#dialog-admin");
 		// Only where Mask Admin is offered (admins/owners of the current mask); the server checks again anyway
 		if (!$dialog.length || !$("#admin").length || $("#admin").css("display") === "none") { return; }
+		// Not for the Public and Private masks (the server refuses them too)
+		const active = (typeof init !== "undefined" && init && Array.isArray(init.masks) ? init.masks.filter(function(m) { return m.active; })[0] : null);
+		const maskID = active ? active.mask : (typeof options !== "undefined" && options.masks ? options.masks.active : null);
+		if (!dn.maskAllowed(maskID)) { return; }
 		if (!$dialog.find(".menu li[data-window='discord']").length) {
 			$dialog.find(".menu ul").append("<li data-window='discord'><a href='#'>Discord</a></li>");
 			$dialog.find(".window").append("<div data-window='discord' class='hidden'></div>");

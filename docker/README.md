@@ -120,7 +120,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
-| `DISCORD_API_BASE` | `https://discord.com/api` | `discord/` (environment) | Dev only: base URL of a local fake Discord; only local hosts (`localhost`, `127.x`, single-label names) are accepted, anything else is ignored |
+| `DISCORD_API_BASE` | `https://discord.com/api` | `discord/` (environment) | Dev only: base URL of a local fake Discord; only `localhost`, `127.0.0.0/8`, `::1` and the dev stack's `discord-mock` are accepted, anything else is ignored |
 | `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
 | `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
 | `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
@@ -244,8 +244,10 @@ systems join the chain, then one shared `since` cursor polled every 20 s (4 s wh
 
 Mask admins can have Tripwire post to their Discord (Mask Admin > Discord). All of it is fork-owned: `discord/`,
 `discord_notify.worker.php`, `public/discord.php`, `app/js/fork/discord-notifications.js`, tables `discord_*` (DDL in
-`discord/schema.php`, reference copy `docker/sql/discord.sql`). Nothing is sent until an admin adds a webhook, picks it
-for a notification type and turns the type on.
+`discord/schema.php`, reference copy `docker/sql/discord.sql`). Only corporation, alliance and custom masks have it (not
+Public or Private masks), and only their admins/owners see and change it. Nothing is sent until an admin adds a
+webhook, picks it for a notification type and turns the type on; nothing that happened before a type was turned on is
+announced (each type stores `enabledAt`, set by the server).
 
 **Webhooks, not a bot.** Each Discord channel webhook (channel settings > Integrations > Webhooks) posts to one
 channel, so "which channel" is "which webhook". Webhooks need no bot account, gateway connection or token with
@@ -256,17 +258,19 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Type | When |
 | --- | --- |
 | New k-space near a ping system | A wormhole on the mask's chain leads to a k-space system (high/low/null, Pochven counts) that had no other wormhole signature in the mask, fewer than `maxJumps` (default 10) *safe* gate jumps from a ping system (default Jita, Amarr). Safe = every system in between is high-sec (security >= 0.45, not Pochven) and never Zarzakh; both ends may be any security (the Favourites panel's safe-route rule). Each connection is looked at once; at most one message per (mask, system) per `cooldownHours` (default 6) |
-| Any kill in our chain | A kill in a system that has one of the mask's wormhole signatures |
+| Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
 
 "Our" corporations/alliances default to the mask's corporation (corp mask), alliance (alliance mask) or the admin's
-corporation (private and custom masks). Kill types can skip NPC kills (default), pods and kills under an ISK value.
+corporation (custom masks). Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
-for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL; it starts
-at the newest existing change, so nothing old is announced, and no upstream file is hooked). Gate distances are a BFS
+for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
+change time and wormhole ID; it starts at the newest existing change and keeps moving with it while no mask has the type
+on, and changes older than the type's `enabledAt` are skipped, so nothing old is announced; no upstream file is
+hooked). Gate distances are a BFS
 in PHP over `discord/gate_graph.php`, generated from the browser's own `appData` (`systems`, `regions`, `map.shortest`)
 in `public/js/combine.js`; regenerate after upstream changes that file:
 `docker compose -f docker-compose.dev.yml exec -T assets node discord/tools/generate-gate-graph.js`.
@@ -274,12 +278,16 @@ Kills: `zkill_feed.worker.php` hands every killmail it streams from R2Z2 to `dis
 ones, and only kills less than 15 minutes old, so catching up after downtime posts nothing old); that only queues
 messages and never calls Discord, so the stream is never held up. No new zKillboard or ESI callers: names come from the
 [zKillboard integration](#zkillboard-integration)'s name cache (a kill message waits up to 90 s for names, then uses
-fallbacks). Dedupe: `discord_sent` per (mask, type, killID / connection / system).
+fallbacks). Dedupe: `discord_sent` per (mask, type, killID / connection / system), written in the same transaction as
+the outbox row (both or neither; its primary key also stops two processes queueing the same message).
 
 **Delivery.** Messages go into the `discord_outbox` table; `discord_notify.worker.php` (supervisord program
 `discord-notify`, runs as `www-data`) is the only process that calls Discord. A separate process keeps Discord's
 latency and outages away from the kill stream and keeps k-space messages working with `ZKILL_FEED_ENABLED=false`.
-Every second it sends up to 20 due messages (5 s budget, 10 s timeout per request, 50 ms between requests):
+With several app containers on one database, MySQL named locks (`GET_LOCK`, `<database>.discord-dispatch` and
+`<database>.discord-kspace`) make one worker the sender and one the k-space poller; the others log "standby" and take
+over when the holder's connection goes away. Every second the sender handles up to 20 due messages (5 s budget, 10 s
+timeout per request, 50 ms between requests):
 
 - `X-RateLimit-Remaining: 0` pauses that webhook for `X-RateLimit-Reset-After`; a 429 pauses the webhook (or every
   request when `global` / `X-RateLimit-Global`, or when the 429 isn't JSON, i.e. Cloudflare) for `retry_after`, and
@@ -287,25 +295,29 @@ Every second it sends up to 20 due messages (5 s budget, 10 s timeout per reques
 - 5xx and network errors: retried after 5 s, doubling up to 15 min, given up after 10 attempts;
 - 401/403/404 (deleted webhook, bad token): the webhook is marked **broken** (shown in Mask Admin with Discord's
   message), its queued messages fail and nothing more is sent to it until an admin replaces the URL; other 4xx fail
-  that message only;
+  that message only. A new or replaced URL is "not verified" (`pending`) until Discord accepts a message for it;
+- circuit breaker: 500 refused requests (any 4xx, 429 included) within 10 minutes pause **all** sending until the
+  oldest leaves the window, logged as `CIRCUIT BREAKER` (Cloudflare bans an IP from Discord's API at 10,000 per 10
+  minutes). Per mask, at most 5 test messages per minute and 10 webhook URLs added or replaced per hour;
 - queued messages older than 6 h expire; sent rows are deleted after 7 days, failed ones after 14, dedupe rows after
   7 days; at most 500 queued messages per mask (more are dropped and logged).
 
 **Messages.** Text from the admin's template with placeholders (`{system}`, `{security}`, `{jumps}`, `{hub}`,
 `{hubs}`, `{sig}`, `{mapper}`, `{mask}`, `{victim}`, `{ship}`, `{corp}`, `{attackers}`, `{isk}`, `{zkill}`, `{pings}`
 and more, listed in the UI) plus an embed (kills: victim, final blow, attackers, value, ship render and portrait from
-`images.evetech.net`, zKillboard link; k-space: security, region, hole, mapper, jumps table, Tripwire and Dotlan links).
+`images.evetech.net`, zKillboard link; k-space: security, region, hole, mapper, jumps table, Tripwire and Dotlan links;
+wormhole systems show their class instead of a security value).
 `allowed_mentions` is built only from what the admin wrote (template + ping field: `<@&role>`, `<@user>`,
 `@here`/`@everyone`), and game data (pilot, corp, ship, mapper names) has Discord markdown escaped and `@` defused, so
 a kill can never ping anyone by itself.
 
 **Settings endpoint** `public/discord.php`: every request checks that the user is admin or owner of the session's mask
-(`checkAdmin` / `checkOwner`, the same check as Mask Admin; never the Public mask), else 403; the menu entry only
-appears where the Mask Admin link does. Changes are JSON POSTs that need the per-session `X-CSRF-Token` (from
+(`checkAdmin` / `checkOwner`, the same check as Mask Admin) and that it is a corporation, alliance or custom mask, else
+403; the menu entry only appears there. Changes are JSON POSTs that need the per-session `X-CSRF-Token` (from
 `mode=get`), `X-Requested-With: XMLHttpRequest` and, when the browser sends `Origin`, this host. Webhook URLs are
 validated (`https://discord.com/api/webhooks/<id>/<token>`, `discordapp.com`, `canary.`/`ptb.`, optional `/vN` and
-`?thread_id=`) and never returned: the UI shows a name, `…/<last 4 digits of the webhook ID>` and the status; they can
-only be replaced or deleted. "Send test" queues a test message the worker sends within seconds.
+`?thread_id=`), refused when the mask already has that webhook, and never returned: the UI shows a name,
+`…/<last 4 digits of the webhook ID>` and the status; they can only be replaced or deleted. "Send test" queues a test message the worker sends within seconds.
 
 **Secrets at rest.** With `DISCORD_SECRET_KEY` set, webhook URLs are stored encrypted (libsodium secretbox, key =
 BLAKE2b of the setting); without it they are stored in plain text (the UI says so) and encrypted by the worker as soon
@@ -316,7 +328,8 @@ admins have to paste the URL again. Keep the key in your secrets store, like `EV
 `zkillboard.com` and `evemaps.dotlan.net`; Discord fetches those, not Tripwire.
 
 **Dev stack:** `docker-compose.dev.yml` runs a fake Discord (`discord-mock`, `docker/dev/discord-mock.php`) and
-points `DISCORD_API_BASE` at it (only local hosts are accepted; production doesn't set it). Webhook IDs ending in
+points `DISCORD_API_BASE` at it (only `localhost`, `127.0.0.0/8`, `::1` and `discord-mock` are accepted; production
+doesn't set it). Webhook IDs ending in
 `0404`/`0401` answer 404/401, `0429`/`0430` answer every other request with a per-webhook/global 429, `0500` fails
 twice; `http://127.0.0.1:9095/messages` lists what was received. Any 18-digit ID and 68-character token works, e.g.
 `https://discord.com/api/webhooks/111111111111111111/<68 characters>`. Fake a kill through the same path as the worker:

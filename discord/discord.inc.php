@@ -48,6 +48,21 @@ function discord_log_sink(?callable $set = null) {
     return $sink;
 }
 
+/**
+ * Leader lock (MySQL named lock, held by this connection until it closes): with several app containers on one
+ * database only the holder of 'discord-dispatch' sends and only the holder of 'discord-kspace' polls, the others
+ * wait as standby. Lock names are per server, so they are prefixed with the database name. Returns true while held.
+ */
+function discord_leader_lock(PDO $db, $name) {
+    $full = "CONCAT(LEFT(DATABASE(), 40), '.', ?)";
+    $stmt = $db->prepare("SELECT IS_USED_LOCK($full) = CONNECTION_ID()");
+    $stmt->execute([$name]);
+    if ((int) $stmt->fetchColumn() === 1) return true;
+    $stmt = $db->prepare("SELECT GET_LOCK($full, 0)");
+    $stmt->execute([$name]);
+    return (int) $stmt->fetchColumn() === 1;
+}
+
 /** Public base URL of this Tripwire (for links in messages), from TRIPWIRE_DOMAIN / TRIPWIRE_HTTPS */
 function discord_app_url() {
     $domain = discord_config('TRIPWIRE_DOMAIN');
