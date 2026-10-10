@@ -1,8 +1,8 @@
 const favouritesRouteStrip = {
 	// Favourites panel: each favourite's route as a strip of jump markers, one per jump in route order
-	// (fork-owned file). Shape = kind of jump (square: stargate, circle: wormhole, triangle: EVE-Scout connection or
-	// a wormhole into Thera / Turnur), colour = the system it enters (EVE's security colours for k-space, Tripwire's
-	// class colours for J-space). Setting: options.favouritesRouteStrip.enabled (missing = on); off shows the
+	// (fork-owned file). Shape = kind of jump (square: stargate, circle: wormhole, ringed circle: a hop into or out of
+	// Thera / Turnur, by an EVE-Scout connection or a mapped wormhole), colour = the system it enters (EVE's security
+	// colours for k-space, Tripwire's class colours for J-space), except hub hops: Thera yellow, Turnur pink (HUB_COLOURS). Setting: options.favouritesRouteStrip.enabled (missing = on); off shows the
 	// "1g → 2wh → 6g" text as before. Pure logic here; the UI is at the bottom.
 	// Keep `const favouritesRouteStrip` on the first line: the test helper strips it to define a global.
 	MARKER_STEP: 11,	// px per marker: 9 px marker + 2 px gap (keep in step with the CSS)

@@ -16,7 +16,7 @@
       "pr": 40,
       "date": "2026-10-10",
       "title": "Favourites: route as jump markers",
-      "description": "Each favourite with a route now shows it as a strip of small markers, one per jump: squares are stargates, circles are wormholes and triangles are EVE-Scout, Thera or Turnur connections. The colour shows the security or wormhole class of each system. Hover a marker to see the system, its region and how you get there; long routes are shortened to fit the panel.\n\nPrefer the old \"1g → 2wh → 6g\" text? Turn it off in Settings > General Preferences > Show routes as jump markers.",
+      "description": "Each favourite with a route now shows it as a strip of small markers, one per jump: squares are stargates, circles are wormholes, and hops into or out of Thera or Turnur are ringed circles (yellow for Thera, pink for Turnur). The colour shows the security or wormhole class of each system. Hover a marker to see the system, its region and how you get there; long routes are shortened to fit the panel.\n\nPrefer the old \"1g → 2wh → 6g\" text? Turn it off in Settings > General Preferences > Show routes as jump markers.",
       "images": [
         {
           "src": "whats-new/img/pr-40-favourites-route-strip.png",

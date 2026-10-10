@@ -33,7 +33,8 @@ asked for Wanderer-style markers instead, so this builds on the Favourites route
   colour of the system entered (class colour in J-space, security in k-space), as #40 does.
 - Thera / Turnur hops (into or out of the hub, EVE-Scout hole or a mapped wormhole) are circles in the hub's colour with
   a thin white ring: Thera `#ffc800` (its C12 colour in `app/css/base.css`), Turnur `#FF4DFF` (no security step or class
-  uses it). This replaces #40's triangle for hub hops, as the user asked for circles.
+  uses it). This replaces #40's triangles for EVE-Scout / Thera / Turnur hops with these ringed circles, as the user
+  asked for circles (the #40 What's New entry is reworded to match; its change-log row stays as history).
 - Hovering a Thera / Turnur marker: "Jump 3 of 13: Thera hole (EVE-Scout) → Thera · warp to EWM-864 in Meirakulf · Q063,
   max medium, 16h left" (hole type, signature, max ship size, life left; all escaped). The strip's tooltip keeps the text
   route and the full walk-through, as #40 does.
