@@ -79,7 +79,31 @@ describe('Chain map size tags', () => {
 		});
 	});
 
+	describe('enabled', () => {
+		it('on without options', () => { assert.equal(sizeTags.enabled(undefined), true); assert.equal(sizeTags.enabled(null), true); });
+		it('on when options have no sizeTags key', () => assert.equal(sizeTags.enabled({ chain: {} }), true));
+		it('on when sizeTags has no enabled property', () => assert.equal(sizeTags.enabled({ sizeTags: {} }), true));
+		it('on when enabled is true', () => assert.equal(sizeTags.enabled({ sizeTags: { enabled: true } }), true));
+		it('off when enabled is false', () => assert.equal(sizeTags.enabled({ sizeTags: { enabled: false } }), false));
+	});
+
 	describe('install', () => {
+		it('leaves the result untouched when size tags are off', () => {
+			const node = { v: 2, f: "<h4 class='nodeType'>H296</h4>", systemID: J135100 };
+			const result = { map: { rows: [
+				{ c: [{ v: 1, f: 'root', systemID: J152820 }, { v: null }] },
+				{ c: [node, { v: 1 }], pathHome: [{ systemID: J135100, type: 'H296' }] }
+			] }, lines: [[2, 1, [], undefined]] };
+			const fakeChain = { nodes: () => JSON.parse(JSON.stringify(result)) };
+			sizeTags.install(fakeChain);
+			global.options = { sizeTags: { enabled: false } };
+			try {
+				assert.equal(fakeChain.nodes().map.rows[1].c[0].f, node.f);
+				global.options.sizeTags.enabled = true;
+				assert.ok(fakeChain.nodes().map.rows[1].c[0].f.indexOf('size-xl') >= 0);
+			} finally { delete global.options; }
+		});
+
 		it('wraps and composes with an existing chain.nodes', () => {
 			const fakeChain = { nodes: function(m) { return { map: { rows: [] }, lines: [], marker: m, self: this }; } };
 			sizeTags.install(fakeChain);
