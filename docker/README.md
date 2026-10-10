@@ -294,7 +294,7 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
-| Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{class}`, `{region}`, `{map}`...) and cleared. The message shows the rally as stored when it is sent; changes within 30 s edit the mask's last rally message (`PATCH .../messages/<id>`, state in `discord_rally`) instead of posting another, and a queued rally message is dropped when a newer one of the mask is queued. A deleted message (404 Unknown Message) is posted again as a new one without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
+| Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`...) and cleared (`{who}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "Tripwire rally point from *Chribba*: **AABCA · J152820** (C5, E-R00024)", and ``{pings} Tripwire rally point cleared by *{who}*{was}``, e.g. "... cleared by *Chribba* (was on AABCA · J152820)". Texts saved with the earlier defaults (`**{system}**`, no `{was}`) are read as the new defaults; edited texts are kept. The message shows the rally as stored when it is sent; changes within 30 s edit the mask's last rally message (`PATCH .../messages/<id>`, state in `discord_rally`) instead of posting another, and a queued rally message is dropped when a newer one of the mask is queued. A deleted message (404 Unknown Message) is posted again as a new one without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
@@ -345,6 +345,13 @@ timeout per request, 50 ms between requests):
 and more, listed in the UI) plus an embed (kills: victim, final blow, attackers, value, ship render and portrait from
 `images.evetech.net`, zKillboard link; k-space: security, region, hole, mapper, jumps table, Tripwire and Dotlan links;
 wormhole systems show their class instead of a security value).
+`{label}` (k-space and rally point) is the system's chain label, the name the chain map shows for it: the name of the
+wormhole signature leading into the system, on the far side of the hole (`discord_chain_label` in `discord/rally.php`:
+a wormhole of the mask whose far-side signature has a name starting with a letter or digit and whose near-side signature is unnamed or a return
+bookmark `<...`; reached more than once, the shortest leading name token wins, then the lowest wormhole id; empty for
+home or a system without a named hole). `{labelSystem}` is "AABCA · J152820", or only "J152820" without a label.
+The legacy `DISCORD_WEB_HOOK` rally posts show the label the same way. Labels are signature names (user text), escaped
+like game data.
 `allowed_mentions` is built only from what the admin wrote (template + ping field: `<@&role>`, `<@user>`,
 `@here`/`@everyone`), and game data (pilot, corp, ship, mapper names) has Discord markdown escaped and `@` defused, so
 a kill can never ping anyone by itself.

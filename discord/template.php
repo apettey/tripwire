@@ -20,14 +20,17 @@ function discord_placeholders() {
     $kill = ['victim' => 'victim pilot', 'ship' => 'victim ship', 'corp' => 'victim corporation', 'alliance' => 'victim alliance',
         'attackers' => 'number of attacking pilots', 'finalblow' => 'final blow pilot', 'attackercorp' => 'final blow corporation',
         'isk' => 'value, e.g. 1.2b', 'zkill' => 'zKillboard link', 'time' => 'kill time (EVE time)'];
+    $label = ['label' => 'chain label of the system: the name of the wormhole signature leading into it, e.g. AABCA (empty when it has none)',
+        'labelSystem' => 'label and system, e.g. "AABCA · J123456", or only the system without a label'];
     return [
-        'kspace'    => $common + ['jumps' => 'e.g. "4 jumps from Jita"', 'hub' => 'closest ping system', 'hubjumps' => 'jumps to it',
+        'kspace'    => $common + $label + ['jumps' => 'e.g. "4 jumps from Jita"', 'hub' => 'closest ping system', 'hubjumps' => 'jumps to it',
             'hubs' => 'every ping system in range, e.g. "Jita 4, Amarr 9"', 'sig' => 'signature ID of the hole', 'hole' => 'wormhole type',
             'from' => 'system the hole is in', 'mapper' => 'who mapped it'],
         'chainKill' => $common + $kill,
         'corpKill'  => $common + $kill,
         'corpLoss'  => $common + $kill,
-        'rally'     => $common + ['who' => 'who set, moved or cleared it'],
+        'rally'     => $common + $label + ['who' => 'who set, moved or cleared it',
+            'was' => 'cleared text: " (was on AABCA · J123456)" when the system it was on is known, else empty'],
     ];
 }
 
@@ -76,7 +79,7 @@ function discord_ping_normalise($ping) {
  */
 function discord_render($template, array $values, array $raw = []) {
     $raw = array_fill_keys($raw, true);
-    $out = preg_replace_callback('/\{([a-z]+)\}/', function ($m) use ($values, $raw) {
+    $out = preg_replace_callback('/\{([a-zA-Z]+)\}/', function ($m) use ($values, $raw) {
         if (!array_key_exists($m[1], $values)) return $m[0];
         $value = (string) $values[$m[1]];
         return isset($raw[$m[1]]) ? $value : discord_escape($value);
@@ -114,9 +117,35 @@ function discord_default_templates() {
         'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}',
         'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}',
         // Rally point (discord/rally.php): set or moved, and cleared. Same wording as the first version (public/rally.php)
-        'rally'      => "{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}",
-        'rallyClear' => '{pings} Tripwire rally point cleared by *{who}*',
+        'rally'      => "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}",
+        'rallyClear' => '{pings} Tripwire rally point cleared by *{who}*{was}',
     ];
+}
+
+/** Default texts of earlier versions, per type and field: a stored text equal to one of them is the default of its
+    time (nobody customised it), so it is replaced by today's default (discord_template_upgrade) */
+function discord_retired_templates() {
+    return [
+        'rally' => [
+            'template' => ["{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}"],
+            'templateClear' => ['{pings} Tripwire rally point cleared by *{who}*'],
+        ],
+    ];
+}
+
+/** $template of $kind's $field ('template' / 'templateClear'), or today's default when it is an earlier default text */
+function discord_template_upgrade($kind, $field, $template, $default = null) {
+    $template = (string) $template;
+    if (!in_array(trim(str_replace("\r", '', $template)), discord_retired_templates()[$kind][$field] ?? [], true)) return $template;
+    return $default ?? discord_default_templates()[$field === 'templateClear' ? $kind . 'Clear' : $kind];
+}
+
+/** "AABCA · J123456" from a chain label and a system name; only the system without a label */
+function discord_label_system($label, $system) {
+    $label = (string) $label;
+    $system = (string) $system;
+    if ($label === '') return $system;
+    return $system === '' ? $label : $label . ' · ' . $system;
 }
 
 /** Embed colours */
@@ -133,7 +162,8 @@ function discord_field($name, $value, $inline = true) {
 /**
  * The webhook payload for a notification. $ctx: everything the message needs, resolved (names etc.):
  *   common: kind, template, ping, mask, system, systemID, security, class, region, map, dotlan, time (unix)
- *   kspace: hubs [[name, jumps], ...] (closest first), sig, hole, from, mapper
+ *   kspace: hubs [[name, jumps], ...] (closest first), sig, hole, from, mapper, label (chain label, discord_chain_label)
+ *   rally:  who, cleared, label, template / templateClear (discord/rally.php)
  *   kills:  killID, victim, victimID, ship, shipTypeID, corp, alliance, attackers, finalblow, attackercorp, value, zkill
  */
 function discord_payload(array $ctx) {
@@ -158,6 +188,7 @@ function discord_payload(array $ctx) {
             'hub' => $first ? $first[0] : '', 'hubjumps' => $first ? (string) $first[1] : '',
             'hubs' => implode(', ', array_map(function ($h) { return $h[0] . ' ' . $h[1]; }, $hubs)),
             'sig' => $ctx['sig'] ?? '', 'hole' => $ctx['hole'] ?? '', 'from' => $ctx['from'] ?? '', 'mapper' => $ctx['mapper'] ?? '',
+            'label' => $ctx['label'] ?? '', 'labelSystem' => discord_label_system($ctx['label'] ?? '', $ctx['system'] ?? ''),
         ];
         $table = implode("\n", array_map(function ($h) { return str_pad(discord_truncate($h[0], 20), 20) . ' ' . str_pad((string) $h[1], 3, ' ', STR_PAD_LEFT); }, $hubs));
         $embed += [
@@ -175,6 +206,11 @@ function discord_payload(array $ctx) {
         // Short text only, no embed (the message is edited in place while the rally moves, see discord/rally.php)
         $template = !empty($ctx['cleared']) ? ($ctx['templateClear'] ?? '') : ($ctx['template'] ?? '');
         $values['who'] = $ctx['who'] ?? 'someone';
+        $values['label'] = $ctx['label'] ?? '';
+        $values['labelSystem'] = discord_label_system($values['label'], $values['system']);
+        // Cleared: the system it was on, when known. Built from escaped parts (the parentheses stay plain)
+        $values['was'] = !empty($ctx['cleared']) && $values['labelSystem'] !== '' ? ' (was on ' . discord_escape($values['labelSystem']) . ')' : '';
+        $raw[] = 'was';
         $content = discord_render($template, $values, $raw);
         if ($content === '') $content = discord_render(discord_default_templates()[!empty($ctx['cleared']) ? 'rallyClear' : 'rally'], $values, $raw);
         return [

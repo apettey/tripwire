@@ -138,9 +138,12 @@ check('real: dotlan link', discord_dotlan_url(30000142), 'https://evemaps.dotlan
 
 // --- k-space candidates ---
 $row = ['wormholeID' => 7, 'type' => 'N110', 'parent' => 'initial',
-    'aID' => 1, 'aSys' => 31000123, 'aSig' => 'abc123', 'aBy' => 'Scout', 'bID' => 2, 'bSys' => 30000142, 'bSig' => 'xyz789', 'bBy' => 'Jumper'];
+    'aID' => 1, 'aSys' => 31000123, 'aSig' => 'abc123', 'aBy' => 'Scout', 'aName' => ' AB ', 'bID' => 2, 'bSys' => 30000142, 'bSig' => 'xyz789', 'bBy' => 'Jumper', 'bName' => ''];
 check('candidates: k-space side, hole in the J-space system', discord_kspace_candidates($row),
-    [['systemID' => 30000142, 'sigRowID' => 2, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'N110', 'mapper' => 'Jumper']]);
+    [['systemID' => 30000142, 'sigRowID' => 2, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'N110', 'mapper' => 'Jumper', 'label' => 'AB']]);
+check('candidates: no label when the k-space side is named (a hole out) or the far side is a return bookmark',
+    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '<A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB']);
+check('candidates: no label without a name on the far side', discord_kspace_candidates(['aName' => null] + $row)[0]['label'], '');
 check('candidates: K162 side', discord_kspace_candidates(['parent' => 'secondary'] + $row)[0]['hole'], 'K162');
 check('candidates: unknown far side', discord_kspace_candidates(['bSys' => 3] + $row), []);
 check('candidates: J-space only', discord_kspace_candidates(['bSys' => 31000200] + $row), []);
@@ -403,7 +406,8 @@ check('rally: enabling needs a webhook', discord_settings_normalise(['types' => 
 check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types' => ['rally' => ['templateClear' => str_repeat('x', 2000)]]], discord_settings_defaults())[0]['types']['rally']['templateClear']), DISCORD_TEMPLATE_MAX);
 check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
 check('rally: stamped like the other types', discord_settings_stamp($rs, discord_settings_defaults(), 4000)['types']['rally']['enabledAt'], 4000);
-check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'who']);
+check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'label', 'labelSystem', 'who', 'was']);
+check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, false]);
 
 // Data queued by public/rally.php: the type's texts, who, and nothing from before the type was turned on
 $rtype = ['enabledAt' => 1000] + $rs['types']['rally'];
@@ -516,6 +520,102 @@ check('rally target: no settings, no admin left, personal or alliance mask', [di
     discord_rally_target($rx, '6.0'), discord_rally_target($rx, '98000001.3')], [null, null, null, null]);
 $rx->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute([$offJson, '98000001.2']);
 check('rally target: type off', discord_rally_target($rx, '98000001.2'), null);
+
+// --- chain label (discord_chain_label): the name of the wormhole signature leading into a system ---
+$cl = new PDO('sqlite::memory:');
+$cl->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, name TEXT, maskID TEXT)");
+$cl->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, maskID TEXT)");
+$sigID = 0;
+// A wormhole of $mask from $from (signature named $fromName) to $to (signature named $toName); $swap stores it the other way round
+$hole = function ($id, $from, $fromName, $to, $toName, $mask = '98000001.2', $swap = false) use ($cl, &$sigID) {
+    $a = ++$sigID; $b = ++$sigID;
+    $cl->prepare("INSERT INTO signatures VALUES (?, 'abc123', ?, 'wormhole', ?, ?)")->execute([$a, $from, $fromName, $mask]);
+    $cl->prepare("INSERT INTO signatures VALUES (?, 'xyz789', ?, 'wormhole', ?, ?)")->execute([$b, $to, $toName, $mask]);
+    $cl->prepare('INSERT INTO wormholes VALUES (?, ?, ?, ?)')->execute($swap ? [$id, $b, $a, $mask] : [$id, $a, $b, $mask]);
+};
+// Home 31000001 -A-> 31000002 -AB-> 31000003 -ABC-> 30000142 (Jita); a loop: 31000001 -B-> 31000005 -BAA-> 31000003
+$hole(1, 31000001, 'A', 31000002, '');
+$hole(2, 31000002, 'AB', 31000003, '', '98000001.2', true);         // stored with the far side as secondary
+$hole(3, 31000003, ' ABC  ', 30000142, '<AB');                       // return bookmark on the near side
+$hole(4, 31000001, 'B', 31000005, null);
+$hole(5, 31000005, 'BAA', 31000003, '');
+$hole(6, 31000003, 'X', 31000009, '', '98000002.2');                 // another mask's chain
+$hole(7, 31000002, '', 30002187, '');                                // Amarr: k-space without a named hole
+$cl->exec("INSERT INTO signatures VALUES (99, 'def456', 31000002, 'combat', 'Named site', '98000001.2')");
+$label = function ($system, $mask = '98000001.2') use ($cl) { return discord_chain_label($cl, $mask, $system); };
+check('chain label: the far side of the hole leading in', [$label(31000002), $label(31000005)], ['A', 'B']);
+check('chain label: reached twice, the shorter name (closer to home) wins', $label(31000003), 'AB');
+check('chain label: trimmed, a return bookmark on the near side still counts', $label(30000142), 'ABC');
+check('chain label: home has none (its own holes are named on its side)', $label(31000001), '');
+check('chain label: k-space without a named hole, unknown system', [$label(30002187), $label(31009999), $label(0)], ['', '', '']);
+check('chain label: only the mask\'s own chain', [$label(31000009), $label(31000009, '98000002.2'), $label(31000002, '98000002.2')], ['', 'X', '']);
+check('chain label: no tables is no label', discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
+check('chain label pick: same token length, lowest wormhole id', discord_chain_label_pick([
+    ['wormholeID' => 9, 'nearName' => '', 'farName' => 'BA', 'farSystem' => 1], ['wormholeID' => 4, 'nearName' => null, 'farName' => 'AB', 'farSystem' => 2]], 3), 'AB');
+check('chain label pick: a hole out (named near side) and a hole to itself are not in', discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => 'C', 'farName' => 'Z', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => 'Y', 'farSystem' => 3]], 3), '');
+check('chain label pick: a far name without a name token (return bookmark "<H", "?") is not a label', discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => '', 'farName' => '<H', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => '?', 'farSystem' => 2],
+    ['wormholeID' => 3, 'nearName' => '', 'farName' => 'AB - drifter', 'farSystem' => 4]], 3), 'AB - drifter');
+check('chain label: one line, at most 100 characters', [discord_chain_label_clean("A\nB"), mb_strlen(discord_chain_label_clean(str_repeat('x', 300)))], ['A B', 100]);
+
+// --- rally messages with the chain label ---
+$tpl = discord_default_templates();
+$rbase = ['template' => $tpl['rally'], 'templateClear' => $tpl['rallyClear'], 'ping' => '', 'mask' => 'Corp', 'time' => 2000];
+$labelled = function ($id) { return 'AABCA'; };
+$none = function ($id) { return ''; };
+check('rally label: default text with a label', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31001880, 'setBy' => 'Chribba'], $labelled))['content'],
+    "Tripwire rally point from *Chribba*: **AABCA · J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+check('rally label: without a label no separator or empty bold', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $none))['content'],
+    "Tripwire rally point from *C*: **J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+check('rally label: looked up for the rally system', discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31000003, 'setBy' => 'C'], $label)['label'], 'AB');
+check('rally label: {label} on its own', discord_payload(discord_rally_context(['action' => 'set', 'template' => '{label}|{labelSystem}|{system}'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $labelled))['content'],
+    'AABCA|AABCA · J152820|J152820');
+$evil = function ($id) { return "@everyone <@&999999999999999999> **x** [l](https://e.example) `c`"; };
+$hp = discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $evil));
+check('rally label: escaped, cannot ping, format or link', [strpos($hp['content'], '@everyone'), strpos($hp['content'], '<@&'), strpos($hp['content'], '**x'),
+    strpos($hp['content'], '](https:'), strpos($hp['content'], '\\[l\\]\\(https\\:') !== false, $hp['allowed_mentions']], [false, false, false, false, true, ['parse' => []]]);
+$hp = discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880] + $rbase, null, $evil));
+check('rally label: escaped in the cleared text too', [strpos($hp['content'], '@everyone'), strpos($hp['content'], '<@&'), strpos($hp['content'], '**x'), $hp['allowed_mentions']], [false, false, false, ['parse' => []]]);
+// Cleared: names the system it was on when the clear kept it
+check('rally cleared: with the system and label it was on', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'Chribba', 'systemID' => 31001880] + $rbase, null, $labelled))['content'],
+    'Tripwire rally point cleared by *Chribba* (was on AABCA · J152820)');
+check('rally cleared: with the system, no label', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'Chribba', 'systemID' => 31001880] + $rbase, null, $none))['content'],
+    'Tripwire rally point cleared by *Chribba* (was on J152820)');
+check('rally cleared: system unknown (queued before this version)', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'Chribba'] + $rbase, null, $labelled))['content'],
+    'Tripwire rally point cleared by *Chribba*');
+check('rally cleared: by someone else, no system', discord_payload(discord_rally_context(['action' => 'set', 'who' => 'S', 'systemID' => 31001880] + $rbase, null, $labelled))['content'],
+    'Tripwire rally point cleared by *someone*');
+check('rally cleared: the label kept at clear time wins over a lookup now', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880, 'label' => 'AAB'] + $rbase, null, $labelled))['content'],
+    'Tripwire rally point cleared by *C* (was on AAB · J152820)');
+check('rally cleared: an empty kept label stays empty', discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880, 'label' => ''] + $rbase, null, $labelled)['label'], '');
+check('rally cleared: unreadable rally, the clear still names it', discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880] + $rbase, false, $labelled)['label'], 'AABCA');
+check('rally set message: {was} is empty', discord_payload(discord_rally_context(['action' => 'set', 'template' => 'x{was}y'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $labelled))['content'], 'xy');
+check('rally data: a clear keeps the system it was on, a set does not', [discord_rally_data($rtype, 'Corp', 'clear', 'C', 2000, 31001880)['systemID'] ?? null,
+    discord_rally_data($rtype, 'Corp', 'set', 'C', 2000, 31001880)['systemID'] ?? null, discord_rally_data($rtype, 'Corp', 'clear', 'C', 2000)['systemID'] ?? null], [31001880, null, null]);
+// k-space: {label} / {labelSystem}
+$kctx = ['kind' => 'kspace', 'template' => '{labelSystem} via {label}', 'ping' => '', 'mask' => 'Corp', 'system' => 'Jita', 'class' => 'HS', 'label' => 'A_B'];
+check('k-space label', discord_payload($kctx)['content'], 'A\\_B · Jita via A\\_B');
+check('k-space label: none', discord_payload(['label' => ''] + $kctx)['content'], 'Jita via');
+check('k-space context carries the candidate label', discord_kspace_context(['systemID' => 30000142, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'K162', 'mapper' => 'M', 'label' => 'AB'],
+    [['Jita', 0]], ['template' => '', 'ping' => ''], 'Corp')['label'], 'AB');
+
+// --- default texts of earlier versions become today's (not customised); custom texts stay ---
+$oldRally = "{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}";
+$oldClear = '{pings} Tripwire rally point cleared by *{who}*';
+[$mig] = discord_settings_normalise(['types' => ['rally' => ['template' => $oldRally, 'templateClear' => $oldClear]]], discord_settings_defaults());
+check('migration: old default texts become the new ones', [$mig['types']['rally']['template'], $mig['types']['rally']['templateClear']], [$tpl['rally'], $tpl['rallyClear']]);
+[$mig] = discord_settings_normalise(['types' => ['rally' => ['template' => str_replace("\n", "\r\n", $oldRally) . ' ', 'templateClear' => 'Gone, said {who}']]], discord_settings_defaults());
+check('migration: line endings and spaces do not matter; custom texts stay', [$mig['types']['rally']['template'], $mig['types']['rally']['templateClear']], [$tpl['rally'], 'Gone, said {who}']);
+[$mig] = discord_settings_normalise(['types' => ['rally' => ['template' => $oldRally . ' @here']]], discord_settings_defaults());
+check('migration: an edited old default is custom', $mig['types']['rally']['template'], $oldRally . ' @here');
+check('migration: other types are not touched', discord_template_upgrade('kspace', 'template', $oldRally), $oldRally);
+check('migration: queued rows with the old texts render the new ones', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880,
+    'template' => $oldRally, 'templateClear' => $oldClear] + $rbase, null, $labelled))['content'], 'Tripwire rally point cleared by *C* (was on AABCA · J152820)');
+$cl2 = new PDO('sqlite::memory:');
+$cl2->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
+$cl2->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000001.2', json_encode(['types' => ['rally' => ['template' => $oldRally, 'templateClear' => $oldClear]]])]);
+check('migration: when loaded', discord_settings_load($cl2, '98000001.2', discord_settings_defaults())['types']['rally']['templateClear'], $tpl['rallyClear']);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

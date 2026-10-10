@@ -95,16 +95,21 @@ function discord_name($value) {
 	return ($name === '' || mb_strlen($name) > 60) ? null : $name;
 }
 
+/** Sample chain label for the preview */
+function discord_sample_label($systemID) {
+	return 'AABCA';
+}
+
 /** Sample message contexts for the preview */
 function discord_sample_context($kind, $template, $ping, $maskName) {
 	$base = array('kind' => $kind, 'template' => $template, 'ping' => $ping, 'mask' => $maskName, 'time' => time());
 	if ($kind === 'rally') {
-		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'));
+		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'), 'discord_sample_label');
 	}
 	if ($kind === 'kspace') {
 		return $base + array('systemID' => 30002659, 'system' => 'Dodixie', 'security' => 0.87, 'class' => 'HS', 'region' => 'Sinq Laison',
 			'map' => discord_map_url(30002659), 'dotlan' => discord_dotlan_url(30002659), 'hubs' => array(array('Jita', 6), array('Amarr', 9)),
-			'sig' => 'ABC-123', 'hole' => 'K162', 'from' => 'J123456', 'mapper' => 'Example Pilot');
+			'sig' => 'ABC-123', 'hole' => 'K162', 'from' => 'J123456', 'mapper' => 'Example Pilot', 'label' => 'AABC');
 	}
 	return $base + array('systemID' => 31000005, 'system' => 'J123456', 'security' => null, 'class' => 'C3', 'region' => 'C-R00023',
 		'map' => discord_map_url(31000005), 'dotlan' => discord_dotlan_url(31000005), 'killID' => 123456789,
@@ -231,9 +236,9 @@ try {
 				// The rally type has a second message, for when the rally is cleared
 				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
 				if ($templateClear === '') $templateClear = $defaults['types']['rally']['templateClear'];
-				// Built like a real clear (no system: only {pings}, {mask} and {who} are filled)
+				// Built like a real clear of the sample rally (the system it was on is known, so {was} is filled)
 				$preview['previewClear'] = discord_payload(discord_rally_context(array('action' => 'clear', 'who' => 'Example Pilot',
-					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null));
+					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null, 'discord_sample_label'));
 			}
 			echo json_encode($preview);
 			exit();
