@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 32,
+      "date": "2026-10-10",
+      "title": "Hole size on the connection",
+      "description": "The hole size tag (S, M, L, VL or XL: the largest ship that fits through) now sits on the line between two systems on the chain map, because it describes the wormhole, not the system. It works in every chain renderer and keeps its tooltip; a dimmed tag with a ? is still a guess from the system classes.\n\nTurn the tags off in Settings > Chain Map Settings > Hole size tags.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-32-size-tags-connector.png",
+          "caption": "Size tags on the connections of the radial chain map"
+        }
+      ]
+    },
+    {
       "pr": 30,
       "date": "2026-10-10",
       "title": "Rally point channel in Mask Admin > Discord",
