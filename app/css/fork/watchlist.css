@@ -194,10 +194,15 @@
 	cursor: default;
 }
 
-/* Make room for the eye beside an effect icon (the class label starts about 20px in on a normal node) */
+/* Make room for the eye beside an effect icon: on a normal node a 3-character class label (C13, C14...) starts about
+   16px in, so the effect icon and the eye are drawn a little smaller there */
 #chainMap .node.watchlist-match i.whEffect {
-	padding-left: 0;
-	padding-right: 1px;
+	padding: 0;
+	font-size: 8px;
+}
+
+#chainMap .node.watchlist-match i.whEffect + .watchlist-badge {
+	font-size: 7px;
 }
 
 /* Pop-ups: top-right (Kill Reporting's sit bottom-right) */

@@ -20,9 +20,11 @@ marker (its tooltip names the matching filters).
 
 The marker in the four chain renderers (radial, org chart, top-down, side-ways), with upstream's pilots marker shown on
 every node: a small eye inside the node's top row, right after the effect icon (that row holds only the centred class
-label and the pilots marker on the right; on matching nodes the effect icon's padding is trimmed to make room). It
-stays clear of the corner badges (threat top-left, pilots top-right, local bottom-right, statics bottom-left), the
-connectors, size tags and the system/signature name line in every "Show name" setting:
+label and the pilots marker on the right; on matching nodes with an effect, the effect icon and the eye are drawn a
+little smaller so both fit before a 3-character label such as C13 or C14). It stays clear of the class label, the
+corner badges (threat top-left, pilots top-right, local bottom-right, statics bottom-left), the connectors, size tags
+and the system/signature name line in every "Show name" setting. Shown: a C5 with Wolf-Rayet, a C13 (J000895,
+Wolf-Rayet) and a Drifter C14 (Sentinel MZ, Red Giant), with Show name and Show ref:
 
 ![renderers](after-renderers.png)
 
