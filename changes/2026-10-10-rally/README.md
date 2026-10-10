@@ -12,7 +12,7 @@ highlighted, and a "Rally: <system> (<n> jumps) ✕" banner in the chain map hea
 
 | Before | After |
 | --- | --- |
-| ![before](before.png) | ![after](after.png) |
+| ![before](before.jpg) | ![after](after.jpg) |
 
 ## Change
 
