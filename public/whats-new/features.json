@@ -1,12 +1,27 @@
 {
   "features": [
     {
+      "pr": 5,
+      "date": "2026-10-10",
+      "title": "Rally point",
+      "description": "Right-click a system on the chain map and choose Rally here to make it the rally point for everyone on your mask. The system pulses green and the wormholes from where you are to it are highlighted, so you can see which holes to take.\n\nThe chain map header shows the rally system and how many jumps away it is; click the cross there, or choose Clear rally, to remove it.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-5-rally.jpg",
+          "caption": "Rally point and route on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 2,
       "date": "2026-10-10",
       "title": "Statics in the signature Type quick picks",
       "description": "When you add or edit a wormhole signature, the buttons next to Type now show this system's statics, marked with a dot. Click one to fill in the type and its destination class in one go; once Leads To is set, the matching static is listed first.",
       "images": [
-        { "src": "whats-new/img/pr-2-quickpicks.png", "caption": "Static quick picks in the signature dialog" }
+        {
+          "src": "whats-new/img/pr-2-quickpicks.png",
+          "caption": "Static quick picks in the signature dialog"
+        }
       ]
     },
     {
@@ -15,8 +30,14 @@
       "title": "What's New",
       "description": "Tripwire now tells you about new features after they're added. This window opens once after each update; reopen it any time from Settings > General Preferences > What's new.",
       "images": [
-        { "src": "whats-new/img/pr-1-settings.png", "caption": "Reopen from Settings" },
-        { "src": "whats-new/img/pr-1-popup.png", "caption": "The What's New window" }
+        {
+          "src": "whats-new/img/pr-1-settings.png",
+          "caption": "Reopen from Settings"
+        },
+        {
+          "src": "whats-new/img/pr-1-popup.png",
+          "caption": "The What's New window"
+        }
       ]
     }
   ]

@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Rally point](2026-10-10-rally/README.md) | Mark a chain map system as the rally point for everyone on the mask, with the wormhole route to it highlighted |
 | 2026-10-10 | [Agent context](2026-10-10-agent-context/README.md) | EVE wormhole primer for agents, `tripwire-domain` and `tripwire-feature` Claude Code skills |
 | 2026-10-10 | [Release versioning](2026-10-10-release-versioning/README.md) | Every merge to `main` gets a SemVer tag, GitHub Release and versioned image; version shown in What's New |
 | 2026-10-10 | [Wormhole type quick picks show statics](2026-10-10-sig-quickpicks/README.md) | Signature dialog type quick picks show the system's statics, statics first, no more stale buttons |
