@@ -31,6 +31,8 @@ services:
       ENABLE_SEARCH_SCOPE: ${ENABLE_SEARCH_SCOPE:-}
       DISCORD_WEB_HOOK: ${DISCORD_WEB_HOOK:-}
       USER_AGENT: ${USER_AGENT:-}
+      ZKILL_FEED_ENABLED: ${ZKILL_FEED_ENABLED:-}
+      KILL_REPORT_FRIENDLY_CORPORATIONS: ${KILL_REPORT_FRIENDLY_CORPORATIONS:-}
       TZ: ${TZ:-}
       # Upstream's settings.php, mounted outside /opt/app (a mount point inside it would leave an empty
       # file in the repo); docker/settings.php reads upstream's version from it
