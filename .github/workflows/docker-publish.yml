@@ -2,7 +2,8 @@
 #
 # pull_request:       computes the version the PR would release (job summary). No image is built.
 # push to main:       computes the next version (.github/scripts/next-version.sh); if it is a release,
-#                     builds and pushes petdog/tripwire, then tags vX.Y.Z and creates the GitHub Release.
+#                     builds and pushes petdog/tripwire, then tags vX.Y.Z and creates the GitHub Release,
+#                     then opens the deploy PR in eve-infrastructure (infra-deploy.yml).
 #                     Docs-only changes (or the semver:skip label) release nothing.
 # workflow_dispatch:  forces a major/minor/patch release of main.
 #
@@ -240,3 +241,16 @@ jobs:
               --notes "Docker image: \`${IMAGE}:${VERSION}\` (upstream Tripwire ${UPSTREAM})"
           fi
           echo "Released **$TAG**: \`${IMAGE}:${VERSION}\`, \`latest\`, \`upstream-${UPSTREAM}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # Deploy: open the eve-infrastructure PR that pins this release (auto-merged unless a PR in the
+  # release has the deploy:manual label). The token comes from the infra-deploy environment (main
+  # only), not from here; without it the job is skipped with a warning.
+  infra:
+    needs: [version, release]
+    if: needs.version.outputs.push == 'true' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/infra-deploy.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
