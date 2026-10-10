@@ -1,6 +1,6 @@
 # Kill messages: chain label
 
-**Date:** 2026-10-10
+**Date:** 2026-10-11
 
 ## Description
 
@@ -51,12 +51,12 @@ mask's chain map, home, or the hole unnamed) the message is exactly as before.
 - **Templates** (`discord/template.php`): `{label}` and `{labelSystem}` for the three kill types. New defaults use
   `{labelSystem}` (`... lost a {ship} in {labelSystem}, {isk} ISK ...`); texts saved with the earlier default are read
   as today's (`discord_retired_templates`, on load and for queued rows), edited texts are kept. The embed title and
-  system line use the labelled system. The label is a signature name (user text): escaped like game data in the text
-  and the system line (markdown, `@`, `<`, `:`), `allowed_mentions` unchanged (admin texts only). The embed title is
-  not escaped, like the ship and system names there (Discord doesn't resolve mentions or links in titles).
+  system line use the labelled system. The label is a signature name (user text): escaped like game data (markdown,
+  `@`, `<`, `:`) in the text, the system line and the embed title (titles render bold, spoilers, code and emoji, so an
+  unescaped hole name could restyle or hide the system); `allowed_mentions` unchanged (admin texts only).
 - **Preview** (`public/discord.php`): the kill sample has the label AABCA.
-- Tests: `discord/tests/discord_test.php` (+18: batch equals single lookup, kill state loads labels, kill data/context
-  carry them, default texts of all three types with and without a label, `{label}` alone, escaping, upgrade of the
+- Tests: `discord/tests/discord_test.php` (+19: batch equals single lookup, kill state loads labels, kill data/context
+  carry them, default texts of all three types with and without a label, `{label}` alone, escaping in text, system line and title, upgrade of the
   earlier defaults). All PHP and mocha tests pass.
 - Checked end to end on the dev stack: home J115405 -A-> J160650 -AB-> J151733 on the corp mask, chain kills and a
   corp loss on one webhook (chain kill text stored as the earlier default), `docker/dev/discord-fake-kill.php`, sent by

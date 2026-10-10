@@ -946,6 +946,9 @@ $kp = discord_payload(['label' => "@everyone **x** <@&999999999999999999> [l](ht
 check('kill label: escaped, cannot ping, format or link', [strpos($kp['content'], '@everyone'), strpos($kp['content'], '<@&'), strpos($kp['content'], '**x'),
     strpos($kp['content'], '](https:'), strpos($kp['embeds'][0]['description'], '@everyone'), strpos($kp['embeds'][0]['description'], '**x'), $kp['allowed_mentions']],
     [false, false, false, false, false, false, ['parse' => []]]);
+$kp = discord_payload(['label' => '||**[x](https://evil.example)** <t:0:R> <:e:123456789012345678> <@&999999999999999999> `c` ~~s~~ _i_'] + $kctx);
+check('kill label: escaped in the embed title too (titles render markdown)', $kp['embeds'][0]['title'],
+    'Kill in the chain: Coercer Navy Issue in \\|\\|\\*\\*\\[x\\]\\(https\\://evil.example\\)\\*\\* \\<t\\:0\\:R\\> \\<\\:e\\:123456789012345678\\> \\<@' . DISCORD_ZWSP . '&999999999999999999\\> \\`c\\` \\~\\~s\\~\\~ \\_i\\_ · J105246');
 // Stored default texts from before the label become today's; customised texts stay
 foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
     $old = discord_retired_templates()[$kind]['template'][0];

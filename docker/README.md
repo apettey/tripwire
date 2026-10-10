@@ -370,7 +370,8 @@ like game data.
 Kill messages name the system with its label on the mask when it has one: the default texts use `{labelSystem}`
 ("... lost a Coercer Navy Issue in AABCA · J105246, 44.07m ISK"), and the embed title and system line show it too
 ("Kill in the chain: Coercer Navy Issue in AABCA · J105246", "AABCA · J105246 (C5), E-R00028"); without a label they
-are as before. The labels of every mask with a kill type on are loaded with the kill settings every 60 s
+are as before. The label is escaped in the embed title too (titles render markdown such as bold, spoilers and
+emoji). The labels of every mask with a kill type on are loaded with the kill settings every 60 s
 (`discord_chain_labels`, one query), so the kill feed never waits on a query per kill, and are stored with the queued
 message (a label up to a minute old). Kill texts saved with the earlier default (`{system}`) are read as today's.
 `allowed_mentions` is built only from what the admin wrote (template + ping field: `<@&role>`, `<@user>`,

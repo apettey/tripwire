@@ -292,8 +292,10 @@ function discord_payload(array $ctx) {
         $title = ['chainKill' => 'Kill in the chain', 'corpKill' => 'Corp kill', 'corpLoss' => 'Corp loss'][$kind] ?? 'Kill';
         // The system with its chain label, when it has one: "AABCA · J105246"
         $at = discord_label_system($ctx['label'] ?? '', $ctx['system'] ?? '?');
+        // Titles render markdown (bold, spoiler, code, emoji): the label is user text (a signature name), escaped there too
+        $atTitle = discord_label_system(discord_escape($ctx['label'] ?? ''), $ctx['system'] ?? '?');
         $embed += [
-            'title' => discord_truncate($title . ': ' . ($ctx['ship'] ?? 'ship') . ' in ' . $at, 256),
+            'title' => discord_truncate($title . ': ' . ($ctx['ship'] ?? 'ship') . ' in ' . $atTitle, 256),
             'description' => $whereOf($at),
             'fields' => [
                 discord_field('Victim', discord_escape($ctx['victim'] ?? '?') . "\n" . discord_escape(trim(($ctx['corp'] ?? '') . (!empty($ctx['alliance']) ? ' / ' . $ctx['alliance'] : '')))),
