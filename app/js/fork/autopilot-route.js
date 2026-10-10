@@ -176,6 +176,17 @@ const autopilotRoute = {
 		return path && path.length > 1 ? { path: path, from: from } : { error: "No gate route" };
 	},
 
+	/** One gate leg of a route through Thera/Turnur (theraRoute plan). The autopilot can't route through wormholes,
+	so each gate stretch is sent on its own: leg 1 now, leg 2 once you are out of Thera, and so on.
+	@return {path, from, to} or {error} */
+	scoutLeg: function(plan, index) {
+		if (!plan || plan.status !== "ok" || plan.kind !== "scout") { return { error: "No route" }; }
+		const leg = (plan.legs || [])[index || 0];
+		const path = leg ? autopilotRoute.normalise(leg.path) : null;
+		if (!path || path.length < 2) { return { error: (plan.legs || []).length ? "No such leg" : "Nothing to fly by gates on this route" }; }
+		return { path: path, from: path[0], to: path[path.length - 1] };
+	},
+
 	/** The gate leg of a Destinations window entry (routeDestinations.evaluate(...).best) */
 	destinationLeg: function(best) {
 		if (!best || !best.jumps) { return { error: best ? "On the chain already" : "No gate route" }; }
@@ -465,11 +476,34 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		// ---- Favourites panel: a button next to each favourite's route button ----
 
+		/** One button per gate leg of a route through Thera/Turnur, numbered when there is more than one */
+		function scoutButtons(plan) {
+			const legs = theraRoute.gateLegs(plan);
+			if (!legs.length) {
+				return "<i class='autopilot-route-btn disabled' data-icon='auto' title='" + ap.escape("Set route in game: nothing to fly by gates on this route") + "'></i>";
+			}
+			return legs.map(function(leg) {
+				return "<i class='autopilot-route-btn autopilot-route-leg' data-icon='auto' data-leg='" + leg.index + "' title='"
+					+ ap.escape(theraRoute.legTitle(leg, systemName)) + "'>" + (leg.count > 1 ? "<sup>" + (leg.index + 1) + "</sup>" : "") + "</i>";
+			}).join("");
+		}
+
+		function scoutLabel(plan, index, destID, safe) {
+			const leg = ap.scoutLeg(plan, index);
+			const count = (plan.legs || []).length;
+			const notes = [];
+			if (count > 1) { notes.push("leg " + (index + 1) + " of " + count + " to " + systemName(destID)); }
+			else if (leg.to !== destID) { notes.push("to " + systemName(destID)); }
+			if (safe) { notes.push("safe"); }
+			return systemName(leg.from) + " → " + systemName(leg.to) + (notes.length ? " (" + notes.join(", ") + ")" : "");
+		}
+
 		function favouriteButton(id) {
 			const fp = favouritesPanel;
 			const flags = fp.flags(fp.settings(options), id);
 			if (!flags.route) { return ""; }
 			const plan = (fp.lastRoutes[id] || {})[flags.route];
+			if (plan && plan.kind === "scout" && typeof theraRoute !== "undefined") { return scoutButtons(plan); }
 			const leg = ap.favouriteLeg(plan, trackedSystem(), id, function() { return [0, 0]; });	// availability only
 			const name = systemName(id);
 			let title;
@@ -515,6 +549,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const id = fp.toID($(this).closest(".fav-row").data("systemid"));
 			const flags = fp.flags(fp.settings(options), id);
 			const plan = (fp.lastRoutes[id] || {})[flags.route];
+			if (plan && plan.kind === "scout") {
+				const index = Number($(this).data("leg")) || 0;
+				const scoutLeg = ap.scoutLeg(plan, index);
+				if (scoutLeg.error) { notify(ap.escape(scoutLeg.error), "yellow", 5000); return; }
+				push(scoutLeg.path, scoutLabel(plan, index, id, flags.route === "safe"));
+				return;
+			}
 			const leg = ap.favouriteLeg(plan, trackedSystem(), id, function(from, to, safe) {
 				return ap.gatePath(gateMap(), appData.systems, from, to, safe, avoidList());
 			});
@@ -526,7 +567,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function destinationButton(id) {
 			const rd = routeDestinations;
-			const best = rd.evaluate(rd.lastExits, id, rd.routingLimit()).best;
+			const ev = rd.evaluate(rd.lastExits, id, rd.routingLimit());
+			if (ev.scout && typeof theraRoute !== "undefined") { return "<td class='route-dest-autopilot'>" + scoutButtons(ev.scout) + "</td>"; }
+			const best = ev.best;
 			const leg = ap.destinationLeg(best);
 			const title = leg.error ? "Set route in game: " + leg.error
 				: "Set route in game: the gate route from " + systemName(best.exit.systemID) + " to " + systemName(id)
@@ -565,7 +608,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($(this).hasClass("disabled")) { return; }
 			const rd = routeDestinations;
 			const id = rd.toID($(this).closest("tr").data("systemid"));
-			const best = rd.evaluate(rd.lastExits, id, rd.routingLimit()).best;
+			const ev = rd.evaluate(rd.lastExits, id, rd.routingLimit());
+			if (ev.scout) {
+				const index = Number($(this).data("leg")) || 0;
+				const scoutLeg = ap.scoutLeg(ev.scout, index);
+				if (scoutLeg.error) { notify(ap.escape(scoutLeg.error), "yellow", 5000); return; }
+				push(scoutLeg.path, scoutLabel(ev.scout, index, id, false));
+				return;
+			}
+			const best = ev.best;
 			const leg = ap.destinationLeg(best);
 			if (leg.error) { notify(ap.escape(leg.error), "yellow", 5000); return; }
 			push(leg.path, systemName(leg.from) + " → " + systemName(id));
