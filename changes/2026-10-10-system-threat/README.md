@@ -35,7 +35,8 @@ temporary until saved, like every other setting):
 
 - **Badge** (`app/js/fork/system-threat.js` + `app/css/fork/system-threat.css`): wraps `chain.nodes` (like size tags)
   and puts the badge on the node's top-left corner; real solar systems only (no unknown destinations, no route
-  destination nodes). Count = zKillboard's kills in the last 7 days; level by kills per day (none / low < 0.5 /
+  destination nodes). Count = zKillboard's kills in the last 7 days, or the stored kills of the retention window if
+  those are more and cover the whole window (zKillboard leaves out a count of 0 or 1, and its stats can be hours old); level by kills per day (none / low < 0.5 /
   moderate < 2 / high < 6 / extreme), raised by a busier last 24 h from the stored kills. Without zKillboard stats yet
   it falls back to the stored kills of the retention window (`ZKILL_RETENTION_HOURS`), as far back as the stream has
   every kill. Tooltip: 1 h / 24 h / 7 d / ~30 d / ~90 d (30/90 days estimated from zKillboard's monthly totals), last
@@ -46,7 +47,8 @@ temporary until saved, like every other setting):
   resident" tags, the top alliances, structures lost in the retention window (Upwell structures, customs offices,
   skyhooks, Metenox drills, basic control towers). Likely resident: lost a structure here; in C1-C6 / C13 wormholes
   also "both killed and lost ships here" or "lost 3 or more". In k-space only structure losses flag anyone (busy gate
-  systems are full of corporations that both kill and die). The 7-day top lists only contain attackers, and losses
+  systems are full of corporations that both kill and die). NPC corporations (IDs 1000000-1999999: militias,
+  starter corporations, Interbus customs offices) are never flagged and are left out of the list in wormholes. The 7-day top lists only contain attackers, and losses
   are only known for the retention window, so it is a hint, not a census.
 - **Server**: `zkill/stats.php` (new) caches zKillboard's per-system stats
   (`/api/stats/solarSystemID/<id>/kills/`, verified against zKillboard's `view/apistats.php`: `activepvp` and
@@ -66,7 +68,9 @@ temporary until saved, like every other setting):
   deduplicated row per system and the caps above. All zKillboard / ESI text is escaped.
 - **Tests**: `app/js-test/fork/system-threat.test.js` (levels, month estimates, summaries, badges, node decoration,
   residents, info block, settings), `zkill/tests/stats_test.php` (stats compaction, queue decisions, caps, resident
-  aggregation).
+  aggregation, and the worker path `zk_stats_run_one()` on SQLite with a fake zKillboard via `zk_http_transport()`:
+  waits for queued back-fills and the rate limiter, success / HTTP error / error answer / not sent, queue order,
+  housekeeping). The worker's SQL avoids MySQL-only syntax for that.
 - **Docs**: `docker/README.md` (System stats section, file table, tables list).
 - **Upstream files touched**: none. Fork files changed: `zkill_feed.worker.php`, `zkill/zkill.inc.php`,
   `zkill/schema.php`, `docker/sql/zkill.sql`, `docker/README.md`. Rebuilt bundles: `public/js/app.min.js`,

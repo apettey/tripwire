@@ -73,7 +73,25 @@ describe('System threat', () => {
 			assert.strictEqual(s.count, null);
 			assert.strictEqual(s.kills1h, null);
 		});
-		it('quiet system is level 0', () => assert.equal(systemThreat.summarize(entry({ kills7d: 0, months: [] }, {}), ctx).level, 0));
+		it('one kill this week: zKillboard leaves the count out, the stored kills fill it in', () => {
+			const s = systemThreat.summarize(entry({ kills7d: 0, months: [] }, { killsWindow: 1, kills24h: 0 }), ctx);
+			assert.equal(s.count, 1);
+			assert.equal(s.kills7d, 1);
+			assert.equal(s.level, 1);
+			assert.equal(s.levelName, 'Low');
+		});
+		it('stale stats: newer stored kills raise the 7-day count', () => {
+			const s = systemThreat.summarize(entry({ kills7d: 5, months: [] }, { killsWindow: 12, kills24h: 0 }), ctx);
+			assert.equal(s.count, 12);
+			assert.equal(s.level, 2);	// 12 / 7 a day
+		});
+		it('stored kills are not used for the 7-day count when they do not cover the whole window', () => {
+			const partial = Object.assign({}, ctx, { localSinceMs: NOW - 6 * 3600000 });
+			assert.equal(systemThreat.summarize(entry({ kills7d: 0, months: [] }, { killsWindow: 1 }), partial).count, 0);
+			const longRetention = Object.assign({}, ctx, { retentionSeconds: 8 * 86400, localSinceMs: NOW - 9 * 86400000 });
+			assert.equal(systemThreat.summarize(entry({ kills7d: 0, months: [] }, { killsWindow: 3 }), longRetention).count, 0);
+		});
+		it('quiet system is level 0',() => assert.equal(systemThreat.summarize(entry({ kills7d: 0, months: [] }, {}), ctx).level, 0));
 	});
 
 	describe('badgeHtml', () => {
@@ -175,6 +193,32 @@ describe('System threat', () => {
 		it('residents first, then by activity', () => {
 			const r = systemThreat.residents(detail, stats, true);
 			assert.deepEqual(r.corporations.map(e => e.id), [50, 20, 40, 10, 30]);
+		});
+		describe('NPC corporations', () => {
+			const npcDetail = {
+				corporations: [
+					{ id: 1000182, kills: 2, losses: 4, iskLost: 1, lastSeen: NOW / 1000 },	// Tribal Liberation Force (militia)
+					{ id: 1000125, kills: 0, losses: 1, iskLost: 1, lastSeen: NOW / 1000 },	// CONCORD-ish / Interbus customs offices
+					{ id: 20, kills: 1, losses: 1, iskLost: 1, lastSeen: NOW / 1000 }
+				],
+				alliances: [],
+				structures: [{ killID: 1, typeID: 2233, time: iso(NOW), corporationID: 1000125, allianceID: null, value: 1 }]
+			};
+			it('are never flagged as residents in k-space, but stay listed', () => {
+				const r = systemThreat.residents(npcDetail, { corporations: [{ id: 1000182, name: 'Tribal Liberation Force', kills: 99 }] }, false);
+				assert.deepEqual(r.corporations.map(e => e.id).sort((a, b) => a - b), [20, 1000125, 1000182]);
+				assert.deepEqual(r.corporations.filter(e => e.resident).map(e => e.id), []);
+			});
+			it('are left out in wormholes', () => {
+				const r = systemThreat.residents(npcDetail, null, true);
+				assert.deepEqual(r.corporations.map(e => e.id), [20]);
+				assert.equal(r.corporations[0].resident, true);
+			});
+			it('isNpcCorporation', () => {
+				assert.equal(systemThreat.isNpcCorporation('corporation', 1000125), true);
+				assert.equal(systemThreat.isNpcCorporation('corporation', 98000001), false);
+				assert.equal(systemThreat.isNpcCorporation('alliance', 1000125), false);
+			});
 		});
 		it('copes with missing data', () => {
 			assert.deepEqual(systemThreat.residents(null, null, true), { corporations: [], alliances: [] });

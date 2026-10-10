@@ -124,6 +124,12 @@ const systemThreat = {
 		};
 		let rate = null;
 		if (stats) {
+			// zKillboard leaves its 7-day count out when it is 0 or 1, and the stats can be hours old: when the stored
+			// kills cover the whole retention window (at most 7 days), they are a lower bound for the 7-day count
+			const retentionMs = (ctx.retentionSeconds || 0) * 1000;
+			if (retentionMs > 0 && retentionMs <= 7 * 86400000 && localSpan >= retentionMs) {
+				out.kills7d = Math.max(out.kills7d, local.killsWindow || 0);
+			}
 			out.count = out.kills7d;
 			out.basis = "7 days";
 			out.source = "zkillboard";
@@ -229,12 +235,19 @@ const systemThreat = {
 		return result;
 	},
 
+	/** Whether an ID is an NPC corporation (EVE gives them 1000000-1999999) */
+	isNpcCorporation: function(kind, id) {
+		const n = Number(id);
+		return kind === "corporation" && n >= 1000000 && n < 2000000;
+	},
+
 	/**
 	 * Corporations and alliances active in a system, most active first, with a "likely resident" flag.
 	 * Sources: zKillboard's 7-day top lists (kills as attackers) and the stored kills of the last hours (final blows
 	 * and losses). Likely resident: lost a structure here, or, in a wormhole (where living in a system is the norm and
 	 * traffic is low), both killed and lost ships here, or lost 3 or more (ratting / mining losses at home). In k-space
-	 * only a structure loss flags anyone: busy gate systems are full of corporations that both kill and die.
+	 * only a structure loss flags anyone: busy gate systems are full of corporations that both kill and die. NPC
+	 * corporations are never flagged, and are left out entirely in wormholes.
 	 * @param detail `detail` of a system_threat.php response (corporations / alliances: [{id, kills, losses, iskLost,
 	 *               lastSeen (unix s)}], structures, names)
 	 * @param stats the system's cached zKillboard stats (corporations / alliances: [{id, name, ticker, kills}]) or null
@@ -275,10 +288,16 @@ const systemThreat = {
 				e.lastSeenMs = l.lastSeen ? Number(l.lastSeen) * 1000 : null;
 			});
 			return Object.keys(byID).map(function(k) {
-				const e = byID[k];
+				return byID[k];
+			}).filter(function(e) {
+				// NPC corporations (starter, militia, Interbus customs offices) never live anywhere; in wormholes they
+				// are noise, in k-space (faction warfare militias) they stay listed but are never flagged
+				return !(wormhole && systemThreat.isNpcCorporation(kind, e.id));
+			}).map(function(e) {
 				if (!e.name && Object.prototype.hasOwnProperty.call(names, String(e.id))) { e.name = String(names[String(e.id)]); }
 				e.structureLost = !!structureOwners[kind + ":" + e.id];
-				e.resident = e.structureLost || (!!wormhole && ((e.losses > 0 && (e.kills > 0 || e.kills7d > 0)) || e.losses >= 3));
+				e.resident = !systemThreat.isNpcCorporation(kind, e.id)
+					&& (e.structureLost || (!!wormhole && ((e.losses > 0 && (e.kills > 0 || e.kills7d > 0)) || e.losses >= 3)));
 				e.score = e.kills7d + e.kills + 2 * e.losses + (e.structureLost ? 10 : 0);
 				return e;
 			}).sort(function(a, b) {

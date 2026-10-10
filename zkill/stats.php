@@ -179,20 +179,31 @@ function zk_stats_request(PDO $db, array $systemIDs, array $options = []) {
 }
 
 /**
+ * Worker: put 'running' rows older than 5 minutes (a crashed or restarted worker) back in the queue and, with $prune,
+ * delete rows nobody asked for in ZK_STATS_KEEP_DAYS days.
+ */
+function zk_stats_housekeeping(PDO $db, $now, $prune = true) {
+    $db->prepare("UPDATE zkill_system_stats SET status = 'queued' WHERE status = 'running' AND attemptedAt < ?")
+        ->execute([gmdate('Y-m-d H:i:s', $now - 300)]);
+    if ($prune) {
+        $db->prepare("DELETE FROM zkill_system_stats WHERE wantedAt < ? AND status <> 'running'")
+            ->execute([gmdate('Y-m-d H:i:s', $now - ZK_STATS_KEEP_DAYS * 86400)]);
+    }
+}
+
+/**
  * Worker: fetch the most important queued system's stats, but only when the zKillboard API may be called now and
  * no back-fill is waiting (back-fills serve open panels; stats are background data). Prunes old rows hourly.
  * @return string|null log line, or null when nothing was done
  */
 function zk_stats_run_one(PDO $db) {
     static $staleChecked = 0, $pruned = 0;
-    if (time() - $staleChecked >= 60) {
-        $staleChecked = time();
-        $db->exec("UPDATE zkill_system_stats SET status = 'queued' WHERE status = 'running' AND attemptedAt < UTC_TIMESTAMP() - INTERVAL 300 SECOND");
-    }
-    if (time() - $pruned >= 3600) {
-        $pruned = time();
-        $db->exec('DELETE FROM zkill_system_stats WHERE wantedAt < UTC_TIMESTAMP() - INTERVAL ' . ZK_STATS_KEEP_DAYS . " DAY AND status <> 'running'");
-    }
+    $now = time();
+    $stale = $now - $staleChecked >= 60;
+    $prune = $now - $pruned >= 3600;
+    if ($stale) $staleChecked = $now;
+    if ($prune) $pruned = $now;
+    if ($stale || $prune) zk_stats_housekeeping($db, $now, $prune);
     if (!zk_http_ready('zkillboard.com')) return null;
     if ($db->query("SELECT 1 FROM zkill_backfill WHERE status = 'queued' LIMIT 1")->fetchColumn()) return null;
     $job = $db->query("SELECT systemID FROM zkill_system_stats WHERE status = 'queued' ORDER BY priority DESC, requestedAt LIMIT 1")->fetchColumn();
@@ -200,8 +211,9 @@ function zk_stats_run_one(PDO $db) {
     $systemID = (int) $job;
     $db->prepare("UPDATE zkill_system_stats SET status = 'running', attemptedAt = UTC_TIMESTAMP(), attempts = attempts + 1 WHERE systemID = ?")
         ->execute([$systemID]);
+    // Plain SQL (no MySQL-only syntax) so zkill/tests/stats_test.php can run the worker path on SQLite
     $finish = $db->prepare('UPDATE zkill_system_stats SET status = ?, error = ?,
-        data = COALESCE(?, data), fetchedAt = IF(? IS NULL, fetchedAt, UTC_TIMESTAMP()) WHERE systemID = ?');
+        data = COALESCE(?, data), fetchedAt = CASE WHEN ? IS NULL THEN fetchedAt ELSE UTC_TIMESTAMP() END WHERE systemID = ?');
     try {
         [$status, $data] = zk_http_get_json(ZK_API_BASE . 'stats/solarSystemID/' . $systemID . '/kills/', false, ZK_STATS_TIMEOUT);
         if ($status === -1) {
