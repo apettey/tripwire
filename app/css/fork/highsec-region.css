@@ -1,0 +1,23 @@
+/* Region name in place of the hole type on chain map nodes in high-sec (fork feature: highsec-region).
+   The line fills the node's width without adding to it, and long names end in an ellipsis (full name and hole
+   type in the tooltip). The hidden copy of the original text keeps the node as wide as it was before, so the
+   chain layouts don't change. */
+#chainMap .nodeType .highsec-region-line {
+	display: block;
+	width: 0;
+	min-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#chainMap .nodeType .highsec-region {
+	text-transform: none;
+}
+
+#chainMap .nodeType .highsec-region-reserve {
+	display: block;
+	height: 0;
+	overflow: hidden;
+	visibility: hidden;
+}
