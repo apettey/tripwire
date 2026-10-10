@@ -3,6 +3,7 @@
 //
 // Long-running CLI process (supervisord [program:discord-notify]); the only process that calls Discord. It
 //   - polls the chain maps for new k-space connections near the ping systems (discord/kspace.php) every 15 s,
+//   - matches the watchlist filters against the chain maps of masks with that type on (discord/watchlist.php), every 15 s,
 //   - sends the outbox (discord/dispatch.php): every second, at most 20 messages / 5 s per pass,
 //   - prunes the outbox and dedupe tables every 10 minutes.
 // Kill notifications are queued by zkill_feed.worker.php (discord_on_killmail), which sees every streamed killmail.
@@ -47,6 +48,7 @@ function dn_connect() {
     $mysql->query('SELECT 1');
     discord_ensure_schema($mysql);
     zk_ensure_schema($mysql);
+    watchlist_ensure_schema($mysql);
     $resealed = discord_reseal_plain($mysql);
     if ($resealed) dn_log("encrypted $resealed stored webhook URLs with DISCORD_SECRET_KEY");
     return $mysql;
@@ -54,10 +56,15 @@ function dn_connect() {
 
 /** Masks with k-space notifications on and a working webhook */
 function dn_kspace_masks(PDO $db) {
+    return dn_type_masks($db, 'kspace');
+}
+
+/** Masks with notification type $kind on and a working webhook */
+function dn_type_masks(PDO $db, $kind) {
     $ok = [];
     foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status IN ('ok', 'pending')")->fetchAll(PDO::FETCH_ASSOC) as $row) $ok[(int) $row['id']] = (string) $row['maskID'];
-    return array_filter(discord_active_settings($db), function ($s, $maskID) use ($ok) {
-        $type = $s['types']['kspace'];
+    return array_filter(discord_active_settings($db), function ($s, $maskID) use ($ok, $kind) {
+        $type = $s['types'][$kind];
         return $type['enabled'] && ($ok[$type['webhookID']] ?? null) === (string) $maskID;
     }, ARRAY_FILTER_USE_BOTH);
 }
@@ -71,7 +78,7 @@ function dn_run() {
     $lastPrune = 0;
     $lastHeartbeat = time();
     $backoff = 0;
-    $totals = ['sent' => 0, 'failed' => 0, 'kspace' => 0];
+    $totals = ['sent' => 0, 'failed' => 0, 'kspace' => 0, 'watchlist' => 0];
     $leaders = ['kspace' => null, 'dispatch' => null];
 
     while (true) {
@@ -90,6 +97,8 @@ function dn_run() {
                 $leaders['kspace'] = $leader;
                 if ($leader) $totals['kspace'] += discord_kspace_poll($db, dn_kspace_masks($db), $highWater);
                 else $highWater = discord_kspace_start($db);   // take over from about now (the poll re-reads an overlap)
+                // Watchlist matches: same leader, same cadence (dedupe rows make a second poller harmless anyway)
+                if ($leader) $totals['watchlist'] += discord_watchlist_poll($db, dn_type_masks($db, 'watchlist'));
             }
             if ($now - $lastDispatch >= DN_DISPATCH_EVERY) {
                 $lastDispatch = $now;
@@ -110,7 +119,7 @@ function dn_run() {
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();
                 $queued = (int) $db->query("SELECT COUNT(*) FROM discord_outbox WHERE status = 'queued'")->fetchColumn();
-                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']} since start; $queued queued now");
+                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']}, watchlist queued {$totals['watchlist']} since start; $queued queued now");
             }
             $backoff = 0;
             usleep(250000);

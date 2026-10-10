@@ -200,7 +200,7 @@ function rally_discord_url_base($redirect, $scriptName) {
 	return $scheme . '://' . $url['host'] . $port . rtrim($path, '/.');
 }
 
-/** The chain label of a system (discord_chain_label in discord/rally.php), '' when there is none or it can't be read */
+/** The chain label of a system (discord_chain_label in discord/chain_label.php), '' when there is none or it can't be read */
 function rally_discord_chain_label($mysql, $mask, $systemID) {
 	if (!function_exists('discord_chain_label')) return '';
 	try {

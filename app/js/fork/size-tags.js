@@ -35,6 +35,18 @@ const sizeTags = {
 
 	/** HTML for a tag from tagFor, or '' if there is none. extra: optional extra class and inline style (numbers only) */
 	tagHtml: function(tag, extraClass, style) {
+		// A hole the watchlist highlights (watchlist.decorateHoles): an eye in front, or the eye alone without a size
+		const watch = tag && Array.isArray(tag.watchlist) && tag.watchlist.length ? tag.watchlist : null;
+		if (watch && typeof watchlist !== 'undefined') {
+			const names = 'Watchlist: ' + watch.join(', ');
+			if (!tag.size) {
+				return '<span class="size-tag size-tag-watchlist size-tag-watchlist-only' + (extraClass ? ' ' + extraClass : '') + '"' + (style ? ' style="' + style + '"' : '')
+					+ ' title="' + watchlist.escape(names) + '"><i data-icon="eye"></i></span>';
+			}
+			const plain = Object.assign({}, tag, { watchlist: null });
+			return sizeTags.tagHtml(plain, 'size-tag-watchlist' + (extraClass ? ' ' + extraClass : ''), style)
+				.replace(/ title="([^"]*)">/, function(m, title) { return ' title="' + watchlist.escape(names) + ' · ' + title + '"><i data-icon="eye"></i>'; });
+		}
 		if (!tag || !tag.size) { return ''; }
 		const cls = sizeTags.classes.filter(function(c) { return c.size == tag.size; })[0];
 		const title = (tag.certain ? 'Max ship ' : 'Likely max ship ') + (tag.jump ? sizeTags.formatKt(tag.jump) + ' kt ' : '') +
