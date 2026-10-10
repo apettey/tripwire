@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 21,
+      "date": "2026-10-10",
+      "title": "Chain kill feed",
+      "description": "A new Chain kills panel shows the recent kills in every wormhole, low-sec and null-sec system on your chain map in one feed, newest first, with the system and hole each kill happened in. When a system joins the chain its last hour of kills is loaded, and new kills appear as they happen; click a system name to view it, or a row to open the kill on zKillboard.\n\nMove and resize it with Customize layout. Turn it off in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-21-chain-killfeed.png",
+          "caption": "The Chain kills panel with kills from several systems on the chain"
+        }
+      ]
+    },
+    {
       "pr": 18,
       "date": "2026-10-10",
       "title": "System kill feed",
