@@ -28,9 +28,10 @@ docker compose -f docker-compose.dev.yml up --build
 - Adminer: http://localhost:9000 (server `mysql`, user `tripwire` / `MYSQL_PASSWORD`, or `root`)
 - MySQL: `localhost:3306`
 - All ports are bound to `127.0.0.1` only.
-- `assets` service (Node 20) rebuilds `public/js/app.min.js` / `public/css/app.min.css` when files
-  under `app/` change. Upstream commits those bundles, so commit them along with your `app/` changes,
-  and `git checkout --` them if the watcher touched them without a real change.
+- `assets` service (Node 20) builds `public/js/app.min.js` / `public/css/app.min.css` on start and
+  rebuilds them when files under `app/` change. They are git-ignored build output (upstream commits
+  them, we don't): CI and the Docker image build their own with `docker/gulpfile.dev.js`. To build
+  them without the stack: `npm ci && npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css`.
 - Quick login without EVE SSO: `docker compose -f docker-compose.dev.yml exec app bash /opt/app/docker/dev-seed.sh`
   creates user `dev` / `dev-password` (override with `DEV_USERNAME`, `DEV_PASSWORD`; `DEV_CHARACTER` picks
   the public EVE character the account borrows). Log in on the "Tripwire" tab of the login page. There is
@@ -441,8 +442,8 @@ files) too.
 
 ## Publishing
 
-Every PR runs `.github/workflows/ci.yml`: JS unit tests (mocha), a check that the committed
-`app.min.js` / `app.min.css` bundles are up to date, PHP syntax, What's New JSON, actionlint, shellcheck
+Every PR runs `.github/workflows/ci.yml`: JS unit tests (mocha), a check that the
+`app.min.js` / `app.min.css` bundles build, PHP syntax, What's New JSON, actionlint, shellcheck
 and the version-calculation tests. PRs do not build the Docker image; it is built and pushed only from
 `main`, after the checks above.
 
