@@ -535,14 +535,28 @@ const intelScans = {
 
 	// ---- Chain map ----
 
+	/**
+	 * Bring the drawn chain's markers up to date. A marker pads the node's last line (CSS), which can widen the node, so
+	 * adding or removing one redraws the chain (the renderers lay out the measured markup); a change of kind or age
+	 * only updates the dot in place.
+	 */
 	patchChain: function() {
+		let redraw = false;
 		$("#chainMap .node[data-nodeid]").each(function() {
 			const $node = $(this);
-			$node.children(".intel-marker").remove();
 			if ($node.closest(".destination-node").length) { return; }
-			const marker = intelScans.markerHtml(intelScans.markerForSystem(parseInt($node.attr("data-nodeid"), 10)));
-			if (marker) { $node.prepend(marker); }
+			const $old = $node.children(".intel-marker");
+			const html = intelScans.markerHtml(intelScans.markerForSystem(parseInt($node.attr("data-nodeid"), 10)));
+			if (!html !== !$old.length) {
+				redraw = true;
+			} else if (html) {
+				$old.replaceWith(html);
+			}
 		});
+		if (redraw && typeof chain !== "undefined" && chain.data && chain.data.rawMap) {
+			clearTimeout(intelScans.redrawTimer);
+			intelScans.redrawTimer = setTimeout(function() { chain.redraw(); }, 0);
+		}
 	},
 
 	install: function(chainObj) {

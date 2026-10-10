@@ -21,8 +21,8 @@ The paste dialog with its live preview (also opened from the chain map's right-c
 ![paste dialog](after-dialog.png)
 
 The marker in the four chain map renderers (radial, org chart top, org chart side, Google org chart), with
-upstream's pilots-in-system marker shown on every node, the rally point set on J163701 and a d-scan / local in two
-systems (2× zoom):
+upstream's pilots-in-system marker shown on every node, the rally point set on J163701 and scans in all three
+systems; top row sig names "System name - replace", bottom row "Reference - prefix" (2× zoom):
 
 ![renderers](after-renderers.png)
 
@@ -63,10 +63,14 @@ requests.
   `intel/tools/generate-types.js` from ESI's public, unauthenticated `/universe/categories`, `/universe/groups`,
   `/universe/names`, `/universe/types` and `/dogma/attributes` (a one-off build step, not a runtime call; no new
   third-party hosts at runtime).
-- **Chain map marker**: a 7 px dot inside the node's bottom-right corner (corners: top-left threat badge, top-right
-  upstream's pilots marker, bottom-left watchlist). Outside the node it ran into the statics row, the connections'
-  size tags and neighbouring nodes, and a lettered pill inside covered the text of three-line nodes; the dot fits
-  beside the last text line. Checked in all four renderers (image above).
+- **Chain map marker**: a 7 px dot with a dark outline inside the node's bottom-right corner (corners: top-left
+  threat badge, top-right upstream's pilots marker, bottom-left watchlist); inside the border ring on the rounded
+  root nodes of the radial / org chart top / org chart side renderers. A marked node pads its last line by 12 px on
+  both sides so long texts ("A - H296" with Settings > Show sig name on map > Reference - prefix) stay clear of the
+  dot; the node may get a little wider, so adding or removing a marker redraws the chain instead of patching it.
+  Outside the node a marker ran into the statics row, the connections' size tags and neighbouring nodes. Checked in
+  all four renderers and all five sig-name settings (image above: "System name - replace" and "Reference - prefix",
+  rally point on the root).
 - **Storage / endpoint**: new `public/intel_scans.php` (GET latest + system scans, POST `add` / `delete`; same
   session/mask checks and `X-Requested-With` CSRF rule as `rally.php`) and table `fork_intel_scans` (mask, system,
   kind, normalised rows as JSON, creator, created/expires), created on first use. The server validates everything
