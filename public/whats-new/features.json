@@ -1,6 +1,30 @@
 {
   "features": [
     {
+      "pr": 18,
+      "date": "2026-10-10",
+      "title": "System kill feed",
+      "description": "A new Kills panel shows the 20 latest kills in the system you are viewing: the victim's ship, pilot and corporation, the corporation that got the final blow, how many pilots were involved, when it happened and the value. Click a row to open the kill on zKillboard.\n\nLike the other panels you can move and resize it with Customize layout. Turn it off in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-18-system-killfeed.png",
+          "caption": "The Kills panel for the viewed system"
+        }
+      ]
+    },
+    {
+      "pr": 17,
+      "date": "2026-10-10",
+      "title": "Favourites panel",
+      "description": "A new movable Favourites panel lists your favourite systems: add them with the search box, drag to reorder, and use the eye to choose which ones the chain map shows routes to. The route button highlights the way there from where you are, through the chain or by gates, as the shortest route or (click again) a safe route through high-sec only, with the jumps shown like 1g → 2wh → 6g. Don't want it? Turn it off in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-17-favourites-panel.png",
+          "caption": "The Favourites panel with a shortest route (dashed) and a safe route (solid) on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 16,
       "date": "2026-10-10",
       "title": "Kill Reporting",
