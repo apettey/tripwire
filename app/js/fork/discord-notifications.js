@@ -274,7 +274,8 @@ const discordNotifications = {
 			let after = "";
 			if (kind === "rally") {
 				templateLabel = "Set or moved:";
-				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea></td></tr>";
+				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
+						+ "<div class='dn-small'>There is no system then: only <code>{pings}</code> <code>{mask}</code> <code>{who}</code> are filled in this text.</div></td></tr>";
 				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
 			} else if (kind === "kspace") {
 				const chips = (t.pingSystems || []).map(function(id) {

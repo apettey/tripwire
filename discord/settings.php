@@ -109,7 +109,7 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if (!array_key_exists($field, $in) || !array_key_exists($field, $type)) continue;
             $template = trim(str_replace("\r", '', (string) $in[$field]));
             if ($template === '') $template = $defaults['types'][$kind][$field];
-            if (mb_strlen($template) > DISCORD_TEMPLATE_MAX) { $errors[] = "$kind: template longer than " . DISCORD_TEMPLATE_MAX . ' characters'; $template = mb_substr($template, 0, DISCORD_TEMPLATE_MAX); }
+            if (mb_strlen($template) > DISCORD_TEMPLATE_MAX) { $errors[] = "$kind: " . ($field === 'templateClear' ? '"cleared" text' : 'template') . ' longer than ' . DISCORD_TEMPLATE_MAX . ' characters'; $template = mb_substr($template, 0, DISCORD_TEMPLATE_MAX); }
             $type[$field] = $template;
         }
         if (array_key_exists('ping', $in)) {

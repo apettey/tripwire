@@ -176,6 +176,8 @@ try {
 				if ($parsed) {
 					$stmt = $mysql->prepare("UPDATE discord_webhooks SET name = ?, url = ?, urlHint = ?, status = 'pending', statusMessage = '', updatedAt = UTC_TIMESTAMP() WHERE id = ?");
 					$stmt->execute(array($name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), $webhook['id']));
+					// A new URL may be another channel: the next rally change posts instead of editing the old message
+					discord_rally_forget_webhook($mysql, $webhook['id']);
 				} else {
 					$stmt = $mysql->prepare('UPDATE discord_webhooks SET name = ?, updatedAt = UTC_TIMESTAMP() WHERE id = ?');
 					$stmt->execute(array($name, $webhook['id']));
@@ -229,7 +231,9 @@ try {
 				// The rally type has a second message, for when the rally is cleared
 				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
 				if ($templateClear === '') $templateClear = $defaults['types']['rally']['templateClear'];
-				$preview['previewClear'] = discord_payload(array('templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX), 'cleared' => true) + $context);
+				// Built like a real clear (no system: only {pings}, {mask} and {who} are filled)
+				$preview['previewClear'] = discord_payload(discord_rally_context(array('action' => 'clear', 'who' => 'Example Pilot',
+					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null));
 			}
 			echo json_encode($preview);
 			exit();

@@ -134,6 +134,11 @@ function discord_rally_forget(PDO $db, $maskID) {
     $db->prepare('DELETE FROM discord_rally WHERE maskID = ?')->execute([(string) $maskID]);
 }
 
+/** A webhook's URL was replaced (public/discord.php): its last rally messages belong to the old URL, don't edit them */
+function discord_rally_forget_webhook(PDO $db, $webhookID) {
+    $db->prepare('DELETE FROM discord_rally WHERE webhookID = ?')->execute([(int) $webhookID]);
+}
+
 /**
  * How the sender sends a rally row: ['method' => 'POST'|'PATCH', 'url' => ..., 'payload' => ...]. $url: the webhook's
  * URL, $payload: discord_payload() of the row. An edit leaves out 'username' (a message keeps its author).

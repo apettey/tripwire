@@ -397,6 +397,8 @@ check('rally: settings kept', [$rs['types']['rally']['enabled'], $rs['types']['r
     [true, 5, '<@&111111111111111111>', "{who} -> {system}\n{map}", []]);
 check('rally: empty clear text falls back to the default', $rs['types']['rally']['templateClear'], discord_default_templates()['rallyClear']);
 check('rally: no fields of other types', array_keys($rs['types']['rally']), ['enabled', 'webhookID', 'template', 'templateClear', 'ping', 'enabledAt']);
+check('rally: a too long "cleared" text is named', discord_settings_normalise(['types' => ['rally' => ['templateClear' => str_repeat('x', 2000)]]], discord_settings_defaults())[1],
+    ['rally: "cleared" text longer than ' . DISCORD_TEMPLATE_MAX . ' characters']);
 check('rally: enabling needs a webhook', discord_settings_normalise(['types' => ['rally' => ['enabled' => true]]], discord_settings_defaults())[0]['types']['rally']['enabled'], false);
 check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types' => ['rally' => ['templateClear' => str_repeat('x', 2000)]]], discord_settings_defaults())[0]['types']['rally']['templateClear']), DISCORD_TEMPLATE_MAX);
 check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
@@ -480,7 +482,11 @@ discord_rally_after_send($rx, $rrow, 'POST', 200, '{"id":"2222"}', $ok, 1040);
 discord_rally_after_send($rx, $rrow, 'POST', 200, '{}', $ok, 1050);
 check('rally send: a post without an id is not edited later', discord_rally_last($rx, '98000001.2'), null);
 check('rally send: a failed post changes nothing', discord_rally_after_send($rx, $rrow, 'POST', 500, '', ['result' => 'retry', 'delay' => 5, 'error' => 'HTTP 500'], 1050)['result'], 'retry');
-$rx->exec("INSERT INTO discord_outbox VALUES (7, '98000001.2', 'rally', 'queued'), (8, '98000002.2', 'rally', 'queued'), (9, '98000001.2', 'kspace', 'queued')");
+discord_rally_remember($rx, '98000001.2', 5, '3333', 1060);
+discord_rally_remember($rx, '98000002.2', 6, '4444', 1060);
+discord_rally_forget_webhook($rx, 5);
+check('rally send: a replaced webhook URL is not edited through', [discord_rally_last($rx, '98000001.2'), discord_rally_last($rx, '98000002.2')['messageID']], [null, '4444']);
+$rx->exec("INSERT INTO discord_outbox VALUES (7,'98000001.2', 'rally', 'queued'), (8, '98000002.2', 'rally', 'queued'), (9, '98000001.2', 'kspace', 'queued')");
 check('rally superseded: nothing newer', discord_rally_superseded($rx, $rrow), false);
 $rx->exec("INSERT INTO discord_outbox VALUES (10, '98000001.2', 'rally', 'sent')");
 check('rally superseded: a newer one already sent does not count', discord_rally_superseded($rx, $rrow), false);

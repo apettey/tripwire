@@ -118,8 +118,11 @@ $db->results = [];	// the shutdown release registered by rally_discord_lock read
 $legacy = array('98000001.2' => 'https://discord.com/api/webhooks/1/legacy', '196379789.1' => 'https://discord.com/api/webhooks/2/private');
 $noTables = new PDO('sqlite::memory:');
 $noTables->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+// SQLite reports a missing table as HY000 (MySQL: 42S02, not logged), so keep its log line out of the test output
+$errorLog = ini_set('error_log', '/dev/null');
 check('route: no discord tables, legacy hook', rally_discord_route($noTables, '98000001.2', $legacy), array('via' => 'legacy', 'hook' => 'https://discord.com/api/webhooks/1/legacy'));
 check('route: no discord tables, no legacy hook', rally_discord_route($noTables, '98000002.2', $legacy), null);
+ini_set('error_log', $errorLog === false ? '' : $errorLog);
 $rdb = new PDO('sqlite::memory:');
 $rdb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $rdb->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');

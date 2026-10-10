@@ -59,7 +59,7 @@ legacy webhook), as before.
 - Nothing from before the type was turned on: changes are only queued while it is on (plus an `enabledAt` check).
 - `docker/dev/discord-mock.php`: accepts `PATCH .../messages/<id>`; `GET /delete/<id>` simulates a deleted message.
 - Docs: `docker/README.md` (types table, `DISCORD_WEB_HOOK`, tables, outbound hosts, dev mock).
-- Tests: `discord/tests/discord_test.php` (+48 checks: settings, texts, escaping, mentions, edit/post decision, edit
+- Tests: `discord/tests/discord_test.php` (+50 checks: settings, texts, escaping, mentions, edit/post decision, edit
   URL, remember/repost/superseded against SQLite, which masks have the type), `tests/rally_discord_test.php` (+9:
   routing between the setting and `DISCORD_WEB_HOOK`), mocha (rally type form, preview without embed, legacy note).
 - No upstream files touched (`ping.inc.php` is no longer required by `public/rally.php`; the legacy lookup is a fork
