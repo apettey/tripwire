@@ -101,6 +101,9 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 - The version bump follows the PR: a What's New entry is minor, docs-only is no release, anything else is
   patch. Override it with a `semver:major` / `semver:minor` / `semver:patch` / `semver:skip` label
   (breaking changes need `semver:major`). Rules: [docker/README.md](docker/README.md#publishing).
+- Each release is then deployed to production by an auto-merging PR in `apettey/eve-infrastructure`.
+  If your change needs new env vars, secrets, compose or schema changes there, add the `deploy:manual`
+  label so that PR waits for a human ([details](docker/README.md#deploying-to-eve-infrastructure)).
 
 ## 6. Security
 
