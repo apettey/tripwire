@@ -14,6 +14,10 @@ One to three sentences: what changed and why.
 
 <!-- No visual change? Delete the table above and use this instead: -->
 
+## Settings
+
+Toggle: Settings > <section> > <name> (on by default) / No toggle, because <reason>.
+
 ## Change
 
 What is different now. Mention any upstream files touched.

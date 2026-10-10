@@ -12,7 +12,7 @@ Everything fork-specific lives in new files so upstream syncs stay conflict-free
 | `docker-compose.dev.yml` | Local development stack |
 | `docker-compose.prod.yml` | Example production stack using the published image |
 | `.env.example` | Settings template for both compose files |
-| `.github/` | Docker Hub publish + weekly upstream sync workflows, `upstream-base`, sync script |
+| `.github/` | Release + Docker Hub publish and weekly upstream sync workflows, `upstream-base`, version and sync scripts |
 | `AGENTS.md`, `changes/` | Working rules and the change log |
 
 Avoid editing upstream files unless you mean to diverge; every edit is a potential sync conflict.
@@ -62,6 +62,11 @@ On start the entrypoint waits up to `DB_WAIT_SECONDS` for MySQL, then:
 - anything else: logs an error and exits. It never imports over existing data (the dump contains
   `DROP TABLE`). Empty the database or set `DB_AUTO_INIT=false` to continue.
 
+Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
+(so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
+`fork_rally` (chain map rally point per mask, created by `public/rally.php`). The app user therefore
+needs `CREATE` privileges on its database, which it already has.
+
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
 its database (the `MYSQL_USER` the mysql image creates has them) to create triggers and events.
 
@@ -100,19 +105,62 @@ files) too.
 
 ## Publishing
 
-`.github/workflows/docker-publish.yml` builds `linux/amd64` on every PR to `main` (no push) and
-pushes to Docker Hub:
+Every PR runs `.github/workflows/ci.yml`: JS unit tests (mocha), a check that the committed
+`app.min.js` / `app.min.css` bundles are up to date, PHP syntax, What's New JSON, actionlint, shellcheck
+and the version-calculation tests. PRs do not build the Docker image; it is built and pushed only from
+`main`, after the checks above.
 
-| Event | Tags pushed |
+Every merge to `main` is a release: `.github/workflows/docker-publish.yml` computes the next
+[SemVer](https://semver.org) version, pushes the image to Docker Hub, tags the commit `vX.Y.Z` and creates
+a GitHub Release with notes generated from the merged PRs. The first release is `v1.0.0`.
+
+### Which part of the version goes up
+
+Decided per merged PR by `.github/scripts/next-version.sh` (tests: `.github/scripts/test-next-version.sh`):
+
+1. A `semver:*` label on the PR wins: `semver:major`, `semver:minor`, `semver:patch`, or `semver:skip`
+   (no release). With several, `skip` beats everything, otherwise the biggest bump.
+2. Otherwise, a PR that changes `public/whats-new/features.json` (a new user-facing feature) is **minor**.
+3. Otherwise, a PR that only touches docs (`docs/`, `changes/`, `.claude/`, `*.md` incl. `AGENTS.md`)
+   is **skipped**: no tag, no image.
+4. Anything else, including pushes to `main` without a PR, is a **patch**.
+
+If several merges land before a run gets to them (runs on `main` are queued one at a time), the next
+run covers every commit since the last tag and applies the biggest bump among them. Each PR's
+**Version** job summary shows what merging it would release; add or change a label to adjust it.
+A run on a commit that is already tagged reuses that version (safe to re-run).
+
+### Image tags
+
+| Event | Tags pushed to `petdog/tripwire` |
 | --- | --- |
-| Push to `main` (or manual run on `main`) | `latest`, Tripwire version from `settings.php` (e.g. `1.30b`), `sha-<commit>` |
-| Push of a `v*` tag, e.g. `v1.2.3` | `1.2.3`, `sha-<commit>` (not `latest`) |
-| Manual run on another branch | `sha-<commit>` |
+| Release (merge to `main` or manual run) | `X.Y.Z`, `X.Y`, `X`, `latest`, `upstream-<Tripwire version from settings.php>` (e.g. `upstream-1.30b`), `sha-<commit>` |
+| Docs-only merge / `semver:skip` | nothing (the image is still built as a check) |
+| Pull request | nothing (built, not pushed) |
 
+The fork version is baked into the image as `TRIPWIRE_FORK_VERSION` and `public/version.json`
+(`{"version":"1.2.0","upstream":"1.30b"}`); the What's New dialog and its Settings row show it. Local
+builds without `--build-arg TRIPWIRE_FORK_VERSION=...` and the dev stack show `dev`.
 The build fails if the version can't be read from `settings.php`.
 
-Required repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (a Docker Hub access token
-with Read & Write scope).
+### Manual release
+
+Actions > Docker image > Run workflow on `main`, pick `patch`, `minor` or `major`. Runs on other
+branches fail.
+
+### One-time setup
+
+Repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (a Docker Hub access token with Read &
+Write scope). The labels:
+
+```bash
+gh label create semver:major --repo apettey/tripwire --color B60205 --description "Release a new major version (breaking change)"
+gh label create semver:minor --repo apettey/tripwire --color 0E8A16 --description "Release a new minor version (new feature)"
+gh label create semver:patch --repo apettey/tripwire --color 1D76DB --description "Release a new patch version (fix)"
+gh label create semver:skip  --repo apettey/tripwire --color CCCCCC --description "Don't release this change"
+```
+
+Releases are tagged by `github-actions[bot]`; tag protection rules (if any) must allow it.
 
 ## Pulling upstream changes
 

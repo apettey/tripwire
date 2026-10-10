@@ -1,0 +1,80 @@
+/* Rally point on the chain map (fork-owned, see app/js/fork/rally.js) */
+
+/* The rally system's node: green, pulsing. !important because top-level/flare/current-node rules are more specific */
+#chainMap div.node.rally-node {
+	border-color: #39ff14 !important;
+	background: #0b3d0b !important;
+	box-shadow: 0 0 6px 2px rgba(57, 255, 20, 0.6) !important;
+	animation: rally-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes rally-pulse {
+	0%, 100% { box-shadow: 0 0 4px 1px rgba(57, 255, 20, 0.45); background-color: #0b3d0b; }
+	50% { box-shadow: 0 0 16px 6px rgba(57, 255, 20, 0.95); background-color: #1a6b1a; }
+}
+
+/* Radial / orgchart-top / orgchart-side renderers draw lines on a canvas, reading style from a temporary
+   element with the connection's classes (propertyFromCssClass): colour, width and aura colour */
+.temp.rally-route {
+	border-color: #39ff14;
+	border-width: 5px;
+	color: #39ff14;
+}
+
+/* Google orgchart renderer: route lines are table cell borders */
+#chainMap td.rally-route {
+	border-color: #39ff14;
+}
+
+/* Banner in the chain map header */
+#rally-banner {
+	margin-left: 6px;
+	color: #39ff14;
+	white-space: nowrap;
+}
+
+#rally-banner.hidden {
+	display: none;
+}
+
+#rally-banner > span:first-child {
+	color: inherit;
+	margin-right: 4px;
+}
+
+#rally-banner .rally-icon {
+	font-style: normal;
+	animation: rally-blink 1.2s ease-in-out infinite;
+}
+
+#rally-banner .rally-name {
+	color: #39ff14;
+	font-weight: bold;
+}
+
+#rally-banner .rally-jumps {
+	color: #9c9;
+}
+
+#rally-banner .rally-clear {
+	font-style: normal;
+	cursor: pointer;
+	margin-left: 4px;
+	color: #bbb;
+}
+
+#rally-banner .rally-clear:hover {
+	color: #FF4747;
+}
+
+@keyframes rally-blink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#chainMap div.node.rally-node,
+	#rally-banner .rally-icon {
+		animation: none;
+	}
+}

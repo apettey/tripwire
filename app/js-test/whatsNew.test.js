@@ -27,6 +27,17 @@ describe('What\'s New', () => {
 		});
 	});
 
+	describe('version', () => {
+		it('Release version gets a v', () => assert.equal(whatsNew.shortVersion({ version: '1.2.0', upstream: '1.30b' }), 'v1.2.0'));
+		it('Non-release version as is', () => assert.equal(whatsNew.shortVersion({ version: 'dev' }), 'dev'));
+		it('Missing file is dev', () => {
+			assert.equal(whatsNew.shortVersion(null), 'dev');
+			assert.equal(whatsNew.shortVersion({}), 'dev');
+		});
+		it('Full line', () => assert.equal(whatsNew.formatVersion({ version: '1.2.0', upstream: '1.30b' }), 'Tripwire fork v1.2.0 (upstream 1.30b)'));
+		it('Full line without upstream', () => assert.equal(whatsNew.formatVersion(undefined), 'Tripwire fork dev'));
+	});
+
 	describe('render', () => {
 		const evil = [{ pr: 2, title: '<script>alert(1)</script>', description: 'x <script>alert(2)</script> & "q"', images: [{ src: 'a.png', caption: '<b>cap</b>' }] }];
 

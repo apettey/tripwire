@@ -1,0 +1,31 @@
+/* Signature dialog: wormhole type quick picks (app/js/fork/sig-quickpicks.js) */
+.wormholeTypeQuickSelect .quick-select.static {
+	padding-right: 7px;	/* room for the dot */
+	border-color: #ddd;
+	opacity: .75;
+	color: #eee;
+}
+
+.wormholeTypeQuickSelect .quick-select.static.frig {
+	border-color: #50D25A;
+	color: #50D25A;
+}
+
+/* Small dot marking a static */
+.wormholeTypeQuickSelect .quick-select.static::after {
+	content: "";
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: currentColor;
+	pointer-events: none;
+}
+
+/* The type currently in the Type field */
+.wormholeTypeQuickSelect .quick-select.selected {
+	border-color: darkorange;
+	opacity: 1;
+}
