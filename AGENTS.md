@@ -6,6 +6,12 @@ This is a fork of [Tripwire](https://bitbucket.org/daimian/tripwire) (upstream, 
 We iterate on it here, and we must keep being able to pull in upstream's changes
 (see [docker/README.md](docker/README.md#pulling-upstream-changes)).
 
+## 0. Context
+
+- New to EVE Online or wormholes? Read [docs/eve-wormhole-primer.md](docs/eve-wormhole-primer.md) (domain, glossary, where each concept lives in the code).
+- Claude Code skills: [tripwire-domain](.claude/skills/tripwire-domain/SKILL.md) (domain + key code entry points) and
+  [tripwire-feature](.claude/skills/tripwire-feature/SKILL.md) (checklist for shipping a user-facing feature).
+
 ## 1. Log every change in `changes/` (required)
 
 Every change you make — a feature, fix, config or infrastructure change — gets a change-log entry in the
