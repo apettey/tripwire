@@ -52,6 +52,16 @@ check('set without url', rally_discord_payload('set', 'A', 'Jita (High-Sec, The 
 check('clear', rally_discord_payload('clear', 'Chribba')['content'], 'Tripwire rally point cleared by *Chribba*');
 check('hostile name', rally_discord_payload('clear', "@everyone *x*\n<@1>")['content'], "Tripwire rally point cleared by *@{$zw}everyone \\*x\\* @{$zw}1*");
 check('no name', rally_discord_payload('clear', null)['content'], 'Tripwire rally point cleared by *someone*');
+// The chain label (discord_chain_label), same text as the Mask Admin > Discord default templates
+check('set with chain label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, 'AABCA')['content'], 'Tripwire rally point from *A*: **AABCA · J152820 (C5, E-R00024)**');
+check('set, empty label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, '  ')['content'], 'Tripwire rally point from *A*: **J152820 (C5, E-R00024)**');
+check('clear with system and label', rally_discord_payload('clear', 'A', null, 'J152820', null, 'AABCA')['content'], 'Tripwire rally point cleared by *A* (was on AABCA · J152820)');
+check('clear with system, no label', rally_discord_payload('clear', 'A', null, 'J152820')['content'], 'Tripwire rally point cleared by *A* (was on J152820)');
+$evilLabel = rally_discord_payload('set', 'A', 'J152820', 'J152820', null, "@everyone <@&42> **x** [l](https://e.example)\n");
+check('hostile label', [$evilLabel['content'], $evilLabel['allowed_mentions']],
+	array("Tripwire rally point from *A*: **@{$zw}everyone @{$zw}&42 \\*\\*x\\*\\* \\[l\\](https\\://e.example) · J152820**", array('parse' => array())));
+check('hostile label when cleared', strpos(rally_discord_payload('clear', 'A', null, 'J152820', null, '@here <@1>')['content'], "(was on @{$zw}here @{$zw}1 · J152820)") !== false, true);
+check('chain label helper without a database', rally_discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
 check('json has allowed_mentions', json_encode($set['allowed_mentions']), '{"parse":[]}');
 
 // --- rally_discord_decision (debounce, 30 s window) ---
