@@ -14,17 +14,18 @@ DEV_CHARACTER="${DEV_CHARACTER:-Chribba}"
 
 export MYSQL_PWD="$DB_PASSWORD"
 db=(mariadb --ssl --skip-ssl-verify-server-cert -h"$DB_HOST" -P"${DB_PORT:-3306}" -u"$DB_USER" "$DB_NAME")
+esi=(curl -sf -H "X-Compatibility-Date: $(php -r 'require "/opt/app/esi/esi.inc.php"; echo ESI_COMPATIBILITY_DATE;')")
 
-character_id=$(curl -sf -X POST "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility" \
+character_id=$("${esi[@]}" -X POST "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility" \
   -H "Content-Type: application/json" -d "[\"$DEV_CHARACTER\"]" \
   | php -r '$r = json_decode(stream_get_contents(STDIN)); echo $r->characters[0]->id ?? "";')
 if [ -z "$character_id" ]; then
   echo "Could not resolve EVE character '$DEV_CHARACTER' on ESI" >&2
   exit 1
 fi
-corporation_id=$(curl -sf "https://esi.evetech.net/latest/characters/$character_id/?datasource=tranquility" \
+corporation_id=$("${esi[@]}" "https://esi.evetech.net/latest/characters/$character_id/?datasource=tranquility" \
   | php -r 'echo json_decode(stream_get_contents(STDIN))->corporation_id;')
-corporation_name=$(curl -sf "https://esi.evetech.net/latest/corporations/$corporation_id/?datasource=tranquility" \
+corporation_name=$("${esi[@]}" "https://esi.evetech.net/latest/corporations/$corporation_id/?datasource=tranquility" \
   | php -r 'echo json_decode(stream_get_contents(STDIN))->name;')
 
 hash=$(DEV_PASSWORD="$DEV_PASSWORD" php -d display_errors=stderr -r 'require "/opt/app/password_hash.php"; $h = new PasswordHash(8, false); echo $h->HashPassword(getenv("DEV_PASSWORD"));')

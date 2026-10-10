@@ -1,6 +1,7 @@
 <?php
 
 require __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/esi/esi.inc.php';	// fork: ESI compatibility date + rate limits
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
@@ -19,6 +20,7 @@ class esi {
 	public $tokenExpire = null;
 
 	private function getAPI($url, $headers = array(), $params = false) {
+		if ($paused = esi_before_request($url, $headers)) { $this->httpCode = 0; $this->lastError = $paused; return false; }	// fork
 		$curl = curl_init();
 		curl_setopt($curl, CURLOPT_URL, $url);
 		curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
@@ -36,9 +38,12 @@ class esi {
 		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 		// curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($curl, CURLOPT_USERAGENT, USER_AGENT);
+		$responseHeaders = array();	// fork
+		curl_setopt($curl, CURLOPT_HEADERFUNCTION, esi_header_collector($responseHeaders));	// fork
 
 		$result = curl_exec($curl);
 		$this->httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+		esi_after_response($url, $this->httpCode, $responseHeaders, $headers);	// fork
 
 		if ($result === false) {
 			$this->lastError = curl_error($curl);
