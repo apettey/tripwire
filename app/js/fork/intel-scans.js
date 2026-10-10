@@ -1,10 +1,11 @@
 const intelScans = {
 	// D-scan & local intel (fork-owned): pilots paste a directional scan or a local member list into the Intel dialog
-	// (an explicit text box: there is no page-wide paste hook) and share it with the mask, pinned to a system. The
+	// and share it with the mask, pinned to a system. A d-scan pasted anywhere on the page (Ctrl+V outside a text box,
+	// upstream's sig-paste path through #clipboard) opens the dialog with it filled in instead (setupPasteDetect). The
 	// Intel panel (its own layout widget, following the viewed system) lists the system's scans as chips that expand to
 	// the full summary; chain map nodes with a fresh scan get a small marker. Server: public/intel_scans.php (validates, normalises and stores the rows; the parse
 	// here is only the preview). Static type data: public/intel/types.json (from ESI, built by intel/tools/).
-	// Settings: options.intelScans = {enabled (missing = on), freshMinutes, gridKm}.
+	// Settings: options.intelScans = {enabled (missing = on), pasteDetect (missing = on), freshMinutes, gridKm}.
 	// Keep `const intelScans` on the first line: the test helper strips it to define a global.
 	URL: "intel_scans.php",
 	TYPES_URL: "intel/types.json",
@@ -57,6 +58,11 @@ const intelScans = {
 
 	enabled: function(opts) {
 		return !(opts && opts.intelScans && opts.intelScans.enabled === false);
+	},
+
+	/** Open the d-scan dialog on a page-wide d-scan paste; missing = on */
+	pasteDetect: function(opts) {
+		return !(opts && opts.intelScans && opts.intelScans.pasteDetect === false);
 	},
 
 	/** Minutes a scan counts as fresh (chips and map markers); 1-1440 */
@@ -149,6 +155,25 @@ const intelScans = {
 			rows.push([typeID, type, intelScans.cleanField(name), intelScans.parseDistanceKm(distance)]);
 		});
 		return { rows: rows, invalid: invalid };
+	},
+
+	/**
+	 * True only for a real d-scan copy (modern client format: typeID, name, type, distance on every line), so a page-wide
+	 * paste of it can open the Intel dialog. Probe-scanner sigs, local lists, legacy 3-column rows and mixed pastes: false.
+	 */
+	looksLikeDscan: function(text) {
+		if (typeof text !== "string" || text.indexOf("	") < 0) { return false; }
+		const bytes = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(text).length : text.length;
+		if (bytes > intelScans.MAX_BYTES) { return false; }
+		const lines = intelScans.lines(text);
+		if (!lines.length || lines.length > intelScans.MAX_LINES) { return false; }
+		const typed = lines.every(function(line) {
+			const f = line.split("	");
+			return f.length >= 4 && /^[0-9]{1,10}$/.test(intelScans.trim(intelScans.stripInvisible(f[0])));
+		});
+		if (!typed) { return false; }
+		const data = intelScans.parseDscan(text);
+		return data.invalid === 0 && data.rows.length === lines.length;
 	},
 
 	validCharacterName: function(name) {
@@ -790,7 +815,7 @@ const intelScans = {
 		let $dialog = $("#" + intelScans.DIALOG_ID);
 		if (!$dialog.length) {
 			$dialog = $("<div id='" + intelScans.DIALOG_ID + "' class='intel-dialog'>"
-				+ "<p class='intel-help'>Copy the d-scan results (click a result, Ctrl+A, Ctrl+C) or the local member list, and paste it here (Ctrl+V). It is shared with your mask, pinned to this system.</p>"
+				+ "<p class='intel-help'>Copy the d-scan results (click a result, Ctrl+A, Ctrl+C) or the local member list, and paste it here (Ctrl+V). A d-scan can also be pasted anywhere in Tripwire (Ctrl+V outside a text box) to open this box. It is shared with your mask, pinned to this system.</p>"
 				+ "<textarea class='intel-text' rows='9' spellcheck='false' autocomplete='off' placeholder='Paste d-scan or local here'></textarea>"
 				+ "<div class='intel-preview'></div><div class='intel-error'></div></div>").appendTo("body");
 			$dialog.dialog({
@@ -817,6 +842,36 @@ const intelScans = {
 		$dialog.dialog("option", "title", "Paste d-scan / local: " + intelScans.systemName(id));
 		intelScans.renderPreview();
 		$dialog.dialog("open");
+	},
+
+	/**
+	 * Ctrl+V outside a text box goes to upstream's hidden #clipboard textarea (tripwire/paste.js), which parses it as
+	 * signatures. A d-scan paste there opens the Intel dialog for the viewed system with the text filled in (never
+	 * shared until the pilot clicks Share) and upstream's handler never sees it (no "Paste detected" / delete missing
+	 * sigs notice). Capture phase on document runs before upstream's handler bound on #clipboard. Pastes into real
+	 * inputs (including the dialog's own box) are left alone.
+	 */
+	setupPasteDetect: function() {
+		document.addEventListener("paste", function(e) {
+			if (!e.target || e.target.id !== "clipboard") { return; }
+			const opts = intelScans.opts();
+			if (!intelScans.enabled(opts) || !intelScans.pasteDetect(opts)) { return; }
+			const systemID = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
+			if (!intelScans.isSystem(systemID)) { return; }
+			let text = "";
+			try {
+				text = e.clipboardData ? e.clipboardData.getData("text/plain") : (window.clipboardData ? window.clipboardData.getData("Text") : "");
+			} catch (err) { return; }
+			if (!intelScans.looksLikeDscan(text)) { return; }
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			e.stopPropagation();
+			$(e.target).val("").trigger("blur");
+			intelScans.openDialog(systemID);
+			// openDialog empties the box, so fill it afterwards
+			$("#" + intelScans.DIALOG_ID).find(".intel-text").val(text);
+			intelScans.renderPreview();
+		}, true);
 	},
 
 	renderPreview: function() {
@@ -873,12 +928,14 @@ const intelScans = {
 		if ($general.length && !$("#intelScans-enabled").length) {
 			$general.append("<tr><th>D-scan &amp; local intel:</th><td>"
 				+ "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
+				+ "<label><input type='checkbox' id='intelScans-pasteDetect' /> Open the d-scan dialog when you paste a d-scan anywhere (Ctrl+V)</label><br/>"
 				+ "<label>Fresh for <input type='number' id='intelScans-fresh' min='1' max='1440' style='width: 4em;' /> min</label>, "
 				+ "<label>on grid within <input type='number' id='intelScans-grid' min='1' max='1000000' style='width: 6em;' /> km</label></td></tr>");
 		}
 		$(document).on("dialogopen", "#dialog-options", function() {
 			const opts = intelScans.opts();
 			$("#intelScans-enabled").prop("checked", intelScans.enabled(opts));
+			$("#intelScans-pasteDetect").prop("checked", intelScans.pasteDetect(opts));
 			$("#intelScans-fresh").val(intelScans.freshMinutes(opts));
 			$("#intelScans-grid").val(intelScans.gridKm(opts));
 		});
@@ -887,7 +944,7 @@ const intelScans = {
 			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
 			if (!button || $.trim($(button).text()) !== "Save") { return; }
 			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#intelScans-enabled").length) { return; }
-			const settings = { enabled: $("#intelScans-enabled").prop("checked") };
+			const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked") };
 			if (options.intelScans && options.intelScans.position) { settings.position = options.intelScans.position; }
 			const fresh = parseInt($("#intelScans-fresh").val(), 10);
 			const grid = parseInt($("#intelScans-grid").val(), 10);
@@ -926,6 +983,7 @@ const intelScans = {
 	init: function() {
 		intelScans.setupSettings();
 		intelScans.setupMenu();
+		intelScans.setupPasteDetect();
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.intelScansWrapped) {
 			const systemChange = tripwire.systemChange;
 			const wrapped = function(systemID) {

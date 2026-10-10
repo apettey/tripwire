@@ -362,4 +362,51 @@ describe('Intel scans', () => {
 			assert.strictEqual(intelScans.markerHtml(null), '');
 		});
 	});
+	describe('looksLikeDscan (page-wide paste)', () => {
+		const SAMPLE = "670\tCapsule\tCapsule\t-\n11182\tCheetah\tCheetah\t2.1 AU\n17738\tMachariel\tMachariel\t1,203 km\n35834\tKeepstar\tKeepstar\t-";
+		const SIG = "ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t4.32 AU";
+		it('accepts a real d-scan copy', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(SAMPLE), true);
+		});
+		it('accepts CRLF line endings and trailing blank lines', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(SAMPLE.replace(/\n/g, "\r\n") + "\r\n\r\n  \r\n"), true);
+		});
+		it('rejects probe-scanner signature pastes', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(SIG), false);
+			assert.strictEqual(intelScans.looksLikeDscan(SIG + "\nXYZ-789\tCosmic Anomaly\tCombat Site\tBlood Raider Hideaway\t100.0%\t2.10 AU"), false);
+		});
+		it('rejects a paste mixing sigs and d-scan rows', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(SAMPLE + "\n" + SIG), false);
+		});
+		it('rejects d-scan text with a stray line', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(DSCAN), false);	// ends with "broken line"
+		});
+		it('rejects local member lists and plain text', () => {
+			assert.strictEqual(intelScans.looksLikeDscan("Chribba\nBob Smith\nAlice"), false);
+			assert.strictEqual(intelScans.looksLikeDscan("hello world"), false);
+		});
+		it('rejects legacy 3-column rows', () => {
+			assert.strictEqual(intelScans.looksLikeDscan("Capsule\tCapsule\t-\nCheetah\tCheetah\t2.1 AU"), false);
+		});
+		it('rejects type ID 0 and empty types', () => {
+			assert.strictEqual(intelScans.looksLikeDscan("0\tThing\tThing\t5 km"), false);
+			assert.strictEqual(intelScans.looksLikeDscan("670\tCapsule\t\t-"), false);
+		});
+		it('rejects empty, non-string and oversize text', () => {
+			assert.strictEqual(intelScans.looksLikeDscan(""), false);
+			assert.strictEqual(intelScans.looksLikeDscan("\n \n"), false);
+			assert.strictEqual(intelScans.looksLikeDscan(undefined), false);
+			assert.strictEqual(intelScans.looksLikeDscan(null), false);
+			const row = "670\tCapsule\tCapsule\t-\n";
+			assert.strictEqual(intelScans.looksLikeDscan(row.repeat(intelScans.MAX_LINES + 1)), false);
+			assert.strictEqual(intelScans.looksLikeDscan("670\t" + "x".repeat(intelScans.MAX_BYTES) + "\tCapsule\t-"), false);
+		});
+		it('paste detection is on by default', () => {
+			assert.strictEqual(intelScans.pasteDetect(undefined), true);
+			assert.strictEqual(intelScans.pasteDetect({}), true);
+			assert.strictEqual(intelScans.pasteDetect({ intelScans: {} }), true);
+			assert.strictEqual(intelScans.pasteDetect({ intelScans: { pasteDetect: true } }), true);
+			assert.strictEqual(intelScans.pasteDetect({ intelScans: { pasteDetect: false } }), false);
+		});
+	});
 });
