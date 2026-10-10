@@ -28,6 +28,7 @@ register_shutdown_function(function () {
 chdir(__DIR__);
 require('config.php');
 require_once(__DIR__ . '/zkill/zkill.inc.php');
+require_once(__DIR__ . '/discord/discord.inc.php');   // Discord notifications: kills are queued from the stream below
 date_default_timezone_set('UTC');
 
 const ZKF_BASE_URL         = 'https://r2z2.zkillboard.com/ephemeral/';
@@ -292,6 +293,7 @@ function zkf_run() {
                     $lastSave = 0; // save right after the kill
                 }
                 zk_store_killmail($db, $kill, 'feed');
+                discord_on_killmail($db, $kill);   // live kills only (never back-fills); never throws
                 if (isset($kill['uploaded_at']) && is_numeric($kill['uploaded_at'])) $highWater = (int) $kill['uploaded_at'];
                 $sequence++;
                 $backoff = 0;
@@ -347,4 +349,5 @@ function zkf_run() {
 }
 
 zk_log_sink('zkf_log');
+discord_log_sink('zkf_log');
 zkf_run();
