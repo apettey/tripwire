@@ -89,3 +89,6 @@
 		animation: none;
 	}
 }
+
+/* Settings > Chain Map Settings: where the rally channel is set */
+#dialog-options .rally-discord-note { font-size: 11px; color: #999; }

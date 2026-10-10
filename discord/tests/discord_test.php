@@ -387,5 +387,129 @@ check('corp breaker notes: a new trip replaces the note', (int) $st->query("SELE
 check('corp breaker notes: expire with time', discord_outbox_status($st, '98000001.2', $nowTs + 601)['paused'], []);
 check('webhook breaker note: only its own mask', discord_breaker_notes($st, '98000001.2', 'webhook:4', 300, $nowTs), ['98000001.2']);
 
+// --- rally point type (discord/rally.php) ---
+$rd = discord_settings_defaults(98000001)['types']['rally'];
+check('rally: off by default, default texts', [$rd['enabled'], $rd['webhookID'], $rd['template'], $rd['templateClear'], $rd['ping']],
+    [false, 0, discord_default_templates()['rally'], discord_default_templates()['rallyClear'], '']);
+[$rs, $rerr] = discord_settings_normalise(['types' => ['rally' => ['enabled' => true, 'webhookID' => 5, 'ping' => '<@&111111111111111111>',
+    'template' => "  {who} -> {system}\r\n{map} ", 'templateClear' => '', 'minIsk' => 5, 'pingSystems' => [30000142]]]], discord_settings_defaults(), [5]);
+check('rally: settings kept', [$rs['types']['rally']['enabled'], $rs['types']['rally']['webhookID'], $rs['types']['rally']['ping'], $rs['types']['rally']['template'], $rerr],
+    [true, 5, '<@&111111111111111111>', "{who} -> {system}\n{map}", []]);
+check('rally: empty clear text falls back to the default', $rs['types']['rally']['templateClear'], discord_default_templates()['rallyClear']);
+check('rally: no fields of other types', array_keys($rs['types']['rally']), ['enabled', 'webhookID', 'template', 'templateClear', 'ping', 'enabledAt']);
+check('rally: enabling needs a webhook', discord_settings_normalise(['types' => ['rally' => ['enabled' => true]]], discord_settings_defaults())[0]['types']['rally']['enabled'], false);
+check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types' => ['rally' => ['templateClear' => str_repeat('x', 2000)]]], discord_settings_defaults())[0]['types']['rally']['templateClear']), DISCORD_TEMPLATE_MAX);
+check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
+check('rally: stamped like the other types', discord_settings_stamp($rs, discord_settings_defaults(), 4000)['types']['rally']['enabledAt'], 4000);
+check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'who']);
+
+// Data queued by public/rally.php: the type's texts, who, and nothing from before the type was turned on
+$rtype = ['enabledAt' => 1000] + $rs['types']['rally'];
+$rdata = discord_rally_data($rtype, 'Corp', 'set', 'Chribba', 2000);
+check('rally data', $rdata, ['kind' => 'rally', 'action' => 'set', 'who' => 'Chribba', 'template' => "{who} -> {system}\n{map}",
+    'templateClear' => discord_default_templates()['rallyClear'], 'ping' => '<@&111111111111111111>', 'mask' => 'Corp', 'time' => 2000]);
+check('rally data: before the type was turned on', discord_rally_data($rtype, 'Corp', 'set', 'x', 999), null);
+check('rally data: unknown action is a set', discord_rally_data($rtype, 'Corp', 'bogus', 'x', 2000)['action'], 'set');
+
+// Messages: the rally as stored when sent; default texts like the first version's
+$tpl = discord_default_templates();
+$rbase = ['template' => $tpl['rally'], 'templateClear' => $tpl['rallyClear'], 'ping' => '', 'mask' => 'Corp', 'time' => 2000];
+$wh = discord_payload(discord_rally_context(['action' => 'set', 'who' => 'Late'] + $rbase, ['systemID' => 31001880, 'setBy' => 'Chribba']));
+check('rally message: wormhole', $wh['content'], "Tripwire rally point from *Chribba*: **J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+check('rally message: no embed, nobody pinged', [isset($wh['embeds']), $wh['allowed_mentions'], $wh['username']], [false, ['parse' => []], 'Tripwire']);
+check('rally message: k-space', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 30000142, 'setBy' => 'A']))['content'],
+    "Tripwire rally point from *A*: **Jita** (HS, The Forge)\n<" . discord_app_url() . "?system=Jita>");
+check('rally message: cleared by this change', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'Chribba'] + $rbase, null))['content'],
+    'Tripwire rally point cleared by *Chribba*');
+check('rally message: cleared by someone else', discord_payload(discord_rally_context(['action' => 'set', 'who' => 'Setter'] + $rbase, null))['content'],
+    'Tripwire rally point cleared by *someone*');
+check('rally message: moved again before it was sent shows the stored rally', discord_rally_context(['action' => 'clear', 'who' => 'Clearer'] + $rbase, ['systemID' => 30000142, 'setBy' => 'Mover'])['who'], 'Mover');
+check('rally message: unreadable rally, a clear is still a clear', discord_rally_context(['action' => 'clear', 'who' => 'C'] + $rbase, false)['cleared'], true);
+check('rally message: unreadable rally, a set can not be shown', discord_rally_context(['action' => 'set'] + $rbase, false), null);
+$hostile = discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 30000142, 'setBy' => "@everyone <@&999999999999999999> *x*\n[l](https://e.example)"]));
+check('rally message: names cannot ping or format', [strpos($hostile['content'], '@everyone'), strpos($hostile['content'], '<@&'), strpos($hostile['content'], "\n["), $hostile['allowed_mentions']],
+    [false, false, false, ['parse' => []]]);
+$pinged = discord_payload(discord_rally_context(['action' => 'set', 'ping' => '<@&111111111111111111> @here'] + $rbase, ['systemID' => 30000142, 'setBy' => 'A']));
+check('rally message: pings from the ping field only', [$pinged['allowed_mentions'], strpos($pinged['content'], '<@&111111111111111111> @here Tripwire') === 0],
+    [['parse' => ['everyone'], 'roles' => ['111111111111111111']], true]);
+check('rally message: the clear text has its own mentions', discord_payload(discord_rally_context(['action' => 'clear', 'templateClear' => 'Cleared <@333333333333333333>'] + $rbase, null))['allowed_mentions'],
+    ['parse' => [], 'users' => ['333333333333333333']]);
+check('rally message: empty result falls back to the default text', discord_payload(discord_rally_context(['action' => 'clear', 'who' => 'C', 'templateClear' => '{pings}'] + $rbase, null))['content'],
+    'Tripwire rally point cleared by *C*');
+
+// Edit in place: only the same webhook, inside the window, with a message id
+check('rally decision', [
+    discord_rally_decision(null, 5, 1000),
+    discord_rally_decision(['webhookID' => 5, 'messageID' => '123', 'postedAt' => 990], 5, 1000),
+    discord_rally_decision(['webhookID' => 5, 'messageID' => '123', 'postedAt' => 970], 5, 1000),
+    discord_rally_decision(['webhookID' => 6, 'messageID' => '123', 'postedAt' => 990], 5, 1000),
+    discord_rally_decision(['webhookID' => 5, 'messageID' => '', 'postedAt' => 990], 5, 1000),
+    discord_rally_decision(['webhookID' => 5, 'messageID' => '123', 'postedAt' => 1010], 5, 1000),
+], ['post', 'edit', 'post', 'post', 'post', 'post']);
+check('edit url', discord_webhook_edit_url($url, '1234567890', 'https://discord.com/api'), "https://discord.com/api/webhooks/$id/$token/messages/1234567890");
+check('edit url with thread', discord_webhook_edit_url("$url?thread_id=223456789012345678", '42', 'https://discord.com/api'), "https://discord.com/api/webhooks/$id/$token/messages/42?thread_id=223456789012345678");
+check('edit url: bad message id', discord_webhook_edit_url($url, '../x', 'https://discord.com/api'), null);
+check('legacy hook', [discord_rally_legacy_hook('98000001.2', ['98000001.2' => 'https://x/hook']), discord_rally_legacy_hook('98000002.2', ['98000001.2' => 'https://x/hook']),
+    discord_rally_legacy_hook('98000001.2', ['98000001.2' => '']), discord_rally_legacy_hook('98000001.2', [])], ['https://x/hook', null, null, null]);
+
+// The sender's side, against SQLite: remember / edit / repost / superseded
+$rx = new PDO('sqlite::memory:');
+$rx->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$rx->exec('CREATE TABLE discord_rally (maskID TEXT PRIMARY KEY, webhookID INTEGER, messageID TEXT, postedAt TEXT)');
+$rx->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY, maskID TEXT, kind TEXT, status TEXT)");
+$rrow = ['id' => 7, 'maskID' => '98000001.2', 'webhookID' => 5, 'kind' => 'rally'];
+$sendUrl = discord_webhook_send_url($url);
+$req = discord_rally_request($rx, $rrow, $url, ['username' => 'Tripwire', 'content' => 'a'], 1000);
+check('rally send: first change posts', [$req['method'], $req['url'], $req['payload']['username']], ['POST', $sendUrl, 'Tripwire']);
+$ok = ['result' => 'sent', 'delay' => 0, 'error' => ''];
+check('rally send: posted message remembered', [discord_rally_after_send($rx, $rrow, 'POST', 200, '{"id":"1111111111"}', $ok, 1000), discord_rally_last($rx, '98000001.2')],
+    [$ok, ['webhookID' => 5, 'messageID' => '1111111111', 'postedAt' => 1000]]);
+$req = discord_rally_request($rx, $rrow, $url, ['username' => 'Tripwire', 'content' => 'b'], 1020);
+check('rally send: a change in the window edits it', [$req['method'], $req['url'], isset($req['payload']['username']), $req['payload']['content']],
+    ['PATCH', discord_webhook_edit_url($url, '1111111111'), false, 'b']);
+discord_rally_after_send($rx, $rrow, 'PATCH', 200, '{"id":"1111111111"}', $ok, 1020);
+check('rally send: an edit keeps the window of the post', discord_rally_last($rx, '98000001.2')['postedAt'], 1000);
+check('rally send: after the window it posts again', discord_rally_request($rx, $rrow, $url, ['content' => 'c'], 1030)['method'], 'POST');
+check('rally send: another channel posts', discord_rally_request($rx, ['webhookID' => 6] + $rrow, $url, ['content' => 'c'], 1010)['method'], 'POST');
+$broken = discord_handle_response('webhook:x', 404, [], '{"message":"Unknown Message","code":10008}', 0, 1.0);
+check('rally send: edit of a deleted message reposts, the webhook is not broken',
+    [discord_rally_after_send($rx, $rrow, 'PATCH', 404, '{"message":"Unknown Message","code":10008}', $broken, 1021)['result'], discord_rally_last($rx, '98000001.2')], ['repost', null]);
+$gone = discord_handle_response('webhook:x', 404, [], '{"message":"Unknown Webhook","code":10015}', 0, 1.0);
+check('rally send: a deleted webhook is still broken', discord_rally_after_send($rx, $rrow, 'PATCH', 404, '{"message":"Unknown Webhook","code":10015}', $gone, 1021)['result'], 'broken');
+discord_rally_after_send($rx, $rrow, 'POST', 200, '{"id":"2222"}', $ok, 1040);
+discord_rally_after_send($rx, $rrow, 'POST', 200, '{}', $ok, 1050);
+check('rally send: a post without an id is not edited later', discord_rally_last($rx, '98000001.2'), null);
+check('rally send: a failed post changes nothing', discord_rally_after_send($rx, $rrow, 'POST', 500, '', ['result' => 'retry', 'delay' => 5, 'error' => 'HTTP 500'], 1050)['result'], 'retry');
+$rx->exec("INSERT INTO discord_outbox VALUES (7, '98000001.2', 'rally', 'queued'), (8, '98000002.2', 'rally', 'queued'), (9, '98000001.2', 'kspace', 'queued')");
+check('rally superseded: nothing newer', discord_rally_superseded($rx, $rrow), false);
+$rx->exec("INSERT INTO discord_outbox VALUES (10, '98000001.2', 'rally', 'sent')");
+check('rally superseded: a newer one already sent does not count', discord_rally_superseded($rx, $rrow), false);
+$rx->exec("INSERT INTO discord_outbox VALUES (11, '98000001.2', 'rally', 'queued')");
+check('rally superseded: a newer queued one of the mask', [discord_rally_superseded($rx, $rrow), discord_rally_superseded($rx, ['id' => 11] + $rrow)], [true, false]);
+// fork_rally as stored now (missing table = unknown)
+check('rally current: no table', discord_rally_current($rx, '98000001.2'), false);
+$rx->exec('CREATE TABLE fork_rally (maskID TEXT PRIMARY KEY, systemID INTEGER, setBy TEXT)');
+check('rally current: none', discord_rally_current($rx, '98000001.2'), null);
+$rx->exec("INSERT INTO fork_rally VALUES ('98000001.2', 30000142, 'Chribba')");
+check('rally current: stored', discord_rally_current($rx, '98000001.2'), ['systemID' => 30000142, 'setBy' => 'Chribba']);
+
+// Which masks have the type (the same corporation rule as every other type)
+$rx->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
+$rx->exec('CREATE TABLE masks (maskID TEXT PRIMARY KEY, ownerID INTEGER, ownerType INTEGER)');
+$rx->exec('CREATE TABLE characters (characterID INTEGER, corporationID INTEGER, admin INTEGER)');
+$rx->exec("INSERT INTO characters VALUES (1, 98000001, 1)");
+$rx->exec("INSERT INTO masks VALUES ('6.0', 90000001, 1373)");
+$on = json_encode($rs);
+$offJson = json_encode(discord_settings_defaults());
+$rx->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000001.2', $on]);
+$rx->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000003.2', $on]);
+$rx->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['6.0', $on]);
+$rx->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000001.3', $on]);
+check('rally target: corp mask with the type on', discord_rally_target($rx, '98000001.2')['webhookID'] ?? null, 5);
+check('rally target: no settings, no admin left, personal or alliance mask', [discord_rally_target($rx, '98000009.2'), discord_rally_target($rx, '98000003.2'),
+    discord_rally_target($rx, '6.0'), discord_rally_target($rx, '98000001.3')], [null, null, null, null]);
+$rx->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute([$offJson, '98000001.2']);
+check('rally target: type off', discord_rally_target($rx, '98000001.2'), null);
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

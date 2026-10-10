@@ -4,19 +4,22 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally"],
 	LABELS: {
 		kspace: "New k-space near a ping system",
 		chainKill: "Any kill in our chain",
 		corpKill: "Kills by our corporation",
-		corpLoss: "Losses of our corporation"
+		corpLoss: "Losses of our corporation",
+		rally: "Rally point"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
 		chainKill: "A kill in a wormhole, low-sec or null-sec system on this mask's chain map (high-sec systems only if you tick them below).",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
-		corpLoss: "The victim is in one of the corporations/alliances below."
+		corpLoss: "The victim is in one of the corporations/alliances below.",
+		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). Changes within 30 seconds edit the last message instead of posting a new one. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings)."
 	},
+	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
 	MAX_PING_SYSTEMS: 20,
@@ -156,7 +159,9 @@ const discordNotifications = {
 			};
 			if (!dn.isValidPing(type.ping)) { errors.push(dn.LABELS[kind] + ": the ping field takes only <@&roleID>, <@userID>, @here or @everyone"); }
 			if (type.enabled && !type.webhookID) { errors.push(dn.LABELS[kind] + ": choose a webhook to turn it on"); }
-			if (kind === "kspace") {
+			if (kind === "rally") {
+				type.templateClear = String(v.templateClear || "").trim();
+			} else if (kind === "kspace") {
 				type.pingSystems = (v.pingSystems || []).map(Number);
 				type.maxJumps = Math.max(1, Math.min(50, parseInt(v.maxJumps, 10) || 10));
 				type.cooldownHours = Math.max(1, Math.min(48, parseInt(v.cooldownHours, 10) || 6));
@@ -190,21 +195,21 @@ const discordNotifications = {
 				.replace(/\\([^A-Za-z0-9\s])/g, "$1");
 		};
 		if (!payload) { return ""; }
-		const embed = (payload.embeds || [])[0] || {};
-		const colour = "#" + ("000000" + (Number(embed.color) || 0).toString(16)).slice(-6);
+		const embed = (payload.embeds || [])[0] || null;
+		const colour = "#" + ("000000" + (Number(embed && embed.color) || 0).toString(16)).slice(-6);
 		const mentions = payload.allowed_mentions || {};
 		const pings = [].concat((mentions.parse || []).indexOf("everyone") >= 0 ? ["@here/@everyone"] : [],
 			(mentions.roles || []).map(function(r) { return "role " + r; }), (mentions.users || []).map(function(u) { return "user " + u; }));
 		return "<div class='dn-preview-msg'>"
-			+ "<div class='dn-preview-content'>" + esc(payload.content || "") + "</div>"
-			+ "<div class='dn-preview-embed' style='border-left-color: " + colour + "'>"
+			+ "<div class='dn-preview-content'>" + esc(payload.content || "").replace(/\n/g, "<br/>") + "</div>"
+			+ (embed ? "<div class='dn-preview-embed' style='border-left-color: " + colour + "'>"
 			+ (embed.title ? "<div class='dn-preview-title'>" + esc(embed.title) + "</div>" : "")
 			+ (embed.description ? "<div>" + esc(embed.description) + "</div>" : "")
 			+ (embed.fields || []).map(function(f) {
 				return "<div class='dn-preview-field" + (f.inline ? " inline" : "") + "'><b>" + esc(f.name) + "</b><br/>" + esc(f.value).replace(/\n/g, "<br/>") + "</div>";
 			}).join("")
 			+ (embed.footer ? "<div class='dn-preview-footer'>" + esc(embed.footer.text) + "</div>" : "")
-			+ "</div>"
+			+ "</div>" : "")
 			+ "<div class='dn-preview-pings'>Pings: " + (pings.length ? esc(pings.join(", ")) : "nobody") + "</div>"
 			+ "</div>";
 	},
@@ -265,7 +270,13 @@ const discordNotifications = {
 				return "<code title='" + esc(placeholders[kind][p]) + "'>{" + esc(p) + "}</code>";
 			}).join(" ");
 			let extra = "";
-			if (kind === "kspace") {
+			let templateLabel = "Message:";
+			let after = "";
+			if (kind === "rally") {
+				templateLabel = "Set or moved:";
+				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea></td></tr>";
+				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
+			} else if (kind === "kspace") {
 				const chips = (t.pingSystems || []).map(function(id) {
 					return "<span class='dn-chip' data-system='" + Number(id) + "'>" + esc(dn.systemName(id))
 						+ " <a href='#' class='dn-chip-remove' title='Remove'>&times;</a></span>";
@@ -290,7 +301,8 @@ const discordNotifications = {
 				+ "<tr><th>Channel:</th><td><select class='dn-webhook'>" + dn.webhookOptionsHtml(webhooks, t.webhookID) + "</select></td></tr>"
 				+ "<tr><th>Ping:</th><td><input type='text' class='dn-ping' size='40' value='" + esc(t.ping) + "' placeholder='e.g. <@&123456789012345678> or @here (empty = nobody)' /></td></tr>"
 				+ extra
-				+ "<tr><th>Message:</th><td><textarea class='dn-template' rows='2'>" + esc(t.template) + "</textarea>"
+				+ "<tr><th>" + templateLabel + "</th><td><textarea class='dn-template' rows='2'>" + esc(t.template) + "</textarea>"
+				+ (after ? "</td></tr>" + after + "<tr><th></th><td>" : "")
 				+ "<div class='dn-small'>Placeholders: " + help + " &middot; <a href='#' class='dn-reset-template'>default text</a> &middot; <a href='#' class='dn-preview-button'>preview</a></div>"
 				+ "<div class='dn-preview'></div></td></tr>"
 				+ "</table></fieldset>";
@@ -342,6 +354,7 @@ const discordNotifications = {
 				enabled: $t.find(".dn-enabled").prop("checked"),
 				webhookID: $t.find(".dn-webhook").val(),
 				template: $t.find(".dn-template").val(),
+				templateClear: $t.find(".dn-templateClear").val(),
 				ping: $t.find(".dn-ping").val(),
 				pingSystems: $t.find(".dn-chip").map(function() { return Number($(this).attr("data-system")); }).get(),
 				maxJumps: $t.find(".dn-maxJumps").val(),
@@ -491,14 +504,16 @@ const discordNotifications = {
 		$doc.on("click", sel + " .dn-reset-template", function(e) {
 			e.preventDefault();
 			const kind = $(this).closest(".dn-type").attr("data-kind");
-			$(this).closest(".dn-type").find(".dn-template").val(((dn.state.defaults || {}).templates || {})[kind] || "");
+			const templates = (dn.state.defaults || {}).templates || {};
+			$(this).closest(".dn-type").find(".dn-template").val(templates[kind] || "");
+			$(this).closest(".dn-type").find(".dn-templateClear").val(templates[kind + "Clear"] || "");
 		});
 		$doc.on("click", sel + " .dn-preview-button", function(e) {
 			e.preventDefault();
 			const $type = $(this).closest(".dn-type");
 			const $preview = $type.find(".dn-preview").removeClass("dn-bad").text("...");
-			dn.request("preview", { kind: $type.attr("data-kind"), template: $type.find(".dn-template").val(), ping: $type.find(".dn-ping").val() })
-				.done(function(data) { $preview.html(dn.previewHtml(data.preview)); })
+			dn.request("preview", { kind: $type.attr("data-kind"), template: $type.find(".dn-template").val(), templateClear: $type.find(".dn-templateClear").val(), ping: $type.find(".dn-ping").val() })
+				.done(function(data) { $preview.html(dn.previewHtml(data.preview) + (data.previewClear ? dn.previewHtml(data.previewClear) : "")); })
 				.fail(fail($preview));
 		});
 		$doc.on("click", sel + " .dn-save", function(e) {

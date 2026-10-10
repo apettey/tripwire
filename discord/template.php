@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -27,6 +27,7 @@ function discord_placeholders() {
         'chainKill' => $common + $kill,
         'corpKill'  => $common + $kill,
         'corpLoss'  => $common + $kill,
+        'rally'     => $common + ['who' => 'who set, moved or cleared it'],
     ];
 }
 
@@ -112,6 +113,9 @@ function discord_default_templates() {
         'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK. {zkill}',
         'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}',
         'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}',
+        // Rally point (discord/rally.php): set or moved, and cleared. Same wording as the first version (public/rally.php)
+        'rally'      => "{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}",
+        'rallyClear' => '{pings} Tripwire rally point cleared by *{who}*',
     ];
 }
 
@@ -167,6 +171,17 @@ function discord_payload(array $ctx) {
             ],
         ];
         if (!empty($ctx['map'])) $embed['url'] = $ctx['map'];
+    } elseif ($kind === 'rally') {
+        // Short text only, no embed (the message is edited in place while the rally moves, see discord/rally.php)
+        $template = !empty($ctx['cleared']) ? ($ctx['templateClear'] ?? '') : ($ctx['template'] ?? '');
+        $values['who'] = $ctx['who'] ?? 'someone';
+        $content = discord_render($template, $values, $raw);
+        if ($content === '') $content = discord_render(discord_default_templates()[!empty($ctx['cleared']) ? 'rallyClear' : 'rally'], $values, $raw);
+        return [
+            'username' => 'Tripwire',
+            'content' => $content,
+            'allowed_mentions' => discord_allowed_mentions($template, $ctx['ping'] ?? ''),
+        ];
     } elseif ($kind === 'test') {
         $embed += ['title' => 'Tripwire test message', 'description' => discord_escape('Webhook "' . ($ctx['webhook'] ?? '') . '" works.')];
     } else {

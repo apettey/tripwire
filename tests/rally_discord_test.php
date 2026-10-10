@@ -1,8 +1,10 @@
 <?php
-// Fork-owned: tests for the pure parts of rally_discord.inc.php (no database, no network).
+// Fork-owned: tests for the pure parts of rally_discord.inc.php (no network; SQLite stands in for MySQL in the
+// routing checks).
 //   docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
+require_once(__DIR__ . '/../discord/discord.inc.php');
 require_once(__DIR__ . '/../rally_discord.inc.php');
 
 $failures = 0;
@@ -111,6 +113,36 @@ $db->results = [1, 0, 1];	// stale hold released, then GET_LOCK succeeds
 check('lock drops a stale hold first', rally_discord_lock($db, 'rally_discord_1.2', 20), true);
 check('lock calls', array_map(function($c) { return $c[0]; }, $db->calls), ['SELECT RELEASE_LOCK(:name)', 'SELECT RELEASE_LOCK(:name)', 'SELECT GET_LOCK(:name, :timeout)']);
 $db->results = [];	// the shutdown release registered by rally_discord_lock reads nothing: stops at once
+
+// --- rally_discord_route: Mask Admin > Discord first, upstream's DISCORD_WEB_HOOK as the fallback ---
+$legacy = array('98000001.2' => 'https://discord.com/api/webhooks/1/legacy', '196379789.1' => 'https://discord.com/api/webhooks/2/private');
+$noTables = new PDO('sqlite::memory:');
+$noTables->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+check('route: no discord tables, legacy hook', rally_discord_route($noTables, '98000001.2', $legacy), array('via' => 'legacy', 'hook' => 'https://discord.com/api/webhooks/1/legacy'));
+check('route: no discord tables, no legacy hook', rally_discord_route($noTables, '98000002.2', $legacy), null);
+$rdb = new PDO('sqlite::memory:');
+$rdb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$rdb->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
+$rdb->exec('CREATE TABLE masks (maskID TEXT PRIMARY KEY, ownerID INTEGER, ownerType INTEGER)');
+$rdb->exec('CREATE TABLE characters (characterID INTEGER, corporationID INTEGER, admin INTEGER)');
+$rdb->exec('INSERT INTO characters VALUES (1, 98000001, 1), (2, 98000002, 1)');
+check('route: no settings, legacy hook (nothing regresses)', rally_discord_route($rdb, '98000001.2', $legacy)['via'], 'legacy');
+check('route: legacy hook of a private mask', rally_discord_route($rdb, '196379789.1', $legacy)['via'], 'legacy');
+$off = discord_settings_defaults();
+$rdb->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(array('98000001.2', json_encode($off)));
+check('route: type off, legacy hook still used', rally_discord_route($rdb, '98000001.2', $legacy)['via'], 'legacy');
+$on = $off;
+$on['types']['rally']['enabled'] = true;
+$on['types']['rally']['webhookID'] = 7;
+$rdb->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute(array(json_encode($on), '98000001.2'));
+$route = rally_discord_route($rdb, '98000001.2', $legacy);
+check('route: type on wins over the legacy hook', array($route['via'], $route['type']['webhookID'], isset($route['hook'])), array('settings', 7, false));
+$rdb->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(array('98000002.2', json_encode($on)));
+check('route: type on without a legacy hook', rally_discord_route($rdb, '98000002.2', $legacy)['via'], 'settings');
+$rdb->exec('UPDATE characters SET admin = 0 WHERE corporationID = 98000002');
+check('route: corporation without a Tripwire admin', rally_discord_route($rdb, '98000002.2', $legacy), null);
+$rdb->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute(array('not json', '98000001.2'));
+check('route: unreadable settings count as off', rally_discord_route($rdb, '98000001.2', $legacy)['via'], 'legacy');
 
 echo ($count - $failures) . "/$count passed\n";
 exit($failures ? 1 : 0);

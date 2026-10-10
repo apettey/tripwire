@@ -175,9 +175,11 @@ const rally = {
 		return info.jumps + (info.jumps == 1 ? " jump" : " jumps");
 	},
 
-	// ---- Discord (server side: rally_discord.inc.php) ----
+	// ---- Discord (server side: public/rally.php; the channel is the "Rally point" type corp admins set up in
+	// Mask Admin > Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK) ----
 	DISCORD_COMMAND: "rallyDiscord",
-	// Whether the mask has a Discord webhook (from rally.php's "discord")
+	DISCORD_HELP: "Rally changes go to the Discord channel your corporation's admins chose in Mask Admin > Discord.",
+	// Whether rally changes of this mask go to Discord at all (from rally.php's "discord")
 	discordAvailable: false,
 
 	/** "Also post to Discord" choice: options.rallyDiscord.enabled, a missing key means on */
@@ -298,7 +300,8 @@ const rally = {
 		// Settings > Chain Map Settings row (before the renderer footnote); takes effect on Save like its neighbours
 		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
 		if ($table.length && !$("#rallyDiscord-enabled").length) {
-			const $row = $("<tr><th>Rally point:</th><td><label><input type='checkbox' id='rallyDiscord-enabled' /> Post rally changes to Discord</label></td></tr>");
+			const $row = $("<tr><th>Rally point:</th><td><label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my rally changes to Discord</label>"
+				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord.</div></td></tr>");
 			const $footnote = $table.find("td[colspan]").last().closest("tr");
 			if ($footnote.length) { $row.insertBefore($footnote); } else { $table.append($row); }
 		}
@@ -353,7 +356,7 @@ const rally = {
 		try {
 			const chainParent = $("#chainParent");
 			$("#chainMenu").append("<li data-command='" + rally.MENU_COMMAND + "'><a id='rallyMenuItem'>Rally here</a></li>");
-			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='Post rally changes to this mask&#39;s Discord'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
+			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='" + rally.escape("Post your rally changes too. " + rally.DISCORD_HELP) + "'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
 			$("#chainMenu").menu("refresh");
 
 			const originalSelect = chainParent.contextmenu("option", "select");

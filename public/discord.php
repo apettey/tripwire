@@ -98,6 +98,9 @@ function discord_name($value) {
 /** Sample message contexts for the preview */
 function discord_sample_context($kind, $template, $ping, $maskName) {
 	$base = array('kind' => $kind, 'template' => $template, 'ping' => $ping, 'mask' => $maskName, 'time' => time());
+	if ($kind === 'rally') {
+		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'));
+	}
 	if ($kind === 'kspace') {
 		return $base + array('systemID' => 30002659, 'system' => 'Dodixie', 'security' => 0.87, 'class' => 'HS', 'region' => 'Sinq Laison',
 			'map' => discord_map_url(30002659), 'dotlan' => discord_dotlan_url(30002659), 'hubs' => array(array('Jita', 6), array('Amarr', 9)),
@@ -220,7 +223,15 @@ try {
 			if ($template === '') $template = $defaults['types'][$kind]['template'];
 			$ping = discord_ping_normalise(isset($input['ping']) ? $input['ping'] : '');
 			if ($ping === null) discord_fail(400, 'Ping may only contain <@&roleID>, <@userID>, @here or @everyone');
-			echo json_encode(array('preview' => discord_payload(discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName))));
+			$context = discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName);
+			$preview = array('preview' => discord_payload($context));
+			if ($kind === 'rally') {
+				// The rally type has a second message, for when the rally is cleared
+				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
+				if ($templateClear === '') $templateClear = $defaults['types']['rally']['templateClear'];
+				$preview['previewClear'] = discord_payload(array('templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX), 'cleared' => true) + $context);
+			}
+			echo json_encode($preview);
 			exit();
 		} else {
 			discord_fail(400, 'Unknown mode');
@@ -247,6 +258,9 @@ try {
 		'placeholders' => discord_placeholders(),
 		'names' => (object) $names,
 		'outbox' => discord_outbox_status($mysql, $mask),
+		// Upstream's server-wide DISCORD_WEB_HOOK has a webhook for this mask: rally changes go there while the rally
+		// type is off (only whether there is one, never the URL)
+		'legacyRally' => discord_rally_legacy_hook($mask) !== null,
 	);
 	echo json_encode($output);
 } catch (PDOException $e) {

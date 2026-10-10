@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Rally point in Mask Admin > Discord](2026-10-10-rally-discord-settings/README.md) | Rally point is a Discord notification type corp admins set up (channel, ping, set/cleared texts); sent through the outbox, which can now edit the last rally message (PATCH) within 30 s; masks without it keep upstream's `DISCORD_WEB_HOOK` |
 | 2026-10-10 | [Rally point to Discord](2026-10-10-rally-discord/README.md) | Setting, moving or clearing the rally point posts to the mask's Discord webhook (upstream's ping hook); at most one new message per mask per 30 s, later changes edit it; per-user "Also post to Discord" toggle |
 | 2026-10-10 | [Set route in game: choose the characters](2026-10-10-autopilot-character-picker/README.md) | The autopilot button asks which tracked characters get the route (tracked one pre-ticked, Select all, last choice remembered) and sends it to each in turn, reporting who got it and who didn't |
 | 2026-10-10 | [Set route in game](2026-10-10-autopilot-route/README.md) | Button in the Favourites panel and Destinations window sends Tripwire's gate route (e.g. the safe one) to the in-game autopilot as ESI waypoints |

@@ -163,7 +163,30 @@ describe('Discord notifications', function() {
 		});
 	});
 
+	describe('collectSettings: rally point', function() {
+		it('keeps both texts and nothing of the other types', function() {
+			const v = formValues();
+			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '2', ping: ' @here ', templateClear: '  Cleared by {who} ' });
+			const r = dn.collectSettings(v);
+			assert.deepStrictEqual(r.errors, []);
+			assert.deepStrictEqual(r.settings.types.rally, { enabled: true, webhookID: 2, template: 'T rally', ping: '@here', templateClear: 'Cleared by {who}' });
+		});
+		it('needs a webhook and a valid ping like the other types', function() {
+			const v = formValues();
+			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '0', ping: 'everyone' });
+			assert.deepStrictEqual(dn.collectSettings(v).errors, [
+				'Rally point: the ping field takes only <@&roleID>, <@userID>, @here or @everyone',
+				'Rally point: choose a webhook to turn it on'
+			]);
+		});
+	});
+
 	describe('previewHtml', function() {
+		it('shows a message without an embed (rally point) as text only, line breaks kept', function() {
+			const html = dn.previewHtml({ content: 'Rally: **Jita**\n<https://tw.example/?system=Jita>', allowed_mentions: { parse: [] } });
+			assert.ok(html.indexOf('dn-preview-embed') < 0);
+			assert.ok(html.indexOf('<b>Jita</b><br/>&lt;https://tw.example/?system=Jita&gt;') > 0);
+		});
 		it('shows content, embed and who gets pinged, escaped', function() {
 			const html = dn.previewHtml({
 				content: '<@&1> @here <script>x</script>',
@@ -203,6 +226,22 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf("<button type='button' class='dn-test' disabled>") > 0);
 			assert.ok(html.indexOf('Our Corp (98000001)') > 0);
 			assert.ok(html.indexOf(dn.SAFE_RULE) > 0);
+		});
+		it('shows the rally point type with its second text, escaped', function() {
+			const s = JSON.parse(JSON.stringify(settings));
+			s.types.rally.templateClear = "Cleared by {who} <script>";
+			const html = dn.pageHtml(state, s);
+			assert.ok(html.indexOf("data-kind='rally'") > 0);
+			assert.ok(html.indexOf('Set or moved:') > 0);
+			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>Cleared by {who} &lt;script&gt;</textarea>") > 0);
+			assert.ok(html.indexOf('DISCORD_WEB_HOOK') < 0);
+		});
+		it('says where rally changes go while the type is off and the server has a legacy webhook', function() {
+			const s = JSON.parse(JSON.stringify(settings));
+			s.types.rally.enabled = false;
+			assert.ok(dn.pageHtml(Object.assign({}, state, { legacyRally: true }), s).indexOf(dn.escape(dn.LEGACY_RALLY)) > 0);
+			s.types.rally.enabled = true;
+			assert.ok(dn.pageHtml(Object.assign({}, state, { legacyRally: true }), s).indexOf(dn.escape(dn.LEGACY_RALLY)) < 0);
 		});
 	});
 });
