@@ -10,6 +10,9 @@ as chips ("D-scan 2 min ago · 11 ships (9 on grid) · 1 Capital · 1 HIC") that
 map nodes with a fresh scan get a small dot in their bottom-right corner (cyan d-scan, green local, half and half for
 both; the tooltip says which and how old).
 
+Update: the chips now live in their own Intel panel instead of the system info panel, see
+[Intel panel](../2026-10-11-intel-panel/README.md).
+
 ## Before / After
 
 | Before | After |

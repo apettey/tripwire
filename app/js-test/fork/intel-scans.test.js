@@ -1,6 +1,7 @@
 const assert = require('assert');
 const { include, loadJSON } = require('../helpers/helpers');
 include('app/js/fork/intel-scans');
+include('app/js/fork/system-killfeed');	// layout helpers the Intel panel shares
 
 const types = loadJSON('public/intel/types');
 const AU = 149597870.7;
@@ -255,6 +256,73 @@ describe('Intel scans', () => {
 		it('the detail line counts ships on and off grid, and objects separately', () => {
 			const html = intelScans.detailHtml(scan, summary, 10000);
 			assert.ok(html.indexOf('7 ships: 4 on grid (≤ 10,000 km), 3 off grid · 12 objects in total') >= 0, html);
+		});
+	});
+
+	describe('Intel panel', () => {
+		const dscan = { id: 11, kind: 'dscan', age: 60, createdBy: 'A', data: intelScans.parseDscan(DSCAN) };
+		const local = { id: 12, kind: 'local', age: 10, createdBy: '<b>B</b>', mine: true, data: { names: ['A Pilot', '<img src=x onerror=alert(1)>'] } };
+		const old = { id: 5, kind: 'local', age: 4000, createdBy: 'C', data: { names: ['Old Pilot'] } };
+		const state = (extra) => Object.assign({ systemID: 31000005, scans: [dscan, old, local], types: types, freshSeconds: 900, gridKm: 10000,
+			showOlder: false, openScanID: null, error: '' }, extra);
+		const chipIDs = (html) => (html.match(/class='intel-chip[^']*' data-scan='(\d+)'/g) || []).map(m => m.match(/(\d+)'$/)[1]);
+
+		it('has the paste button first, then the fresh chips newest first', () => {
+			const html = intelScans.panelHtml(state());
+			assert.ok(html.indexOf("class='intel-paste'") >= 0 && html.indexOf("class='intel-paste'") < html.indexOf('intel-chip'));
+			assert.deepEqual(chipIDs(html), ['12', '11']);
+		});
+		it('folds older scans', () => {
+			const closed = intelScans.panelHtml(state());
+			assert.ok(closed.indexOf('older (1)') >= 0);
+			assert.deepEqual(chipIDs(intelScans.panelHtml(state({ showOlder: true }))), ['12', '11', '5']);
+			assert.ok(intelScans.panelHtml(state({ showOlder: true })).indexOf('hide older') >= 0);
+		});
+		it('only older scans: says so and keeps the fold', () => {
+			const html = intelScans.panelHtml(state({ scans: [old] }));
+			assert.ok(html.indexOf('No fresh scans.') >= 0);
+			assert.ok(html.indexOf('older (1)') >= 0);
+			assert.deepEqual(chipIDs(html), []);
+		});
+		it('expands one scan to its full summary, with delete for own scans', () => {
+			const html = intelScans.panelHtml(state({ openScanID: 12 }));
+			assert.equal((html.match(/<div class='intel-detail[' ]/g) || []).length, 1);
+			assert.ok(html.indexOf("class='intel-delete' data-scan='12'") >= 0);
+			assert.ok(html.indexOf("aria-expanded='true'") >= 0);
+			const d = intelScans.panelHtml(state({ openScanID: 11 }));
+			assert.ok(d.indexOf('Sabre ×2') >= 0);
+			assert.equal(d.indexOf('intel-delete'), -1, 'not own');
+		});
+		it('empty state and no system', () => {
+			const html = intelScans.panelHtml(state({ scans: [] }));
+			assert.ok(html.indexOf('No scans for this system. Paste one') >= 0);
+			assert.ok(html.indexOf('intel-paste') >= 0);
+			const none = intelScans.panelHtml(state({ systemID: null }));
+			assert.equal(none.indexOf('intel-paste'), -1);
+			assert.ok(none.indexOf('Select a system') >= 0);
+		});
+		it('d-scan chips wait for the type data', () => {
+			const html = intelScans.panelHtml(state({ types: null, openScanID: 11 }));
+			assert.ok(html.indexOf('loading…') >= 0);
+		});
+		it('escapes pasted names and errors', () => {
+			const html = intelScans.panelHtml(state({ openScanID: 12, error: '<script>x</script>' }));
+			assert.equal(html.indexOf('<img'), -1);
+			assert.equal(html.indexOf('<b>B'), -1);
+			assert.equal(html.indexOf('<script>'), -1);
+			assert.ok(html.indexOf('&lt;script&gt;') >= 0);
+		});
+		it('remembers its position while turned off', () => {
+			assert.deepEqual(intelScans.rememberedPosition({ intelScans: { enabled: false, position: { col: 15, row: 7, size_x: 7, size_y: 9 } } }),
+				{ col: 15, row: 7, size_x: 7, size_y: 9 });
+			assert.strictEqual(intelScans.rememberedPosition({ intelScans: { enabled: true } }), null);
+			assert.strictEqual(intelScans.rememberedPosition({ intelScans: { position: { col: 0, row: 7 } } }), null);
+			assert.strictEqual(intelScans.rememberedPosition(undefined), null);
+		});
+		it('widget markup', () => {
+			const w = intelScans.widgetHtml();
+			assert.ok(w.indexOf("id='intelScansWidget' class='gridWidget'") >= 0);
+			assert.ok(w.indexOf("class='content'><div class='intel-body'>") >= 0);
 		});
 	});
 

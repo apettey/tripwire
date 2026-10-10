@@ -1,8 +1,8 @@
 const intelScans = {
 	// D-scan & local intel (fork-owned): pilots paste a directional scan or a local member list into the Intel dialog
 	// (an explicit text box: there is no page-wide paste hook) and share it with the mask, pinned to a system. The
-	// system info panel lists the system's scans as chips that expand to the full summary; chain map nodes with a fresh
-	// scan get a small marker. Server: public/intel_scans.php (validates, normalises and stores the rows; the parse
+	// Intel panel (its own layout widget, following the viewed system) lists the system's scans as chips that expand to
+	// the full summary; chain map nodes with a fresh scan get a small marker. Server: public/intel_scans.php (validates, normalises and stores the rows; the parse
 	// here is only the preview). Static type data: public/intel/types.json (from ESI, built by intel/tools/).
 	// Settings: options.intelScans = {enabled (missing = on), freshMinutes, gridKm}.
 	// Keep `const intelScans` on the first line: the test helper strips it to define a global.
@@ -438,7 +438,7 @@ const intelScans = {
 	loadTypes: function() {
 		if (intelScans.types || intelScans.typesXhr) { return; }
 		intelScans.typesXhr = $.ajax({ url: intelScans.TYPES_URL, dataType: "JSON", cache: true, timeout: 20000 })
-			.done(function(data) { intelScans.types = data; intelScans.renderInfo(); intelScans.renderPreview(); })
+			.done(function(data) { intelScans.types = data; intelScans.renderPanel(); intelScans.renderPreview(); })
 			.always(function() { intelScans.typesXhr = null; });
 	},
 
@@ -515,11 +515,11 @@ const intelScans = {
 			intelScans.error = "";
 			intelScans.absorb(response);
 			intelScans.patchChain();
-			intelScans.renderInfo();
+			intelScans.renderPanel();
 		}).fail(function(x, status) {
 			if (status === "abort") { return; }
 			intelScans.error = "Could not load scans" + (x && x.status ? " (HTTP " + x.status + ")" : "");
-			intelScans.renderInfo();
+			intelScans.renderPanel();
 		}).always(function() {
 			if (intelScans.xhr === xhr) { intelScans.xhr = null; }
 		});
@@ -606,9 +606,12 @@ const intelScans = {
 		} catch (e) { console.error("intel-scans: context menu setup failed", e); }
 	},
 
-	// ---- System info panel ----
+	// ---- Intel panel (a layout widget, like the Kills panel) ----
 
-	$info: function() { return $("#intelScansInfo"); },
+	WIDGET_ID: "intelScansWidget",
+	SIZE: { x: 6, y: 6, minX: 4, minY: 3 },
+
+	$widget: function() { return $("#" + intelScans.WIDGET_ID); },
 
 	systemName: function(systemID) {
 		const systems = typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems : (typeof appData !== "undefined" ? appData.systems : null);
@@ -616,37 +619,107 @@ const intelScans = {
 		return s && s.name ? s.name : String(systemID);
 	},
 
-	syncInfo: function() {
+	/**
+	 * Inner HTML of the panel body (escaped).
+	 * @param state {systemID, scans (ages as of now), types, freshSeconds, gridKm, showOlder, openScanID, error}
+	 */
+	panelHtml: function(state) {
+		const esc = intelScans.escape;
+		if (!state || !intelScans.isSystem(state.systemID)) { return "<div class='intel-empty intel-muted'>Select a system to see its scans.</div>"; }
+		const scans = (Array.isArray(state.scans) ? state.scans : []).slice().sort(function(a, z) { return a.age - z.age || z.id - a.id; });
+		const fresh = scans.filter(function(s) { return s.age < state.freshSeconds; });
+		const older = scans.filter(function(s) { return s.age >= state.freshSeconds; });
+		const chips = function(list) {
+			return "<div class='intel-chips'>" + list.map(function(s) {
+				const summary = s.data !== undefined && (s.kind === "local" || state.types) ? intelScans.summarize(s, state.types, state.gridKm) : null;
+				const open = s.id === state.openScanID;
+				return intelScans.chipHtml(s, summary, s.age < state.freshSeconds, open) + (open ? intelScans.detailHtml(s, summary, state.gridKm) : "");
+			}).join("") + "</div>";
+		};
+		let html = "<div class='intel-actions'><button type='button' class='intel-paste' title='Paste a directional scan or the local member list and share a summary with your mask'>"
+			+ "Paste d-scan / local</button></div>";
+		if (state.error) { html += "<div class='intel-muted intel-error-line'>" + esc(state.error) + "</div>"; }
+		if (!scans.length) {
+			return html + "<div class='intel-empty intel-muted'>No scans for this system. Paste one to share it with your mask.</div>";
+		}
+		html += fresh.length ? chips(fresh) : "<div class='intel-empty intel-muted'>No fresh scans.</div>";
+		if (older.length) {
+			html += "<a href='#' class='intel-older' aria-expanded='" + (state.showOlder ? "true" : "false") + "'>"
+				+ (state.showOlder ? "hide older" : esc("older (" + older.length + ")")) + "</a>";
+			if (state.showOlder) { html += chips(older); }
+		}
+		return html;
+	},
+
+	widgetHtml: function() {
+		return "<li id='" + intelScans.WIDGET_ID + "' class='gridWidget'>"
+			+ "<div class='controls'>"
+			+ "<span class='intel-title'>Intel</span> <span class='intel-system'></span>"
+			+ "<div style='float: right;'><span class='intel-status'></span></div>"
+			+ "</div>"
+			+ "<div class='content'><div class='intel-body'></div></div>"
+			+ "</li>";
+	},
+
+	/** Position remembered when the panel was turned off (options.intelScans.position), or null */
+	rememberedPosition: function(opts) {
+		const p = opts && opts.intelScans ? opts.intelScans.position : null;
+		return p && typeof systemKillFeed !== "undefined" ? systemKillFeed.savedPosition([Object.assign({}, p, { id: intelScans.WIDGET_ID })], intelScans.WIDGET_ID) : null;
+	},
+
+	/** gridster, when the layout is there (placement helpers are shared with the Kills panel, system-killfeed.js) */
+	gridster: function() {
+		return typeof systemKillFeed !== "undefined" ? systemKillFeed.gridster() : null;
+	},
+
+	addWidget: function() {
+		const g = intelScans.gridster();
+		if (!g || intelScans.$widget().length) { return; }
+		const others = $(".gridster li.gridWidget").map(function() {
+			return { col: parseInt($(this).attr("data-col"), 10), row: parseInt($(this).attr("data-row"), 10),
+				size_x: parseInt($(this).attr("data-sizex"), 10), size_y: parseInt($(this).attr("data-sizey"), 10) };
+		}).get();
+		const size = intelScans.SIZE;
+		const opts = intelScans.opts();
+		// Where it was when it was last turned off (options.grid can be the page-load copy: options.apply() restores it
+		// from local storage), else the saved layout, else the first free place
+		const pos = intelScans.rememberedPosition(opts)
+			|| systemKillFeed.savedPosition(opts ? opts.grid : null, intelScans.WIDGET_ID)
+			|| systemKillFeed.defaultPosition(others, $(window).width(), size);
+		// From now on the layout (Customize layout) owns the position
+		if (opts && opts.intelScans && opts.intelScans.position) { delete opts.intelScans.position; }
+		const $w = g.add_widget(intelScans.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
+		$w.stop(true, true);	// skip the fade-in (it never finishes in a background tab)
+		// Same as layout.js does for the built-in widgets: resize handle only while customising the layout
+		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
+		$w.addClass("gridster-transition");
+		intelScans.renderPanel();
+	},
+
+	removeWidget: function() {
+		const $w = intelScans.$widget();
+		if (!$w.length) { return; }
+		const g = intelScans.gridster();
+		const opts = intelScans.opts();
+		// Remember where it was, so turning it back on puts it in the same place (like the Favourites panel)
+		if (g && opts) {
+			const entry = systemKillFeed.savedPosition(g.serialize($w), intelScans.WIDGET_ID);
+			if (entry) { opts.intelScans = Object.assign({}, opts.intelScans || {}, { position: entry }); }
+		}
+		// Drop the id first: gridster fades the widget out before removing it, and turning the setting back on
+		// meanwhile must add a new panel (see systemKillFeed.removeWidget)
+		$w.attr("id", intelScans.WIDGET_ID + "-removed");
+		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
+	},
+
+	/** Add or remove the panel to match the setting; when on, follow the viewed system */
+	sync: function() {
 		if (!intelScans.enabled(intelScans.opts())) {
-			intelScans.$info().remove();
+			intelScans.removeWidget();
+			if (intelScans.xhr) { intelScans.xhr.abort(); intelScans.xhr = null; }
 			return;
 		}
-		if (!intelScans.$info().length) {
-			const $before = $("#infoWidget #activityGraph");
-			if (!$before.length) { return; }
-			$before.before("<div id='intelScansInfo' class='intel-info'></div>");
-			intelScans.$info().on("click", ".intel-paste", function(e) {
-				e.preventDefault();
-				intelScans.openDialog(intelScans.scansSystemID);
-			}).on("click", ".intel-chip", function() {
-				const id = parseInt($(this).attr("data-scan"), 10);
-				intelScans.openScanID = intelScans.openScanID === id ? null : id;
-				intelScans.renderInfo();
-			}).on("click", ".intel-older", function(e) {
-				e.preventDefault();
-				intelScans.showOlder = !intelScans.showOlder;
-				intelScans.renderInfo();
-			}).on("click", ".intel-delete", function(e) {
-				e.preventDefault();
-				const id = parseInt($(this).attr("data-scan"), 10);
-				if (!window.confirm("Delete this scan for everyone on the mask?")) { return; }
-				intelScans.post({ mode: "delete", id: id, systemID: intelScans.scansSystemID }).done(function(response) {
-					intelScans.absorb(response);
-					intelScans.patchChain();
-					intelScans.renderInfo();
-				});
-			});
-		}
+		intelScans.addWidget();
 		intelScans.setSystem(typeof viewingSystemID !== "undefined" ? viewingSystemID : null);
 	},
 
@@ -657,40 +730,53 @@ const intelScans = {
 			intelScans.scans = [];
 			intelScans.openScanID = null;
 			intelScans.showOlder = false;
-			intelScans.renderInfo();
+			intelScans.renderPanel();
 		}
 		intelScans.fetch();
 	},
 
-	renderInfo: function() {
-		const $info = intelScans.$info();
-		if (!$info.length) { return; }
-		if (!intelScans.scansSystemID) { $info.empty(); return; }
+	renderPanel: function() {
+		const $w = intelScans.$widget();
+		if (!$w.length) { return; }
 		const opts = intelScans.opts();
-		const freshSeconds = intelScans.freshMinutes(opts) * 60;
-		const gridKm = intelScans.gridKm(opts);
+		const id = intelScans.scansSystemID;
 		const shift = Math.floor((Date.now() - intelScans.scansAt) / 1000);
 		const scans = intelScans.scans.map(function(s) { return Object.assign({}, s, { age: s.age + shift }); });
 		if (scans.some(function(s) { return s.kind === "dscan"; })) { intelScans.loadTypes(); }
-		const fresh = scans.filter(function(s) { return s.age < freshSeconds; });
-		const older = scans.filter(function(s) { return s.age >= freshSeconds; });
-		const shown = intelScans.showOlder ? scans : fresh;
-		let html = "<div class='intel-head'><span class='intel-label'>Intel</span> "
-			+ "<a href='#' class='intel-paste' title='Paste a directional scan or the local member list and share a summary with your mask'>Paste d-scan / local</a>"
-			+ (older.length ? " <a href='#' class='intel-older'>" + (intelScans.showOlder ? "hide older" : intelScans.escape("older (" + older.length + ")")) + "</a>" : "")
-			+ "</div>";
-		if (intelScans.error) { html += "<div class='intel-muted'>" + intelScans.escape(intelScans.error) + "</div>"; }
-		if (shown.length) {
-			html += "<div class='intel-chips'>";
-			shown.forEach(function(s) {
-				const summary = s.data !== undefined && (s.kind === "local" || intelScans.types) ? intelScans.summarize(s, intelScans.types, gridKm) : null;
-				const open = s.id === intelScans.openScanID;
-				html += intelScans.chipHtml(s, summary, s.age < freshSeconds, open);
-				if (open) { html += intelScans.detailHtml(s, summary, gridKm); }
+		$w.find(".intel-system").text(id ? "— " + intelScans.systemName(id) : "");
+		$w.find(".intel-status").text(scans.length ? intelScans.plural(scans.length, "scan", "scans") : "");
+		const $content = $w.find(".content");
+		const scroll = $content.scrollTop();
+		$w.find(".intel-body").html(intelScans.panelHtml({
+			systemID: id, scans: scans, types: intelScans.types, freshSeconds: intelScans.freshMinutes(opts) * 60,
+			gridKm: intelScans.gridKm(opts), showOlder: intelScans.showOlder, openScanID: intelScans.openScanID, error: intelScans.error
+		}));
+		$content.scrollTop(scroll);
+	},
+
+	bindPanel: function() {
+		const sel = "#" + intelScans.WIDGET_ID;
+		$(document).on("click", sel + " .intel-paste", function(e) {
+			e.preventDefault();
+			intelScans.openDialog(intelScans.scansSystemID);
+		}).on("click", sel + " .intel-chip", function() {
+			const id = parseInt($(this).attr("data-scan"), 10);
+			intelScans.openScanID = intelScans.openScanID === id ? null : id;
+			intelScans.renderPanel();
+		}).on("click", sel + " .intel-older", function(e) {
+			e.preventDefault();
+			intelScans.showOlder = !intelScans.showOlder;
+			intelScans.renderPanel();
+		}).on("click", sel + " .intel-delete", function(e) {
+			e.preventDefault();
+			const id = parseInt($(this).attr("data-scan"), 10);
+			if (!window.confirm("Delete this scan for everyone on the mask?")) { return; }
+			intelScans.post({ mode: "delete", id: id, systemID: intelScans.scansSystemID }).done(function(response) {
+				intelScans.absorb(response);
+				intelScans.patchChain();
+				intelScans.renderPanel();
 			});
-			html += "</div>";
-		}
-		$info.html(html);
+		});
 	},
 
 	// ---- Paste dialog ----
@@ -772,7 +858,7 @@ const intelScans = {
 			}
 			$dialog.dialog("close");
 			intelScans.patchChain();
-			intelScans.renderInfo();
+			intelScans.renderPanel();
 		}).fail(function(x) {
 			const message = x && x.responseJSON && x.responseJSON.error ? x.responseJSON.error : "Could not share the scan" + (x && x.status ? " (HTTP " + x.status + ")" : "");
 			$dialog.find(".intel-error").text(message);
@@ -786,7 +872,7 @@ const intelScans = {
 		const $general = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
 		if ($general.length && !$("#intelScans-enabled").length) {
 			$general.append("<tr><th>D-scan &amp; local intel:</th><td>"
-				+ "<label><input type='checkbox' id='intelScans-enabled' /> Show shared scans and the paste button</label><br/>"
+				+ "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
 				+ "<label>Fresh for <input type='number' id='intelScans-fresh' min='1' max='1440' style='width: 4em;' /> min</label>, "
 				+ "<label>on grid within <input type='number' id='intelScans-grid' min='1' max='1000000' style='width: 6em;' /> km</label></td></tr>");
 		}
@@ -802,6 +888,7 @@ const intelScans = {
 			if (!button || $.trim($(button).text()) !== "Save") { return; }
 			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#intelScans-enabled").length) { return; }
 			const settings = { enabled: $("#intelScans-enabled").prop("checked") };
+			if (options.intelScans && options.intelScans.position) { settings.position = options.intelScans.position; }
 			const fresh = parseInt($("#intelScans-fresh").val(), 10);
 			const grid = parseInt($("#intelScans-grid").val(), 10);
 			if (fresh >= 1 && fresh <= 1440) { settings.freshMinutes = fresh; }
@@ -826,7 +913,7 @@ const intelScans = {
 			const apply = options.apply;
 			const wrappedApply = function() {
 				const result = apply.apply(this, arguments);
-				intelScans.syncInfo();
+				intelScans.sync();
 				intelScans.patchChain();
 				return result;
 			};
@@ -843,7 +930,7 @@ const intelScans = {
 			const systemChange = tripwire.systemChange;
 			const wrapped = function(systemID) {
 				const result = systemChange.apply(this, arguments);
-				if (intelScans.$info().length) { intelScans.setSystem(systemID); }
+				if (intelScans.enabled(intelScans.opts())) { intelScans.setSystem(systemID); }
 				return result;
 			};
 			Object.keys(systemChange).forEach(function(k) { wrapped[k] = systemChange[k]; });
@@ -855,8 +942,9 @@ const intelScans = {
 		});
 		setInterval(intelScans.fetch, intelScans.POLL_MS);
 		// Ages in chips and markers move on between polls
-		setInterval(function() { intelScans.renderInfo(); intelScans.patchChain(); }, intelScans.POLL_MS);
-		intelScans.syncInfo();
+		setInterval(function() { intelScans.renderPanel(); intelScans.patchChain(); }, intelScans.POLL_MS);
+		intelScans.bindPanel();
+		intelScans.sync();
 	}
 };
 
