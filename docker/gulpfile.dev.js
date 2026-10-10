@@ -1,11 +1,12 @@
-// Dev-only wrapper around the upstream gulpfile: adds a `watch` task and a deterministic file order.
-// Run from the repo root: npx gulp --gulpfile docker/gulpfile.dev.js --cwd . watch   (or: ... js css)
+// Wrapper around the upstream gulpfile: adds a `watch` task and a deterministic file order.
+// Builds the bundles everywhere: the dev `assets` service, CI and the Docker image (they are not committed).
+// Run from the repo root: npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css   (or: ... watch)
 const gulp = require('gulp');
 
 // Upstream's gulpfile passes gulp.src() a list of globs and concatenates files in the order they arrive, which
 // depends on the file system (and on a Windows/macOS bind mount, on timing). Script order matters (fork files
 // depend on each other), so expand every glob here into a sorted list of files: globs in their listed order,
-// files sorted by path within each glob, each file once at its first match. That reproduces the committed bundles.
+// files sorted by path within each glob, each file once at its first match. The same order on every machine.
 // Must run before the upstream gulpfile is loaded (it calls gulp.src inside its tasks).
 // Each file keeps the base of the glob it matched (e.g. app/js for app/js/**/*.js), as gulp would give it, so
 // source-map paths stay the same (dialogs/x.js, fork/x.js).
