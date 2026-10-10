@@ -7,7 +7,8 @@
 Pilots paste a directional scan or a local member list into Tripwire and share a summary with their mask, pinned to
 the system, instead of linking third-party sites such as dscan.info. The system info panel lists the system's scans
 as chips ("D-scan 2 min ago · 11 ships (9 on grid) · 1 Capital · 1 HIC") that expand to the full summary, and chain
-map nodes with a fresh scan get a small D / L / DL marker on their bottom-right corner.
+map nodes with a fresh scan get a small dot in their bottom-right corner (cyan d-scan, green local, half and half for
+both; the tooltip says which and how old).
 
 ## Before / After
 
@@ -62,8 +63,10 @@ requests.
   `intel/tools/generate-types.js` from ESI's public, unauthenticated `/universe/categories`, `/universe/groups`,
   `/universe/names`, `/universe/types` and `/dogma/attributes` (a one-off build step, not a runtime call; no new
   third-party hosts at runtime).
-- **Chain map marker**: bottom-right corner, a little outside the node so it clears the statics row (corners: top-left
-  threat badge, top-right upstream's pilots marker, bottom-left watchlist). Checked in all four renderers.
+- **Chain map marker**: a 7 px dot inside the node's bottom-right corner (corners: top-left threat badge, top-right
+  upstream's pilots marker, bottom-left watchlist). Outside the node it ran into the statics row, the connections'
+  size tags and neighbouring nodes, and a lettered pill inside covered the text of three-line nodes; the dot fits
+  beside the last text line. Checked in all four renderers (image above).
 - **Storage / endpoint**: new `public/intel_scans.php` (GET latest + system scans, POST `add` / `delete`; same
   session/mask checks and `X-Requested-With` CSRF rule as `rally.php`) and table `fork_intel_scans` (mask, system,
   kind, normalised rows as JSON, creator, created/expires), created on first use. The server validates everything

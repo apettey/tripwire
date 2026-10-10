@@ -284,9 +284,14 @@ describe('Intel scans', () => {
 			const node = "<div id='node1' data-nodeid='31000005' class='node'><div class='nodeIcons'></div></div>";
 			const marker = intelScans.markerHtml({ text: 'D', title: '<x>' });
 			const once = intelScans.insertMarker(node, marker);
-			assert.ok(once.indexOf("<span class='intel-marker' title='&lt;x&gt;'>D</span><div class='nodeIcons'>") > 0);
+			assert.ok(once.indexOf("<span class='intel-marker intel-marker-d' role='img' title='&lt;x&gt;' aria-label='&lt;x&gt;'></span><div class='nodeIcons'>") > 0, once);
 			assert.equal(intelScans.insertMarker(once, marker), once);
 			assert.equal(intelScans.insertMarker(node, ''), node);
+		});
+		it('is a dot coloured by kind', () => {
+			assert.ok(intelScans.markerHtml({ text: 'L', title: 'x' }).indexOf('intel-marker-l') > 0);
+			assert.ok(intelScans.markerHtml({ text: 'DL', title: 'x' }).indexOf('intel-marker-dl') > 0);
+			assert.strictEqual(intelScans.markerHtml(null), '');
 		});
 	});
 });

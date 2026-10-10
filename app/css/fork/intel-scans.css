@@ -4,21 +4,21 @@
 	position: absolute;	/* bottom-right corner of the node ([data-nodeid] is position: relative); corners: top-left threat
 				   badge, top-right upstream's pilots marker, bottom-left watchlist */
 	z-index: 1;
-	bottom: -6px;
-	right: -11px;	/* clear of the statics row (H L N) along the bottom edge */
-	padding: 0 2px;
-	min-width: 8px;
-	font-size: 8px;
-	font-weight: bold;
-	line-height: 10px;
-	text-align: center;
-	color: #bfefff;
-	background: #1d5a73;
-	border: 1px solid #4fb3d9;
-	border-radius: 6px;
-	white-space: nowrap;
+	/* A small dot inside the node's corner: below the node are the statics row (H L N), connectors and the size tags
+	   of the connections, beside it the neighbouring nodes, and a three-line node has no room for text there */
+	bottom: 3px;
+	right: 4px;
+	box-sizing: border-box;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	border: 1px solid rgba(0, 0, 0, 0.6);
+	box-shadow: 0 0 3px rgba(79, 179, 217, 0.9);
 	cursor: default;
 }
+.intel-marker-d { background: #4fd0ff; }
+.intel-marker-l { background: #a8e070; box-shadow: 0 0 3px rgba(168, 224, 112, 0.9); }
+.intel-marker-dl { background: linear-gradient(90deg, #4fd0ff 50%, #a8e070 50%); }
 
 /* System info panel block */
 .intel-info {

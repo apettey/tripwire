@@ -402,7 +402,10 @@ const intelScans = {
 
 	markerHtml: function(marker) {
 		if (!marker) { return ""; }
-		return "<span class='intel-marker' title='" + intelScans.escape(marker.title) + "'>" + intelScans.escape(marker.text) + "</span>";
+		// A dot (cyan d-scan, green local, half and half for both): nodes have no room for text without covering theirs
+		const kind = marker.text === "DL" ? "dl" : marker.text === "L" ? "l" : "d";
+		return "<span class='intel-marker intel-marker-" + kind + "' role='img' title='" + intelScans.escape(marker.title)
+			+ "' aria-label='" + intelScans.escape(marker.title) + "'></span>";
 	},
 
 	/** Insert marker markup into a chain node's HTML as the node's first child */
