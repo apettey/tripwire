@@ -120,7 +120,7 @@ function discord_sample_context($kind, $template, $ping, $maskName) {
 		'map' => discord_map_url(31000005), 'dotlan' => discord_dotlan_url(31000005), 'killID' => 123456789,
 		'victimID' => 2112625428, 'victim' => 'Example Victim', 'shipTypeID' => 11377, 'ship' => 'Nemesis',
 		'corp' => 'Example Corp', 'alliance' => 'Example Alliance', 'finalblow' => 'Example Hunter', 'attackercorp' => 'Hunter Corp',
-		'attackers' => 4, 'value' => 254300000, 'zkill' => 'https://zkillboard.com/kill/123456789/');
+		'attackers' => 4, 'value' => 254300000, 'zkill' => 'https://zkillboard.com/kill/123456789/', 'label' => discord_sample_label(31000005));
 }
 
 try {

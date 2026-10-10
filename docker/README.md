@@ -360,13 +360,19 @@ timeout per request, 50 ms between requests):
 and more, listed in the UI) plus an embed (kills: victim, final blow, attackers, value, ship render and portrait from
 `images.evetech.net`, zKillboard link; k-space: security, region, hole, mapper, jumps table, Tripwire and Dotlan links;
 wormhole systems show their class instead of a security value).
-`{label}` (k-space and rally point) is the system's chain label, the name the chain map shows for it: the name of the
-wormhole signature leading into the system, on the far side of the hole (`discord_chain_label` in `discord/rally.php`:
+`{label}` (k-space, rally point and the three kill types) is the system's chain label, the name the chain map shows for it: the name of the
+wormhole signature leading into the system, on the far side of the hole (`discord_chain_label` in `discord/chain_label.php`:
 a wormhole of the mask whose far-side signature has a name starting with a letter or digit and whose near-side signature is unnamed or a return
 bookmark `<...`; reached more than once, the shortest leading name token wins, then the lowest wormhole id; empty for
 home or a system without a named hole). `{labelSystem}` is "AABCA · J152820", or only "J152820" without a label.
 The legacy `DISCORD_WEB_HOOK` rally posts show the label the same way. Labels are signature names (user text), escaped
 like game data.
+Kill messages name the system with its label on the mask when it has one: the default texts use `{labelSystem}`
+("... lost a Coercer Navy Issue in AABCA · J105246, 44.07m ISK"), and the embed title and system line show it too
+("Kill in the chain: Coercer Navy Issue in AABCA · J105246", "AABCA · J105246 (C5), E-R00028"); without a label they
+are as before. The labels of every mask with a kill type on are loaded with the kill settings every 60 s
+(`discord_chain_labels`, one query), so the kill feed never waits on a query per kill, and are stored with the queued
+message (a label up to a minute old). Kill texts saved with the earlier default (`{system}`) are read as today's.
 `allowed_mentions` is built only from what the admin wrote (template + ping field: `<@&role>`, `<@user>`,
 `@here`/`@everyone`), and game data (pilot, corp, ship, mapper names) has Discord markdown escaped and `@` defused, so
 a kill can never ping anyone by itself.
