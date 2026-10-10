@@ -6,7 +6,8 @@
 // pooled module in zkill/ (one HTTP client, rate limiter, set of tables). Per kill it
 //   - stores every kill in `zkill_killmails` (System Kill Feed and other readers, ZKILL_RETENTION_HOURS), and
 //   - stores kills in systems that are on someone's chain in `zkill_kills` (Kill Reporting's alert log, 24 h).
-// Between kills it drains the back-fill queue (zKillboard API, ZKILL_API_INTERVAL) and the ESI name queue.
+// Between kills it drains the back-fill queue (zKillboard API, ZKILL_API_INTERVAL), then the per-system stats queue
+// (System Threat, same API budget, lowest priority) and the ESI name queue.
 // Browsers never talk to zKillboard; they poll public/kills.php and public/system_kills.php, which read the tables.
 //
 //   php zkill_feed.worker.php
@@ -211,6 +212,7 @@ function zkf_tick(PDO $db) {
     static $lastNames = 0;
     try {
         $line = zk_backfill_run_one($db);
+        if ($line === null) $line = zk_stats_run_one($db);   // System Threat stats: only when no back-fill is waiting
         if ($line !== null) zkf_log($line);
         if (time() - $lastNames >= ZKF_NAMES_EVERY) {
             $lastNames = time();

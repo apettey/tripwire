@@ -76,3 +76,24 @@ CREATE TABLE IF NOT EXISTS `zkill_names` (
   PRIMARY KEY (`id`),
   KEY `pending` (`resolvedAt`, `requestedAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Per-system zKillboard stats (System Threat, zkill/stats.php): a compact JSON cache entry per system, also the
+-- queue (status 'queued' -> 'running' -> 'done' / 'failed'; chain 10 < detail 20). wantedAt = last time an
+-- endpoint asked for the system (rows nobody asked for in 14 days are pruned).
+CREATE TABLE IF NOT EXISTS `zkill_system_stats` (
+  `systemID` int unsigned NOT NULL,
+  `status` varchar(8) NOT NULL DEFAULT 'queued',
+  `priority` tinyint unsigned NOT NULL DEFAULT 10,
+  `requestedBy` int unsigned NOT NULL DEFAULT 0,
+  `requestedAt` datetime NOT NULL,
+  `wantedAt` datetime NOT NULL,
+  `attemptedAt` datetime DEFAULT NULL,
+  `fetchedAt` datetime DEFAULT NULL,
+  `attempts` smallint unsigned NOT NULL DEFAULT 0,
+  `error` varchar(255) NOT NULL DEFAULT '',
+  `data` mediumtext DEFAULT NULL,
+  PRIMARY KEY (`systemID`),
+  KEY `queue` (`status`, `priority`, `requestedAt`),
+  KEY `requested_by` (`requestedBy`, `status`),
+  KEY `wanted` (`wantedAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
