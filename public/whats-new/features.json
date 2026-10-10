@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 46,
+      "date": "2026-10-10",
+      "title": "Kill messages show the chain label",
+      "description": "Discord kill messages (kills in the chain, corp kills and corp losses) now name the system the way the chain map does, with the name of the hole leading into it, for example \"AABCA · J105246\". Systems without a name on your chain look as before.\n\nTo leave the label out, edit the message text in Mask Admin > Discord and use {system} instead of {labelSystem}.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-46-kill-discord-chain-label.png",
+          "caption": "Mask Admin > Discord preview of a chain kill with its label"
+        }
+      ]
+    },
+    {
       "pr": 45,
       "date": "2026-10-10",
       "title": "Discord chain kills: set your home system",

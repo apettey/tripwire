@@ -10,6 +10,8 @@
 //   corpLoss   the victim is in "our" corporations/alliances
 // Each (mask, type, killID) is queued once. When several matching types post to the same webhook, only the most
 // specific one is sent (loss > kill > chain). Names are resolved later by the dispatcher (zkill_names cache).
+// The message names the system with its chain label when it has one on the mask ("AABCA · J105246",
+// discord/chain_label.php), taken from the labels loaded with the 60 s refresh, so a kill costs no extra query.
 
 const DISCORD_KILL_MAX_AGE  = 900;   // seconds: older kills are history, not news
 const DISCORD_KILL_REFRESH  = 60;    // seconds between reloads of settings, webhooks and chain systems
@@ -95,8 +97,9 @@ function discord_classify_kill(array $facts, array $settings, array $chainSystem
     return $matches;
 }
 
-/** Outbox data of a kill notification: IDs (names are resolved when it is sent) plus the type's template/ping */
-function discord_kill_data($kind, array $facts, array $type, $maskName) {
+/** Outbox data of a kill notification: IDs (names are resolved when it is sent) plus the type's template/ping and the
+    system's chain label on the mask ('' = none) */
+function discord_kill_data($kind, array $facts, array $type, $maskName, $label = '') {
     $fb = $facts['finalBlow'] ?? ['character' => 0, 'corporation' => 0, 'alliance' => 0, 'ship' => 0];
     return [
         'kind' => $kind, 'template' => $type['template'], 'ping' => $type['ping'], 'mask' => $maskName,
@@ -104,7 +107,7 @@ function discord_kill_data($kind, array $facts, array $type, $maskName) {
         'victimID' => $facts['victim']['character'], 'corpID' => $facts['victim']['corporation'],
         'allianceID' => $facts['victim']['alliance'], 'shipTypeID' => $facts['victim']['ship'],
         'finalBlowID' => $fb['character'], 'finalBlowCorpID' => $fb['corporation'],
-        'attackers' => $facts['pilots'], 'value' => $facts['value'],
+        'attackers' => $facts['pilots'], 'value' => $facts['value'], 'label' => (string) $label,
     ];
 }
 
@@ -119,8 +122,9 @@ function discord_kill_context(array $data, array $names) {
     $name = function ($id, $fallback) use ($names) { return $id && isset($names[$id]) ? $names[$id] : ($id ? $fallback : ''); };
     $system = discord_system($data['systemID']);
     return [
-        'kind' => $data['kind'], 'template' => $data['template'], 'ping' => $data['ping'], 'mask' => $data['mask'],
+        'kind' => $data['kind'], 'template' => discord_template_upgrade($data['kind'], 'template', $data['template']), 'ping' => $data['ping'], 'mask' => $data['mask'],
         'systemID' => $data['systemID'], 'system' => $system ? $system[0] : (string) $data['systemID'],
+        'label' => (string) ($data['label'] ?? ''),   // none in rows queued before labels existed: as before
         // Wormhole space has no meaningful security status: the class is shown instead
         'security' => $system && !$system[4] ? $system[1] : null, 'class' => discord_system_class($data['systemID']),
         'region' => $system ? discord_region_name($system[2]) : '',
@@ -136,11 +140,11 @@ function discord_kill_context(array $data, array $names) {
     ];
 }
 
-/** Settings, webhooks and chain systems of masks with a kill type enabled (reloaded every DISCORD_KILL_REFRESH s) */
+/** Settings, webhooks, chain systems and chain labels of masks with a kill type enabled (reloaded every DISCORD_KILL_REFRESH s) */
 function discord_kill_state(PDO $db, $force = false) {
     static $state = null, $loaded = 0;
     if (!$force && $state !== null && time() - $loaded < DISCORD_KILL_REFRESH) return $state;
-    $state = ['masks' => [], 'chains' => []];
+    $state = ['masks' => [], 'chains' => [], 'labels' => []];
     $loaded = time();
     $webhooks = [];
     foreach ($db->query("SELECT id, maskID FROM discord_webhooks WHERE status IN ('ok', 'pending')")->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -164,6 +168,8 @@ function discord_kill_state(PDO $db, $force = false) {
         foreach ($chainMasks as $maskID) $homes[(string) $maskID] = (int) $state['masks'][$maskID]['homeSystemID'];
         $state['chains'] = discord_chain_systems($db, $homes);
     }
+    // Chain labels for the messages of every kill type (a corp kill or loss in a labelled system shows it too)
+    if ($state['masks']) $state['labels'] = discord_chain_labels($db, array_keys($state['masks']));
     return $state;
 }
 
@@ -181,7 +187,8 @@ function discord_on_killmail(PDO $db, array $kill) {
         $queued = 0;
         foreach ($state['masks'] as $maskID => $settings) {
             foreach (discord_classify_kill($facts, $settings, $state['chains'][$maskID] ?? []) as $kind => $webhookID) {
-                $data = discord_kill_data($kind, $facts, $settings['types'][$kind], discord_mask_name($db, $maskID));
+                $data = discord_kill_data($kind, $facts, $settings['types'][$kind], discord_mask_name($db, $maskID),
+                    $state['labels'][$maskID][$facts['systemID']] ?? '');
                 $claim = function () use ($db, $maskID, $kind, $facts) { return discord_dedupe_once($db, $maskID, 'kill:' . $kind, (string) $facts['killID']); };
                 if (discord_enqueue_once($db, $maskID, $webhookID, $kind, $data, $claim) !== null) {
                     if (function_exists('zk_names_lookup')) zk_names_lookup($db, discord_kill_name_ids($data));   // the worker resolves them meanwhile

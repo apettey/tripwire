@@ -26,9 +26,9 @@ function discord_placeholders() {
         'kspace'    => $common + $label + ['jumps' => 'e.g. "4 jumps from Jita"', 'hub' => 'closest ping system', 'hubjumps' => 'jumps to it',
             'hubs' => 'every ping system in range, e.g. "Jita 4, Amarr 9"', 'sig' => 'signature ID of the hole', 'hole' => 'wormhole type',
             'from' => 'system the hole is in', 'mapper' => 'who mapped it'],
-        'chainKill' => $common + $kill,
-        'corpKill'  => $common + $kill,
-        'corpLoss'  => $common + $kill,
+        'chainKill' => $common + $label + $kill,
+        'corpKill'  => $common + $label + $kill,
+        'corpLoss'  => $common + $label + $kill,
         'rally'     => $common + $label + ['who' => 'who set, moved or cleared it',
             'time' => 'when it was set, moved or cleared, shown in each reader\'s own time zone (Discord timestamp)',
             'rally' => 'cleared text: the rally message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {rally})',
@@ -118,9 +118,9 @@ function discord_security_text($security) {
 function discord_default_templates() {
     return [
         'kspace'    => '{pings} New k-space connection: **{system}** ({class} {security}, {region}), {jumps}. Hole {sig} in {from}, mapped by {mapper}.',
-        'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK. {zkill}',
-        'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}',
-        'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}',
+        'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
+        'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK, {attackers} pilots. {zkill}',
+        'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
         // Rally point (discord/rally.php): set or moved, and cleared. The cleared text replaces the rally message (an edit,
         // nobody pinged): {rally} is that message struck through
         'rally'      => "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}",
@@ -133,6 +133,10 @@ function discord_default_templates() {
     time (nobody customised it), so it is replaced by today's default (discord_template_upgrade) */
 function discord_retired_templates() {
     return [
+        // Kills before the chain label ({system}, not {labelSystem})
+        'chainKill' => ['template' => ['{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK. {zkill}']],
+        'corpKill'  => ['template' => ['{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}']],
+        'corpLoss'  => ['template' => ['{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}']],
         'rally' => [
             'template' => ["{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}"],
             // 1.15 (#30) and 1.17 (#31): a new "cleared" message, now an edit of the rally message
@@ -198,7 +202,8 @@ function discord_field($name, $value, $inline = true) {
  *   common: kind, template, ping, mask, system, systemID, security, class, region, map, dotlan, time (unix)
  *   kspace: hubs [[name, jumps], ...] (closest first), sig, hole, from, mapper, label (chain label, discord_chain_label)
  *   rally:  who, cleared, label, template / templateClear (discord/rally.php)
- *   kills:  killID, victim, victimID, ship, shipTypeID, corp, alliance, attackers, finalblow, attackercorp, value, zkill
+ *   kills:  killID, victim, victimID, ship, shipTypeID, corp, alliance, attackers, finalblow, attackercorp, value, zkill,
+ *           label (chain label on the mask, discord_chain_labels; '' = none)
  */
 function discord_payload(array $ctx) {
     $kind = $ctx['kind'];
@@ -211,8 +216,12 @@ function discord_payload(array $ctx) {
     $raw = ['pings', 'map', 'dotlan', 'zkill'];
     $embed = ['color' => discord_colour($kind, $ctx['class'] ?? null)];
     if (!empty($ctx['time'])) $embed['timestamp'] = gmdate('Y-m-d\TH:i:s\Z', (int) $ctx['time']);
-    $where = discord_escape($ctx['system'] ?? '?') . ' (' . discord_escape(trim(($ctx['class'] ?? '') . ' ' . $values['security'])) . ')'
-        . (!empty($ctx['region']) ? ', ' . discord_escape($ctx['region']) : '');
+    // "J105246 (C5), E-R00028": the embed's system line, from the system as shown (with or without its chain label)
+    $whereOf = function ($system) use ($ctx, $values) {
+        return discord_escape($system) . ' (' . discord_escape(trim(($ctx['class'] ?? '') . ' ' . $values['security'])) . ')'
+            . (!empty($ctx['region']) ? ', ' . discord_escape($ctx['region']) : '');
+    };
+    $where = $whereOf($ctx['system'] ?? '?');
 
     if ($kind === 'kspace') {
         $hubs = $ctx['hubs'] ?? [];
@@ -300,11 +309,16 @@ function discord_payload(array $ctx) {
             'attackers' => (string) ($ctx['attackers'] ?? ''), 'finalblow' => $ctx['finalblow'] ?? '', 'attackercorp' => $ctx['attackercorp'] ?? '',
             'isk' => discord_isk($ctx['value'] ?? 0), 'zkill' => isset($ctx['zkill']) ? '<' . $ctx['zkill'] . '>' : '',
             'time' => !empty($ctx['time']) ? gmdate('Y-m-d H:i', (int) $ctx['time']) : '',
+            'label' => $ctx['label'] ?? '', 'labelSystem' => discord_label_system($ctx['label'] ?? '', $ctx['system'] ?? ''),
         ];
         $title = ['chainKill' => 'Kill in the chain', 'corpKill' => 'Corp kill', 'corpLoss' => 'Corp loss'][$kind] ?? 'Kill';
+        // The system with its chain label, when it has one: "AABCA · J105246"
+        $at = discord_label_system($ctx['label'] ?? '', $ctx['system'] ?? '?');
+        // Titles render markdown (bold, spoiler, code, emoji): the label is user text (a signature name), escaped there too
+        $atTitle = discord_label_system(discord_escape($ctx['label'] ?? ''), $ctx['system'] ?? '?');
         $embed += [
-            'title' => discord_truncate($title . ': ' . ($ctx['ship'] ?? 'ship') . ' in ' . ($ctx['system'] ?? '?'), 256),
-            'description' => $where,
+            'title' => discord_truncate($title . ': ' . ($ctx['ship'] ?? 'ship') . ' in ' . $atTitle, 256),
+            'description' => $whereOf($at),
             'fields' => [
                 discord_field('Victim', discord_escape($ctx['victim'] ?? '?') . "\n" . discord_escape(trim(($ctx['corp'] ?? '') . (!empty($ctx['alliance']) ? ' / ' . $ctx['alliance'] : '')))),
                 discord_field('Final blow', discord_escape($ctx['finalblow'] ?? '?') . "\n" . discord_escape($ctx['attackercorp'] ?? '')),

@@ -407,7 +407,7 @@ check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types
 check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
 check('rally: stamped like the other types', discord_settings_stamp($rs, discord_settings_defaults(), 4000)['types']['rally']['enabledAt'], 4000);
 check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'label', 'labelSystem', 'who', 'time', 'rally', 'was']);
-check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, false]);
+check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, true]);   // kills too since the kill chain label
 
 // Data queued by public/rally.php: the type's texts, who, and nothing from before the type was turned on
 $rtype = ['enabledAt' => 1000] + $rs['types']['rally'];
@@ -900,6 +900,63 @@ check('kill state: old fragment posts no chain kill (corp kill unaffected)',
     discord_classify_kill(['systemID' => 31000010] + $kf, $ks2['masks']['98000001.2'], $ks2['chains']['98000001.2']), ['corpKill' => 2]);
 check('kill state: no home set: no chain kills at all', [$ks2['chains']['98000002.2'],
     discord_classify_kill(['systemID' => 31000001] + $kf, $ks2['masks']['98000002.2'], $ks2['chains']['98000002.2'])], [[], []]);
+
+// --- kill messages with the chain label (discord_chain_labels, loaded with the kill state) ---
+// Every system's batch label equals the one-system lookup (same rule), per mask; only labelled systems are listed
+$batch = discord_chain_labels($cl, ['98000001.2', '98000002.2', '98000003.2']);
+$single = [];
+foreach (['98000001.2', '98000002.2', '98000003.2'] as $m) {
+    foreach ([31000001, 31000002, 31000003, 31000005, 31000009, 30000142, 30002187] as $s) { $l = discord_chain_label($cl, $m, $s); if ($l !== '') $single[$m][$s] = $l; }
+}
+ksort($batch['98000001.2']);
+ksort($single['98000001.2']);
+check('chain labels: batch equals the one-system lookup', $batch, $single);
+check('chain labels: values', $batch['98000001.2'], [30000142 => 'ABC', 31000002 => 'A', 31000003 => 'AB', 31000005 => 'B']);
+check('chain labels: no masks, no tables', [discord_chain_labels($cl, []), discord_chain_labels(new PDO('sqlite::memory:'), ['98000001.2'])], [[], []]);
+// The kill state loads them for every mask with a kill type (one query per refresh, none per kill)
+check('kill state: no named holes, no labels', $ks2['labels'], []);
+$ch->exec("UPDATE signatures SET name = 'A' WHERE id = 1");   // home's side of home - 31000002
+$ks3 = discord_kill_state($ch, true);
+check('kill state: labels of the mask\'s chain', $ks3['labels'], ['98000001.2' => [31000002 => 'A']]);
+$kd = discord_kill_data('chainKill', ['systemID' => 31000002] + $facts, $ks3['masks']['98000001.2']['types']['chainKill'], 'Corp', $ks3['labels']['98000001.2'][31000002] ?? '');
+check('kill data: carries the label', [$kd['label'], discord_kill_context($kd, [])['label']], ['A', 'A']);
+check('kill data: no label by default; rows queued before have none', [discord_kill_data('corpKill', $facts, $ks['types']['corpKill'], 'Corp')['label'],
+    discord_kill_context(array_diff_key($kd, ['label' => 1]), [])['label']], ['', '']);
+
+$kctx = ['kind' => 'chainKill', 'template' => discord_default_templates()['chainKill'], 'ping' => '', 'mask' => 'Corp', 'system' => 'J105246',
+    'security' => null, 'class' => 'C5', 'region' => 'E-R00028', 'killID' => 1, 'victim' => 'Voidlord Pandora', 'corp' => 'All You Can Eat Holes',
+    'ship' => 'Coercer Navy Issue', 'value' => 44070000, 'zkill' => 'https://zkillboard.com/kill/1/', 'time' => 1791633600];
+$kp = discord_payload(['label' => 'AABCA'] + $kctx);
+check('kill label: default text', $kp['content'], 'Kill in the chain: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in AABCA · J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>');
+check('kill label: embed title and system line', [$kp['embeds'][0]['title'], $kp['embeds'][0]['description']],
+    ['Kill in the chain: Coercer Navy Issue in AABCA · J105246', 'AABCA · J105246 (C5), E\\-R00028']);
+$kp = discord_payload(['label' => ''] + $kctx);
+check('kill label: none, as before', [$kp['content'], $kp['embeds'][0]['title'], $kp['embeds'][0]['description']],
+    ['Kill in the chain: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>',
+     'Kill in the chain: Coercer Navy Issue in J105246', 'J105246 (C5), E\\-R00028']);
+check('kill label: old context without one, as before', discord_payload($kctx)['content'], $kp['content']);
+$tpl = discord_default_templates();
+check('kill label: corp kill and loss defaults', [
+    discord_payload(['kind' => 'corpKill', 'template' => $tpl['corpKill'], 'label' => 'AB', 'attackers' => 3] + $kctx)['content'],
+    discord_payload(['kind' => 'corpLoss', 'template' => $tpl['corpLoss'], 'label' => 'AB'] + $kctx)['content']], [
+    'Corp kill: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in AB · J105246, 44.07m ISK, 3 pilots. <https://zkillboard.com/kill/1/>',
+    'Corp loss: Voidlord Pandora lost a Coercer Navy Issue in AB · J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>']);
+check('kill label: {label} and {system} on their own', discord_payload(['template' => '{label}|{labelSystem}|{system}', 'label' => 'AB'] + $kctx)['content'], 'AB|AB · J105246|J105246');
+$kp = discord_payload(['label' => "@everyone **x** <@&999999999999999999> [l](https://e.example)"] + $kctx);
+check('kill label: escaped, cannot ping, format or link', [strpos($kp['content'], '@everyone'), strpos($kp['content'], '<@&'), strpos($kp['content'], '**x'),
+    strpos($kp['content'], '](https:'), strpos($kp['embeds'][0]['description'], '@everyone'), strpos($kp['embeds'][0]['description'], '**x'), $kp['allowed_mentions']],
+    [false, false, false, false, false, false, ['parse' => []]]);
+$kp = discord_payload(['label' => '||**[x](https://evil.example)** <t:0:R> <:e:123456789012345678> <@&999999999999999999> `c` ~~s~~ _i_'] + $kctx);
+check('kill label: escaped in the embed title too (titles render markdown)', $kp['embeds'][0]['title'],
+    'Kill in the chain: Coercer Navy Issue in \\|\\|\\*\\*\\[x\\]\\(https\\://evil.example\\)\\*\\* \\<t\\:0\\:R\\> \\<\\:e\\:123456789012345678\\> \\<@' . DISCORD_ZWSP . '&999999999999999999\\> \\`c\\` \\~\\~s\\~\\~ \\_i\\_ · J105246');
+// Stored default texts from before the label become today's; customised texts stay
+foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
+    $old = discord_retired_templates()[$kind]['template'][0];
+    check("kill label: $kind's earlier default upgraded", [discord_template_upgrade($kind, 'template', $old . "\r\n"), discord_template_upgrade($kind, 'template', $old . '!'),
+        discord_settings_normalise(['types' => [$kind => ['template' => $old]]], discord_settings_defaults())[0]['types'][$kind]['template'],
+        discord_kill_context(['kind' => $kind, 'template' => $old] + $kd, [])['template']], [$tpl[$kind], $old . '!', $tpl[$kind], $tpl[$kind]]);
+}
+check('kill label: placeholders listed', [isset(discord_placeholders()['chainKill']['labelSystem']), isset(discord_placeholders()['corpLoss']['label'])], [true, true]);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);
