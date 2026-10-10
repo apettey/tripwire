@@ -13,6 +13,18 @@
       ]
     },
     {
+      "pr": 24,
+      "date": "2026-10-10",
+      "title": "Worst-case rolling calculator",
+      "description": "The mass dialog (right-click a connection > Mass) now shows how much mass can be left in the hole in the worst case: nominal mass ±10%, minus the logged jumps, narrowed by the hole's stable, destab or crit state. Pick your ship, prop on or off for each pass, and Higgs, and it marks the out pass and the return pass as Safe, May collapse or Will collapse, and warns you when you could be stranded on the far side.\n\nTurn it off in Settings > Chain Map Settings > Rolling guidance.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-24-rolling-calculator.png",
+          "caption": "Rolling guidance in the mass dialog"
+        }
+      ]
+    },
+    {
       "pr": 21,
       "date": "2026-10-10",
       "title": "Chain kill feed",
