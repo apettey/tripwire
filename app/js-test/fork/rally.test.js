@@ -152,4 +152,26 @@ describe('Rally', () => {
 		it('Off map', () => assert.equal(rally.routeText({ onMap: false }), 'not on this map'));
 		it('Unknown', () => assert.equal(rally.routeText(null), 'not on this map'));
 	});
+
+	describe('discordEnabled', () => {
+		it('On when the option is missing', () => assert.equal(rally.discordEnabled({}), true));
+		it('On without options', () => assert.equal(rally.discordEnabled(null), true));
+		it('On when enabled', () => assert.equal(rally.discordEnabled({ rallyDiscord: { enabled: true } }), true));
+		it('Off when disabled', () => assert.equal(rally.discordEnabled({ rallyDiscord: { enabled: false } }), false));
+		it('On for an empty entry', () => assert.equal(rally.discordEnabled({ rallyDiscord: {} }), true));
+	});
+
+	describe('changePayload', () => {
+		it('Posts when a webhook exists and the user wants it', () =>
+			assert.deepEqual(rally.changePayload({ mode: 'set', systemID: HOME }, true, {}), { mode: 'set', systemID: HOME, discord: 1 }));
+		it('Not when the user unticked it', () =>
+			assert.deepEqual(rally.changePayload({ mode: 'clear' }, true, { rallyDiscord: { enabled: false } }), { mode: 'clear', discord: 0 }));
+		it('Not without a webhook', () =>
+			assert.deepEqual(rally.changePayload({ mode: 'clear' }, false, {}), { mode: 'clear', discord: 0 }));
+		it('Leaves the input alone', () => {
+			const input = { mode: 'clear' };
+			rally.changePayload(input, true, {});
+			assert.deepEqual(input, { mode: 'clear' });
+		});
+	});
 });

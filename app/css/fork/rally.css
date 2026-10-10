@@ -67,6 +67,17 @@
 	color: #FF4747;
 }
 
+/* "Also post to Discord" entry in the chain map context menu (Discord blurple when on) */
+#rallyDiscordMenuItem .rally-discord-check {
+	display: inline-block;
+	width: 1em;
+	color: #bbb;
+}
+
+#rallyDiscordMenuItem .rally-discord-check.on {
+	color: #7289da;
+}
+
 @keyframes rally-blink {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.35; }
