@@ -72,7 +72,10 @@ Fork features that need their own tables create them on first use with `CREATE T
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
 `zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
-([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped). The app user therefore
+([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
+and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
+`fork_watchlist_baseline` / `fork_watchlist_seen` (what the Discord type "Watchlist match" has seen, created by
+`discord_notify.worker.php`; DDL in `docker/sql/watchlist.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -310,13 +313,28 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Type | When |
 | --- | --- |
 | New k-space near a ping system | A wormhole on the mask's chain leads to a k-space system (high/low/null, Pochven counts) that had no other wormhole signature in the mask, fewer than `maxJumps` (default 10) *safe* gate jumps from a ping system (default Jita, Amarr). Safe = every system in between is high-sec (security >= 0.45, not Pochven) and never Zarzakh; both ends may be any security (the Favourites panel's safe-route rule). Each connection is looked at once; at most one message per (mask, system) per `cooldownHours` (default 6) |
-| Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
+| Any kill in our chain | A kill in a wormhole, low-sec or null-sec system connected to the mask's **home system** through live wormholes right now (see "Home system" below; no home set = no chain kills); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
+| Watchlist match | A system on the mask's chain (every wormhole of the mask) matches one of the mask's [watchlist](#watchlist) filters, evaluated by the worker every 15 s (`discord/watchlist.php`), so it is posted even when nobody has Tripwire open. What is new comes from what the worker has seen, not from edit times: on the first poll after the type is turned on, or after a filter is saved or turned on, the chain's current matches are recorded without posting anything (`fork_watchlist_baseline`); afterwards a (filter, system) match is posted once, when none of its holes (any of the system's connections for filters on the system only, those fitting the hole conditions otherwise) was seen before; the message names the oldest of them. Every hole seen matching is kept in `fork_watchlist_seen` for as long as it exists (no expiry, so an old hole or a gate link is never posted again however long it stays on the chain), and forgotten when it is gone from the chain: a second way into a system already posted isn't posted, the system reached through a new wormhole after all its holes collapsed is. Editing a hole (name, EOL, mass) never posts it; a hole that only starts matching through an edit (e.g. its type is filled in) is new. A paused or deleted filter's records are dropped. Filters with "jumps from you / from home" are skipped (they depend on who is looking). Placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}` (class and effect), `{region}`, `{sig}` (the hole's signature in the system it is off), `{hole}` (its type there, K162 for the exit side), `{from}`, `{map}`; default ``{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}`` + `{map}` on a new line, e.g. "@here Watchlist **C5 with a Wolf-Rayet**: **J170540** (C5, Wolf-Rayet, E-R00024), through WRC-555 H296 in J115405". Filter names (admin text) and game data are escaped; at most 20 messages per mask per poll |
 | Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`, `{time}`...) and cleared (`{rally}`, `{who}`, `{time}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "@here Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)", and ``{rally}`` + ``Cleared by *{who}* at {time}`` on a new line. One live message per mask (`discord_rally_message`: id and text as last posted): a set or move within 30 s of its post edits it (`PATCH .../messages/<id>`); a move after that posts a new message (with the pings) and edits the old one into its text struck through + "Moved to **AB · J170122** by *who* at <time>" (fixed text); a clear, at any time, edits it into the cleared text: `{rally}` is the message struck through line by line, without its pings and its link line (a cleared text without `{rally}` gets it put above). E.g. "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)~~" / "Cleared by *Aashai Modor* at 19:08". A clear never posts a new message or pings: when there is no live message (never posted, deleted in Discord, another webhook, the type turned off and on since) nothing is sent. Every edit has empty `allowed_mentions` (Discord doesn't notify on edits anyway); the edits that end a message (cleared, moved) also have no pings in their text (the ping field and mentions the admin wrote are left out; a struck rally text that doesn't fit Discord's 2000 characters is cut, never the cleared line). `{time}` is a Discord timestamp (`<t:unix:t>`), shown in each reader's own time zone. Texts saved with an earlier default (1.15's, or 1.17's ``{pings} Tripwire rally point cleared by *{who}*{was}``) are read as today's; edited texts are kept. The message shows the rally as stored when it is sent, and a queued rally message is dropped when a newer one of the mask is queued (a set and a clear queued together send nothing). A live message deleted in Discord (404 Unknown Message) is posted again for a set/move, never for a clear, without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
+
+**Home system** (per mask, Mask Admin > Discord, stored as `homeSystemID` in the mask's settings; any known system,
+validated against the static data). "The chain" for chain kills is every system connected to home through the mask's
+live wormholes, walked outward from home (`discord_chain_systems` in `discord/chain.php`, through k-space exits too,
+like the chain map). A wormhole is live while its `wormholes` row and both signatures exist in the mask and neither
+signature is past its `lifeLeft` (signatures with `lifeLength` 0 never expire; EOL holes count until they expire; a
+hole that collapsed early counts until it is deleted from the map). Signatures with an unknown far side are never
+walked through, and neither are EVE-Scout's Thera/Turnur connections the chain map draws (they aren't in the mask's
+tables): a kill behind a Thera hole that only EVE-Scout knows doesn't count until the hole is added to the mask. The
+chain is reloaded with the kill settings every `DISCORD_KILL_REFRESH` (60 s). Without a home set, chain kills post
+nothing and the page warns; corp kills/losses don't use it. Before 2026-10-10 any system with one of the mask's
+wormhole signatures counted, so fragments of an old chain (holes collapsed or rolled but not deleted; upstream's
+`wormholeClean` only deletes them at `lifeLeft` + 10 % of their life) kept posting
+(`changes/2026-10-10-chain-kills-connected/`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
@@ -406,6 +424,32 @@ Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/d
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
 tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`, legacy texts) and, against the running dev stack (worker + mock), `php tests/rally_discord_flow_test.php` (every set / move / clear sequence on both paths, printing the channel).
+
+### Watchlist
+
+Named filters per mask ("C5 with a Wolf-Rayet", "J123450", "anything on an H296") that tell everyone on the mask when
+the chain map has what they are looking for. They belong to the same masks and admins as the
+[Discord notifications](#discord-notifications): the corporation mask and corporation-owned custom masks; the
+corporation's Tripwire admins (`checkAdmin`) create, edit, pause and delete them in Mask Admin > Watchlist (or the
+panel), every member of the mask reads them. Fork-owned: `watchlist/` (storage, validation and the server-side matcher),
+`public/watchlist.php`, `app/js/fork/watchlist.js`, table `fork_watchlist` (one row per mask with the filters as JSON;
+DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`).
+
+- `public/watchlist.php`: `GET ?mode=get` returns the session mask's filters (`available` false and no filters for
+  masks the watchlist isn't for), `canEdit`, and for admins a per-session CSRF token. Admins `POST` JSON
+  (`filter-save`, `filter-delete`, `filter-enable`) with the `X-CSRF-Token` header, `X-Requested-With: XMLHttpRequest`,
+  `Content-Type: application/json` and, when the browser sends `Origin`, this host; everyone else gets 403. The server
+  normalises the conditions with the browser's rules, checks the system, region, constellation and wormhole types
+  against the game data, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask.
+- The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
+  makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
+  signature table). Each member turns these on or off in Settings > General Preferences > Watchlist.
+- The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`. Both matchers pass the
+  same cases, `watchlist/tests/cases.json` (mocha: `app/js-test/fork/watchlist.test.js`; PHP:
+  `docker compose -f docker-compose.dev.yml exec -T app php watchlist/tests/watchlist_test.php`).
+- Game data (systems, wormhole types, regions) is read from `public/js/combine.js`, the file the browser matches with
+  (`appData` is plain JSON after `var appData =`), once per worker process and per admin save (about 35 ms); there is
+  no copy to regenerate after a game-data update. `watchlist/tests/` is not in the image.
 
 ### Versions
 

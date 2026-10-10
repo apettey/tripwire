@@ -1,0 +1,33 @@
+{
+  "username": "Tripwire",
+  "content": "@here Watchlist **C5 with a Wolf\\-Rayet**: **J170540** (C5, Wolf\\-Rayet, E\\-R00024), through WRC\\-555 H296 in J115405\n<http://localhost:8107/?system=J170540>",
+  "embeds": [
+    {
+      "color": 5227511,
+      "timestamp": "2026-10-10T21:28:11Z",
+      "title": "Watchlist: C5 with a Wolf\\-Rayet",
+      "description": "J170540 (C5), E\\-R00024 · Wolf\\-Rayet",
+      "fields": [
+        {
+          "name": "Through",
+          "value": "WRC\\-555 H296 in J115405",
+          "inline": true
+        },
+        {
+          "name": "Links",
+          "value": "[Tripwire](http://localhost:8107/?system=J170540)",
+          "inline": true
+        }
+      ],
+      "url": "http://localhost:8107/?system=J170540",
+      "footer": {
+        "text": "Tripwire · Corp"
+      }
+    }
+  ],
+  "allowed_mentions": {
+    "parse": [
+      "everyone"
+    ]
+  }
+}

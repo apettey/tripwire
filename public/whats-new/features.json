@@ -1,14 +1,34 @@
 {
   "features": [
     {
-      "pr": 37,
+      "pr": 45,
       "date": "2026-10-10",
-      "title": "Routes through Thera and Turnur",
-      "description": "Favourite routes and the Destinations window now also look at the public Thera and Turnur connections from EVE-Scout. When going through Thera or Turnur is shorter, the route uses it: every jump is a small marker, Thera hops are yellow circles and Turnur hops pink ones, and the signatures to warp to are listed next to the route (click one to copy it). Hover a Thera or Turnur marker for the hole type, the signature, the largest ship it takes and the life left. By default holes with under 4 hours left (EOL) are skipped.\n\nSet route in game sends each gate stretch separately: the first one now, the next once you are out of Thera. Choose Thera, Turnur, your ship size and which holes to skip in Settings > General Preferences > Routes through; untick both Thera and Turnur to turn it off.",
+      "title": "Discord chain kills: set your home system",
+      "description": "Discord \"Any kill in our chain\" notifications now only post kills in systems connected to your home system through live wormholes, re-checked every minute, so an old chain no longer pings after its connecting hole collapses or expires.\n\nAdmins: set the home system in Mask Admin > Discord. Until a home is set, no chain kills are posted and the page shows a warning. Chain kills can still be turned off on the same page.",
       "images": [
         {
-          "src": "whats-new/img/pr-37-exit-finder-thera.png",
-          "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
+          "src": "whats-new/img/pr-45-chain-kills-connected.png",
+          "caption": "Mask Admin > Discord: the new Home system setting"
+        }
+      ]
+    },
+    {
+      "pr": 41,
+      "date": "2026-10-10",
+      "title": "Watchlist: get told when the chain has what you're looking for",
+      "description": "Your corporation's Tripwire admins can now set up a watchlist for the mask in Mask Admin > Watchlist: filters for a specific J-code or system, a region or constellation, a wormhole class, an effect such as Wolf-Rayet, a static (e.g. \"has a C5 static\"), a hole type such as H296 or a minimum hole size, and how many jumps it may be from you or from home. Everyone on the mask sees the filters in the Watchlist panel.\n\nWhen something new on the chain map matches, you get a pop-up and a sound, the system gets an eye marker, the hole into it is highlighted, and its signature is marked in the signature table so you know which one to warp to. Admins can also have matches posted to Discord (Mask Admin > Discord > Watchlist match). Turn the sound, pop-ups, markers or the panel off in Settings > General Preferences > Watchlist.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-41-watchlist.png",
+          "caption": "The Watchlist panel, matching systems and their highlighted holes on the chain map"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-admin.png",
+          "caption": "Admins set the mask's filters in Mask Admin > Watchlist"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-editor.png",
+          "caption": "Creating a filter"
         }
       ]
     },
@@ -21,6 +41,18 @@
         {
           "src": "whats-new/img/pr-40-favourites-route-strip.png",
           "caption": "Routes in the Favourites panel as jump markers"
+        }
+      ]
+    },
+    {
+      "pr": 37,
+      "date": "2026-10-10",
+      "title": "Routes through Thera and Turnur",
+      "description": "Favourite routes and the Destinations window now also look at the public Thera and Turnur connections from EVE-Scout. When going through Thera or Turnur is shorter, the route uses it: every jump is a small marker, Thera hops are yellow circles and Turnur hops pink ones, and the signatures to warp to are listed next to the route (click one to copy it). Hover a Thera or Turnur marker for the hole type, the signature, the largest ship it takes and the life left. By default holes with under 4 hours left (EOL) are skipped.\n\nSet route in game sends each gate stretch separately: the first one now, the next once you are out of Thera. Choose Thera, Turnur, your ship size and which holes to skip in Settings > General Preferences > Routes through; untick both Thera and Turnur to turn it off.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-37-exit-finder-thera.png",
+          "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
         }
       ]
     },
