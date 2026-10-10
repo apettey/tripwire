@@ -18,12 +18,14 @@ const rollingCalc = {
 	},
 
 	/** Mass a single pass takes off the hole: (hull + prop mod if hot) x2 with a Higgs anchor.
+		mods.propKg: the fitted prop module's real mass addition (auto-mass-logging), used instead of the 50kt/500kt rule.
 		@return kg, or null if the hull mass is unknown */
 	passMass: function(hullKg, mods) {
 		const hull = Number(hullKg);
 		if (!(hull > 0)) { return null; }
 		mods = mods || {};
-		return (hull + (mods.prop ? rollingCalc.propMass(hull) : 0)) * (mods.higgs ? 2 : 1);
+		const prop = typeof mods.propKg === 'number' && mods.propKg >= 0 ? mods.propKg : rollingCalc.propMass(hull);
+		return (hull + (mods.prop ? prop : 0)) * (mods.higgs ? 2 : 1);
 	},
 
 	/** Range of mass still left in the hole.
@@ -150,16 +152,32 @@ const rollingCalc = {
 	},
 
 	/** Ship choices for the dialog: the current ship first, then ships seen in this hole's log (unique by name).
-		@param currentShip {typeName, mass} or null; jumps parseMassData().jumps ({shipName, originalMass}) */
-	shipChoices: function(currentShip, jumps) {
+		@param currentShip {typeName, mass, propKg?, higgs?} or null; jumps parseMassData().jumps ({shipName, originalMass},
+			plus fit: {source: 'assets', base, propMass, multiplier} and characterName for a logged fit, auto-mass-logging)
+		A fitted ship's mass is hull + plates (before Higgs), with its real prop module (propKg) and Higgs anchor (higgs).
+		currentCharacterID: with a current fit, that pilot's logged fits are left out (the current one is listed first). */
+	shipChoices: function(currentShip, jumps, currentCharacterID) {
 		const out = [], seen = {};
-		const add = function(name, mass, current) {
+		const add = function(name, mass, current, fit) {
 			if (!name || !(Number(mass) > 0) || seen[name]) { return; }
 			seen[name] = true;
-			out.push({ name: name, mass: Number(mass), current: !!current });
+			const choice = { name: name, mass: Number(mass), current: !!current };
+			if (fit) { choice.propKg = Number(fit.propKg) || 0; choice.higgs = !!fit.higgs; }
+			out.push(choice);
 		};
-		if (currentShip) { add(currentShip.typeName, currentShip.mass, true); }
-		(jumps || []).forEach(function(j) { if (j) { add(j.shipName, j.originalMass, false); } });
+		if (currentShip) {
+			add(currentShip.typeName, currentShip.mass, true, currentShip.propKg !== undefined ? currentShip : null);
+		}
+		(jumps || []).forEach(function(j) {
+			if (!j) { return; }
+			if (j.fit && j.fit.source === 'assets' && Number(j.fit.base) > 0) {
+				if (currentShip && currentShip.propKg !== undefined && currentCharacterID && j.characterID == currentCharacterID) { return; }
+				add(j.shipName + " (" + (j.characterName || "logged") + "'s fit)", j.fit.base, false,
+					{ propKg: j.fit.propMass, higgs: Number(j.fit.multiplier) > 1 });
+			} else {
+				add(j.shipName, j.originalMass, false);
+			}
+		});
 		return out;
 	},
 
@@ -223,6 +241,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function currentShip() {
 			const eve = typeof tripwire !== "undefined" && tripwire.client ? tripwire.client.EVE : null;
+			// The tracked character's fitted mass (auto-mass-logging), when its fit is known
+			const fit = eve && eve.characterID && typeof autoMass !== "undefined" && autoMass.currentFit ? autoMass.currentFit(eve.characterID) : null;
+			if (fit && fit.source === 'assets' && fit.mass && fit.mass.known) {
+				return { typeName: fit.shipName + ", fitted", mass: fit.mass.base, propKg: fit.mass.prop ? fit.mass.prop.mass : 0, higgs: fit.mass.multiplier > 1 };
+			}
 			const data = eve && eve.shipTypeID && typeof appData !== "undefined" && appData.mass ? appData.mass[eve.shipTypeID] : null;
 			return data ? { typeName: data.typeName, mass: parseFloat(data.mass) } : null;
 		}
@@ -254,9 +277,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!info || !state.massData) { $p.hide().empty(); return; }
 			$p.show();
 
-			const ships = rollingCalc.shipChoices(currentShip(), state.massData.jumps);
+			const eve = tripwire.client ? tripwire.client.EVE : null;
+			const ships = state.ships = rollingCalc.shipChoices(currentShip(), state.massData.jumps, eve ? eve.characterID : null);
 			if (state.choice === null) { state.choice = ships.length ? ships[0].name : 'custom'; }
-			if (state.higgs === null) { state.higgs = !!(tripwire.massOptions && tripwire.massOptions.higgs); }
+			const chosen = ships.filter(function(s) { return s.name === state.choice; })[0];
+			if (state.higgs === null) { state.higgs = chosen && chosen.higgs !== undefined ? chosen.higgs : !!(tripwire.massOptions && tripwire.massOptions.higgs); }
 			if (state.outProp === null) { state.outProp = !!(tripwire.massOptions && tripwire.massOptions.prop); }
 			if (state.backProp === null) { state.backProp = state.outProp; }
 
@@ -264,8 +289,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const hull = ship ? ship.mass : parseFloat(state.customKt) * 1e6;
 			const plan = rollingCalc.plan({
 				totalKg: info.type.mass, jumpKg: info.type.jump, usedKg: state.massData.totalMass, massState: info.wormhole.mass,
-				outKg: rollingCalc.passMass(hull, { prop: state.outProp, higgs: state.higgs }),
-				backKg: rollingCalc.passMass(hull, { prop: state.backProp, higgs: state.higgs })
+				outKg: rollingCalc.passMass(hull, { prop: state.outProp, higgs: state.higgs, propKg: ship ? ship.propKg : undefined }),
+				backKg: rollingCalc.passMass(hull, { prop: state.backProp, higgs: state.higgs, propKg: ship ? ship.propKg : undefined })
 			});
 
 			const e = rollingCalc.escape;
@@ -289,7 +314,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 		}
 
-		$(document).on("change", "#rolling-calc .rolling-ship", function() { state.choice = $(this).val(); render(); });
+		$(document).on("change", "#rolling-calc .rolling-ship", function() {
+			state.choice = $(this).val();
+			const ship = state.ships ? state.ships.filter(function(s) { return s.name === state.choice; })[0] : null;
+			if (ship && ship.higgs !== undefined) { state.higgs = ship.higgs; }	// a logged fit knows its Higgs anchor
+			render();
+		});
 		$(document).on("input", "#rolling-calc .rolling-custom", function() { state.customKt = $(this).val(); render(); });
 		$(document).on("change", "#rolling-calc .rolling-out-prop", function() { state.outProp = $(this).prop("checked"); render(); });
 		$(document).on("change", "#rolling-calc .rolling-back-prop", function() { state.backProp = $(this).prop("checked"); render(); });

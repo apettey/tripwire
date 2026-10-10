@@ -105,6 +105,18 @@
       ]
     },
     {
+      "pr": 38,
+      "date": "2026-10-10",
+      "title": "Fitted jump mass",
+      "description": "When a tracked character jumps through a mapped wormhole, Tripwire logs the mass the jump really took, using your ship's current fitting from ESI (armor plates, prop module, Higgs anchor), and asks whether you jumped hot or cold. The mass dialog marks each jump as \"fit\" or \"hull\", and clicking the prop icon switches a jump between hot and cold. Rolling guidance uses these masses.\n\nThe fit lookup needs asset access, which your Tripwire admin turns on; then remove your tracking characters and add them again. Until then, jumps are logged with the hull mass and your hot/cold answer. ESI can show a refit up to an hour late. Turn it off, or turn off the hot/cold question, in Settings > Chain Map Settings > Jump mass.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-38-auto-mass-logging.png",
+          "caption": "The jump log with fitted masses and the hot/cold question"
+        }
+      ]
+    },
+    {
       "pr": 37,
       "date": "2026-10-10",
       "title": "Routes through Thera and Turnur",

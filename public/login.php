@@ -272,7 +272,7 @@ if ($mode == 'login') {
 				$esi->login();
 			}
 		} else if ($login == 'esi') {
-			$esi->login('esi-location.read_online.v1 esi-location.read_location.v1 esi-location.read_ship_type.v1 esi-ui.write_waypoint.v1 esi-ui.open_window.v1', 'evessoesi');
+			$esi->login('esi-location.read_online.v1 esi-location.read_location.v1 esi-location.read_ship_type.v1 esi-ui.write_waypoint.v1 esi-ui.open_window.v1' . (defined('ENABLE_ASSETS_SCOPE') && ENABLE_ASSETS_SCOPE ? ' esi-assets.read_assets.v1' : ''), 'evessoesi');
 		}
 	}
 } else if (isset($_COOKIE['tripwire'])) {

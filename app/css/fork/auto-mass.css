@@ -1,0 +1,29 @@
+/* Fitted jump mass (fork feature: auto-mass-logging) */
+#dialog-mass .automass-badge {
+	display: inline-block;
+	padding: 0 3px;
+	border-radius: 2px;
+	font-size: 0.85em;
+	line-height: 1.3;
+	cursor: help;
+}
+#dialog-mass .automass-fit { color: #0b1a0b; background: #6fcf6f; }
+#dialog-mass .automass-hull { color: #c0c8cc; background: #3a4650; }
+#dialog-mass .automass-toggle { cursor: pointer; }
+#dialog-mass .automass-toggle:hover,
+#dialog-mass .automass-toggle:focus { outline: 1px dotted #9aa6ae; }
+
+.automass-prompt { line-height: 1.5; }
+.automass-prompt .automass-source { opacity: 0.85; font-size: 0.9em; }
+.automass-prompt .automass-choice { margin-top: 3px; }
+.automass-prompt .automass-set {
+	padding: 1px 6px;
+	border: 1px solid rgba(255, 255, 255, 0.5);
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+.automass-prompt .automass-set.active { background: rgba(255, 255, 255, 0.85); color: #10324a; font-weight: bold; }
+.automass-prompt .automass-set:disabled { opacity: 0.6; cursor: wait; }
