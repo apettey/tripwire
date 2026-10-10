@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 26,
+      "date": "2026-10-10",
+      "title": "Signature age colouring",
+      "description": "Signatures nobody has updated for a while are now tinted in the signature table's Age column, so you can see at a glance what needs re-scanning: a light amber tint after 4.5 hours (12 hours for wormholes) and a stronger one after 24 hours. Hover the Age cell to see how long it has been. Editing a signature, or a paste that adds new info, resets it; wormholes already marked EOL keep their red countdown.\n\nTurn it off in Settings > General Preferences > Colour signatures by age.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-26-sig-age.png",
+          "caption": "Stale signature with its tooltip"
+        }
+      ]
+    },
+    {
       "pr": 24,
       "date": "2026-10-10",
       "title": "Worst-case rolling calculator",
