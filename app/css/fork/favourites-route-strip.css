@@ -29,8 +29,9 @@
 	overflow: hidden;
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;	/* only wraps in a very narrow panel (see favouritesRouteStrip.compress) */
 	gap: 2px;	/* marker 9px + gap 2px = favouritesRouteStrip.MARKER_STEP */
-	height: 12px;
+	min-height: 12px;
 }
 
 #favouritesWidget .fav-mk {

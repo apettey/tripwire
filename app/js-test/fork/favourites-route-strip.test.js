@@ -37,13 +37,16 @@ describe('Favourites route strip', () => {
 		it('Tiny positive shows 0.1', () => assert.equal(rs.displaySecurity(0.02), 0.1));
 		it('-0.04 is 0.0, not -0', () => assert.ok(Object.is(rs.displaySecurity(-0.04), 0)));
 		it('Missing: null', () => assert.equal(rs.displaySecurity(undefined), null));
+		it('Negative rounds half away from zero (-0.85 is -0.9)', () => assert.equal(rs.displaySecurity(-0.85), -0.9));
+		it('-0.84 is -0.8', () => assert.equal(rs.displaySecurity(-0.84), -0.8));
+		it('-0.05 is -0.1', () => assert.equal(rs.displaySecurity(-0.05), -0.1));
 		it('Each step has its colour', () => {
 			assert.equal(rs.securityColour(1.0), '#2C75E1');
 			assert.equal(rs.securityColour(0.9), '#399AEB');
 			assert.equal(rs.securityColour(0.5), '#F5FF83');
-			assert.equal(rs.securityColour(0.4), '#DC6D07');
+			assert.equal(rs.securityColour(0.4), '#DC6C06');
 			assert.equal(rs.securityColour(0.1), '#731F1F');
-			assert.equal(rs.securityColour(0.0), '#8D3264');
+			assert.equal(rs.securityColour(0.0), '#8D3163');
 		});
 		it('Null-sec all share one colour', () => assert.equal(rs.securityColour(-0.9), rs.securityColour(0)));
 		it('Eleven steps', () => assert.equal(Object.keys(rs.SECURITY_COLOURS).length, 11));
@@ -51,7 +54,7 @@ describe('Favourites route strip', () => {
 
 	describe('systemStyle', () => {
 		it('High-sec', () => assert.deepEqual(rs.systemStyle(systems[JITA]), { kind: 'hisec', colour: '#399AEB', label: '0.9' }));
-		it('Low-sec', () => assert.deepEqual(rs.systemStyle(systems[AMAMAKE]), { kind: 'lowsec', colour: '#DC6D07', label: '0.4' }));
+		it('Low-sec', () => assert.deepEqual(rs.systemStyle(systems[AMAMAKE]), { kind: 'lowsec', colour: '#DC6C06', label: '0.4' }));
 		it('Null-sec', () => assert.equal(rs.systemStyle(systems[30000001]).kind, 'nullsec'));
 		it('C5 uses Tripwire class colour', () => assert.deepEqual(rs.systemStyle(systems[J1]), { kind: 'wh', colour: '#9060f0', label: 'C5' }));
 		it('String class', () => assert.equal(rs.systemStyle(systems[J2]).label, 'C3'));
@@ -103,6 +106,8 @@ describe('Favourites route strip', () => {
 			rs.steps({ status: 'ok', kind: 'direct', gatesIn: 1, mode: 'safe' }, PERIMETER, JITA, (a, b, safe) => { safeSeen = safe; return [a, b]; }, []);
 			assert.equal(safeSeen, true);
 		});
+		it('Unknown plan kind (e.g. a later Thera plan): null, not the chain branch', () =>
+			assert.equal(rs.steps({ status: 'ok', kind: 'thera', gatesIn: 0, holes: 1, gatesOut: 0, entrySystemID: J1, exitSystemID: J2, lineIndexes: [4], mode: 'shortest' }, J1, J2, gatePath, connections), null));
 		it('No route: null', () => assert.equal(rs.steps({ status: 'no-route' }, HEK, JITA, gatePath, []), null));
 		it('Here: null', () => assert.equal(rs.steps({ status: 'here' }, JITA, JITA, gatePath, []), null));
 		it('Gate path length differs from the plan: null', () =>
@@ -117,6 +122,35 @@ describe('Favourites route strip', () => {
 		});
 	});
 
+	describe('EVE-Scout connections', () => {
+		const n = (v, cls) => ({ c: [{ v: v, f: "<div id='node" + v + "' class='node " + cls + "'></div>" }] });
+		it('Class token', () => assert.ok(rs.isThirdPartyNode("<div class='node third-party third-party-evescout'>")));
+		it('Not a substring elsewhere', () => assert.ok(!rs.isThirdPartyNode("<div class='node' title='third-party'>")));
+		it('Not a longer class', () => assert.ok(!rs.isThirdPartyNode("<div class='node third-party-evescout'>")));
+		it('No markup', () => assert.ok(!rs.isThirdPartyNode(undefined)));
+		const rows = [n(1, ''), n(2, 'third-party third-party-evescout'), n(3, '')];
+		// lines are [child, parent, classes, id]: 2 is the EVE-Scout node off 1, 3 is your own hole off 2
+		const lines = [[2, 1, [], 'es1'], [3, 2, [], 77]];
+		it('Only the line whose child is the EVE-Scout node', () => assert.deepEqual(rs.thirdPartyLines(rows, lines), { 0: true }));
+		it('Nothing', () => assert.deepEqual(rs.thirdPartyLines(null, null), {}));
+	});
+
+	describe('genericSystem', () => {
+		it('Drops the placeholder security', () =>
+			assert.deepEqual(rs.genericSystem({ security: 0.8, class: undefined, factionID: undefined }), { name: 'unknown system', class: undefined, factionID: undefined }));
+		it('Shows as unknown security', () => assert.equal(rs.systemStyle(rs.genericSystem({ security: -0.1 })).kind, 'unknown'));
+		it('Keeps class', () => assert.equal(rs.systemStyle(rs.genericSystem({ security: undefined, class: [5] })).label, 'C5'));
+		it('Keeps Pochven', () => assert.equal(rs.systemStyle(rs.genericSystem({ factionID: 500026 })).kind, 'pochven'));
+		it('Nothing', () => assert.equal(rs.genericSystem(null), null));
+	});
+
+	describe('stripTitle', () => {
+		it('Adds the breakdown', () => assert.equal(rs.stripTitle('Route (safe): direct: 19 gate jumps', 'direct 19g'), 'Route (safe): direct: 19 gate jumps · direct 19g'));
+		it('Not twice', () => assert.equal(rs.stripTitle('Route (shortest): 3wh → 1g (3 wormhole jumps)', '3wh → 1g'), 'Route (shortest): 3wh → 1g (3 wormhole jumps)'));
+		it('No breakdown', () => assert.equal(rs.stripTitle('Route', ''), 'Route'));
+		it('No summary', () => assert.equal(rs.stripTitle('', ' 2g '), '2g'));
+	});
+
 	describe('markers', () => {
 		const steps = [
 			{ from: String(HEK), to: String(AMAMAKE), kind: 'gate' },
@@ -128,7 +162,7 @@ describe('Favourites route strip', () => {
 		const m = rs.markers(steps, lookup, regionName, hole);
 		it('One marker per jump', () => assert.equal(m.length, 4));
 		it('Gate marker title', () => assert.equal(m[0].title, 'Jump 1 of 4: Gate → Amamake 0.4 · Metropolis'));
-		it('Gate kind and colour', () => assert.deepEqual([m[0].kind, m[0].colour, m[0].systemKind], ['gate', '#DC6D07', 'lowsec']));
+		it('Gate kind and colour', () => assert.deepEqual([m[0].kind, m[0].colour, m[0].systemKind], ['gate', '#DC6C06', 'lowsec']));
 		it('Wormhole marker title with type and class', () => assert.equal(m[1].title, 'Jump 2 of 4: Wormhole H296 → J100001 C5 · A-R00001'));
 		it('Wormhole kind', () => assert.equal(m[1].kind, 'wormhole'));
 		it('Into Thera: hub', () => assert.equal(m[2].kind, 'hub'));
@@ -164,6 +198,11 @@ describe('Favourites route strip', () => {
 			const c = rs.compress(l, 4);
 			assert.deepEqual(c, l);
 			assert.notStrictEqual(c, l);
+		});
+		it('Only 1-2 would be hidden: all shown (the strip wraps)', () => {
+			assert.equal(rs.compress(list(3), 2).length, 3);
+			assert.equal(rs.compress(list(4), 2).length, 4);
+			assert.equal(rs.compress(list(5), 2).length, 3);
 		});
 		it('Odd max', () => assert.deepEqual(rs.compress(list(10), 5).map(x => x.gap ? '+' + x.gap : x.title), ['m0', 'm1', 'm2', '+5', 'm8', 'm9']));
 	});

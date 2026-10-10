@@ -8,11 +8,11 @@ const favouritesRouteStrip = {
 	MARKER_STEP: 11,	// px per marker: 9 px marker + 2 px gap (keep in step with the CSS)
 	GAP_WIDTH: 34,		// px reserved for the "…+N" in the middle of a compressed strip
 
-	// EVE's in-game security colours (1.0 down to 0.1; 0.0 and below share the null-sec one), the scale the game's
-	// map, route and system info use since 2021 (and Wanderer and other mappers follow)
+	// EVE's security status colours (1.0 down to 0.1; 0.0 and below share the null-sec one), as CCP publishes them:
+	// https://developers.eveonline.com/docs/guides/system-security/ ("Security Status Colors")
 	SECURITY_COLOURS: {
 		"1.0": "#2C75E1", "0.9": "#399AEB", "0.8": "#4ECEF8", "0.7": "#60DBA3", "0.6": "#71E754",
-		"0.5": "#F5FF83", "0.4": "#DC6D07", "0.3": "#CE440F", "0.2": "#BB1116", "0.1": "#731F1F", "0.0": "#8D3264"
+		"0.5": "#F5FF83", "0.4": "#DC6C06", "0.3": "#CE440F", "0.2": "#BB1116", "0.1": "#731F1F", "0.0": "#8D3163"
 	},
 	// Tripwire's own colours (app/css/base.css) for J-space classes, Pochven; Zarzakh gets its own
 	CLASS_COLOURS: { 1: "#4399F0", 2: "#4399F0", 3: "#4399F0", 4: "#9060f0", 5: "#9060f0", 6: "#f06090", 12: "#ffc800", 15: "#f06060", 16: "#f06060", 17: "#f06060" },
@@ -33,12 +33,13 @@ const favouritesRouteStrip = {
 		return !(opts && opts.favouritesRouteStrip && opts.favouritesRouteStrip.enabled === false);
 	},
 
-	/** Security as the game shows it: one decimal, rounded to nearest, but anything above 0.0 and below 0.05 is 0.1 */
+	/** Security as the game shows it (CCP's rule, see SECURITY_COLOURS): one decimal, normal rounding (half away from
+	zero, so -0.85 is -0.9), but anything above 0.0 and below 0.05 is 0.1 */
 	displaySecurity: function(security) {
 		const s = Number(security);
 		if (security === null || security === undefined || security === "" || !isFinite(s)) { return null; }
 		if (s > 0 && s < 0.05) { return 0.1; }
-		const r = Math.round(s * 10) / 10;
+		const r = Math.sign(s) * Math.round(Math.abs(s) * 10) / 10;
 		return r === 0 ? 0 : r;	// no -0
 	},
 
@@ -102,6 +103,7 @@ const favouritesRouteStrip = {
 			return true;
 		};
 		if (plan.kind === "direct") { return gates(startID, favID, plan.gatesIn) && out.length ? out : null; }
+		if (plan.kind !== "chain") { return null; }	// a kind of plan this doesn't know: the row keeps its text
 		if (!gates(startID, plan.entrySystemID, plan.gatesIn)) { return null; }
 		const byIndex = {};
 		(connections || []).forEach(function(c) { if (c) { byIndex[c[3]] = c; } });
@@ -118,6 +120,40 @@ const favouritesRouteStrip = {
 		if (current !== String(plan.exitSystemID)) { return null; }
 		if (!gates(plan.exitSystemID, favID, plan.gatesOut)) { return null; }
 		return out.length ? out : null;
+	},
+
+	/** Whether a chain node's markup (makeSystemNode output) is an EVE-Scout (third-party) node: the class token,
+	not just the text anywhere in the HTML */
+	isThirdPartyNode: function(markup) {
+		const m = typeof markup === "string" ? /class='([^']*)'/.exec(markup) || /class="([^"]*)"/.exec(markup) : null;
+		return !!m && m[1].split(/\s+/).indexOf("third-party") >= 0;
+	},
+
+	/** Chain connections that are EVE-Scout ones: {<line index>: true}. A line is [child node, parent node, ...]
+	and the connection belongs to its child, so only the child counts (your own hole off an EVE-Scout system isn't one). */
+	thirdPartyLines: function(rows, lines) {
+		const nodes = {};
+		(rows || []).forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			if (node && favouritesRouteStrip.isThirdPartyNode(node.f)) { nodes[node.v] = true; }
+		});
+		const result = {};
+		(lines || []).forEach(function(line, index) { if (line && nodes[line[0]]) { result[index] = true; } });
+		return result;
+	},
+
+	/** A system-like object for a chain node that isn't a real system ("High-Sec|..." / "Class-5|..."): class and
+	faction (Pochven) are known, but the security systemAnalysis fills in is a placeholder, so leave it out */
+	genericSystem: function(analysed) {
+		if (!analysed) { return null; }
+		return { name: analysed.name || "unknown system", class: analysed.class, factionID: analysed.factionID };
+	},
+
+	/** Tooltip of the whole strip: the route detail plus the short breakdown ("1g → 2wh → 6g") unless already in it */
+	stripTitle: function(summary, breakdown) {
+		summary = summary || "";
+		breakdown = String(breakdown || "").trim();
+		return summary + (breakdown && summary.indexOf(breakdown) < 0 ? (summary ? " · " : "") + breakdown : "");
 	},
 
 	/** Markers for a list of steps: [{kind: "gate" | "wormhole" | "hub", systemID, colour, systemKind, title}].
@@ -154,11 +190,13 @@ const favouritesRouteStrip = {
 	},
 
 	/** Markers to show when only `max` fit: the start and the end of the route, the middle replaced by one
-	{gap: n, hidden: [markers]} item. Returns the list unchanged when it fits. */
+	{gap: n, hidden: [markers]} item. Returns the list unchanged when it fits, or when only one or two would be hidden
+	(the "…+N" is wider than that; the strip wraps instead, which only happens when the panel is very narrow). */
 	compress: function(markers, max) {
 		const list = markers || [];
 		if (!(max >= 0) || list.length <= max) { return list.slice(); }
 		const keep = Math.max(2, max);
+		if (list.length - keep <= 2) { return list.slice(); }
 		const tail = Math.max(1, Math.floor(keep / 2));
 		const head = keep - tail;
 		const hidden = list.slice(head, list.length - tail);
@@ -193,8 +231,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const n = Number(id);
 			if (appData.systems[id]) { return Object.assign({ systemID: n }, appData.systems[id]); }
 			if (typeof systemAnalysis === "undefined") { return null; }
-			const s = systemAnalysis.analyse(id);	// generic "Class-5|..." chain systems: class / security only
-			return s ? { name: s.name || "unknown system", security: s.security, class: s.class, factionID: s.factionID } : null;
+			return rs.genericSystem(systemAnalysis.analyse(id));	// generic "Class-5|..." chain systems
 		}
 		function regionName(regionID) { return (tripwire.regions && tripwire.regions[regionID] && tripwire.regions[regionID].name) || ""; }
 
@@ -225,18 +262,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				try {
 					const rows = (result && result.map && result.map.rows) || [];
 					const lines = (result && result.lines) || [];
-					const thirdPartyNodes = {};
-					rows.forEach(function(row) {
-						const node = row && row.c && row.c[0];
-						if (node && typeof node.f === "string" && node.f.indexOf("third-party") >= 0) { thirdPartyNodes[node.v] = true; }
-					});
-					const thirdParty = {}, lineWormholes = {};
-					lines.forEach(function(line, index) {
-						if (!line) { return; }
-						if (thirdPartyNodes[line[0]] || thirdPartyNodes[line[1]]) { thirdParty[index] = true; }
-						lineWormholes[index] = line[3];
-					});
-					snapshot = { connections: rally.systemConnections(rows, lines), thirdParty: thirdParty, lineWormholes: lineWormholes,
+					const lineWormholes = {};
+					lines.forEach(function(line, index) { if (line) { lineWormholes[index] = line[3]; } });
+					snapshot = { connections: rally.systemConnections(rows, lines), thirdParty: rs.thirdPartyLines(rows, lines), lineWormholes: lineWormholes,
 						start: startSystemID, ignore: ignore || null };
 				} catch (e) { console.error("Favourites route strip: snapshot failed", e); }
 				return routes;
@@ -260,9 +288,23 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$marks.html(rs.markersHtml(rs.compress(markers, rs.fit(markers.length, width))));
 		}
 
+		const BREAKDOWN_ATTR = "data-fav-breakdown";	// the row's "1g → 2wh → 6g", kept while the strip shows instead
+
+		/** The route text as the panel rendered it: from the attribute once a strip has replaced it */
+		function breakdownOf($text) {
+			const stored = $text.attr(BREAKDOWN_ATTR);
+			return stored !== undefined ? stored : $text.clone().children().remove().end().text();
+		}
+
 		function decorateRows() {
 			const $rows = $("#" + fp.WIDGET_ID + " .fav-row");
 			$rows.removeClass("fav-has-strip").find(".fav-strip").remove();
+			// Rows decorated before (this runs again on Save / Reset without the panel re-rendering): text back first
+			$rows.find(".fav-route-text[" + BREAKDOWN_ATTR + "]").each(function() {
+				const $text = $(this);
+				$text.contents().filter(function() { return this.nodeType === 3; }).remove();
+				$text.append(document.createTextNode($text.attr(BREAKDOWN_ATTR))).removeAttr(BREAKDOWN_ATTR);
+			});
 			if (!isOn()) { return; }
 			$rows.each(function() {
 				const $row = $(this);
@@ -272,9 +314,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (!markers || !markers.length) { return; }
 				const $text = $row.find(".fav-route-text");
 				const summary = $text.attr("title") || "";
-				const breakdown = $text.clone().children().remove().end().text();
-				const title = summary + (breakdown && summary.indexOf(breakdown) < 0 ? " · " + breakdown : "");
-				$text.contents().filter(function() { return this.nodeType === 3; }).remove();	// the text moves into the tooltip
+				const breakdown = breakdownOf($text);
+				const title = rs.stripTitle(summary, breakdown);
+				$text.attr(BREAKDOWN_ATTR, breakdown).contents().filter(function() { return this.nodeType === 3; }).remove();	// the text moves into the tooltip
 				const $strip = $("<div class='fav-strip'></div>").attr("title", title)
 					.append($("<span class='fav-strip-count'></span>").text(markers.length + (markers.length === 1 ? " jump" : " jumps")))
 					.append("<span class='fav-strip-markers'></span>");
