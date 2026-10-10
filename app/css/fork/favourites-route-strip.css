@@ -1,0 +1,76 @@
+/* Favourites panel: route as jump markers (fork-owned, see app/js/fork/favourites-route-strip.js) */
+
+#favouritesWidget .fav-row.fav-has-strip {
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
+/* Second line of the row, under the name */
+#favouritesWidget .fav-strip {
+	flex: 1 0 100%;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding-left: 18px;
+	box-sizing: border-box;
+	cursor: default;
+}
+
+#favouritesWidget .fav-strip-count {
+	flex: 0 0 auto;
+	color: #8fbfff;
+	font-size: 0.9em;
+}
+
+#favouritesWidget .fav-strip-markers {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	gap: 2px;	/* marker 9px + gap 2px = favouritesRouteStrip.MARKER_STEP */
+	height: 12px;
+}
+
+#favouritesWidget .fav-mk {
+	flex: 0 0 9px;
+	width: 9px;
+	height: 9px;
+	box-sizing: border-box;
+	background: var(--fav-mk, #777);
+	font-style: normal;
+}
+
+/* Stargate jump: square */
+#favouritesWidget .fav-mk-gate {
+	border-radius: 1px;
+}
+
+/* Wormhole jump: circle */
+#favouritesWidget .fav-mk-wormhole {
+	border-radius: 50%;
+}
+
+/* EVE-Scout connection, or a wormhole into Thera / Turnur: triangle */
+#favouritesWidget .fav-mk-hub {
+	clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+#favouritesWidget .fav-mk:hover {
+	outline: 1px solid #fff;
+	outline-offset: 1px;
+}
+
+#favouritesWidget .fav-mk-hub:hover {
+	outline: none;
+	filter: brightness(1.4);
+}
+
+#favouritesWidget .fav-mk-gap {
+	flex: 0 0 auto;
+	color: #999;
+	font-size: 0.85em;
+	padding: 0 2px;
+	line-height: 12px;
+}
