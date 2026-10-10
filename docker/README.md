@@ -223,8 +223,10 @@ A run on a commit that is already tagged reuses that version (safe to re-run).
 | Docs-only merge / `semver:skip` | nothing (the image is still built as a check) |
 | Pull request | nothing (not built) |
 
-Every tag is a multi-arch image for `linux/amd64` and `linux/arm64` (built with QEMU on the CI runner;
-the `assets` and `src` stages run natively). `org.opencontainers.image.version` is set to `X.Y.Z`.
+Images are `linux/amd64` only. arm64 was dropped because building it under QEMU made releases very
+slow and nobody runs it yet; it can be added back with native arm64 runners (`ubuntu-24.04-arm`,
+one build per platform merged into a manifest list). `org.opencontainers.image.version` is set to
+`X.Y.Z`.
 
 The fork version is baked into the image as `TRIPWIRE_FORK_VERSION` and `public/version.json`
 (`{"version":"1.2.0","upstream":"1.30b"}`) and is the app's version everywhere (see [Versions](#versions)).

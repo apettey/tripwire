@@ -6,6 +6,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 | Date | Feature | Summary |
 | --- | --- | --- |
 | 2026-10-10 | [Kill Reporting](2026-10-10-kill-reporting/README.md) | Sounds and pop-ups for kills in the chain (small gank, gank, friendly kill, friendly loss) from a single server-side zKillboard feed; selectable sound pack with per-event volume |
+| 2026-10-10 | [Docker image: amd64 only](2026-10-10-amd64-only/README.md) | Release images are `linux/amd64` only; arm64 under QEMU made releases very slow and has no users yet |
 | 2026-10-10 | [Docker image hardening](2026-10-10-image-hardening/README.md) | No upstream analytics/PayPal panel in the image, runtime files only, arm64, utf8mb4, `DB_SSL`, full env var table, fork version as the app version (#9) |
 | 2026-10-10 | [Hole size tags on the chain map](2026-10-10-size-tags/README.md) | Each chain map node shows the max ship size (S/M/L/VL/XL) of its connection; XL (capitals) highlighted |
 | 2026-10-10 | [Saved destinations](2026-10-10-route-destinations/README.md) | Destinations window with jumps from the chain to saved k-space systems, optionally drawn on the chain map |
