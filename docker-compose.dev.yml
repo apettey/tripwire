@@ -4,8 +4,8 @@
 #   docker compose -f docker-compose.dev.yml up --build
 #
 # The repo is bind-mounted into the container, so PHP edits are live.
-# The `assets` service watches app/js and app/css and rebuilds public/js/app.min.js
-# and public/css/app.min.css on change.
+# The `assets` service builds public/js/app.min.js and public/css/app.min.css on start (they are
+# git-ignored), then watches app/js and app/css and rebuilds them on change.
 
 name: tripwire-dev
 
@@ -65,7 +65,7 @@ services:
     working_dir: /src
     environment:
       DISABLE_NOTIFIER: "true"
-    command: sh -c "npm ci --no-audit --no-fund && npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src watch"
+    command: sh -c "npm ci --no-audit --no-fund && npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css && npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src watch"
     volumes:
       - ./:/src
       - node_modules:/src/node_modules

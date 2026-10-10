@@ -1909,43 +1909,43 @@
     },
     "22428": {
         "typeName": "Redeemer",
-        "mass": 150300000
+        "mass": 112700000
     },
     "22430": {
         "typeName": "Sin",
-        "mass": 141700000
+        "mass": 106300000
     },
     "22436": {
         "typeName": "Widow",
-        "mass": 151100000
+        "mass": 113300000
     },
     "22440": {
         "typeName": "Panther",
-        "mass": 148800000
+        "mass": 111600000
     },
     "44996": {
         "typeName": "Marshal",
-        "mass": 150000000
+        "mass": 112500000
     },
     "85236": {
         "typeName": "Python",
-        "mass": 141700000
+        "mass": 106300000
     },
     "28659": {
         "typeName": "Paladin",
-        "mass": 160000000
+        "mass": 128000000
     },
     "28661": {
         "typeName": "Kronos",
-        "mass": 148000000
+        "mass": 118400000
     },
     "28665": {
         "typeName": "Vargur",
-        "mass": 150000000
+        "mass": 120000000
     },
     "28710": {
         "typeName": "Golem",
-        "mass": 157000000
+        "mass": 125600000
     },
     "34219": {
         "typeName": "Paladin Blood Raider Edition",
@@ -2005,7 +2005,7 @@
     },
     "88001": {
         "typeName": "Babaroga",
-        "mass": 143000000
+        "mass": 114400000
     },
     "28844": {
         "typeName": "Rhea",
@@ -2089,6 +2089,10 @@
     },
     "89807": {
         "typeName": "Anhinga",
+        "mass": 14760000
+    },
+    "95741": {
+        "typeName": "Akoman",
         "mass": 14760000
     },
     "12729": {

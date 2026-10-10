@@ -87,8 +87,8 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 ```
 
 - PHP edits are live. Edits under `app/js` or `app/css` are rebuilt into `public/js/app.min.js` /
-  `public/css/app.min.css` by the `assets` service. Upstream commits those bundles, so commit them
-  together with the source change, and only when you changed `app/`.
+  `public/css/app.min.css` by the `assets` service. The bundles are build output: they are git-ignored
+  and the Docker image builds its own, so never commit them (upstream does; we don't).
 - Never commit `.env`, `config.php`, `db.inc.php`, or any secret. EVE SSO credentials stay in `.env`.
 - Before opening a PR, make sure the image still builds: `docker build -f docker/Dockerfile -t tripwire:local .`
 - JS tests: `npx gulp test` (from the `assets` container or with Node locally).

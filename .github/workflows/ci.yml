@@ -32,12 +32,12 @@ jobs:
       - name: Unit tests
         run: npx mocha --recursive app/js-test
 
-      - name: Committed bundles are up to date
+      - name: Bundles build
         env:
           DISABLE_NOTIFIER: "true"
         run: |
-          npx gulp js && npx gulp css
-          node .github/scripts/check-bundles.js
+          npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
+          test -s public/js/app.min.js && test -s public/css/app.min.css
 
       - name: What's New data is valid
         run: |
