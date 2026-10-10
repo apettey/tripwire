@@ -72,6 +72,58 @@ const holeNaming = {
 		return { isRoot: isRoot, incomingName: last && last.name ? String(last.name) : "" };
 	},
 
+	/** Root system IDs of the active chain tab, from the tab's data (the same value chain-map.js reads from
+		$("#chainTabs .current .name").data("tab")): a system ID or comma separated list of them.
+		Returns null when there is no active tab, or for the "all k-space" tab (0), whose roots aren't home. */
+	tabRoots: function(tabData) {
+		if (tabData === undefined || tabData === null) { return null; }
+		const roots = String(tabData).split(",").map(function(s) { return s.trim(); })
+			.filter(function(s) { return s !== "" && s !== "0"; });
+		return roots.length ? roots : null;
+	},
+
+	/** Leading name token of the hole leading into a system, derived from the wormholes themselves (for when
+		the chain map isn't rooted at home). A wormhole touching the system is an incoming hole if its far-side
+		sig has a name token and its near-side sig is unnamed or a return bookmark ("<C"); a named near side
+		(e.g. "CA") is an outbound hole of this system. With several candidates the shortest token (closest to
+		home) wins, ties go to the lowest wormhole id. Returns undefined if there is none. */
+	incomingFromWormholes: function(systemID, wormholes, signatures) {
+		let best;
+		Object.keys(wormholes || {}).forEach(function(key) {
+			const wormhole = wormholes[key];
+			if (!wormhole || !signatures) { return; }
+			const a = signatures[wormhole.initialID], b = signatures[wormhole.secondaryID];
+			let near, far;
+			if (a && a.systemID == systemID) { near = a; far = b; }
+			else if (b && b.systemID == systemID) { near = b; far = a; }
+			else { return; }
+			if (!far || far.systemID == systemID) { return; }
+			const token = holeNaming.leadingToken(far.name);
+			if (!token) { return; }
+			const nearName = String(near.name === undefined || near.name === null ? "" : near.name).trim();
+			if (nearName !== "" && nearName.charAt(0) !== "<") { return; }
+			const id = Number(wormhole.id !== undefined ? wormhole.id : key);
+			if (!best || token.length < best.token.length || (token.length === best.token.length && id < best.id)) {
+				best = { token: token, id: id };
+			}
+		});
+		return best ? best.token : undefined;
+	},
+
+	/** Name prefix for holes leaving a system, relative to home.
+		With an active chain tab (tabRoots) the chain map is rooted at home, so chain.data is used; otherwise
+		(no tab, "all k-space" tab, or the system isn't in the chain) the incoming hole comes from the wormholes.
+		@return "" for home / no incoming hole, the incoming token, or null if the chain's incoming hole is unnamed */
+	resolvePrefix: function(systemID, tabRoots, chainData, wormholes, signatures) {
+		if (tabRoots && tabRoots.length) {
+			if (tabRoots.some(function(r) { return r == systemID; })) { return ""; }
+			const context = holeNaming.chainContext(systemID, chainData);
+			if (context.isRoot) { return ""; }
+			if (context.incomingName !== undefined) { return holeNaming.prefixFor(context.incomingName, false); }
+		}
+		return holeNaming.incomingFromWormholes(systemID, wormholes, signatures) || "";
+	},
+
 	/** Names of the other wormhole sigs in a system (excluding excludeSigId). */
 	siblingNames: function(signatures, systemID, excludeSigId) {
 		const names = [];
@@ -124,10 +176,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return t1;
 		}
 
+		/** Prefix for holes leaving systemID, relative to home (also handy from the console) */
+		holeNaming.prefixForSystem = function(systemID) {
+			// Same source chain-map.js uses to pick its roots
+			const $tabName = $("#chainTabs .current .name");
+			const roots = holeNaming.tabRoots($tabName.length ? $tabName.data("tab") : undefined);
+			return holeNaming.resolvePrefix(systemID, roots, typeof chain !== "undefined" ? chain.data : undefined,
+				tripwire.client.wormholes, tripwire.client.signatures);
+		};
+
 		holeNaming.suggestForDialog = function() {
 			const systemID = sigDialogVM.viewingSystemID;
-			const context = holeNaming.chainContext(systemID, typeof chain !== "undefined" ? chain.data : undefined);
-			const prefix = holeNaming.prefixFor(context.incomingName, context.isRoot);
+			const prefix = holeNaming.prefixForSystem(systemID);
 			const used = holeNaming.siblingNames(tripwire.client.signatures, systemID, sigDialogVM.sigId);
 			return holeNaming.nextName(prefix, used, holeNaming.sizeClass(effectiveType()));
 		};

@@ -80,6 +80,100 @@ describe('Hole naming', () => {
 		it('No chain data', () => assert.deepEqual(holeNaming.chainContext(31000001, undefined), { isRoot: false, incomingName: undefined }));
 	});
 
+	describe('tabRoots', () => {
+		it('No active tab', () => assert.equal(holeNaming.tabRoots(undefined), null));
+		it('All k-space tab (number)', () => assert.equal(holeNaming.tabRoots(0), null));
+		it('All k-space tab (string)', () => assert.equal(holeNaming.tabRoots('0'), null));
+		it('Single system (number)', () => assert.deepEqual(holeNaming.tabRoots(31000001), ['31000001']));
+		it('Several systems', () => assert.deepEqual(holeNaming.tabRoots('31000001,30000142'), ['31000001', '30000142']));
+	});
+
+	// Home J152820 (31000001) -> sig ABC "C" -> J135100 (31000002); J135100 has outbound "CA" -> 31000003
+	const HOME = 31000001, J135100 = 31000002, CA_SYS = 31000003;
+	const whSigs = (nearName) => ({
+		10: { id: 10, systemID: String(HOME), type: 'wormhole', name: 'C' },
+		11: { id: 11, systemID: String(J135100), type: 'wormhole', name: nearName },
+		12: { id: 12, systemID: String(J135100), type: 'wormhole', name: 'CA' },
+		13: { id: 13, systemID: String(CA_SYS), type: 'wormhole', name: '' },
+	});
+	const whs = {
+		100: { id: '100', initialID: '10', secondaryID: '11', type: 'H296' },
+		101: { id: '101', initialID: '12', secondaryID: '13', type: 'K162' },
+	};
+
+	describe('incomingFromWormholes', () => {
+		it('Far side named, near side unnamed', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('')), 'C'));
+		it('Near side missing name', () => assert.equal(holeNaming.incomingFromWormholes(String(J135100), whs, whSigs(undefined)), 'C'));
+		it('Near side return bookmark', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('<C')), 'C'));
+		it('Reversed initial/secondary', () => assert.equal(holeNaming.incomingFromWormholes(J135100,
+			{ 100: { id: 100, initialID: 11, secondaryID: 10 } }, whSigs('')), 'C'));
+		it('Deeper system', () => assert.equal(holeNaming.incomingFromWormholes(CA_SYS, whs, whSigs('')), 'CA'));
+		it('Named near side is an outbound hole, ignored', () => assert.equal(holeNaming.incomingFromWormholes(J135100,
+			{ 101: whs[101] }, whSigs('')), undefined));
+		it('Home has no incoming hole', () => assert.equal(holeNaming.incomingFromWormholes(HOME, whs, whSigs('')), undefined));
+		it('Near side named with another name, ignored', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('X')), undefined));
+		it('Far side unnamed, ignored', () => assert.equal(holeNaming.incomingFromWormholes(J135100,
+			{ 100: whs[100] }, Object.assign(whSigs(''), { 10: { id: 10, systemID: String(HOME), name: '' } })), undefined));
+		it('Missing far sig, ignored', () => assert.equal(holeNaming.incomingFromWormholes(J135100,
+			{ 100: { id: 100, initialID: 99, secondaryID: 11 } }, whSigs('')), undefined));
+		it('Several candidates: shortest token wins', () => {
+			const sigs = Object.assign(whSigs(''), {
+				20: { id: 20, systemID: '31000009', name: 'BA6' },
+				21: { id: 21, systemID: String(J135100), name: '' },
+			});
+			const both = Object.assign({ 50: { id: '50', initialID: '20', secondaryID: '21' } }, whs);
+			assert.equal(holeNaming.incomingFromWormholes(J135100, both, sigs), 'C');
+		});
+		it('Several candidates of equal length: lowest wormhole id wins', () => {
+			const sigs = Object.assign(whSigs(''), {
+				20: { id: 20, systemID: '31000009', name: 'D' },
+				21: { id: 21, systemID: String(J135100), name: '<D' },
+			});
+			assert.equal(holeNaming.incomingFromWormholes(J135100,
+				Object.assign({ 900: { id: '900', initialID: '20', secondaryID: '21' } }, whs), sigs), 'C');
+			assert.equal(holeNaming.incomingFromWormholes(J135100,
+				Object.assign({ 99: { id: '99', initialID: '20', secondaryID: '21' } }, whs), sigs), 'D');
+		});
+		it('None gives undefined', () => assert.equal(holeNaming.incomingFromWormholes(J135100, {}, whSigs('')), undefined));
+		it('No data', () => assert.equal(holeNaming.incomingFromWormholes(J135100, undefined, undefined), undefined));
+	});
+
+	describe('resolvePrefix', () => {
+		// chain.data when the chain map is rooted at the viewed system J135100 (no chain tab)
+		const viewedRooted = {
+			map: { rows: [{ c: [{ v: 1, systemID: J135100 }, { v: null }] }, { c: [{ v: 2, systemID: HOME }, { v: 1 }] }] },
+			systemsInChainMap: { [HOME]: { pathHome: [{ name: '' }] } }
+		};
+		// chain.data with a chain tab on home
+		const homeRooted = {
+			map: { rows: [{ c: [{ v: 1, systemID: HOME }, { v: null }] }, { c: [{ v: 2, systemID: J135100 }, { v: 1 }] }] },
+			systemsInChainMap: { [J135100]: { pathHome: [{ name: 'C' }] }, [CA_SYS]: { pathHome: [{ name: 'C' }, { name: 'CA' }] } }
+		};
+		const sizes = (prefix, used) => ['large', 'small', 'medium'].map(s => holeNaming.nextName(prefix, used || [], s));
+
+		it('No tab: J135100 continues from C, not from A', () => {
+			const prefix = holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, whSigs(''));
+			assert.equal(prefix, 'C');
+			assert.deepEqual(sizes(prefix), ['CA', 'C1', 'C6']);
+		});
+		it('No tab: return bookmark near side', () => assert.equal(holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, whSigs('<C')), 'C'));
+		it('No tab: siblings skip used CA and ignore the incoming sig', () => {
+			const sigs = whSigs('<C');
+			const prefix = holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, sigs);
+			assert.equal(holeNaming.nextName(prefix, holeNaming.siblingNames(sigs, J135100), 'large'), 'CB');
+		});
+		it('No tab: home is a root', () => assert.equal(holeNaming.resolvePrefix(HOME, null, undefined, whs, whSigs('')), ''));
+		it('No tab, no wormhole data: root', () => assert.equal(holeNaming.resolvePrefix(J135100, null, viewedRooted, {}, {}), ''));
+		it('Tab on home: chain data used', () => assert.equal(holeNaming.resolvePrefix(J135100, ['' + HOME], homeRooted, {}, {}), 'C'));
+		it('Tab on home: deeper system', () => assert.equal(holeNaming.resolvePrefix(CA_SYS, ['' + HOME], homeRooted, {}, {}), 'CA'));
+		it('Tab on home: home is root', () => assert.equal(holeNaming.resolvePrefix(HOME, ['' + HOME], homeRooted, whs, whSigs('')), ''));
+		it('Tab root even before chain data catches up', () => assert.equal(holeNaming.resolvePrefix(HOME, ['' + HOME], undefined, whs, whSigs('')), ''));
+		it('Tab on home: unnamed incoming hole gives no suggestion', () => assert.equal(holeNaming.resolvePrefix(J135100, ['' + HOME],
+			{ map: homeRooted.map, systemsInChainMap: { [J135100]: { pathHome: [{ name: '' }] } } }, whs, whSigs('')), null));
+		it('Tab on home: off-chain system falls back to wormholes', () => assert.equal(holeNaming.resolvePrefix(J135100, ['' + HOME],
+			{ map: { rows: [{ c: [{ v: 1, systemID: HOME }, { v: null }] }] }, systemsInChainMap: {} }, whs, whSigs('')), 'C'));
+	});
+
 	describe('siblingNames', () => {
 		const sigs = {
 			1: { id: 1, systemID: '31000001', type: 'wormhole', name: 'A' },
