@@ -13,6 +13,18 @@
       ]
     },
     {
+      "pr": 5,
+      "date": "2026-10-10",
+      "title": "Rally point",
+      "description": "Right-click a system on the chain map and choose Rally here to make it the rally point for everyone on your mask. The system pulses green and the wormholes from where you are to it are highlighted, so you can see which holes to take.\n\nThe chain map header shows the rally system and how many jumps away it is; click the cross there, or choose Clear rally, to remove it.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-5-rally.jpg",
+          "caption": "Rally point and route on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 2,
       "date": "2026-10-10",
       "title": "Statics in the signature Type quick picks",

@@ -62,6 +62,11 @@ On start the entrypoint waits up to `DB_WAIT_SECONDS` for MySQL, then:
 - anything else: logs an error and exits. It never imports over existing data (the dump contains
   `DROP TABLE`). Empty the database or set `DB_AUTO_INIT=false` to continue.
 
+Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
+(so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
+`fork_rally` (chain map rally point per mask, created by `public/rally.php`). The app user therefore
+needs `CREATE` privileges on its database, which it already has.
+
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
 its database (the `MYSQL_USER` the mysql image creates has them) to create triggers and events.
 
