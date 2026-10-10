@@ -13,6 +13,18 @@
       ]
     },
     {
+      "pr": 17,
+      "date": "2026-10-10",
+      "title": "Favourites panel",
+      "description": "A new movable Favourites panel lists your favourite systems: add them with the search box, drag to reorder, and use the eye to choose which ones the chain map shows routes to. The route button highlights the way there from where you are, through the chain or by gates, as the shortest route or (click again) a safe route through high-sec only, with the jumps shown like 1g → 2wh → 6g. Don't want it? Turn it off in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-17-favourites-panel.png",
+          "caption": "The Favourites panel with a shortest route (dashed) and a safe route (solid) on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 16,
       "date": "2026-10-10",
       "title": "Kill Reporting",
