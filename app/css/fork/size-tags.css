@@ -1,0 +1,41 @@
+/* Hole size tag on chain map nodes (fork feature: size-tags).
+   Not scoped to #chainMap: the renderers measure node markup outside the map, and the legend tooltip uses it too. */
+.size-tag {
+	display: inline-block;
+	margin-left: 3px;
+	padding: 0 2px;
+	min-width: 9px;
+	font-size: 8px;
+	font-weight: normal;
+	line-height: 9px;
+	text-align: center;
+	text-transform: none;
+	vertical-align: 1px;
+	color: #b8c4cc;
+	background: transparent;
+	border: 1px solid #50606c;
+	border-radius: 2px;
+	white-space: nowrap;
+	cursor: default;
+}
+
+.size-tag.size-s { color: #40e0ff; border-color: #2a7f90; }
+.size-tag.size-m { color: #90ff90; border-color: #4a8a4a; }
+.size-tag.size-l { color: #c0c0c0; border-color: #707070; }
+.size-tag.size-vl { color: #ffd890; border-color: #a08040; }
+
+/* Capitals fit: must stand out */
+.size-tag.size-xl {
+	color: #ffffff;
+	background: #d06a10;
+	border-color: #ffb060;
+	font-weight: bold;
+}
+
+/* Size guessed from system classes (wormhole type unknown) */
+.size-tag.size-uncertain {
+	opacity: 0.6;
+	border-style: dashed;
+}
+
+#guide .size-tag { margin-left: 0; }

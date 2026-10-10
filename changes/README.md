@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Hole size tags on the chain map](2026-10-10-size-tags/README.md) | Each chain map node shows the max ship size (S/M/L/VL/XL) of its connection; XL (capitals) highlighted |
 | 2026-10-10 | [Saved destinations](2026-10-10-route-destinations/README.md) | Destinations window with jumps from the chain to saved k-space systems, optionally drawn on the chain map |
 | 2026-10-10 | [Jump return bookmark](2026-10-10-jump-return/README.md) | After jumping out through a named hole, a panel offers the return bookmark (`<AB`) to copy |
 | 2026-10-10 | [Hole naming](2026-10-10-hole-naming/README.md) | Auto-suggested hierarchical wormhole names; bookmark string copied on Add/Save |
