@@ -40,9 +40,15 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 
 ## 4. Bundles
 - [ ] The `assets` service rebuilds `public/js/app.min.js` and `public/css/app.min.css` on save.
-      Commit them with the source change.
-- [ ] Check `git diff --stat public/`: bundle diffs should be **additive** (your code only). If the
-      watcher touched them without a real change, `git checkout --` them.
+      Commit them with the source change. To rebuild by hand, use the dev gulpfile (it orders the
+      files deterministically: globs in order, files sorted within each glob):
+      `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css`.
+      Not plain `npx gulp js css`: upstream's gulpfile concatenates in file-system order.
+- [ ] Bundles must keep main's line order (script order matters; fork files depend on each other):
+      `git diff origin/main -- public/js/app.min.js` should show only your files' lines **added**,
+      nothing removed or moved. If the watcher touched them without a real change, `git checkout --`
+      them. A rewrite with the same size can slip past git's stat cache: if `git status` is clean but
+      the diff looks wrong, `git rm --cached` the bundle and `git add` it again.
 
 ## 5. Try it in the browser
 - [ ] Dev login: `docker compose -f docker-compose.dev.yml exec app bash /opt/app/docker/dev-seed.sh`,
@@ -82,5 +88,6 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] Merge with a **merge commit** (not squash/rebase).
 - [ ] When later branches conflict on `public/js/app.min.js` / `app.min.css`, don't hand-merge:
       merge main, take either side of the bundle, then rebuild from the merged sources with
-      `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp js css`
-      (the watcher only rebuilds on `app/` changes) and commit the result.
+      `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css`
+      (the watcher only rebuilds on `app/` changes), check the result keeps main's line order (only your
+      lines added, see section 4) and commit it.

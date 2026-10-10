@@ -48,3 +48,8 @@ if (tw_env('DISCORD_WEB_HOOK')) {
 // public/kills.php marks kills by/against these corporations (plus the user's own) as friendly
 define('ZKILL_FEED_ENABLED', tw_env_bool('ZKILL_FEED_ENABLED', true));
 define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORATIONS', ''));
+
+// zKillboard integration (fork, zkill/): how long stored kills are kept (hours, 1-168) and the minimum
+// spacing of zKillboard API requests made by the worker for back-fills (seconds, 1-60)
+define('ZKILL_RETENTION_HOURS', tw_env('ZKILL_RETENTION_HOURS', 48));
+define('ZKILL_API_INTERVAL', tw_env('ZKILL_API_INTERVAL', 2));

@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [System Kill Feed](2026-10-10-system-killfeed/README.md) | Kills panel with the 20 latest kills in the viewed system; all zKillboard/ESI access pooled in one server module (`zkill/`) used only by the feed worker, with back-fill and name queues |
 | 2026-10-10 | [Deploy releases to eve-infrastructure](2026-10-10-infra-deploy-trigger/README.md) | Each release opens an auto-merging PR in eve-infrastructure pinning the new image by digest; `deploy:manual` label opts out; manual "Deploy release to infra" workflow for existing releases and rollbacks |
 | 2026-10-10 | [Favourites panel](2026-10-10-favourites-panel/README.md) | Movable panel to add, remove and drag-reorder favourites, choose which are drawn on the chain map, and highlight the shortest or high-sec-only route to them from your location |
 | 2026-10-10 | [Kill Reporting](2026-10-10-kill-reporting/README.md) | Sounds and pop-ups for kills in the chain (small gank, gank, friendly kill, friendly loss) from a single server-side zKillboard feed; selectable sound pack with per-event volume |

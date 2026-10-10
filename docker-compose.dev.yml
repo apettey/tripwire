@@ -33,6 +33,8 @@ services:
       USER_AGENT: ${USER_AGENT:-}
       ZKILL_FEED_ENABLED: ${ZKILL_FEED_ENABLED:-}
       KILL_REPORT_FRIENDLY_CORPORATIONS: ${KILL_REPORT_FRIENDLY_CORPORATIONS:-}
+      ZKILL_RETENTION_HOURS: ${ZKILL_RETENTION_HOURS:-}
+      ZKILL_API_INTERVAL: ${ZKILL_API_INTERVAL:-}
       TZ: ${TZ:-}
       # Upstream's settings.php, mounted outside /opt/app (a mount point inside it would leave an empty
       # file in the repo); docker/settings.php reads upstream's version from it

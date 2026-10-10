@@ -1,0 +1,190 @@
+/* System Kill Feed (fork-owned, see app/js/fork/system-killfeed.js) */
+
+#systemKillFeedWidget .controls {
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+#systemKillFeedWidget .skf-title {
+	color: #888;
+}
+
+#systemKillFeedWidget .skf-system {
+	color: #CCC;
+	font-weight: bold;
+}
+
+#systemKillFeedWidget .skf-status {
+	color: #777;
+	margin-right: 8px;
+	font-size: 0.9em;
+}
+
+#systemKillFeedWidget .skf-zkill {
+	font-size: 0.9em;
+}
+
+#systemKillFeedWidget .content {
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+.skf-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.skf-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 4px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	color: #ccc;
+	text-decoration: none;
+	text-align: left;
+	min-width: 0;
+}
+
+.skf-row:hover {
+	background: rgba(255, 255, 255, 0.07);
+	color: #fff;
+}
+
+.skf-ship, .skf-corp, .skf-fb {
+	flex: 0 0 auto;
+	display: inline-block;
+}
+
+.skf-ship {
+	width: 32px;
+	height: 32px;
+}
+
+.skf-corp, .skf-fb {
+	width: 24px;
+	height: 24px;
+}
+
+.skf-noimg {
+	background: rgba(255, 255, 255, 0.05);
+	border-radius: 2px;
+}
+
+.skf-main {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.25;
+}
+
+.skf-name, .skf-sub {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.skf-name {
+	color: #ddd;
+	font-weight: bold;
+}
+
+.skf-row:hover .skf-name {
+	color: #fff;
+}
+
+.skf-name.skf-structure {
+	color: #c9b37a;
+}
+
+.skf-sub {
+	color: #888;
+	font-size: 0.9em;
+	font-weight: normal;
+}
+
+.skf-value {
+	color: #b9a35a;
+	margin-left: 6px;
+}
+
+.skf-time {
+	flex: 0 0 auto;
+	color: #888;
+	font-size: 0.9em;
+	min-width: 26px;
+	text-align: right;
+}
+
+.skf-pilots {
+	flex: 0 0 auto;
+	min-width: 34px;
+	text-align: right;
+	color: #bbb;
+	white-space: nowrap;
+}
+
+.skf-pilots i {
+	font-style: normal;
+	font-size: 0.85em;
+	color: #777;
+	margin-right: 2px;
+}
+
+.skf-fbname {
+	display: none;
+	flex: 0 1 auto;
+	max-width: 30%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #888;
+	font-size: 0.9em;
+	font-weight: normal;
+	text-align: right;
+}
+
+.skf-npc .skf-pilots {
+	color: #777;
+}
+
+.skf-state {
+	padding: 24px 8px;
+	color: #888;
+	text-align: center;
+}
+
+.skf-loading {
+	color: #999;
+	animation: skf-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skf-pulse {
+	50% { opacity: 0.45; }
+}
+
+.skf-note {
+	padding: 6px 4px;
+	color: #888;
+	font-size: 0.9em;
+	text-align: center;
+}
+
+.skf-error {
+	color: #d9822b;
+}
+
+/* Panel width classes, set by systemKillFeed.widthClasses() (clean-css drops @container rules) */
+.skf-lt340 .skf-value { display: none; }
+
+.skf-lt280 .skf-sub { display: none; }
+.skf-lt280 .skf-ship { width: 24px; height: 24px; }
+.skf-lt280 .skf-corp, .skf-lt280 .skf-fb { width: 20px; height: 20px; }
+.skf-lt280 .skf-row { gap: 4px; }
+
+.skf-lt230 .skf-corp, .skf-lt230 .skf-time { display: none; }
+
+.skf-wide .skf-row { gap: 10px; padding: 3px 8px; }
+.skf-wide .skf-pilots { min-width: 44px; }
+.skf-wide .skf-fbname { display: inline; flex: 0 0 25%; max-width: 200px; }
