@@ -69,7 +69,7 @@ Fork features that need their own tables create them on first use with `CREATE T
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
 `fork_rally` / `fork_rally_discord` (chain map rally point per mask, created by `public/rally.php`), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
-`zkill_state` / `zkill_backfill` / `zkill_names` (the [zKillboard integration](#zkillboard-integration), DDL in
+`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally`
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
@@ -163,7 +163,7 @@ the feed off for the instance; the endpoint then simply returns no kills.
 
 All zKillboard and ESI access of the fork goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to two bounded queues the worker drains. New features that need kills must read these
+tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
@@ -175,6 +175,7 @@ tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add 
 | `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
 | `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
+| `zkill/stats.php`, `zkill/threat.php` | Per-system zKillboard stats cache + queue, and the read side of System Threat behind `public/system_threat.php` (see [System stats](#system-stats-system-threat)) |
 | `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
 | `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image) |
 
@@ -212,6 +213,7 @@ Data flow:
    after a day).
 4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
    older than the retention, stale names.
+5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -239,6 +241,29 @@ Kill Feed panel (`app/js/fork/chain-killfeed.js`): a window request (`systems=<j
 `source=chain` for wormhole systems and the first 10 k-space systems of a join, `source=panel` for the rest) when
 systems join the chain, then one shared `since` cursor polled every 20 s (4 s while back-fills or names are pending,
 `queue=0`), at most 200 systems per request.
+
+#### System stats (System Threat)
+
+Longer history than the retention comes from zKillboard's per-system stats,
+`https://zkillboard.com/api/stats/solarSystemID/<id>/kills/`: kills of the last 7 days (`activepvp`, NPC kills left
+out), monthly kill totals, and the 7-day top corporations / alliances (kills as attackers). `zkill/stats.php` keeps a
+compact copy per system in `zkill_system_stats`, which is also the queue. `zk_stats_request()` (web) queues systems
+whose entry is missing or older than 12 hours (zKillboard caches these numbers for hours itself), a failed fetch is
+retried after 15 minutes; caps: 400 queued/running rows overall, 200 per user; the viewed system (priority 20) goes
+before chain systems (10). The worker runs `zk_stats_run_one()` **after** `zk_backfill_run_one()` found nothing to do:
+only while the stream is caught up, only when no back-fill is queued, and within the same `ZKILL_API_INTERVAL` budget
+(10 s timeout, one request per system). Rows nobody asked for in 14 days are pruned. `zkill/threat.php` adds counts
+from the stored kills (1 h, 24 h, retention window), corporations / alliances seen in a system's stored kills (final
+blows and losses) and its structure losses.
+
+`public/system_threat.php` (logged-in users, GET only): `systems=<id,...>` (chain badges, at most 200),
+`systemID=<id>` (the viewed system: adds `detail` with residents and structure losses, queues names and a back-fill of
+the retention window like the System Kill Feed), `queue=0|1`. The answer has `systems` (ID => `stats` (the cached
+entry or `null`), `fetchedAt`, `statsStatus`, `pending`, `queueFull`, `local` (`kills1h`, `kills24h`, `killsWindow`,
+`lastKill`)), `retentionSeconds`, `localSince` (since when the stream has every kill), `feed`, `pending`, and with
+`systemID` a `detail` object. Poll again while `pending` is true. Browser consumer: `app/js/fork/system-threat.js`
+(badges every 5 minutes and when the chain changes, the viewed system after 1 s; 6 s while pending, paused while the
+tab is hidden). Tests: `php zkill/tests/stats_test.php`.
 
 ### Discord notifications
 
