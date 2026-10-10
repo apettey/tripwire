@@ -41,6 +41,16 @@ jobs:
           if ! git diff --quiet -- public/js/app.min.js public/css/app.min.css; then
             echo "::error::public/js/app.min.js or public/css/app.min.css is out of date. Rebuild (the dev 'assets' service, or 'npx gulp js css') and commit them."
             git diff --stat -- public/js/app.min.js public/css/app.min.css
+            node -e '
+              const cp = require("child_process"), fs = require("fs");
+              for (const f of ["public/js/app.min.js", "public/css/app.min.css"]) {
+                const a = cp.execSync("git show HEAD:" + f).toString(), b = fs.readFileSync(f, "utf8");
+                if (a === b) continue;
+                let i = 0; while (i < a.length && a[i] === b[i]) i++;
+                console.log(f + ": committed " + a.length + " chars, rebuilt " + b.length + ", first difference at " + i);
+                console.log("  committed: " + JSON.stringify(a.slice(Math.max(0, i - 80), i + 80)));
+                console.log("  rebuilt:   " + JSON.stringify(b.slice(Math.max(0, i - 80), i + 80)));
+              }'
             exit 1
           fi
 
