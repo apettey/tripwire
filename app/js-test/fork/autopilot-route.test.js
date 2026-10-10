@@ -104,17 +104,41 @@ describe('Set route in game', () => {
 			const square = tinyMap([[1, 2], [2, 4], [1, 3], [3, 4]]);
 			assert.deepEqual(autopilotRoute.waypoints([sys(1), sys(2), sys(4)], square, hs), [sys(2), sys(4)]);
 		});
-		it('Security band changes: waypoint before it', () => {
+		it('Leaving high-sec: waypoint before it, then every low-sec system', () => {
 			const line = tinyMap([[1, 2], [2, 3], [3, 4]]);
 			const mixed = tinySystems({ 1: 0.9, 2: 0.9, 3: 0.3, 4: 0.3 });
-			assert.deepEqual(autopilotRoute.waypoints([sys(1), sys(2), sys(3), sys(4)], line, mixed), [sys(2), sys(4)]);
+			assert.deepEqual(autopilotRoute.waypoints([sys(1), sys(2), sys(3), sys(4)], line, mixed), [sys(2), sys(3), sys(4)]);
 		});
-		it('Capped, keeping the destination', () => {
-			const line = tinyMap([[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]);
-			const zigzag = tinySystems({ 1: 0.9, 2: 0.3, 3: 0.9, 4: 0.3, 5: 0.9, 6: 0.3 });
-			const path = [1, 2, 3, 4, 5, 6].map(sys);
-			assert.deepEqual(autopilotRoute.waypoints(path, line, zigzag), path.slice(1));
-			assert.deepEqual(autopilotRoute.waypoints(path, line, zigzag, 3), [sys(2), sys(3), sys(6)]);
+		it('Low-sec stretch that is the only shortest route: still every system ("safer" would go round by high-sec)', () => {
+			// 1-2-3-4 through low-sec 2 and 3 (3 jumps, unique shortest); 1-5-6-7-8-4 all high-sec (5 jumps)
+			const map = tinyMap([[1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 7], [7, 8], [8, 4]]);
+			const systems = tinySystems({ 1: 0.9, 2: 0.3, 3: 0.2, 4: 0.9, 5: 0.9, 6: 0.9, 7: 0.9, 8: 0.9 });
+			assert.deepEqual(autopilotRoute.waypoints([1, 2, 3, 4].map(sys), map, systems), [sys(2), sys(3), sys(4)]);
+		});
+		it('Back into high-sec: skips ahead again', () => {
+			const line = tinyMap([[1, 2], [2, 3], [3, 4], [4, 5]]);
+			const systems = tinySystems({ 1: 0.9, 2: 0.3, 3: 0.9, 4: 0.9, 5: 0.9 });
+			assert.deepEqual(autopilotRoute.waypoints([1, 2, 3, 4, 5].map(sys), line, systems), [sys(2), sys(5)]);
+		});
+	});
+
+	describe('Cap', () => {
+		const list = [1, 2, 3, 4, 5, 6].map(sys);
+		it('Within the cap: unchanged', () =>
+			assert.deepEqual(autopilotRoute.limit(list, 6), { waypoints: list, capped: false, total: 6 }));
+		it('Over the cap: first max-1, then the destination', () =>
+			assert.deepEqual(autopilotRoute.limit(list, 3), { waypoints: [sys(1), sys(2), sys(6)], capped: true, total: 6, pinnedUntil: sys(2) }));
+		it('Default cap', () => assert.equal(autopilotRoute.limit(new Array(80).fill(0).map((x, i) => sys(i + 1))).waypoints.length, autopilotRoute.MAX_WAYPOINTS));
+		const name = id => 'S' + (id - 30000000);
+		it('Done text', () => assert.equal(autopilotRoute.doneText('A → B', 'Pilot', 9, autopilotRoute.limit(list, 6), name),
+			'Route set in game: A → B for Pilot (9 jumps, 6 waypoints)'));
+		it('Done text when capped says where EVE takes over', () => assert.equal(
+			autopilotRoute.doneText('A → B', 'Pilot', 9, autopilotRoute.limit(list, 3), name),
+			'Route set in game: A → B for Pilot (9 jumps, 3 waypoints). The route needs 6 waypoints, more than the 3 Tripwire sets: '
+			+ 'it is followed as far as S2, from there EVE picks its own route to S6.'));
+		it('Progress text', () => {
+			assert.equal(autopilotRoute.progressText('A → B', 0, 3), 'Setting route in game: A → B, waypoint 1 of 3...');
+			assert.equal(autopilotRoute.progressText('A → B', 3, 3), 'Setting route in game: A → B, waypoint 3 of 3...');
 		});
 	});
 
@@ -124,8 +148,11 @@ describe('Set route in game', () => {
 				const path = autopilotRoute.gatePath(MAP, SYSTEMS, a, b, safe);
 				const waypoints = autopilotRoute.waypoints(path, MAP, SYSTEMS);
 				assert.equal(waypoints[waypoints.length - 1], b);
-				assert.ok(waypoints.length < path.length - 1, 'fewer waypoints than jumps');
-				assert.ok(waypoints.length <= autopilotRoute.MAX_WAYPOINTS);
+				assert.ok(waypoints.length <= path.length - 1);
+				if (safe) { assert.ok(waypoints.length < path.length - 1, 'fewer waypoints than jumps on a high-sec route'); }
+				path.slice(1).forEach(id => {
+					if (!autopilotRoute.isHighSec(SYSTEMS[id])) { assert.ok(waypoints.indexOf(id) >= 0, SYSTEMS[id].name + ' (not high-sec) is a waypoint'); }
+				});
 				assert.ok(followsPath(path, waypoints), 'each leg is the only shortest route');
 			});
 		});
@@ -145,7 +172,11 @@ describe('Set route in game', () => {
 		});
 		it('Favourite on the chain: nothing to fly by gates', () => {
 			const plan = { status: 'ok', mode: 'shortest', kind: 'chain', gatesIn: 0, holes: 2, gatesOut: 0, exitSystemID: JITA };
-			assert.ok(autopilotRoute.favouriteLeg(plan, J152820, JITA, pathFn).error);
+			assert.equal(autopilotRoute.favouriteLeg(plan, J152820, JITA, pathFn).error, 'Nothing to fly by gates after the chain');
+		});
+		it('Gates into the chain but none after it', () => {
+			const plan = { status: 'ok', mode: 'shortest', kind: 'chain', gatesIn: 3, holes: 1, gatesOut: 0, entrySystemID: HEK, exitSystemID: JITA };
+			assert.equal(autopilotRoute.favouriteLeg(plan, PERIMETER, JITA, pathFn).error, 'Nothing to fly by gates after the chain');
 		});
 		it('Here', () => assert.ok(autopilotRoute.favouriteLeg({ status: 'here' }, JITA, JITA, pathFn).error));
 		it('No route', () => assert.equal(autopilotRoute.favouriteLeg({ status: 'no-route', mode: 'safe' }, JITA, AMARR, pathFn).error, 'No high-sec only route'));

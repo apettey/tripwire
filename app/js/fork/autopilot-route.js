@@ -3,7 +3,7 @@ const autopilotRoute = {
 	// to the in-game autopilot as ESI waypoints, so EVE follows that route (e.g. the high-sec only one) rather
 	// than its own choice (fork-owned file). Pure logic here; the UI is at the bottom.
 	// Keep `const autopilotRoute` on the first line: the test helper strips it to define a global.
-	MAX_WAYPOINTS: 25,      // hard cap on ESI calls per route (EVE allows more; a real route reduces to a handful)
+	MAX_WAYPOINTS: 50,      // cap on ESI calls per route; 50 is the commonly quoted in-game waypoint limit (not confirmed by CCP)
 
 	escape: function(text) {
 		return String(text === undefined || text === null ? "" : text)
@@ -85,11 +85,6 @@ const autopilotRoute = {
 		return ids.slice(start);
 	},
 
-	/** Security band a route preference cares about: high-sec or not */
-	band: function(system) {
-		return autopilotRoute.isHighSec(system) ? "high" : "low";
-	},
-
 	/** Breadth-first from one system over the whole gate map (no avoid list: EVE's own view), up to maxDepth jumps.
 	@return {dist: {id: jumps}, count: {id: number of shortest paths, capped at 2}} */
 	reach: function(map, fromID, maxDepth) {
@@ -116,30 +111,59 @@ const autopilotRoute = {
 	},
 
 	/** Waypoints that make the autopilot fly exactly this gate path. path: real IDs, path[0] = where the route
-	starts (not sent). Greedy: from each waypoint, skip ahead as long as the path so far is the only shortest
-	gate route there (so EVE can't pick another) and stays in one security band (so EVE's "safer" / "less secure"
-	preference has no reason to leave it). Always ends with the destination. Capped at max (default MAX_WAYPOINTS):
-	beyond that the first max-1 are kept, then the destination. */
-	waypoints: function(path, map, systems, max) {
+	starts (not sent). Low-sec, null-sec and Pochven systems are each a waypoint: EVE's "safer" preference would
+	otherwise leave such a stretch for a longer high-sec way round, even when it is the only shortest route.
+	High-sec stretches are skipped over greedily while the path so far is the only shortest gate route (so
+	"shortest" can't pick another) and stays in high-sec (so "safer" has nothing better). Always ends with the
+	destination. Not capped: see limit. */
+	waypoints: function(path, map, systems) {
 		const ids = autopilotRoute.normalise(path);
 		if (!ids || ids.length < 2) { return []; }
 		const result = [];
 		let from = 0;
 		while (from < ids.length - 1) {
-			const info = autopilotRoute.reach(map || {}, ids[from], ids.length - 1 - from);
-			const firstBand = autopilotRoute.band(systems[ids[from + 1]]);
 			let end = from + 1;		// always at least the next system
-			while (end + 1 < ids.length) {
-				const id = ids[end + 1];
-				if (info.dist[id] !== end + 1 - from || info.count[id] !== 1) { break; }
-				if (autopilotRoute.band(systems[id]) !== firstBand) { break; }
-				end++;
+			if (autopilotRoute.isHighSec(systems[ids[end]])) {
+				const info = autopilotRoute.reach(map || {}, ids[from], ids.length - 1 - from);
+				while (end + 1 < ids.length) {
+					const id = ids[end + 1];
+					if (!autopilotRoute.isHighSec(systems[id])) { break; }
+					if (info.dist[id] !== end + 1 - from || info.count[id] !== 1) { break; }
+					end++;
+				}
 			}
 			result.push(ids[end]);
 			from = end;
 		}
-		const cap = max || autopilotRoute.MAX_WAYPOINTS;
-		return result.length > cap ? result.slice(0, cap - 1).concat([result[result.length - 1]]) : result;
+		return result;
+	},
+
+	/** Waypoints within the cap (default MAX_WAYPOINTS). Over it: the first max-1, then the destination, so the
+	autopilot still gets there but picks its own route after the last pinned one.
+	@return {waypoints, capped, total (before capping), pinnedUntil (last waypoint on our route, when capped)} */
+	limit: function(waypoints, max) {
+		const list = (waypoints || []).slice();
+		const cap = Math.max(2, max || autopilotRoute.MAX_WAYPOINTS);
+		if (list.length <= cap) { return { waypoints: list, capped: false, total: list.length }; }
+		const kept = list.slice(0, cap - 1);
+		return { waypoints: kept.concat([list[list.length - 1]]), capped: true, total: list.length, pinnedUntil: kept[kept.length - 1] };
+	},
+
+	/** Toast text while waypoints are being sent */
+	progressText: function(label, done, total) {
+		return "Setting route in game: " + label + ", waypoint " + Math.min(done + 1, total) + " of " + total + "...";
+	},
+
+	/** Toast text once the route is set. name: function(systemID) -> system name (plain text, escape it for HTML) */
+	doneText: function(label, who, jumps, limited, name) {
+		const n = limited.waypoints.length;
+		let text = "Route set in game: " + label + " for " + who + " (" + jumps + " jump" + (jumps === 1 ? "" : "s") + ", "
+			+ n + " waypoint" + (n === 1 ? "" : "s") + ")";
+		if (limited.capped) {
+			text += ". The route needs " + limited.total + " waypoints, more than the " + n + " Tripwire sets: it is followed as far as "
+				+ name(limited.pinnedUntil) + ", from there EVE picks its own route to " + name(limited.waypoints[n - 1]) + ".";
+		}
+		return text;
 	},
 
 	/** The gate leg of a Favourites panel plan. Direct: from where you are. Through the chain: from the system you
@@ -152,7 +176,7 @@ const autopilotRoute = {
 		if (plan.status !== "ok") { return { error: plan.mode === "safe" ? "No high-sec only route" : "No route" }; }
 		const from = plan.kind === "direct" ? autopilotRoute.toID(startID) : autopilotRoute.toID(plan.exitSystemID);
 		const gates = plan.kind === "direct" ? plan.gatesIn : plan.gatesOut;
-		if (!from || !gates) { return { error: "No gate jumps on this route (only wormholes)" }; }
+		if (!from || !gates) { return { error: "Nothing to fly by gates after the chain" }; }
 		const path = pathFn(from, favID, plan.mode === "safe");
 		return path && path.length > 1 ? { path: path, from: from } : { error: "No gate route" };
 	},
@@ -228,20 +252,31 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (busy) { notify("Still setting the previous route, one moment.", "yellow", 4000); return; }
 			const who = ap.character(options, tripwire.esi && tripwire.esi.characters);
 			if (who.error) { notify(ap.escape(who.error), "red", 8000); return; }
-			const waypoints = ap.waypoints(path, appData.map.shortest, appData.systems);
+			const leg = ap.kspaceLeg(path, appData.systems);	// never send wormhole space (it can't be waypointed)
+			const limited = ap.limit(ap.waypoints(leg, appData.map.shortest, appData.systems));
+			const waypoints = limited.waypoints;
 			if (!waypoints.length) { notify("Nothing to set: no gate jumps on this route.", "yellow", 5000); return; }
 			const dest = systemName(waypoints[waypoints.length - 1]);
-			const text = ap.escape(label) + " for " + ap.escape(who.name) + " (" + (path.length - 1) + " jumps, "
-				+ waypoints.length + " waypoint" + (waypoints.length === 1 ? "" : "s") + ")";
 			busy = true;
-			notify("Setting route in game: " + text + "...", "blue", 3000);
+			// One toast for the whole run, updated per waypoint (jBox is what Notify uses)
+			let progress = null;
+			const showProgress = function(done) {
+				const html = ap.escape(ap.progressText(label, done, waypoints.length));
+				if (progress) { progress.setContent(html); return; }
+				if (typeof jBox === "undefined") { notify(html, "blue", 3000); return; }
+				progress = new jBox("Notice", { content: html, offset: { y: 35 }, animation: "flip", color: "blue", autoClose: false });
+			};
+			const closeProgress = function() { if (progress) { progress.close(); progress = null; } };
+			showProgress(0);
 			ap.sendAll(waypoints, function(systemID, clear) {
 				return tripwire.esi.setDestination(systemID, who.characterID, clear, false);
-			}).then(function() {
+			}, showProgress).then(function() {
 				busy = false;
-				notify("Route set in game: " + text, "green", 6000);
+				closeProgress();
+				notify(ap.escape(ap.doneText(label, who.name, leg.length - 1, limited, systemName)), "green", limited.capped ? 15000 : 6000);
 			}, function(failure) {
 				busy = false;
+				closeProgress();
 				const at = failure.index === 1 ? " Only the first waypoint was set."
 					: failure.index > 1 ? " Only the first " + failure.index + " waypoints were set." : "";
 				notify("Could not set the route to " + ap.escape(dest) + " in game. " + ap.escape(ap.errorText(failure.error)) + at, "red", 12000);
