@@ -88,7 +88,9 @@ describe('Jump return', () => {
 	describe('forJump', () => {
 		it('Home -> child via "C" gives <C', () => {
 			const f = fixtures();
-			assert.deepEqual(jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures), { text: '<C', token: 'C', wormholeId: 1 });
+			const r = jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures);
+			assert.deepEqual({ text: r.text, token: r.token, wormholeId: r.wormholeId }, { text: '<C', token: 'C', wormholeId: 1 });
+			assert.equal(r.toSig.id, 102);
 		});
 		it('Child -> grandchild via "CA" gives <CA', () => {
 			const f = fixtures();
@@ -127,5 +129,40 @@ describe('Jump return', () => {
 		it('Different character', () => assert.equal(jumpReturn.detectJump(prev, { characterID: 2, systemID: CHILD }), null));
 		it('Tracking stopped', () => assert.equal(jumpReturn.detectJump(prev, false), null));
 		it('String vs number IDs', () => assert.deepEqual(jumpReturn.detectJump(prev, { characterID: '1', systemID: String(CHILD) }), { from: HOME, to: String(CHILD) }));
+	});
+	describe('alreadyHandled (first pilot through)', () => {
+		const ME = ['Test Pilot', 'My Alt'];
+		const fresh = { id: 102, systemID: CHILD, signatureID: null, name: null };
+		it('Nothing recorded: first through', () => assert.equal(jumpReturn.alreadyHandled(fresh, [], ME, false), null));
+		it('Jump log unknown: first through', () => assert.equal(jumpReturn.alreadyHandled(fresh, null, ME, false), null));
+		it('Empty strings count as nothing', () => assert.equal(jumpReturn.alreadyHandled({ signatureID: '', name: '  ' }, undefined, ME, false), null));
+		it('"???" is not a signature ID', () => assert.equal(jumpReturn.alreadyHandled({ signatureID: '???', name: '' }, [], ME, false), null));
+		it('Far side has a signature ID', () => assert.ok(/signature ID/.test(jumpReturn.alreadyHandled({ signatureID: 'xyz987', name: null }, [], ME, false))));
+		it('Far side has a partial signature ID', () => assert.ok(jumpReturn.alreadyHandled({ signatureID: 'XYZ', name: null }, [], ME, false)));
+		it('Far side named (return bookmark recorded)', () => assert.ok(/named/.test(jumpReturn.alreadyHandled({ signatureID: null, name: '<C' }, [], ME, false))));
+		it('Copied before in this browser', () => assert.equal(jumpReturn.alreadyHandled(fresh, [], ME, true), 'already copied'));
+		it('Another pilot jumped it', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Other Pilot', toID: CHILD }], ME, false), 'already jumped by Other Pilot'));
+		it('Another pilot jumped it the other way', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Other Pilot', toID: HOME }], ME, false)));
+		it('Only my own jumps (this one, back and forth)', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+			[{ characterName: 'Test Pilot', toID: CHILD }, { characterName: 'test pilot ', toID: HOME }], ME, false), null));
+		it('My other tracked character does not count', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'My Alt' }], ME, false), null));
+		it('Jump without a name is ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: null }, {}], ME, false), null));
+		it('No names of mine known', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Test Pilot' }], undefined, false)));
+		it('No far-side signature', () => assert.equal(jumpReturn.alreadyHandled(undefined, [], ME, false), null));
+	});
+
+	describe('settings', () => {
+		it('Missing options: on, first only', () => {
+			assert.equal(jumpReturn.enabled(undefined), true);
+			assert.equal(jumpReturn.firstOnly({}), true);
+			assert.equal(jumpReturn.modeFor({ jumpReturn: {} }), 'first');
+		});
+		it('Off', () => {
+			assert.equal(jumpReturn.enabled({ jumpReturn: { enabled: false } }), false);
+			assert.equal(jumpReturn.modeFor({ jumpReturn: { enabled: false } }), 'off');
+		});
+		it('Every jump', () => assert.equal(jumpReturn.modeFor({ jumpReturn: { enabled: true, firstOnly: false } }), 'always'));
+		it('Round trip', () => ['first', 'always', 'off'].forEach(m => assert.equal(jumpReturn.modeFor({ jumpReturn: jumpReturn.optionsForMode(m) }), m)));
+		it('Unknown mode means the default', () => assert.deepEqual(jumpReturn.optionsForMode('x'), { enabled: true, firstOnly: true }));
 	});
 });
