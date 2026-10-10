@@ -32,8 +32,12 @@ const rollingCalc = {
 		@param massState 'stable' | 'destab' | 'critical' | anything else (ignored)
 		@return {known: false} without a total mass, else
 			{known: true, min, max, logMin, logMax, state, inconsistent, overLogged}
-			inconsistent: the logged mass contradicts the mass state (the state wins: logs can miss jumps),
-			or more was logged than the hole could ever take (then the log is ignored) */
+			With a mass state, the log and the state are combined through the real total mass T: remaining is
+			T - used, and the state says (T - used) / T is in [fmin, fmax], so T is in
+			[used / (1 - fmin), used / (1 - fmax)], intersected with [0.9, 1.1] x nominal.
+			inconsistent: no T fits both the log and the state (jumps missing from the log, or a stale state),
+			or more was logged than the hole could ever take. Then the most cautious bounds are used:
+			the lower of the two minimums and the higher of the two maximums. */
 	remaining: function(totalKg, usedKg, massState) {
 		const total = Number(totalKg);
 		if (!(total > 0)) { return { known: false }; }
@@ -46,12 +50,19 @@ const rollingCalc = {
 		let min = logMin, max = logMax, inconsistent = overLogged;
 		if (fractions) {
 			const stateMin = lightest * fractions.min, stateMax = heaviest * fractions.max;
-			min = Math.max(logMin, stateMin);
-			max = Math.min(logMax, stateMax);
-			if (min > max) {
-				inconsistent = true;
+			const tLow = overLogged ? Infinity : Math.max(lightest, used / (1 - fractions.min));
+			const tHigh = Math.min(heaviest, fractions.max >= 1 ? Infinity : used / (1 - fractions.max));
+			if (tLow <= tHigh) {
+				min = tLow - used;
+				max = tHigh - used;
+			} else if (used === 0) {
+				// Nothing logged but the hole is already reduced: nobody logged their jumps, the state alone decides
 				min = stateMin;
 				max = stateMax;
+			} else {
+				inconsistent = true;
+				min = Math.min(logMin, stateMin);
+				max = Math.max(logMax, stateMax);
 			}
 		}
 		return { known: true, min: min, max: max, logMin: logMin, logMax: logMax,
@@ -113,8 +124,23 @@ const rollingCalc = {
 		none: '-'
 	},
 
-	formatKt: function(kg) {
-		return String(Math.round(kg / 1e6)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + 'kt';
+	/** Mass in kt with thousands separators. round: 'floor' (for a minimum), 'ceil' (for a maximum), else nearest,
+		so a bound is never shown on the wrong side of a ship mass. */
+	formatKt: function(kg, round) {
+		const fn = round === 'floor' ? Math.floor : round === 'ceil' ? Math.ceil : Math.round;
+		return String(fn(kg / 1e6)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + 'kt';
+	},
+
+	/** Which end of a connection is home and which is far for an out-and-back pass.
+		The far side is the chain node the dialog was opened from (clickedSystemID); if neither end is that,
+		"out" goes away from the viewed system, else from the first signature's side.
+		@return {home, far} (the given signature objects) */
+	sides: function(sigA, sigB, clickedSystemID, viewingID) {
+		if (clickedSystemID !== undefined && clickedSystemID !== null) {
+			if (sigB.systemID == clickedSystemID && sigA.systemID != clickedSystemID) { return { home: sigA, far: sigB }; }
+			if (sigA.systemID == clickedSystemID && sigB.systemID != clickedSystemID) { return { home: sigB, far: sigA }; }
+		}
+		return viewingID !== undefined && sigB.systemID == viewingID ? { home: sigB, far: sigA } : { home: sigA, far: sigB };
 	},
 
 	escape: function(s) {
@@ -154,12 +180,12 @@ const rollingCalc = {
 				"<td>" + (leg.mass ? rollingCalc.formatKt(leg.mass) : '?') + "</td>" +
 				"<td><span class='rolling-verdict'>" + L[leg.verdict] + "</span></td></tr>";
 		};
-		let html = "<p class='rolling-range'>Remaining: <b>" + rollingCalc.formatKt(r.min) + " &ndash; " + rollingCalc.formatKt(r.max) + "</b>" +
+		let html = "<p class='rolling-range'>Remaining: <b>" + rollingCalc.formatKt(r.min, 'floor') + " &ndash; " + rollingCalc.formatKt(r.max, 'ceil') + "</b>" +
 			" <span class='rolling-note'>(worst case: &plusmn;10%" + (r.state ? ", " + e(r.state === 'critical' ? 'crit' : r.state) : "") + ")</span></p>";
 		if (r.inconsistent) {
 			html += "<p class='rolling-note'>" + (r.overLogged ?
 				"More mass is logged than this hole can take; check the hole type. Ignoring the log." :
-				"The logged mass doesn't match the hole's mass state; using the mass state.") + "</p>";
+				"The logged mass doesn't fit the hole's mass state (jumps missing from the log, or the state is out of date); showing the widest range.") + "</p>";
 		}
 		html += "<table class='rolling-legs'><tbody>" +
 			row("Out to " + e(outName), plan.out) +
@@ -210,9 +236,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			// No guidance on a type guessed from the system classes: its mass is only a size bucket
 			const type = wormhole.type && tripwire.wormholes[wormhole.type] && !tripwire.wormholes[wormhole.type].dummy ?
 				tripwire.wormholes[wormhole.type] : null;
-			// "Out" goes away from the system being viewed (or from the signature's side)
-			const homeIsB = typeof viewingSystemID !== "undefined" && b.systemID == viewingSystemID;
-			const home = homeIsB ? b : a, far = homeIsB ? a : b;
+			// "Out" goes to the chain node the dialog was opened from (global-hooks passes it as systemID)
+			const s = rollingCalc.sides(a, b, $("#dialog-mass").data("systemID"),
+				typeof viewingSystemID !== "undefined" ? viewingSystemID : undefined);
+			const home = s.home, far = s.far;
 			const name = function(id) {
 				try { return systemAnalysis.analyse(id).name; } catch (e) { return String(id); }
 			};
@@ -220,6 +247,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function render() {
+			state.lastKey = holeKey();
 			const $p = panel();
 			if (!rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { $p.hide().empty(); return; }
 			const info = holeInfo();
@@ -288,6 +316,33 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			};
 			parseMassData.rollingCalcWrapped = true;
 		}
+
+		// Keep the verdicts current when a sync changes the hole (mass state, type, sigs) while the dialog is open
+		function holeKey() {
+			const info = holeInfo();
+			return info ? [info.wormhole.mass, info.wormhole.type, info.homeName, info.farName].join('|') : '';
+		}
+		function refreshIfChanged() {
+			try {
+				if (!state.massData || !$("#dialog-mass").dialog("isOpen")) { return; }
+				if (holeKey() !== state.lastKey) { render(); }
+			} catch (e) {
+				if (typeof console !== "undefined") { console.warn("rolling-calculator: could not refresh", e); }
+			}
+		}
+		// tripwire.parse handles synced signatures, tripwire.chainMap.parse synced wormholes
+		[typeof tripwire !== "undefined" ? tripwire : null, typeof tripwire !== "undefined" ? tripwire.chainMap : null].forEach(function(owner) {
+			if (!owner || typeof owner.parse !== "function" || owner.parse.rollingCalcWrapped) { return; }
+			const previous = owner.parse;
+			const wrapped = function() {
+				const result = previous.apply(this, arguments);
+				refreshIfChanged();
+				return result;
+			};
+			Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
+			wrapped.rollingCalcWrapped = true;
+			owner.parse = wrapped;
+		});
 
 		// Settings > Chain Map Settings: "Rolling guidance" checkbox, applied on Save like the other chain settings
 		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();

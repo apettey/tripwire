@@ -51,49 +51,72 @@ describe('Rolling calculator', () => {
 			assert.ok(rollingCalc.planHtml(rollingCalc.plan({ totalKg: kt(2000), usedKg: kt(2500) }), 'A', 'B').indexOf('More mass is logged') >= 0);
 		});
 		it('exactly the heaviest hole logged counts as over-logged', () => assert.equal(rollingCalc.remaining(kt(2000), kt(2200)).overLogged, true));
-		it('over-logged with a mass state uses the state', () => {
+		it('over-logged with a mass state takes the widest bounds', () => {
 			const r = rollingCalc.remaining(kt(2000), kt(2500), 'destab');
-			near(r.min, kt(180)); near(r.max, kt(1100));
+			near(r.min, 0); near(r.max, kt(2200)); assert.equal(r.inconsistent, true);
 		});
 		it('unknown mass state is ignored', () => {
 			const r = rollingCalc.remaining(kt(2000), kt(1000), 'whatever');
 			near(r.min, kt(800)); near(r.max, kt(1200)); assert.equal(r.state, null);
 		});
 
-		describe('narrowed by mass state', () => {
-			it('stable raises the minimum to 50% of the lightest hole', () => {
+		describe('combined with the mass state (through the real total mass)', () => {
+			it('stable: total must be at least 2x used', () => {
+				// T >= 2000 within 1800-2200 -> 1000-1200 left
 				const r = rollingCalc.remaining(kt(2000), kt(1000), 'stable');
-				near(r.min, kt(900)); near(r.max, kt(1200)); assert.equal(r.state, 'stable');
+				near(r.min, kt(1000)); near(r.max, kt(1200)); assert.equal(r.state, 'stable'); assert.equal(r.inconsistent, false);
 			});
 			it('stable with little logged keeps the log bounds', () => {
 				const r = rollingCalc.remaining(kt(2000), kt(100), 'stable');
 				near(r.min, kt(1700)); near(r.max, kt(2100));
 			});
-			it('destab caps the maximum at 50% of the heaviest hole', () => {
-				const r = rollingCalc.remaining(kt(2000), kt(500), 'destab');
-				// log says 1300-1700, state says 180-1100: contradiction, the state wins
-				assert.equal(r.inconsistent, true);
-				near(r.min, kt(180)); near(r.max, kt(1100));
+			it('stable with nothing logged is a fresh hole', () => {
+				const r = rollingCalc.remaining(kt(2000), 0, 'stable');
+				near(r.min, kt(1800)); near(r.max, kt(2200)); assert.equal(r.inconsistent, false);
 			});
-			it('destab narrows both ends when consistent', () => {
+			it('stable but 1500kt logged on a 2000kt hole (stale state): widest bounds', () => {
+				// stable needs T >= 3000 > 2200: impossible. log 300-700, state 900-2200
+				const r = rollingCalc.remaining(kt(2000), kt(1500), 'stable');
+				assert.equal(r.inconsistent, true);
+				near(r.min, kt(300)); near(r.max, kt(2200));
+			});
+			it('destab with 840kt logged on a 2000kt hole (missing jumps): widest bounds', () => {
+				// destab needs T <= 1680 < 1800: impossible. log 960-1360, state 180-1100
+				const r = rollingCalc.remaining(kt(2000), kt(840), 'destab');
+				assert.equal(r.inconsistent, true);
+				near(r.min, kt(180)); near(r.max, kt(1360));
+				const p = rollingCalc.plan({ totalKg: kt(2000), usedKg: kt(840), massState: 'destab', outKg: kt(300), backKg: kt(300) });
+				assert.equal(p.out.verdict, 'may'); assert.equal(p.stranded, 'possible');
+			});
+			it('destab with too little logged: widest bounds', () => {
+				// destab needs T <= 1000: impossible. log 1300-1700, state 180-1100
+				const r = rollingCalc.remaining(kt(2000), kt(500), 'destab');
+				assert.equal(r.inconsistent, true);
+				near(r.min, kt(180)); near(r.max, kt(1700));
+			});
+			it('destab consistent with the log keeps the log bounds', () => {
+				// T in 1444-2600 -> 1800-2200
 				const r = rollingCalc.remaining(kt(2000), kt(1300), 'destab');
-				// log 500-900, state 180-1100
 				near(r.min, kt(500)); near(r.max, kt(900)); assert.equal(r.inconsistent, false);
 			});
-			it('destab with a large log keeps the state minimum', () => {
+			it('destab raises the minimum through the total', () => {
+				// destab needs T >= 1700 / 0.9 = 1888.9 -> 188.9-500 left
 				const r = rollingCalc.remaining(kt(2000), kt(1700), 'destab');
-				// log 100-500, state 180-1100
-				near(r.min, kt(180)); near(r.max, kt(500));
+				near(r.min, kt(1700) / 0.9 - kt(1700)); near(r.max, kt(500)); assert.equal(r.inconsistent, false);
 			});
-			it('critical caps at 10% of the heaviest hole', () => {
+			it('critical caps the total at used / 0.9', () => {
+				// T in 1900-2111.1 -> 0-211.1 left
 				const r = rollingCalc.remaining(kt(2000), kt(1900), 'critical');
-				// log 0-300, state 0-220
-				near(r.min, 0); near(r.max, kt(220)); assert.equal(r.inconsistent, false);
+				near(r.min, 0); near(r.max, kt(1900) / 0.9 - kt(1900)); assert.equal(r.inconsistent, false);
 			});
 			it('critical with nothing logged trusts the state', () => {
 				const r = rollingCalc.remaining(kt(2000), 0, 'critical');
-				assert.equal(r.inconsistent, true);
+				assert.equal(r.inconsistent, false);
 				near(r.min, 0); near(r.max, kt(220));
+			});
+			it('destab with nothing logged trusts the state', () => {
+				const r = rollingCalc.remaining(kt(2000), 0, 'destab');
+				near(r.min, kt(180)); near(r.max, kt(1100));
 			});
 			it('keeps the log-only bounds for reference', () => {
 				const r = rollingCalc.remaining(kt(2000), kt(1900), 'critical');
@@ -213,6 +236,36 @@ describe('Rolling calculator', () => {
 			const html = rollingCalc.planHtml(rollingCalc.plan({ totalKg: kt(2000), usedKg: kt(1000), outKg: kt(100), backKg: kt(100) }), 'A', 'B');
 			assert.ok(html.indexOf('800kt') >= 0 && html.indexOf('1,200kt') >= 0, html);
 		});
+	});
+
+	describe('formatKt', () => {
+		it('floors a minimum and ceils a maximum', () => {
+			assert.equal(rollingCalc.formatKt(499.6e6, 'floor'), '499kt');
+			assert.equal(rollingCalc.formatKt(500.2e6, 'ceil'), '501kt');
+		});
+		it('rounds otherwise, with separators', () => assert.equal(rollingCalc.formatKt(1520.6e6), '1,521kt'));
+		it('range shown is never on the wrong side of a ship mass', () => {
+			const html = rollingCalc.planHtml(rollingCalc.plan({ totalKg: 1e9, usedKg: 1e9 * 0.9 - 499.6e6, outKg: 500e6, backKg: 500e6 }), 'A', 'B');
+			assert.ok(html.indexOf('499kt') >= 0, html);
+		});
+	});
+
+	describe('sides', () => {
+		const a = { systemID: 31000001 }, b = { systemID: 30000142 };
+		it('far side is the clicked chain node', () => {
+			assert.deepEqual(rollingCalc.sides(a, b, 31000001, 30000142), { home: b, far: a });
+			assert.deepEqual(rollingCalc.sides(a, b, 30000142, 99), { home: a, far: b });
+		});
+		it('clicked node wins over the viewed system (initial sig on the far side, deeper in the chain)', () => {
+			// chain Jita -> J135250 -> J111707, initial sig in J111707, Mass opened on the J111707 node
+			const j111707 = { systemID: 31000002 }, j135250 = { systemID: 31000003 };
+			assert.deepEqual(rollingCalc.sides(j111707, j135250, 31000002, 30000142), { home: j135250, far: j111707 });
+		});
+		it('falls back to away from the viewed system', () => {
+			assert.deepEqual(rollingCalc.sides(a, b, undefined, 30000142), { home: b, far: a });
+			assert.deepEqual(rollingCalc.sides(a, b, 12345, 31000001), { home: a, far: b });
+		});
+		it('falls back to the first signature', () => assert.deepEqual(rollingCalc.sides(a, b), { home: a, far: b }));
 	});
 
 	describe('shipChoices', () => {
