@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 37,
+      "date": "2026-10-10",
+      "title": "Routes through Thera and Turnur",
+      "description": "Favourite routes and the Destinations window now also look at the public Thera and Turnur connections from EVE-Scout. When going through Thera or Turnur is shorter, the route shows it (e.g. \"1wh → 5g → Thera → 7g\") with the systems and signatures to warp to; hover it for each hole's type, size and life left. By default holes with under 4 hours left (EOL) are skipped.\n\nSet route in game sends each gate stretch separately: the first one now, the next once you are out of Thera. Choose Thera, Turnur, your ship size and which holes to skip in Settings > General Preferences > Routes through; untick both Thera and Turnur to turn it off.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-37-exit-finder-thera.png",
+          "caption": "A favourite routed through Turnur, with the signatures to warp to"
+        }
+      ]
+    },
+    {
       "pr": 33,
       "date": "2026-10-10",
       "title": "Clearing the rally point strikes through its Discord message",
