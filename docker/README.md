@@ -252,6 +252,56 @@ gh label create semver:skip  --repo apettey/tripwire --color CCCCCC --descriptio
 
 Releases are tagged by `github-actions[bot]`; tag protection rules (if any) must allow it.
 
+### Deploying to eve-infrastructure
+
+Production runs from the private repo `apettey/eve-infrastructure`, which pins the image by digest
+in `stacks/tripwire/compose.yaml`; every merge to its `main` deploys. After each release,
+`docker-publish.yml` calls `.github/workflows/infra-deploy.yml`, which:
+
+1. resolves the digest of `petdog/tripwire:X.Y.Z` (`docker buildx imagetools inspect`);
+2. runs infra's `tools/bump-tripwire.sh` (image pin + version lines in its docs) on branch
+   `bump/tripwire-X.Y.Z` and opens the PR **"tripwire: petdog/tripwire X.Y.Z"**, listing the fork PRs
+   since the version infra runs now;
+3. enables **squash auto-merge**, so it merges and deploys once infra's 5 required checks pass.
+   If a check fails, the PR just stays open.
+
+**`deploy:manual` label**: put it on a fork PR whose release needs more than a new image in infra (new
+env vars or secrets, compose changes, manual SQL, new outbound hosts). The infra PR is still opened,
+but without auto-merge, and its body lists what to check; push the infra changes to that branch and
+merge it yourself. The label applies to every infra PR that includes that fork PR.
+
+Re-runs are safe: an existing branch/PR is updated (a branch with human commits is never overwritten),
+older open `bump/tripwire-*` PRs are closed as superseded, and nothing happens when infra already runs
+that version. Without the `INFRA_REPO_TOKEN` secret the job is skipped with a warning; the release
+itself never fails because of it.
+
+**Deploy an existing release by hand** (first rollout, re-deploy, rollback): Actions > *Deploy release
+to infra* > Run workflow, with `version` (empty = latest tag). `dry_run` only shows the infra diff and
+PR body in the job summary; `auto_merge` off opens the PR for you to merge. Older versions than infra
+runs need `allow_downgrade` and are never auto-merged. Or revert the infra PR.
+
+If an infra PR sits waiting for an approval (eve-infrastructure's ruleset asks for an extra approval
+for unattributed changes), approve or merge it by hand; auto-merge stays armed. Commits are made as the
+token's owner to keep them attributed.
+
+One-time setup (owner; done 2026-10-10):
+
+1. Create a fine-grained personal access token (GitHub > Settings > Developer settings > Fine-grained
+   tokens): resource owner `apettey`, **Only select repositories: `apettey/eve-infrastructure`**,
+   permissions **Contents: Read and write** and **Pull requests: Read and write** (Metadata: read is
+   added automatically), expiry e.g. 1 year (calendar the renewal).
+   Alternative: a GitHub App installed only on eve-infrastructure with the same two permissions, with
+   its token minted by `actions/create-github-app-token` in `infra-deploy.yml`.
+2. Add it to this repo as the Actions secret **`INFRA_REPO_TOKEN`** (Settings > Secrets and variables >
+   Actions > New repository secret).
+3. In eve-infrastructure: Settings > General > Pull Requests > tick **Allow auto-merge**. Its branch
+   protection (PR + 5 required checks) is what gates the merge.
+4. The label exists (created 2026-10-10); to recreate it:
+   `gh label create deploy:manual --repo apettey/tripwire --color FBCA04 --description "Release needs infra changes: open the infra PR without auto-merge"`
+
+It must not be `GITHUB_TOKEN`: PRs and merges made with it start no workflows, so infra's checks and
+deploy would never run. PRs and auto-merges appear as made by the token's owner.
+
 ## Pulling upstream changes
 
 This repo was started from a snapshot of upstream and does **not** share its git history.
