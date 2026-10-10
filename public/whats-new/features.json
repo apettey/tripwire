@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 27,
+      "date": "2026-10-10",
+      "title": "Discord notifications",
+      "description": "Corporation admins can have Tripwire post to Discord for the corp mask (and the corporation's custom masks) when a new wormhole opens a few safe jumps from a trade hub, and for kills in the chain and kills and losses of the corporation. Each notification can go to its own channel, ping a role or @here and use your own text. Set it up in Mask Admin > Discord with a webhook from your Discord channel (Integrations > Webhooks); nothing is posted until you do.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-27-discord-notifications.png",
+          "caption": "Mask Admin > Discord on a Corp mask: webhooks and the notifications they receive"
+        }
+      ]
+    },
+    {
       "pr": 26,
       "date": "2026-10-10",
       "title": "Signature age colouring",

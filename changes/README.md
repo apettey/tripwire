@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Discord notifications](2026-10-10-discord-notifications/README.md) | Corporation admins route notifications (corp mask and corporation custom masks) to Discord channel webhooks: new k-space within safe jumps of trade hubs, kills in the chain, corp kills and losses; durable outbox with one rate-limit-aware sender, encrypted webhook URLs, CSRF-protected admin-only settings |
 | 2026-10-10 | [Signature age colouring](2026-10-10-sig-age/README.md) | Amber two-step tint (aging / stale) on the Age cell of sigs not updated for 4.5 h / 24 h (holes 12 h / 24 h, EOL holes left alone), with a tooltip line; toggle in General Preferences |
 | 2026-10-10 | [Worst-case rolling calculator](2026-10-10-rolling-calculator/README.md) | Mass dialog shows the worst-case remaining mass range (±10%, narrowed by mass state) and Safe / May collapse / Will collapse for an out-and-back pass with a chosen ship, warning when you could be stranded |
 | 2026-10-10 | [Feature review loop](2026-10-10-review-loop/README.md) | Features are reviewed by a fresh reviewer and fixed in rounds until a review has no findings, before the PR (`tripwire-feature` skill section 7) |
