@@ -15,10 +15,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY gulpfile.js ./
+COPY docker/gulpfile.dev.js ./docker/
 COPY app ./app
 RUN mkdir -p public/js public/css
 ENV DISABLE_NOTIFIER=true
-RUN npx gulp js css
+# The fork's gulpfile wrapper: script order matters and upstream's gulpfile leaves it to the file system
+RUN npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
 
 ############################################################
 # Stage 2: app files only (no repo/dev files in /opt/app)
