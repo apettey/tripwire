@@ -4,7 +4,8 @@
 // zkill_feed.worker.php hands every killmail it streams from R2Z2 to discord_on_killmail() (never back-filled
 // ones). Only kills that happened in the last DISCORD_KILL_MAX_AGE seconds count, so a worker catching up after
 // downtime never posts old kills. Per mask with a kill type enabled:
-//   chainKill  the kill is in a system on the mask's chain (a system with one of the mask's wormhole signatures)
+//   chainKill  the kill is in a system on the mask's chain: connected to the mask's home system through live
+//              wormholes right now (discord/chain.php; no home set = no chain kills)
 //   corpKill   one of the attackers is in "our" corporations/alliances (and the victim is not)
 //   corpLoss   the victim is in "our" corporations/alliances
 // Each (mask, type, killID) is queued once. When several matching types post to the same webhook, only the most
@@ -157,10 +158,11 @@ function discord_kill_state(PDO $db, $force = false) {
     }
     $chainMasks = array_keys(array_filter($state['masks'], function ($s) { return $s['types']['chainKill']['enabled']; }));
     if ($chainMasks) {
-        $stmt = $db->prepare("SELECT DISTINCT maskID, systemID FROM signatures WHERE type = 'wormhole' AND systemID >= 30000000
-            AND maskID IN (" . implode(',', array_fill(0, count($chainMasks), '?')) . ')');
-        $stmt->execute($chainMasks);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) $state['chains'][(string) $row['maskID']][(int) $row['systemID']] = true;
+        // Only systems connected to the mask's home through live wormholes (not every system with one of its
+        // wormhole signatures: fragments of an old chain kept pinging). No home set: no chain kills at all.
+        $homes = [];
+        foreach ($chainMasks as $maskID) $homes[(string) $maskID] = (int) $state['masks'][$maskID]['homeSystemID'];
+        $state['chains'] = discord_chain_systems($db, $homes);
     }
     return $state;
 }
