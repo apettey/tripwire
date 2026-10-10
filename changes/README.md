@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Set route in game: choose the characters](2026-10-10-autopilot-character-picker/README.md) | The autopilot button asks which tracked characters get the route (tracked one pre-ticked, Select all, last choice remembered) and sends it to each in turn, reporting who got it and who didn't |
 | 2026-10-10 | [Set route in game](2026-10-10-autopilot-route/README.md) | Button in the Favourites panel and Destinations window sends Tripwire's gate route (e.g. the safe one) to the in-game autopilot as ESI waypoints |
 | 2026-10-10 | [Chain Kill Feed](2026-10-10-chain-killfeed/README.md) | "Chain kills" panel: one live feed of recent kills in every wormhole, low-sec and null-sec system on the chain map, last hour back-filled when a system joins; built on `system_kills.php`, no new zKillboard callers |
 | 2026-10-10 | [Infra deploy: pass the environment secret](2026-10-10-infra-deploy-secret/README.md) | Release path called `infra-deploy.yml` without secrets, so the environment's `INFRA_REPO_TOKEN` was empty and v1.9.0 opened no infra PR; now `secrets: inherit` |

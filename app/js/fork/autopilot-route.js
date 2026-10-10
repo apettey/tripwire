@@ -149,11 +149,6 @@ const autopilotRoute = {
 		return { waypoints: kept.concat([list[list.length - 1]]), capped: true, total: list.length, pinnedUntil: kept[kept.length - 1] };
 	},
 
-	/** Toast text while waypoints are being sent */
-	progressText: function(label, done, total) {
-		return "Setting route in game: " + label + ", waypoint " + Math.min(done + 1, total) + " of " + total + "...";
-	},
-
 	/** Toast text once the route is set. name: function(systemID) -> system name (plain text, escape it for HTML) */
 	doneText: function(label, who, jumps, limited, name) {
 		const n = limited.waypoints.length;
@@ -196,7 +191,8 @@ const autopilotRoute = {
 		let chain = Promise.resolve();
 		list.forEach(function(systemID, index) {
 			chain = chain.then(function() {
-				return Promise.resolve(sendOne(systemID, index === 0)).then(function() {
+				// new Promise: a sendOne that throws (rather than rejecting) is reported like a failed call
+				return new Promise(function(resolve) { resolve(sendOne(systemID, index === 0)); }).then(function() {
 					if (onProgress) { onProgress(index + 1, list.length); }
 				}, function(error) {
 					throw { index: index, systemID: systemID, error: error };
@@ -217,14 +213,115 @@ const autopilotRoute = {
 		return "ESI error " + status + ".";
 	},
 
-	/** The character to set the route for, like upstream's "Set destination": the active tracked character, if
-	it has an ESI login. @return {characterID, name} or {error} */
-	character: function(opts, characters) {
-		const id = opts && opts.tracking ? opts.tracking.active : null;
-		const c = id && characters ? characters[id] : null;
-		if (!c) { return { error: "Select a tracked character (logged in with EVE SSO) first." }; }
-		if (!c.accessToken) { return { error: (c.characterName || "This character") + " has no ESI login. Log in again with EVE SSO." }; }
-		return { characterID: id, name: c.characterName || String(id) };
+	/** Every tracked character (tripwire.esi.characters) for the character picker, sorted by name. Usable: has an
+	ESI login. Preselected: the usable ones of the last selection sent (opts.autopilotRoute.characters), or else
+	the active tracked character (opts.tracking.active, like upstream's "Set destination") if it is usable.
+	@return [{characterID (string, the key in characters), name, usable, reason, active, preselected}] */
+	characters: function(opts, characters) {
+		const active = opts && opts.tracking && opts.tracking.active !== null && opts.tracking.active !== undefined
+			? String(opts.tracking.active) : null;
+		const saved = opts && opts.autopilotRoute && Array.isArray(opts.autopilotRoute.characters)
+			? opts.autopilotRoute.characters.map(String) : [];
+		const list = Object.keys(characters && typeof characters === "object" ? characters : {}).filter(function(id) {
+			return characters[id] && typeof characters[id] === "object";
+		}).map(function(id) {
+			const c = characters[id];
+			const usable = !!c.accessToken;
+			return {
+				characterID: id, name: String(c.characterName || id), usable: usable,
+				reason: usable ? null : "no ESI login, log in again", active: id === active, preselected: false
+			};
+		});
+		list.sort(function(a, b) { return a.name.localeCompare(b.name) || a.characterID.localeCompare(b.characterID); });
+		const remembered = list.filter(function(c) { return c.usable && saved.indexOf(c.characterID) >= 0; });
+		(remembered.length ? remembered : list.filter(function(c) { return c.usable && c.active; }))
+			.forEach(function(c) { c.preselected = true; });
+		return list;
+	},
+
+	/** Error to show instead of the character picker when no character can be sent to, else null */
+	noCharacterError: function(list) {
+		if ((list || []).some(function(c) { return c.usable; })) { return null; }
+		if (list && list.length === 1) { return list[0].name + " has no ESI login. Log in again with EVE SSO."; }
+		return list && list.length ? "None of your tracked characters has an ESI login. Log in again with EVE SSO."
+			: "Select a tracked character (logged in with EVE SSO) first.";
+	},
+
+	/** State of the picker's "Select all" box: "all", "some" or "none" of the usable characters selected */
+	selectAllState: function(list, selectedIDs) {
+		const usable = (list || []).filter(function(c) { return c.usable; });
+		const selected = (selectedIDs || []).map(String);
+		const n = usable.filter(function(c) { return selected.indexOf(c.characterID) >= 0; }).length;
+		return n && n === usable.length ? "all" : n ? "some" : "none";
+	},
+
+	/** Send the same waypoints to several characters, one character after another (each in order, see sendAll), so
+	ESI sees one call at a time. A failure for one character doesn't stop the others.
+	sendOne(characterID, systemID, clear) returns a thenable. onProgress({character, characterIndex, characterCount,
+	done, total}) is optional, called before each character starts (done 0) and after each waypoint.
+	@return Promise (never rejects) of [{characterID, name, ok, sent, systemID (failed one), error}] in send order */
+	sendToCharacters: function(targets, waypoints, sendOne, onProgress) {
+		const list = (targets || []).slice(), wps = (waypoints || []).slice(), results = [];
+		let chain = Promise.resolve();
+		list.forEach(function(c, ci) {
+			const progress = function(done) {
+				if (onProgress) {
+					onProgress({ character: c, characterIndex: ci, characterCount: list.length, done: done, total: wps.length });
+				}
+			};
+			chain = chain.then(function() {
+				progress(0);
+				return autopilotRoute.sendAll(wps, function(systemID, clear) {
+					return sendOne(c.characterID, systemID, clear);
+				}, progress).then(function(sent) {
+					results.push({ characterID: c.characterID, name: c.name, ok: true, sent: sent });
+				}, function(failure) {
+					const f = failure && typeof failure.index === "number" ? failure : { index: 0, error: failure };
+					results.push({ characterID: c.characterID, name: c.name, ok: false, sent: f.index, systemID: f.systemID, error: f.error });
+				});
+			});
+		});
+		return chain.then(function() { return results; });
+	},
+
+	/** "Alice", "Alice and Bob", "Alice, Bob and Carol" */
+	joinNames: function(names) {
+		const list = (names || []).slice();
+		return list.length < 2 ? (list[0] || "") : list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
+	},
+
+	/** How much of a failed route was set: sent = waypoints set before the failing call */
+	partialText: function(sent) {
+		return sent === 1 ? " Only the first waypoint was set." : sent > 1 ? " Only the first " + sent + " waypoints were set." : "";
+	},
+
+	/** Progress toast text for a multi-character run */
+	characterProgressText: function(label, info) {
+		return "Setting route in game: " + label + ". " + info.character.name + ": waypoint " + Math.min(info.done + 1, info.total)
+			+ " of " + info.total + (info.characterCount > 1 ? " (" + (info.characterIndex + 1) + " of " + info.characterCount + " characters)" : "")
+			+ "...";
+	},
+
+	/** Result toast for sendToCharacters' results. dest: destination name; the rest as doneText.
+	@return {color: green (all set) / yellow (some failed) / red (all failed), lines: [plain text, escape each]} */
+	summary: function(results, label, dest, jumps, limited, name) {
+		const ok = (results || []).filter(function(r) { return r.ok; });
+		const failed = (results || []).filter(function(r) { return !r.ok; });
+		const failure = function(r) {
+			return (results.length > 1 ? r.name + ": " : "") + autopilotRoute.errorText(r.error) + autopilotRoute.partialText(r.sent);
+		};
+		if (!failed.length) {
+			return { color: "green", lines: [autopilotRoute.doneText(label, autopilotRoute.joinNames(ok.map(function(r) { return r.name; })), jumps, limited, name)] };
+		}
+		if (!ok.length) {
+			return { color: "red", lines: ["Could not set the route to " + dest + " in game" + (failed.length > 1 ? " for any character." : ".")]
+				.concat(failed.map(failure)) };
+		}
+		return {
+			color: "yellow",
+			lines: [autopilotRoute.doneText(label, autopilotRoute.joinNames(ok.map(function(r) { return r.name; })), jumps, limited, name)]
+				.concat(failed.map(function(r) { return "Failed for " + failure(r); }))
+		};
 	}
 };
 
@@ -247,39 +344,121 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return list;
 		}
 
-		/** Send a gate path to the in-game autopilot */
+		// ---- Character picker: which tracked characters get the route ----
+
+		const DIALOG_ID = "dialog-autopilotCharacters";
+		let pending = null;		// {list, onSend} while the picker is open; Send takes it, anything else drops it
+
+		function sendButton() { return $("#" + DIALOG_ID).parent().find(".ui-dialog-buttonpane button.autopilot-chars-send"); }
+		function selectedIDs() {
+			return $("#" + DIALOG_ID + " .autopilot-chars-list input:checked:enabled").map(function() { return String(this.value); }).get();
+		}
+		function updatePicker() {
+			if (!pending) { return; }
+			const selected = selectedIDs();
+			const state = ap.selectAllState(pending.list, selected);
+			$("#" + DIALOG_ID + " .autopilot-chars-all").prop({ checked: state === "all", indeterminate: state === "some" });
+			sendButton().prop("disabled", !selected.length).toggleClass("ui-state-disabled", !selected.length);
+		}
+
+		function ensureDialog() {
+			const $dialog = $("#" + DIALOG_ID);
+			if ($dialog.hasClass("ui-dialog-content")) { return $dialog; }
+			$dialog.dialog({
+				autoOpen: false,
+				title: "Set route in game",
+				resizable: false,
+				modal: true,
+				width: 340,
+				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-autopilotCharacters",
+				buttons: [
+					{ text: "Send", "class": "autopilot-chars-send", click: function() {
+						const ids = selectedIDs();
+						if (!pending || !ids.length) { return; }
+						const job = pending;
+						pending = null;
+						$(this).dialog("close");
+						rememberSelection(ids);
+						job.onSend(job.list.filter(function(c) { return c.usable && ids.indexOf(c.characterID) >= 0; }));
+					} },
+					{ text: "Cancel", click: function() { $(this).dialog("close"); } }
+				],
+				open: function() { sendButton().focus(); },	// Enter sends: the old one-click flow is click, Enter
+				close: function() { pending = null; }		// Cancel, Escape and the close button send nothing
+			});
+			return $dialog;
+		}
+
+		/** Remember the selection for next time (per user, in options like other fork features; not a setting) */
+		function rememberSelection(ids) {
+			try {
+				options.autopilotRoute = Object.assign({}, options.autopilotRoute || {}, { characters: ids.slice() });
+				options.save();
+			} catch (err) {
+				console.error("Set route in game: could not save the character selection", err);
+			}
+		}
+
+		/** Ask which characters get the route. onSend([character]) runs only on Send, with at least one character. */
+		function pickCharacters(label, waypointCount, onSend) {
+			const list = ap.characters(options, tripwire.esi && tripwire.esi.characters);
+			const error = ap.noCharacterError(list);
+			if (error) { notify(ap.escape(error), "red", 8000); return; }
+			const $dialog = ensureDialog();
+			pending = { list: list, onSend: onSend };
+			$dialog.find(".autopilot-chars-route").html(ap.escape(label) + ", " + waypointCount + " waypoint"
+				+ (waypointCount === 1 ? "" : "s") + ". Send to:");
+			$dialog.find(".autopilot-chars-list").html(list.map(function(c) {
+				return "<li class='autopilot-chars-row" + (c.usable ? "" : " disabled") + "'><label>"
+					+ "<input type='checkbox' value='" + ap.escape(c.characterID) + "'" + (c.preselected ? " checked" : "")
+					+ (c.usable ? "" : " disabled") + " /> <span class='autopilot-chars-name'>" + ap.escape(c.name) + "</span>"
+					+ (c.active ? " <span class='autopilot-chars-note'>(tracking)</span>" : "")
+					+ (c.reason ? " <span class='autopilot-chars-reason'>" + ap.escape(c.reason) + "</span>" : "")
+					+ "</label></li>";
+			}).join(""));
+			$dialog.find(".autopilot-chars-tools").toggle(list.filter(function(c) { return c.usable; }).length > 1);
+			$dialog.dialog("open");
+			updatePicker();
+		}
+
+		/** Send a gate path to the in-game autopilot, for the characters picked in the dialog */
 		function push(path, label) {
 			if (busy) { notify("Still setting the previous route, one moment.", "yellow", 4000); return; }
-			const who = ap.character(options, tripwire.esi && tripwire.esi.characters);
-			if (who.error) { notify(ap.escape(who.error), "red", 8000); return; }
 			const leg = ap.kspaceLeg(path, appData.systems);	// never send wormhole space (it can't be waypointed)
 			const limited = ap.limit(ap.waypoints(leg, appData.map.shortest, appData.systems));
 			const waypoints = limited.waypoints;
 			if (!waypoints.length) { notify("Nothing to set: no gate jumps on this route.", "yellow", 5000); return; }
+			pickCharacters(label, waypoints.length, function(targets) {
+				if (busy) { notify("Still setting the previous route, one moment.", "yellow", 4000); return; }
+				send(targets, waypoints, leg.length - 1, limited, label);
+			});
+		}
+
+		function send(targets, waypoints, jumps, limited, label) {
 			const dest = systemName(waypoints[waypoints.length - 1]);
-			busy = true;
+			busy = true;		// covers the whole run, every character
 			// One toast for the whole run, updated per waypoint (jBox is what Notify uses)
 			let progress = null;
-			const showProgress = function(done) {
-				const html = ap.escape(ap.progressText(label, done, waypoints.length));
+			const showProgress = function(info) {
+				const html = ap.escape(ap.characterProgressText(label, info));
 				if (progress) { progress.setContent(html); return; }
 				if (typeof jBox === "undefined") { notify(html, "blue", 3000); return; }
 				progress = new jBox("Notice", { content: html, offset: { y: 35 }, animation: "flip", color: "blue", autoClose: false });
 			};
 			const closeProgress = function() { if (progress) { progress.close(); progress = null; } };
-			showProgress(0);
-			ap.sendAll(waypoints, function(systemID, clear) {
-				return tripwire.esi.setDestination(systemID, who.characterID, clear, false);
-			}, showProgress).then(function() {
+			ap.sendToCharacters(targets, waypoints, function(characterID, systemID, clear) {
+				return tripwire.esi.setDestination(systemID, characterID, clear, false);
+			}, showProgress).then(function(results) {
 				busy = false;
 				closeProgress();
-				notify(ap.escape(ap.doneText(label, who.name, leg.length - 1, limited, systemName)), "green", limited.capped ? 15000 : 6000);
-			}, function(failure) {
+				const result = ap.summary(results, label, dest, jumps, limited, systemName);
+				const ms = result.color === "green" ? (limited.capped ? 15000 : 6000) : 15000;
+				notify(result.lines.map(ap.escape).join("<br/>"), result.color, ms);
+			}).catch(function(err) {	// only a bug in the code above gets here
 				busy = false;
 				closeProgress();
-				const at = failure.index === 1 ? " Only the first waypoint was set."
-					: failure.index > 1 ? " Only the first " + failure.index + " waypoints were set." : "";
-				notify("Could not set the route to " + ap.escape(dest) + " in game. " + ap.escape(ap.errorText(failure.error)) + at, "red", 12000);
+				console.error("Set route in game", err);
+				notify("Could not set the route to " + ap.escape(dest) + " in game.", "red", 8000);
 			});
 		}
 		ap.push = push;
@@ -393,6 +572,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		$(function() {
+			$("body").append("<div id='" + DIALOG_ID + "' class='hidden'>"
+				+ "<p class='autopilot-chars-route'></p>"
+				+ "<div class='autopilot-chars-tools'><label><input type='checkbox' class='autopilot-chars-all' /> Select all</label></div>"
+				+ "<ul class='autopilot-chars-list'></ul>"
+				+ "<p class='autopilot-chars-hint'>Each character gets the same waypoints, replacing its current route.</p>"
+				+ "</div>");
+			$("#" + DIALOG_ID).on("change", ".autopilot-chars-all", function() {
+				$("#" + DIALOG_ID + " .autopilot-chars-list input:enabled").prop("checked", this.checked);
+				updatePicker();
+			});
+			$("#" + DIALOG_ID).on("change", ".autopilot-chars-list input", updatePicker);
 			wrapDestinations();
 			$(document).on("click", "#dialog-routeDestinations .autopilot-route-btn", destinationClick);
 			$(document).on("click", ".fav-row .autopilot-route-btn", favouriteClick);

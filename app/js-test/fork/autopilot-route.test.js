@@ -136,10 +136,14 @@ describe('Set route in game', () => {
 			autopilotRoute.doneText('A → B', 'Pilot', 9, autopilotRoute.limit(list, 3), name),
 			'Route set in game: A → B for Pilot (9 jumps, 3 waypoints). The route needs 6 waypoints, more than the 3 Tripwire sets: '
 			+ 'it is followed as far as S2, from there EVE picks its own route to S6.'));
-		it('Progress text', () => {
-			assert.equal(autopilotRoute.progressText('A → B', 0, 3), 'Setting route in game: A → B, waypoint 1 of 3...');
-			assert.equal(autopilotRoute.progressText('A → B', 3, 3), 'Setting route in game: A → B, waypoint 3 of 3...');
+		it('Progress text, one character', () => {
+			const info = { character: { name: 'Alice' }, characterIndex: 0, characterCount: 1, done: 0, total: 3 };
+			assert.equal(autopilotRoute.characterProgressText('A → B', info), 'Setting route in game: A → B. Alice: waypoint 1 of 3...');
+			assert.equal(autopilotRoute.characterProgressText('A → B', Object.assign(info, { done: 3 })), 'Setting route in game: A → B. Alice: waypoint 3 of 3...');
 		});
+		it('Progress text, several characters', () => assert.equal(
+			autopilotRoute.characterProgressText('A → B', { character: { name: 'Bob' }, characterIndex: 1, characterCount: 3, done: 2, total: 12 }),
+			'Setting route in game: A → B. Bob: waypoint 3 of 12 (2 of 3 characters)...'));
 	});
 
 	describe('Waypoints (New Eden)', () => {
@@ -224,18 +228,148 @@ describe('Set route in game', () => {
 			const thenable = { then: (ok) => ok() };
 			assert.equal(await autopilotRoute.sendAll([1], () => thenable), 1);
 		});
+		it('A call that throws counts as a failed call', async () => {
+			await assert.rejects(autopilotRoute.sendAll([1, 2], id => { if (id === 2) { throw new Error('boom'); } return Promise.resolve(); }),
+				failure => failure.index === 1 && failure.systemID === 2 && failure.error.message === 'boom');
+		});
 	});
 
-	describe('Errors and character', () => {
+	describe('Sending to several characters', () => {
+		const alice = { characterID: '1', name: 'Alice' }, bob = { characterID: '2', name: 'Bob' }, carol = { characterID: '3', name: 'Carol' };
+		const delay = ms => new Promise(r => setTimeout(r, ms));
+		it('All succeed: each character in order, clear then append, one call at a time', async () => {
+			const calls = [];
+			let running = 0;
+			const results = await autopilotRoute.sendToCharacters([alice, bob, carol], [10, 20, 30], (cid, id, clear) => {
+				running++;
+				assert.equal(running, 1, 'not in parallel');
+				calls.push(cid + ':' + id + ':' + clear);
+				return delay(id === 10 ? 5 : 1).then(() => { running--; });
+			});
+			assert.deepEqual(calls, ['1:10:true', '1:20:false', '1:30:false', '2:10:true', '2:20:false', '2:30:false',
+				'3:10:true', '3:20:false', '3:30:false']);
+			assert.deepEqual(results, [
+				{ characterID: '1', name: 'Alice', ok: true, sent: 3 },
+				{ characterID: '2', name: 'Bob', ok: true, sent: 3 },
+				{ characterID: '3', name: 'Carol', ok: true, sent: 3 }]);
+		});
+		it('One fails, the others continue; partial failure index', async () => {
+			const calls = [];
+			const results = await autopilotRoute.sendToCharacters([alice, bob, carol], [10, 20, 30], (cid, id, clear) => {
+				calls.push(cid + ':' + id);
+				return cid === '2' && id === 30 ? Promise.reject({ status: 420 }) : Promise.resolve();
+			});
+			assert.deepEqual(calls, ['1:10', '1:20', '1:30', '2:10', '2:20', '2:30', '3:10', '3:20', '3:30']);
+			assert.deepEqual(results.map(r => r.ok), [true, false, true]);
+			assert.equal(results[1].sent, 2);
+			assert.equal(results[1].systemID, 30);
+			assert.equal(results[1].error.status, 420);
+		});
+		it('Failure on the first waypoint: nothing sent for that character', async () => {
+			const results = await autopilotRoute.sendToCharacters([alice], [10, 20], () => Promise.reject({ status: 403 }));
+			assert.deepEqual(results, [{ characterID: '1', name: 'Alice', ok: false, sent: 0, systemID: 10, error: { status: 403 } }]);
+		});
+		it('Progress per character and waypoint', async () => {
+			const seen = [];
+			await autopilotRoute.sendToCharacters([alice, bob], [10, 20], () => Promise.resolve(),
+				p => seen.push(p.character.name + ' ' + p.done + '/' + p.total + ' ' + (p.characterIndex + 1) + '/' + p.characterCount));
+			assert.deepEqual(seen, ['Alice 0/2 1/2', 'Alice 1/2 1/2', 'Alice 2/2 1/2', 'Bob 0/2 2/2', 'Bob 1/2 2/2', 'Bob 2/2 2/2']);
+		});
+		it('No characters: no calls', async () => {
+			let called = false;
+			assert.deepEqual(await autopilotRoute.sendToCharacters([], [10], () => { called = true; }), []);
+			assert.equal(called, false);
+		});
+	});
+
+	describe('Result summary', () => {
+		const limited = autopilotRoute.limit([1, 2, 3].map(sys), 50);
+		const name = id => 'S' + (id - 30000000);
+		const ok = (n) => ({ characterID: n, name: n, ok: true, sent: 3 });
+		it('All set', () => assert.deepEqual(autopilotRoute.summary([ok('Alice'), ok('Bob')], 'A → B', 'S3', 9, limited, name),
+			{ color: 'green', lines: ['Route set in game: A → B for Alice and Bob (9 jumps, 3 waypoints)'] }));
+		it('Cap notice kept', () => {
+			const capped = autopilotRoute.limit([1, 2, 3, 4, 5, 6].map(sys), 3);
+			assert.ok(/more than the 3 Tripwire sets/.test(autopilotRoute.summary([ok('Alice')], 'A → B', 'S6', 9, capped, name).lines[0]));
+		});
+		it('Some failed: who succeeded, who failed and why, how far it got', () => assert.deepEqual(
+			autopilotRoute.summary([ok('Alice'), { name: 'Bob', ok: false, sent: 2, error: { status: 420 } }, ok('Carol')], 'A → B', 'S3', 9, limited, name),
+			{ color: 'yellow', lines: ['Route set in game: A → B for Alice and Carol (9 jumps, 3 waypoints)',
+				'Failed for Bob: ESI is rate limiting requests. Try again in a minute. Only the first 2 waypoints were set.'] }));
+		it('The only character failed: the old error', () => assert.deepEqual(
+			autopilotRoute.summary([{ name: 'Alice', ok: false, sent: 1, error: { status: 0 } }], 'A → B', 'S3', 9, limited, name),
+			{ color: 'red', lines: ['Could not set the route to S3 in game.', 'Could not reach ESI. Only the first waypoint was set.'] }));
+		it('All failed', () => {
+			const r = autopilotRoute.summary([{ name: 'Alice', ok: false, sent: 0, error: { status: 403 } }, { name: 'Bob', ok: false, sent: 0, error: { status: 502 } }],
+				'A → B', 'S3', 9, limited, name);
+			assert.equal(r.color, 'red');
+			assert.equal(r.lines[0], 'Could not set the route to S3 in game for any character.');
+			assert.equal(r.lines[2], 'Bob: ESI error 502.');
+		});
+		it('Names', () => {
+			assert.equal(autopilotRoute.joinNames(['A']), 'A');
+			assert.equal(autopilotRoute.joinNames(['A', 'B', 'C']), 'A, B and C');
+		});
+	});
+
+	describe('Errors', () => {
 		it('Missing scope / expired token', () => assert.ok(/log in again/i.test(autopilotRoute.errorText({ status: 403 }))));
 		it('Unauthorised', () => assert.ok(/log in again/i.test(autopilotRoute.errorText({ status: 401 }))));
 		it('Network', () => assert.equal(autopilotRoute.errorText({ status: 0 }), 'Could not reach ESI.'));
 		it('Other', () => assert.equal(autopilotRoute.errorText({ status: 502 }), 'ESI error 502.'));
-		it('Active tracked character', () => assert.deepEqual(
-			autopilotRoute.character({ tracking: { active: 5 } }, { 5: { characterName: 'Pilot', accessToken: 't' } }),
-			{ characterID: 5, name: 'Pilot' }));
-		it('No active character', () => assert.ok(autopilotRoute.character({ tracking: { active: null } }, {}).error));
-		it('Active character without ESI', () => assert.ok(autopilotRoute.character({ tracking: { active: 5 } }, {}).error));
-		it('No token', () => assert.ok(autopilotRoute.character({ tracking: { active: 5 } }, { 5: { characterName: 'P' } }).error));
+	});
+
+	describe('Characters', () => {
+		const chars = {
+			5: { characterName: 'Pilot', accessToken: 't' },
+			6: { characterName: 'Alt', accessToken: 't' },
+			7: { characterName: 'Expired' }
+		};
+		const byName = list => list.reduce((o, c) => { o[c.name] = c; return o; }, {});
+		it('Every tracked character, sorted by name, with or without ESI', () => {
+			const list = autopilotRoute.characters({ tracking: { active: 5 } }, chars);
+			assert.deepEqual(list.map(c => c.name), ['Alt', 'Expired', 'Pilot']);
+			assert.deepEqual(byName(list).Pilot, { characterID: '5', name: 'Pilot', usable: true, reason: null, active: true, preselected: true });
+		});
+		it('Preselects only the active character', () => {
+			const list = byName(autopilotRoute.characters({ tracking: { active: '5' } }, chars));
+			assert.equal(list.Alt.preselected, false);
+			assert.equal(list.Pilot.preselected, true);
+		});
+		it('Character without ESI: shown, disabled, with a reason, never preselected', () => {
+			const c = byName(autopilotRoute.characters({ tracking: { active: 7 } }, chars)).Expired;
+			assert.equal(c.usable, false);
+			assert.equal(c.reason, 'no ESI login, log in again');
+			assert.equal(c.preselected, false);
+			assert.equal(c.active, true);
+		});
+		it('No active character: nothing preselected', () =>
+			assert.ok(autopilotRoute.characters({ tracking: { active: 'new' } }, chars).every(c => !c.preselected)));
+		it('Last selection wins over the active character (usable ones only)', () => {
+			const list = byName(autopilotRoute.characters({ tracking: { active: 5 }, autopilotRoute: { characters: ['6', 7] } }, chars));
+			assert.deepEqual([list.Alt.preselected, list.Pilot.preselected, list.Expired.preselected], [true, false, false]);
+		});
+		it('Last selection with no usable character left: back to the active one', () => {
+			const list = byName(autopilotRoute.characters({ tracking: { active: 5 }, autopilotRoute: { characters: ['7', '99'] } }, chars));
+			assert.equal(list.Pilot.preselected, true);
+		});
+		it('No characters', () => {
+			assert.deepEqual(autopilotRoute.characters({ tracking: { active: 5 } }, {}), []);
+			assert.deepEqual(autopilotRoute.characters(undefined, undefined), []);
+		});
+		it('Error instead of the picker when no one can be sent to', () => {
+			assert.equal(autopilotRoute.noCharacterError([]), 'Select a tracked character (logged in with EVE SSO) first.');
+			assert.equal(autopilotRoute.noCharacterError(autopilotRoute.characters({}, { 7: chars[7] })),
+				'Expired has no ESI login. Log in again with EVE SSO.');
+			assert.ok(/None of your tracked characters/.test(autopilotRoute.noCharacterError(
+				autopilotRoute.characters({}, { 7: chars[7], 8: { characterName: 'Old' } }))));
+			assert.equal(autopilotRoute.noCharacterError(autopilotRoute.characters({}, chars)), null);
+		});
+		it('Select all state', () => {
+			const list = autopilotRoute.characters({}, chars);
+			assert.equal(autopilotRoute.selectAllState(list, []), 'none');
+			assert.equal(autopilotRoute.selectAllState(list, ['5']), 'some');
+			assert.equal(autopilotRoute.selectAllState(list, [5, 6]), 'all');
+		});
 	});
 });
