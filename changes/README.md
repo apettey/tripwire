@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Docker image hardening](2026-10-10-image-hardening/README.md) | No upstream analytics/PayPal panel in the image, runtime files only, arm64, utf8mb4, `DB_SSL`, full env var table (#9) |
 | 2026-10-10 | [Rally point](2026-10-10-rally/README.md) | Mark a chain map system as the rally point for everyone on the mask, with the wormhole route to it highlighted |
 | 2026-10-10 | [Agent context](2026-10-10-agent-context/README.md) | EVE wormhole primer for agents, `tripwire-domain` and `tripwire-feature` Claude Code skills |
 | 2026-10-10 | [Release versioning](2026-10-10-release-versioning/README.md) | Every merge to `main` gets a SemVer tag, GitHub Release and versioned image; version shown in What's New |

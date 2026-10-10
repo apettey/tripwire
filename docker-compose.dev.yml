@@ -37,6 +37,9 @@ services:
       # Docker creates empty (gitignored) config.php / db.inc.php in the repo as mount points
       - ./docker/config.php:/opt/app/config.php:ro
       - ./docker/db.inc.php:/opt/app/db.inc.php:ro
+      # Same as the image: no upstream Google Analytics / PayPal panel (opt in with GA_MEASUREMENT_ID etc.)
+      - ./docker/analytics.inc.php:/opt/app/analytics.inc.php:ro
+      - ./docker/donation_panel.inc:/opt/app/donation_panel.inc:ro
       - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
       - php-sessions:/var/lib/php/session   # stay logged in across rebuilds
     depends_on:

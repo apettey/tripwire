@@ -164,6 +164,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Emulation for the linux/arm64 half of the multi-arch build
+      - uses: docker/setup-qemu-action@v4
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
@@ -185,13 +188,17 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.push }}
             type=raw,value=upstream-${{ needs.version.outputs.upstream }},enable=${{ needs.version.outputs.push }}
             type=sha,prefix=sha-
+          # Pin the version label to the release version (metadata-action would otherwise use the
+          # first tag, which only happens to be X.Y.Z)
+          labels: |
+            org.opencontainers.image.version=${{ needs.version.outputs.build_version }}
 
       - name: Build (and push on release)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: ${{ needs.version.outputs.push == 'true' }}
           build-args: |
             TRIPWIRE_FORK_VERSION=${{ needs.version.outputs.build_version }}

@@ -20,6 +20,8 @@ services:
       DB_USER: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
       DB_WAIT_SECONDS: ${DB_WAIT_SECONDS:-}
+      DB_AUTO_INIT: ${DB_AUTO_INIT:-}
+      DB_SSL: ${DB_SSL:-}
       TRIPWIRE_DOMAIN: ${TRIPWIRE_DOMAIN}
       TRIPWIRE_HTTPS: ${TRIPWIRE_HTTPS:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
@@ -34,6 +36,8 @@ services:
       DISCORD_WEB_HOOK: ${DISCORD_WEB_HOOK:-}
       USER_AGENT: ${USER_AGENT:-}
       TZ: ${TZ:-}
+      GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
+      DONATION_PANEL_HTML_FILE: ${DONATION_PANEL_HTML_FILE:-}
     volumes:
       - cache:/opt/app/cache
       - php-sessions:/var/lib/php/session   # keep users logged in across image updates
