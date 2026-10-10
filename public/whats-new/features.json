@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 45,
+      "date": "2026-10-10",
+      "title": "Discord chain kills: set your home system",
+      "description": "Discord \"Any kill in our chain\" notifications now only post kills in systems connected to your home system through live wormholes, re-checked every minute, so an old chain no longer pings after its connecting hole collapses or expires.\n\nAdmins: set the home system in Mask Admin > Discord. Until a home is set, no chain kills are posted and the page shows a warning. Chain kills can still be turned off on the same page.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-45-chain-kills-connected.png",
+          "caption": "Mask Admin > Discord: the new Home system setting"
+        }
+      ]
+    },
+    {
       "pr": 43,
       "date": "2026-10-10",
       "title": "D-scan and local scans on the map",
@@ -9,6 +21,26 @@
         {
           "src": "whats-new/img/pr-43-dscan-local.png",
           "caption": "The Intel panel next to the chain map, with a d-scan summary opened, and the dot on the system"
+        }
+      ]
+    },
+    {
+      "pr": 41,
+      "date": "2026-10-10",
+      "title": "Watchlist: get told when the chain has what you're looking for",
+      "description": "Your corporation's Tripwire admins can now set up a watchlist for the mask in Mask Admin > Watchlist: filters for a specific J-code or system, a region or constellation, a wormhole class, an effect such as Wolf-Rayet, a static (e.g. \"has a C5 static\"), a hole type such as H296 or a minimum hole size, and how many jumps it may be from you or from home. Everyone on the mask sees the filters in the Watchlist panel.\n\nWhen something new on the chain map matches, you get a pop-up and a sound, the system gets an eye marker, the hole into it is highlighted, and its signature is marked in the signature table so you know which one to warp to. Admins can also have matches posted to Discord (Mask Admin > Discord > Watchlist match). Turn the sound, pop-ups, markers or the panel off in Settings > General Preferences > Watchlist.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-41-watchlist.png",
+          "caption": "The Watchlist panel, matching systems and their highlighted holes on the chain map"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-admin.png",
+          "caption": "Admins set the mask's filters in Mask Admin > Watchlist"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-editor.png",
+          "caption": "Creating a filter"
         }
       ]
     },
