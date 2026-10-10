@@ -73,30 +73,58 @@ $queue = ['queue' => true, 'pending' => true];
 $wait = ['queue' => false, 'pending' => true];
 $none = ['queue' => false, 'pending' => false];
 check('decision: unknown system', zk_backfill_decision(null, 1000, 3600, $now), $queue);
-check('decision: queued', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 3600, 'attemptedAt' => null, 'completedAt' => null], 1000, 3600, $now), $wait);
-check('decision: queued, wider window', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 3600, 'attemptedAt' => null, 'completedAt' => null], 1000, 7200, $now), $queue);
+check('decision: queued', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 3600, 'priority' => 10, 'attemptedAt' => null, 'completedAt' => null], 1000, 3600, $now), $wait);
+check('decision: queued, wider window', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 3600, 'priority' => 10, 'attemptedAt' => null, 'completedAt' => null], 1000, 7200, $now), $queue);
 check('decision: failed recently', zk_backfill_decision(['status' => 'failed', 'windowSeconds' => 3600, 'attemptedAt' => $now - 60, 'completedAt' => null], 1000, 3600, $now), $none);
 check('decision: failed long ago', zk_backfill_decision(['status' => 'failed', 'windowSeconds' => 3600, 'attemptedAt' => $now - 3600, 'completedAt' => null], 1000, 3600, $now), $queue);
 check('decision: done, shorter window', zk_backfill_decision(['status' => 'done', 'windowSeconds' => 3600, 'attemptedAt' => $now - 60, 'completedAt' => $now - 60], 1000, 7200, $now), $queue);
 check('decision: done, truncated (busy system)', zk_backfill_decision(['status' => 'done', 'windowSeconds' => 7200, 'attemptedAt' => $now - 3600, 'completedAt' => $now - 3600], 1000, 7200, $now), $none);
 check('decision: done before a stream restart, recent', zk_backfill_decision(['status' => 'done', 'windowSeconds' => 7200, 'attemptedAt' => $now - 60, 'completedAt' => $now - 60], $now - 10, 7200, $now), $none);
+check('decision: queued at lower priority (chain request)', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 7200, 'priority' => 10, 'attemptedAt' => null, 'completedAt' => null], 1000, 3600, $now, 20), $queue);
+check('decision: queued at same priority', zk_backfill_decision(['status' => 'queued', 'windowSeconds' => 7200, 'priority' => 20, 'attemptedAt' => null, 'completedAt' => null], 1000, 3600, $now, 10), $wait);
 check('decision: done before a stream restart, old', zk_backfill_decision(['status' => 'done', 'windowSeconds' => 7200, 'attemptedAt' => $now - 3600, 'completedAt' => $now - 3600], $now - 10, 7200, $now), $queue);
+
+// --- zk_backfill_covered_from ---
+$started = 100000;
+check('covered: short answer covers the whole window', zk_backfill_covered_from($started, 3600, 10, [0 => $started - 60, 9 => $started - 3000], null), $started - 3600);
+check('covered: full page starts at its oldest kill', zk_backfill_covered_from($started, 86400, 200, [0 => $started - 60, 199 => $started - 7000], null), $started - 7000);
+check('covered: ESI cap / budget skipped entries: up to the first gap only',
+    zk_backfill_covered_from($started, 86400, 50, [0 => $started - 60, 1 => $started - 120, 2 => $started - 600, 4 => $started - 9000], 3), $started - 600);
+check('covered: gap at the start covers nothing', zk_backfill_covered_from($started, 86400, 50, [1 => $started - 120], 0), $started);
+check('covered: nothing returned', zk_backfill_covered_from($started, 3600, 0, [], null), $started - 3600);
+check('covered: ESI cap reaches the page size', ZK_BACKFILL_ESI_MAX >= 200, true);
 
 // --- rate limiter ---
 check('limiter: fresh host is ready', zk_http_ready('example.test'), true);
 zk_http_record('zkillboard.com', 200, []);
-check('limiter: API spacing', zk_http_wait('zkillboard.com') > 0 && zk_http_wait('zkillboard.com') <= zk_api_interval(), true);
+check('limiter: a success alone does not pause', zk_http_ready('zkillboard.com'), true);
 zk_http_record('esi.evetech.net', 429, ['retry-after' => '120']);
 check('limiter: Retry-After', zk_http_wait('esi.evetech.net') > 100, true);
 zk_http_record('r2z2.zkillboard.com', 200, ['x-esi-error-limit-remain' => '5', 'x-esi-error-limit-reset' => '30']);
 check('limiter: ESI error limit', zk_http_wait('r2z2.zkillboard.com') > 25, true);
 zk_http_record('other.test', 503, []);
 check('limiter: backoff on 5xx', zk_http_wait('other.test') >= 9, true);
+$logged = [];
+zk_log_sink(function ($m) use (&$logged) { $logged[] = $m; });
+zk_http_record('blocked.test', 403, []);
+check('limiter: 403 blocks for at least the floor', zk_http_wait('blocked.test') >= ZK_HTTP_BLOCK_FLOOR - 1, true);
+check('limiter: 403 is logged', count($logged) === 1 && strpos($logged[0], 'BLOCKED by blocked.test') === 0, true);
+zk_http_record('blocked2.test', 403, ['retry-after' => '3600']);
+check('limiter: 403 honours a longer Retry-After', zk_http_wait('blocked2.test') > 3500, true);
+zk_http_record('esi-rl.test', 200, ['x-ratelimit-remaining' => '3', 'x-ratelimit-limit' => '3600/15m']);
+check('limiter: ESI rate-limit group nearly used up', zk_http_wait('esi-rl.test') > 50, true);
+zk_http_record('esi-ok.test', 200, ['x-ratelimit-remaining' => '3000', 'x-ratelimit-limit' => '3600/15m']);
+check('limiter: ESI rate-limit group fine', zk_http_wait('esi-ok.test'), 0.0);
+zk_http_reserve('zkillboard.com');
+check('limiter: a starting request reserves the spacing', zk_http_wait('zkillboard.com') > 0 && zk_http_wait('zkillboard.com') <= zk_api_interval(), true);
 
 // --- misc ---
 check('system id: J-space', zk_is_system_id(31000005), true);
 check('system id: k-space', zk_is_system_id(30000142), true);
-check('system id: not a system', zk_is_system_id(60003760), false);
+check('system id: first / last range', [zk_is_system_id(30000001), zk_is_system_id(30005334), zk_is_system_id(30005335)], [true, true, false]);
+check('system id: not a system (station)', zk_is_system_id(60003760), false);
+check('system id: inside the old range check but not a system', zk_is_system_id(32999999), false);
+check('system id: strings are not accepted', zk_is_system_id('30000142'), false);
 check('iso', zk_iso('2026-10-10 09:41:57'), '2026-10-10T09:41:57Z');
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";

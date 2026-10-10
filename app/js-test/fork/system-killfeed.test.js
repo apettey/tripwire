@@ -7,8 +7,10 @@ describe('System kill feed', () => {
 
 	const response = (over) => Object.assign({
 		pastSeconds: 172800,
-		feed: { enabled: true, live: true, coveredSince: '2026-10-10T09:00:00Z' },
+		feed: { enabled: true, live: true, caughtUp: true, lagSeconds: 3, coveredSince: '2026-10-10T09:00:00Z' },
+		complete: true,
 		pending: false,
+		queueFull: false,
 		namesPending: false,
 		kills: [{
 			killID: 139046138, systemID: 30000142, killTime: '2026-10-10T09:41:57Z',
@@ -51,6 +53,13 @@ describe('System kill feed', () => {
 		});
 		it('formats EVE time', () => {
 			assert.equal(skf().eveTime(Date.parse('2026-10-10T09:41:57Z')), '2026-10-10 09:41:57');
+		});
+		it('formats durations', () => {
+			assert.equal(skf().formatDuration(45), '45 s');
+			assert.equal(skf().formatDuration(754), '12 min');
+			assert.equal(skf().formatDuration(3600), '1 h');
+			assert.equal(skf().formatDuration(3900), '1 h 5 min');
+			assert.equal(skf().formatDuration(null), '0 s');
 		});
 		it('formats the window', () => {
 			assert.equal(skf().formatWindow(172800), '48 hours');
@@ -136,8 +145,21 @@ describe('System kill feed', () => {
 		it('says when the feed is off', () => {
 			assert.equal(skf().viewModel(response({ kills: [], feed: { enabled: false } })).state, 'disabled');
 		});
-		it('warns when the feed is behind', () => {
-			assert.match(skf().viewModel(response({ feed: { enabled: true, live: false } })).note, /behind/);
+		it('says how far the feed is behind', () => {
+			const m = skf().viewModel(response({ complete: false, feed: { enabled: true, live: false, caughtUp: false, lagSeconds: 754 } }));
+			assert.equal(m.note, 'The zKillboard feed is behind by 12 min; recent kills may be missing.');
+			const e = skf().viewModel(response({ kills: [], complete: false, feed: { enabled: true, caughtUp: false, lagSeconds: 3900 } }));
+			assert.equal(e.state, 'empty');
+			assert.match(e.note, /^No kills in the last 48 hours\. The zKillboard feed is behind by 1 h 5 min/);
+		});
+		it('says when the server could not queue a back-fill', () => {
+			assert.match(skf().viewModel(response({ complete: false, queueFull: true })).note, /busy/);
+			assert.equal(skf().viewModel(response({ complete: true, queueFull: true })).note, '');
+		});
+		it('treats an empty read-only answer as not known yet', () => {
+			assert.equal(skf().viewModel(response({ kills: [], complete: false }), true).state, 'loading');
+			assert.equal(skf().viewModel(response({ kills: [], complete: true }), true).state, 'empty');
+			assert.equal(skf().viewModel(response({ kills: [], complete: false }), false).state, 'empty');
 		});
 	});
 

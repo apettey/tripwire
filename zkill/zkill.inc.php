@@ -5,12 +5,14 @@
 // one process calls it for outgoing requests: zkill_feed.worker.php. Web endpoints (public/kills.php,
 // public/system_kills.php, ...) only read the tables below and, at most, add rows to the back-fill and name queues.
 //
-//   zkill/http.php       one HTTP client: User-Agent, per-host rate limits, 429/Retry-After, ESI error limit
-//   zkill/schema.php     DDL (CREATE TABLE IF NOT EXISTS) for every zkill_* table, reference copy in docker/sql/
-//   zkill/killmails.php  normalise a killmail, store it in zkill_killmails, stream coverage state, pruning
-//   zkill/backfill.php   per-system back-fill queue (web: request, worker: drain via the zKillboard API)
-//   zkill/names.php      ESI name cache + queue (web: look up / queue, worker: resolve via /universe/names/)
-//   zkill/query.php      read helpers for endpoints (kills of systems in a window, coverage)
+//   zkill/http.php        one HTTP client: User-Agent, per-host rate limits, 429/Retry-After, 403/challenge blocks,
+//                         ESI error and rate limits
+//   zkill/schema.php      DDL (CREATE TABLE IF NOT EXISTS) for every zkill_* table, reference copy in docker/sql/
+//   zkill/killmails.php   normalise a killmail, store it in zkill_killmails, stream coverage / high-water mark, pruning
+//   zkill/backfill.php    per-system back-fill queue (web: request, worker: drain via the zKillboard API)
+//   zkill/names.php       ESI name cache + queue (web: look up / queue, worker: resolve via /universe/names)
+//   zkill/query.php       read helpers for endpoints (kills of systems in a window, since-cursor, coverage)
+//   zkill/system_ids.php  generated list of valid solar system IDs (zkill/tools/generate-system-ids.js)
 //
 // Tables: zkill_killmails (all kills, from the stream and back-fill), zkill_state, zkill_backfill, zkill_names,
 // plus Kill Reporting's zkill_kills (alert log, chain systems only, unchanged) and zkill_feed_state.
@@ -23,7 +25,8 @@ require_once(__DIR__ . '/names.php');
 require_once(__DIR__ . '/query.php');
 
 const ZK_API_BASE  = 'https://zkillboard.com/api/';
-const ZK_ESI_BASE  = 'https://esi.evetech.net/latest/';
+const ZK_ESI_BASE  = 'https://esi.evetech.net/';       // versionless routes, pinned with X-Compatibility-Date
+const ZK_ESI_COMPATIBILITY_DATE = '2025-12-16';
 
 /** Integer setting from a config.php constant or the environment, clamped to [min, max] */
 function zk_config_int($name, $default, $min, $max) {
@@ -56,12 +59,52 @@ function zk_user_agent() {
     return ($agent === false || $agent === null || trim($agent) === '') ? 'Tripwire kill feed (+https://github.com/apettey/tripwire)' : $agent;
 }
 
-/** Real New Eden system ID (k-space, J-space, Abyssal/Pochven ranges) */
+/** Log sink for the module (the worker points it at its log; web requests use error_log) */
+function zk_log($message) {
+    $sink = zk_log_sink();
+    if ($sink) $sink($message); else error_log('[zkill] ' . $message);
+}
+
+function zk_log_sink(?callable $set = null) {
+    static $sink = null;
+    if ($set !== null) $sink = $set;
+    return $sink;
+}
+
+/** Sorted [[from, to], ...] ranges of valid solar system IDs (zkill/system_ids.php) */
+function zk_system_ranges() {
+    static $ranges = null;
+    if ($ranges === null) {
+        $ranges = [];
+        foreach (explode(',', (string) require(__DIR__ . '/system_ids.php')) as $part) {
+            $bounds = array_map('intval', explode('-', $part, 2));
+            $ranges[] = [$bounds[0], $bounds[1] ?? $bounds[0]];
+        }
+    }
+    return $ranges;
+}
+
+/** A real solar system (k-space, J-space, Pochven, ...) according to the app's static system data */
 function zk_is_system_id($id) {
-    return is_int($id) && $id >= 30000000 && $id < 33000000;
+    if (!is_int($id)) return false;
+    $ranges = zk_system_ranges();
+    $low = 0;
+    $high = count($ranges) - 1;
+    while ($low <= $high) {
+        $mid = ($low + $high) >> 1;
+        if ($id < $ranges[$mid][0]) $high = $mid - 1;
+        elseif ($id > $ranges[$mid][1]) $low = $mid + 1;
+        else return true;
+    }
+    return false;
 }
 
 /** 'Y-m-d H:i:s' (UTC) -> ISO 8601 'Y-m-d\TH:i:s\Z'; null stays null */
 function zk_iso($datetime) {
     return $datetime === null ? null : str_replace(' ', 'T', $datetime) . 'Z';
+}
+
+/** Unix time of a 'Y-m-d H:i:s' UTC value, null for null */
+function zk_unix($datetime) {
+    return $datetime === null ? null : strtotime($datetime . ' UTC');
 }

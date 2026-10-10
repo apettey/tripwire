@@ -76,6 +76,20 @@ function zk_stream_reset_coverage(PDO $db) {
     zk_state_set($db, 'stream.coveredSince', gmdate('Y-m-d H:i:s'));
 }
 
+/**
+ * Worker: up to when the stream has stored every kill (unix time): the R2Z2 upload time of the last processed
+ * killmail while catching up, or now when it is caught up (R2Z2 has nothing newer).
+ */
+function zk_stream_set_high_water(PDO $db, $unix) {
+    zk_state_set($db, 'stream.highWater', gmdate('Y-m-d H:i:s', (int) $unix));
+}
+
+/** [coveredSince, highWater] as unix times (null when unknown) */
+function zk_stream_window(PDO $db) {
+    $rows = $db->query("SELECT name, value FROM zkill_state WHERE name IN ('stream.coveredSince', 'stream.highWater')")->fetchAll(PDO::FETCH_KEY_PAIR);
+    return [zk_unix($rows['stream.coveredSince'] ?? null), zk_unix($rows['stream.highWater'] ?? null)];
+}
+
 /** Delete kills, back-fill rows and names that are past their retention. Returns the number of kills deleted. */
 function zk_prune(PDO $db) {
     $retention = zk_retention_seconds();

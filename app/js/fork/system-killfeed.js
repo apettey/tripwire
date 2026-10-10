@@ -7,6 +7,8 @@ const systemKillFeed = {
 	URL: "system_kills.php",
 	WIDGET_ID: "systemKillFeedWidget",
 	LIMIT: 20,
+	WINDOW_SECONDS: 86400,	// asked of the server (it clamps to its retention)
+	QUEUE_DELAY_MS: 1000,	// a system must be viewed this long before the server is asked to back-fill it
 	REFRESH_MS: 90000,	// while the system is viewed
 	PENDING_MS: 4000,	// while a back-fill or names are pending
 	MAX_PENDING_POLLS: 30,
@@ -58,6 +60,15 @@ const systemKillFeed = {
 	eveTime: function(timeMs) {
 		if (!isFinite(timeMs)) { return ""; }
 		return new Date(timeMs).toISOString().replace("T", " ").substring(0, 19);
+	},
+
+	/** Short duration: "45 s", "12 min", "3 h 5 min" */
+	formatDuration: function(seconds) {
+		const s = Math.max(0, Math.round(Number(seconds) || 0));
+		if (s < 60) { return s + " s"; }
+		if (s < 3600) { return Math.floor(s / 60) + " min"; }
+		const m = Math.floor((s % 3600) / 60);
+		return Math.floor(s / 3600) + " h" + (m ? " " + m + " min" : "");
 	},
 
 	/** "48 hours", "1 hour", "7 days", "30 minutes" */
@@ -120,22 +131,25 @@ const systemKillFeed = {
 
 	/**
 	 * What the panel shows for a response: { state: 'list'|'loading'|'empty'|'disabled', rows, note }
-	 * note: a status line under the list ("" for none)
+	 * note: a status line under the list ("" for none).
+	 * @param provisional the response was read-only (no back-fill requested yet): an empty answer means "not known yet"
 	 */
-	viewModel: function(response) {
+	viewModel: function(response, provisional) {
 		const rows = systemKillFeed.buildRows(response);
 		const feed = response && response.feed ? response.feed : {};
 		const windowText = systemKillFeed.formatWindow(response && response.pastSeconds);
+		const incomplete = !(response && response.complete);
 		let note = "";
 		if (response && response.pending) { note = "Loading older kills from zKillboard…"; }
-		else if (feed.enabled && feed.live === false) { note = "The zKillboard feed is behind; recent kills may be missing."; }
+		else if (feed.enabled && feed.caughtUp === false && feed.lagSeconds !== null && feed.lagSeconds !== undefined) {
+			note = "The zKillboard feed is behind by " + systemKillFeed.formatDuration(feed.lagSeconds) + "; recent kills may be missing.";
+		} else if (response && response.queueFull && incomplete) { note = "The server is busy; older kills may be missing."; }
 		if (feed.enabled === false && !rows.length) {
 			return { state: "disabled", rows: rows, note: "The zKillboard feed is turned off on this server." };
 		}
 		if (!rows.length) {
-			return response && response.pending
-				? { state: "loading", rows: rows, note: "" }
-				: { state: "empty", rows: rows, note: "No kills in the last " + windowText + "." };
+			if ((response && response.pending) || (provisional && incomplete)) { return { state: "loading", rows: rows, note: "" }; }
+			return { state: "empty", rows: rows, note: "No kills in the last " + windowText + "." + (note ? " " + note : "") };
 		}
 		return { state: "list", rows: rows, note: note };
 	},
@@ -238,8 +252,10 @@ const systemKillFeed = {
 	tickTimer: null,
 	pendingPolls: 0,
 	lastLoad: 0,
-	missed: false,
-	observer: null,	// a refresh was skipped while the tab was hidden
+	missed: false,	// a refresh was skipped while the tab was hidden
+	provisional: false,	// the current response was read-only (queue=0)
+	queueTimer: null,
+	observer: null,
 
 	isOn: function() {
 		return systemKillFeed.enabled(typeof options !== "undefined" ? options : undefined);
@@ -305,6 +321,11 @@ const systemKillFeed = {
 		const g = systemKillFeed.gridster();
 		const $w = systemKillFeed.$widget();
 		if (!$w.length) { return; }
+		// Drop the id first: gridster fades the widget out before removing it, and turning the setting back on
+		// meanwhile must add a new panel
+		$w.attr("id", systemKillFeed.WIDGET_ID + "-removed");
+		systemKillFeed.systemID = null;
+		systemKillFeed.response = null;
 		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
 	},
 
@@ -316,12 +337,14 @@ const systemKillFeed = {
 	stop: function() {
 		clearTimeout(systemKillFeed.timer);
 		systemKillFeed.timer = null;
+		clearTimeout(systemKillFeed.queueTimer);
+		systemKillFeed.queueTimer = null;
 		if (systemKillFeed.xhr) { systemKillFeed.xhr.abort(); systemKillFeed.xhr = null; }
 	},
 
 	schedule: function(ms) {
 		clearTimeout(systemKillFeed.timer);
-		systemKillFeed.timer = setTimeout(function() { systemKillFeed.fetch(false); }, ms);
+		systemKillFeed.timer = setTimeout(function() { systemKillFeed.fetch(false, true); }, ms);
 	},
 
 	/** Show a (new) system */
@@ -340,22 +363,31 @@ const systemKillFeed = {
 			systemKillFeed.render();
 		}
 		systemKillFeed.pendingPolls = 0;
-		systemKillFeed.fetch(true);
+		// Show what the server has right away, but only ask it to back-fill once the system has been viewed a moment
+		// (clicking through systems shouldn't queue each one)
+		clearTimeout(systemKillFeed.queueTimer);
+		systemKillFeed.fetch(true, false);
+		systemKillFeed.queueTimer = setTimeout(function() {
+			systemKillFeed.queueTimer = null;
+			if (systemKillFeed.systemID === id) { systemKillFeed.fetch(true, true); }
+		}, systemKillFeed.QUEUE_DELAY_MS);
 	},
 
-	fetch: function(force) {
+	fetch: function(force, queue) {
 		const id = systemKillFeed.systemID;
 		if (!id || !systemKillFeed.$widget().length || !systemKillFeed.isOn()) { return; }
 		if (!force && document.hidden) { systemKillFeed.missed = true; return; }	// resumes on visibilitychange
 		systemKillFeed.missed = false;
 		if (systemKillFeed.xhr) { systemKillFeed.xhr.abort(); }
 		systemKillFeed.$widget().find(".skf-status").text("updating…");
-		const xhr = $.ajax({ url: systemKillFeed.URL, type: "GET", data: { systemID: id, limit: systemKillFeed.LIMIT },
+		const xhr = $.ajax({ url: systemKillFeed.URL, type: "GET",
+			data: { systemID: id, limit: systemKillFeed.LIMIT, pastSeconds: systemKillFeed.WINDOW_SECONDS, queue: queue ? 1 : 0 },
 			dataType: "JSON", cache: false, timeout: 15000 });
 		systemKillFeed.xhr = xhr;
 		xhr.done(function(response) {
 			if (id !== systemKillFeed.systemID) { return; }
 			systemKillFeed.response = response;
+			systemKillFeed.provisional = !queue;
 			systemKillFeed.error = "";
 			systemKillFeed.lastLoad = Date.now();
 			const waiting = response && (response.pending || response.namesPending);
@@ -376,7 +408,7 @@ const systemKillFeed = {
 		const $w = systemKillFeed.$widget();
 		if (!$w.length) { return; }
 		const response = systemKillFeed.response;
-		const model = response ? systemKillFeed.viewModel(response) : null;
+		const model = response ? systemKillFeed.viewModel(response, systemKillFeed.provisional) : null;
 		if (typeof Tooltips !== "undefined" && Tooltips.close) { Tooltips.close(); }
 		const $body = $w.find(".skf-body");
 		const scroll = $w.find(".content").scrollTop();
@@ -455,7 +487,7 @@ const systemKillFeed = {
 		}
 		document.addEventListener("visibilitychange", function() {
 			if (!document.hidden && systemKillFeed.missed) {
-				systemKillFeed.fetch(false);
+				systemKillFeed.fetch(false, true);
 			}
 		});
 		systemKillFeed.sync();

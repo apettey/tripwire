@@ -40,7 +40,8 @@ const ZKF_PRUNE_EVERY      = 600;      // seconds between prunes
 const ZKF_KEEP_HOURS       = 24;
 const ZKF_HEARTBEAT_EVERY  = 300;
 const ZKF_STATE_SAVE_EVERY = 5;        // seconds; the sequence is also saved after every stored kill
-const ZKF_NAMES_EVERY      = 2;        // seconds between ESI name-queue passes
+const ZKF_NAMES_EVERY      = 2;        // seconds between ESI name-queue passes (only while caught up)
+const ZKF_NAMES_REQUESTS   = 3;        // ESI requests per name pass
 
 // Same DDL as docker/sql/kill-reporting.sql (keep in sync)
 const ZKF_DDL = [
@@ -203,7 +204,8 @@ function zkf_prune(PDO $db) {
     if ($deleted) zkf_log("pruned $deleted stored killmails older than " . (zk_retention_seconds() / 3600) . ' h');
 }
 
-// Queue work between kills: one back-fill when the zKillboard API may be called, names every few seconds.
+// Queue work, only while the stream is caught up (zkf_idle): one back-fill when the zKillboard API may be called
+// (a job is bounded by its HTTP timeouts and ESI budget, see zkill/backfill.php), names every few seconds.
 // Database errors go up to the main loop (reconnect); anything else is logged and doesn't stop the stream.
 function zkf_tick(PDO $db) {
     static $lastNames = 0;
@@ -212,7 +214,7 @@ function zkf_tick(PDO $db) {
         if ($line !== null) zkf_log($line);
         if (time() - $lastNames >= ZKF_NAMES_EVERY) {
             $lastNames = time();
-            $resolved = zk_names_resolve($db);
+            $resolved = zk_names_resolve($db, ZKF_NAMES_REQUESTS);
             if ($resolved) zkf_log("resolved $resolved names");
         }
     } catch (PDOException $error) {
@@ -251,6 +253,7 @@ function zkf_run() {
     $backoff = 0;
     $latestKnown = null;
     $latestChecked = 0;
+    $highWater = null;     // R2Z2 upload time of the last processed killmail
 
     while (true) {
         try {
@@ -287,14 +290,15 @@ function zkf_run() {
                     $lastSave = 0; // save right after the kill
                 }
                 zk_store_killmail($db, $kill, 'feed');
+                if (isset($kill['uploaded_at']) && is_numeric($kill['uploaded_at'])) $highWater = (int) $kill['uploaded_at'];
                 $sequence++;
                 $backoff = 0;
                 if ($sequence !== $savedSequence && time() - $lastSave >= ZKF_STATE_SAVE_EVERY) {
                     zkf_save_sequence($db, $sequence);
+                    if ($highWater !== null) zk_stream_set_high_water($db, min($highWater, time()));
                     $savedSequence = $sequence;
                     $lastSave = time();
                 }
-                zkf_tick($db);
                 usleep(ZKF_CATCHUP_DELAY_US);
                 continue;
             }
@@ -324,6 +328,8 @@ function zkf_run() {
                     usleep(ZKF_CATCHUP_DELAY_US);
                     continue;
                 }
+                // Caught up: the stream has every kill up to now
+                zk_stream_set_high_water($db, time());
                 zkf_idle($db, ZKF_CAUGHT_UP_SLEEP);
                 continue;
             }
@@ -338,4 +344,5 @@ function zkf_run() {
     }
 }
 
+zk_log_sink('zkf_log');
 zkf_run();

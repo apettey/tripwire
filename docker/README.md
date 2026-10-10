@@ -159,48 +159,68 @@ the feed off for the instance; the endpoint then simply returns no kills.
 
 All zKillboard and ESI access of the fork goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to two queues the worker drains. New features that need kills must read these tables
-(`zkill/query.php`) and queue work, never add their own zKillboard callers.
+tables and at most add rows to two bounded queues the worker drains. New features that need kills must read these
+tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
 | --- | --- |
-| `zkill/zkill.inc.php` | Entry point (require this), settings (`ZKILL_*`, `USER_AGENT`) |
-| `zkill/http.php` | The HTTP client: one User-Agent, per-host rate limits (`zkillboard.com`: `ZKILL_API_INTERVAL`; ESI: 20/s), 429 `Retry-After`, exponential backoff on 420/5xx/network errors, ESI error-limit headers |
+| `zkill/zkill.inc.php` | Entry point (require this), settings (`ZKILL_*`, `USER_AGENT`), log sink, system ID check |
+| `zkill/http.php` | The HTTP client: one User-Agent, per-host spacing reserved when a request starts (`zkillboard.com`: `ZKILL_API_INTERVAL`; ESI: 20/s), 429 `Retry-After`, exponential backoff on 420/5xx/network errors, **403 or a 200 that isn't JSON (challenge page) blocks the host for at least 10 minutes and is logged as `BLOCKED by <host>`**, ESI error-limit and `X-Ratelimit-*` headers. ESI uses versionless routes with `X-Compatibility-Date` |
 | `zkill/schema.php` | DDL of the tables below (`docker/sql/zkill.sql` is the reference copy) |
-| `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage, pruning |
+| `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage and high-water mark, pruning |
 | `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
-| `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names/` (worker) |
+| `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
-| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (not in the image) |
+| `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
+| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image) |
 
 Data flow:
 
 1. **Stream.** The worker follows R2Z2 as described in [Kill Reporting](#kill-reporting). Every killmail (all of
    New Eden, NPC kills included, flagged `npc`) goes into `zkill_killmails` (victim, final blow
    character/corporation/alliance/ship, pilot count, value, flags) and is kept for `ZKILL_RETENTION_HOURS` (by kill
-   time). Kills in chain systems still also go into `zkill_kills`, Kill Reporting's alert log, exactly as before.
-   `zkill_state` `stream.coveredSince` records since when the stream has stored every kill without a gap; it is
-   reset when the worker starts from the current sequence (first start, or after more than 20 hours down) or skips
-   ahead. Expect roughly 10-30 thousand rows per day of retention.
-2. **Back-fill.** When an endpoint asks for a window (e.g. the last 48 hours of a system) that the stream doesn't
-   cover yet, `zk_backfill_request()` queues the system in `zkill_backfill` (one row per system, deduped; a failed
-   back-fill or one older than a stream restart is retried after 10 minutes) and the response says `pending`.
-   Between kills the worker takes the oldest queued system and requests
-   `https://zkillboard.com/api/systemID/<id>/pastSeconds/<window>/` (at most one request per
-   `ZKILL_API_INTERVAL` seconds, instance-wide). Entries that come back without the killmail are fetched from ESI
-   (`/killmails/<id>/<hash>/`, 5 in parallel, at most 100 per job). Back-filled kills go into `zkill_killmails`
-   only, never into `zkill_kills`, so they never trigger kill sounds. Busy systems where zKillboard's answer is cut
-   off (about 200 kills) are covered from their oldest returned kill and not asked again.
-3. **Names.** Endpoints return IDs plus the names already in `zkill_names` and queue unknown IDs; the worker resolves
-   up to 500 queued IDs every 2 seconds through ESI `POST /universe/names/` (splitting a batch that ESI rejects to
-   isolate invalid IDs). Names are re-resolved after 30 days.
+   time). Its auto-increment `id` is the since-cursor for readers. Kills in chain systems still also go into
+   `zkill_kills`, Kill Reporting's alert log, exactly as before. Expect roughly 10-30 thousand rows per day of retention.
+   `zkill_state` holds the stream's coverage: `stream.coveredSince` (since when it has stored every kill without a
+   gap; reset when the worker starts from the current sequence, i.e. first start or more than 20 hours down, or skips
+   ahead) and `stream.highWater` (up to when: the R2Z2 upload time of the last processed killmail while catching up,
+   or now whenever it is caught up). Readers get `feed.lagSeconds` / `feed.caughtUp` from it.
+2. **Back-fill.** When an endpoint asks for a window that the stream doesn't cover yet, `zk_backfill_request()`
+   queues the system in `zkill_backfill` (one row per system, deduped) and the response says `pending`. Limits: only
+   real solar systems (`zkill/system_ids.php`), at most 1000 queued/running rows overall and 250 per user (above
+   that nothing new is queued and the response says `queueFull`), a failed back-fill or one older than a stream
+   restart is retried after 10 minutes. Priority: `source=chain` (20) before `source=panel` (10), then oldest request;
+   a later chain request raises a queued panel request. **Only while the stream is caught up** (between R2Z2 polls),
+   the worker takes the top job and requests `https://zkillboard.com/api/systemID/<id>/pastSeconds/<window>/` (at
+   most one request per `ZKILL_API_INTERVAL` seconds, instance-wide, 10 s timeout). Entries that come back without the
+   killmail are fetched from ESI (`/killmails/<id>/<hash>`, 5 in parallel, at most 200 per job and 8 s per job);
+   if any entry is left out, the back-fill only counts as covering the kills before the first gap. Busy systems where
+   zKillboard's answer is cut off (about 200 kills) are covered from their oldest returned kill and not asked again.
+   A job that throws is marked `failed`; a `running` job older than 5 minutes is queued again. Back-filled kills go
+   into `zkill_killmails` only, never into `zkill_kills`, so they never trigger kill sounds.
+3. **Names.** Endpoints return IDs plus the names already in `zkill_names` and queue unknown IDs; while the stream is
+   caught up the worker resolves queued IDs every 2 seconds (at most 3 ESI requests of up to 500 IDs per pass,
+   splitting a batch that ESI rejects to isolate invalid IDs). Names are re-resolved after 30 days.
 4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
    older than the retention, stale names.
 
-`public/system_kills.php` (logged-in users, GET): `systemID=<id>` and/or `systems=<id,...>` (at most 25),
-`pastSeconds` (60 up to the retention, default the retention), `limit` (1-50 kills over all systems, default 20).
-It returns the kills newest first plus `names`, per-system coverage and `pending` / `namesPending` flags (poll again
-while either is true). With `ZKILL_FEED_ENABLED=false` it returns what is stored and queues nothing.
+`public/system_kills.php` (logged-in users, GET only):
+
+| Parameter | Meaning |
+| --- | --- |
+| `systemID=<id>` and/or `systems=<id,...>` | Solar systems, at most 200 (validated against `zkill/system_ids.php`) |
+| `pastSeconds` | Window, 60 up to the retention (default: the retention; longer is clamped) |
+| `limit` | Kills returned over all systems, 1-50 (default 20) |
+| `since=<cursor>` | Incremental mode like `kills.php`: only kills stored after the cursor (in the window), oldest stored first; `cursor` in the answer is where to continue (the last kill of a full page, else the latest id; a cursor beyond the latest resets to it) |
+| `source=panel\|chain` | Back-fill priority (default `panel`) |
+| `queue=0\|1` | `0` = read only, queue nothing (default `1`) |
+
+The answer has `kills` (newest first without `since`), `names` (ID => name), `cursor`, `feed` (`enabled`, `live`,
+`caughtUp`, `lagSeconds`, `coveredSince`, `highWater`), per-system `systems[]` (`complete`, `coveredFrom`,
+`coveredTo`, `pending`, `queueFull`, `backfill`) and overall `complete` / `pending` / `queueFull` / `namesPending`
+flags. Poll again while `pending` or `namesPending` is true. With `ZKILL_FEED_ENABLED=false` it returns what is
+stored and queues nothing. The GET's only side effect is a deduplicated, capped queue row, so a cross-site request
+can at most queue real systems up to the caps.
 
 ### Versions
 
@@ -233,7 +253,7 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose

@@ -5,7 +5,8 @@
 // The worker resolves the queue with zk_names_resolve() in batches through ESI POST /universe/names/.
 
 const ZK_NAMES_BATCH        = 500;  // IDs per worker pass (ESI accepts up to 1000 per request)
-const ZK_NAMES_MAX_REQUESTS = 12;   // ESI requests per pass (a 404 batch is split in halves to find the bad IDs)
+const ZK_NAMES_MAX_REQUESTS = 6;    // ESI requests per pass (a 404 batch is split in halves to find the bad IDs)
+const ZK_NAMES_TIMEOUT      = 10;   // seconds per request
 const ZK_NAMES_MAX_ATTEMPTS = 5;
 
 /**
@@ -39,10 +40,10 @@ function zk_names_lookup(PDO $db, array $ids, $queue = true) {
 }
 
 /**
- * Worker: resolve queued names. Returns the number of IDs resolved (including unknown ones), or null if
- * nothing was queued or ESI is rate limited.
+ * Worker: resolve queued names with at most $maxRequests ESI requests. Returns the number of IDs resolved
+ * (including unknown ones), or null if nothing was queued or ESI is rate limited.
  */
-function zk_names_resolve(PDO $db) {
+function zk_names_resolve(PDO $db, $maxRequests = ZK_NAMES_MAX_REQUESTS) {
     if (!zk_http_ready('esi.evetech.net')) return null;
     $ids = $db->query('SELECT id FROM zkill_names WHERE name IS NULL ORDER BY requestedAt LIMIT ' . ZK_NAMES_BATCH)->fetchAll(PDO::FETCH_COLUMN);
     if (!$ids) return null;
@@ -55,9 +56,9 @@ function zk_names_resolve(PDO $db) {
     $batches = [$ids];
     while ($batches) {
         $batch = array_shift($batches);
-        if ($requests >= ZK_NAMES_MAX_REQUESTS || !zk_http_ready('esi.evetech.net')) continue;   // stays queued
+        if ($requests >= $maxRequests || !zk_http_ready('esi.evetech.net')) continue;   // stays queued
         $requests++;
-        [$status, $body] = zk_http_request('POST', ZK_ESI_BASE . 'universe/names/', json_encode($batch), false);
+        [$status, $body] = zk_http_request('POST', ZK_ESI_BASE . 'universe/names', json_encode($batch), false, ZK_NAMES_TIMEOUT);
         $data = $status === 200 ? json_decode($body, true) : null;
         if (is_array($data)) {
             foreach ($data as $entry) {

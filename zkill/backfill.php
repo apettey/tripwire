@@ -1,17 +1,25 @@
 <?php
 // Fork-owned: per-system back-fill of the zKillboard integration (see zkill/zkill.inc.php).
 //
-// The stream (R2Z2) stores every kill from the moment the worker started following it (stream.coveredSince).
-// Anything older is fetched per system from the zKillboard API, but never in a web request: endpoints call
-// zk_backfill_request(), which queues the system, and the worker drains the queue one system at a time with
-// zk_backfill_run_one(), spaced by ZKILL_API_INTERVAL.
+// The stream (R2Z2) stores every kill from the moment the worker started following it (stream.coveredSince) up to
+// its high-water mark. Anything older is fetched per system from the zKillboard API, but never in a web request:
+// endpoints call zk_backfill_request(), which queues the system (bounded: valid systems only, ZK_BACKFILL_MAX_QUEUED
+// overall, ZK_BACKFILL_MAX_PER_USER per user), and the worker drains the queue one system at a time with
+// zk_backfill_run_one() while the stream is caught up, highest priority first, spaced by ZKILL_API_INTERVAL.
 
-const ZK_BACKFILL_COOLDOWN   = 600;  // seconds before a system whose back-fill failed / no longer covers is queued again
-const ZK_BACKFILL_ESI_MAX    = 100;  // killmails per job fetched from ESI when the API returns only id + hash
-const ZK_BACKFILL_PAGE_FULL  = 150;  // an API answer this long may be truncated: coverage then starts at its oldest kill
+const ZK_BACKFILL_PRIORITY      = ['panel' => 10, 'chain' => 20];   // request source => queue priority
+const ZK_BACKFILL_COOLDOWN      = 600;   // seconds before a failed / outdated back-fill is queued again
+const ZK_BACKFILL_MAX_QUEUED    = 1000;  // queued + running rows; above this nothing new is queued
+const ZK_BACKFILL_MAX_PER_USER  = 250;   // queued + running rows one user may have added
+const ZK_BACKFILL_STALE_RUNNING = 300;   // seconds after which a 'running' job counts as abandoned
+const ZK_BACKFILL_TIMEOUT       = 10;    // seconds per HTTP request of a job
+const ZK_BACKFILL_BUDGET        = 8;     // seconds a job may spend on ESI killmail fetches
+const ZK_BACKFILL_ESI_MAX       = 200;   // killmails per job fetched from ESI (>= the API's page size)
+const ZK_BACKFILL_PAGE_FULL     = 150;   // an API answer this long may be truncated: coverage then starts at its oldest kill
+const ZK_STREAM_LAG_TOLERANCE   = 120;   // seconds the high-water mark may trail now and still count as caught up
 
 /**
- * Start of the gap-free coverage (unix time) for one system, or null if nothing is covered up to now.
+ * Start of the gap-free coverage (unix time) for one system, or null if nothing is covered.
  * @param int|null $streamSince unix time since when the stream has stored every kill
  * @param array|null $backfill ['status' => .., 'completedAt' => unix|null, 'coveredFrom' => unix|null]
  */
@@ -27,15 +35,17 @@ function zk_coverage_from($streamSince, $backfill) {
 }
 
 /**
- * What to do for a system whose window is not covered.
- * @param array|null $backfill its queue row: ['status', 'windowSeconds', 'attemptedAt' => unix|null, 'completedAt' => unix|null]
- * @return array ['queue' => (re)queue it now, 'pending' => a back-fill is under way, the caller should poll again]
+ * What to do for a system whose history (start of the window) is not covered.
+ * @param array|null $backfill its queue row: ['status', 'windowSeconds', 'priority', 'attemptedAt' => unix|null, 'completedAt' => unix|null]
+ * @return array ['queue' => (re)queue / upgrade it now, 'pending' => a back-fill is under way, poll again]
  */
-function zk_backfill_decision($backfill, $streamSince, $windowSeconds, $now) {
+function zk_backfill_decision($backfill, $streamSince, $windowSeconds, $now, $priority = 10) {
     if (!$backfill) return ['queue' => true, 'pending' => true];
     $status = $backfill['status'];
     if ($status === 'queued' || $status === 'running') {
-        return ['queue' => $backfill['windowSeconds'] < $windowSeconds, 'pending' => true];   // widen the window
+        // widen the window or raise the priority of a queued job
+        $upgrade = $backfill['windowSeconds'] < $windowSeconds || ($backfill['priority'] ?? 0) < $priority;
+        return ['queue' => $upgrade, 'pending' => true];
     }
     $recent = $backfill['attemptedAt'] !== null && $backfill['attemptedAt'] > $now - ZK_BACKFILL_COOLDOWN;
     if ($status === 'done') {
@@ -49,32 +59,53 @@ function zk_backfill_decision($backfill, $streamSince, $windowSeconds, $now) {
     return $recent ? ['queue' => false, 'pending' => false] : ['queue' => true, 'pending' => true];
 }
 
-/** Unix time of a 'Y-m-d H:i:s' UTC value, null for null */
-function zk_unix($datetime) {
-    return $datetime === null ? null : strtotime($datetime . ' UTC');
+/**
+ * Where a back-fill's coverage starts (unix time).
+ * @param int $started when the job asked zKillboard
+ * @param int $pastSeconds the window it asked for
+ * @param int $listCount entries zKillboard returned
+ * @param array $times list index => kill time (unix) of every entry that was stored
+ * @param int|null $firstSkipped list index of the first entry that was not stored (ESI cap, budget, failure), or null
+ */
+function zk_backfill_covered_from($started, $pastSeconds, $listCount, array $times, $firstSkipped) {
+    if ($firstSkipped !== null) {
+        // The answer is newest first: only the entries before the first gap are known to be complete
+        $before = array_filter($times, function ($index) use ($firstSkipped) { return $index < $firstSkipped; }, ARRAY_FILTER_USE_KEY);
+        return $before ? min($before) : $started;
+    }
+    if ($listCount >= ZK_BACKFILL_PAGE_FULL) return $times ? min($times) : $started;
+    return $started - $pastSeconds;
 }
 
 /**
- * Coverage of the window [now - windowSeconds, now] for each system, queueing a back-fill for systems that
- * are not covered (deduped per system, ZK_BACKFILL_COOLDOWN after a failed or outdated attempt).
- * @return array systemID => ['complete' => bool, 'coveredFrom' => unix|null, 'pending' => bool,
- *                            'status' => queue status|null, 'error' => string]
+ * Coverage of the window [now - windowSeconds, now] for each system, queueing a back-fill for systems whose history
+ * is not covered (see zk_backfill_decision()), unless the queue limits are reached.
+ * @param array $options queue (bool), source ('panel'|'chain'), userID (int)
+ * @return array systemID => ['complete' => bool, 'coveredFrom' => unix|null, 'coveredTo' => unix|null, 'pending' => bool,
+ *                            'queueFull' => bool, 'status' => queue status|null, 'error' => string]
  */
-function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, $queue = true) {
+function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, array $options = []) {
+    $queue = $options['queue'] ?? true;
+    $priority = ZK_BACKFILL_PRIORITY[$options['source'] ?? 'panel'] ?? ZK_BACKFILL_PRIORITY['panel'];
+    $userID = (int) ($options['userID'] ?? 0);
     $now = time();
     $needFrom = $now - $windowSeconds;
-    $streamSince = zk_unix(zk_stream_covered_since($db));
+    [$streamSince, $highWater] = zk_stream_window($db);
     $rows = [];
     if ($systemIDs) {
-        $stmt = $db->prepare('SELECT systemID, windowSeconds, status, requestedAt, attemptedAt, completedAt, coveredFrom, error
+        $stmt = $db->prepare('SELECT systemID, windowSeconds, status, priority, requestedAt, attemptedAt, completedAt, coveredFrom, error
             FROM zkill_backfill WHERE systemID IN (' . implode(',', array_fill(0, count($systemIDs), '?')) . ')');
         $stmt->execute(array_values($systemIDs));
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) $rows[(int) $row['systemID']] = $row;
     }
-    $enqueue = $db->prepare("INSERT INTO zkill_backfill (systemID, windowSeconds, status, requestedAt)
-        VALUES (?, ?, 'queued', UTC_TIMESTAMP())
+    $queued = null;
+    $queuedByUser = null;
+    $enqueue = $db->prepare("INSERT INTO zkill_backfill (systemID, windowSeconds, status, priority, requestedBy, requestedAt)
+        VALUES (?, ?, 'queued', ?, ?, UTC_TIMESTAMP())
         ON DUPLICATE KEY UPDATE
             requestedAt = IF(status IN ('queued', 'running'), requestedAt, VALUES(requestedAt)),
+            requestedBy = IF(status IN ('queued', 'running'), requestedBy, VALUES(requestedBy)),
+            priority = IF(status IN ('queued', 'running'), GREATEST(priority, VALUES(priority)), VALUES(priority)),
             windowSeconds = IF(status IN ('queued', 'running'), GREATEST(windowSeconds, VALUES(windowSeconds)), VALUES(windowSeconds)),
             status = IF(status = 'running', status, 'queued')");
 
@@ -87,18 +118,38 @@ function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, $queue =
             'coveredFrom' => zk_unix($row['coveredFrom']),
         ] : null;
         $from = zk_coverage_from($streamSince, $backfill);
-        $complete = $from !== null && $from <= $needFrom;
+        $historyCovered = $from !== null && $from <= $needFrom;
+        $complete = $historyCovered && $highWater !== null && $highWater >= $now - ZK_STREAM_LAG_TOLERANCE;
         $status = $row ? $row['status'] : null;
         $pending = false;
-        if (!$complete && $queue) {
+        $queueFull = false;
+        if (!$historyCovered && $queue) {
             $decision = zk_backfill_decision($row ? [
                 'status' => $row['status'],
                 'windowSeconds' => (int) $row['windowSeconds'],
+                'priority' => (int) $row['priority'],
                 'attemptedAt' => zk_unix($row['attemptedAt']),
                 'completedAt' => $backfill['completedAt'],
-            ] : null, $streamSince, $windowSeconds, $now);
+            ] : null, $streamSince, $windowSeconds, $now, $priority);
+            $inQueue = $row && in_array($row['status'], ['queued', 'running'], true);
+            if ($decision['queue'] && !$inQueue) {
+                // A new queue entry: respect the global and per-user limits
+                if ($queued === null) {
+                    $queued = (int) $db->query("SELECT COUNT(*) FROM zkill_backfill WHERE status IN ('queued', 'running')")->fetchColumn();
+                    $byUser = $db->prepare("SELECT COUNT(*) FROM zkill_backfill WHERE requestedBy = ? AND status IN ('queued', 'running')");
+                    $byUser->execute([$userID]);
+                    $queuedByUser = (int) $byUser->fetchColumn();
+                }
+                if ($queued >= ZK_BACKFILL_MAX_QUEUED || ($userID > 0 && $queuedByUser >= ZK_BACKFILL_MAX_PER_USER)) {
+                    $queueFull = true;
+                    $decision = ['queue' => false, 'pending' => false];
+                } else {
+                    $queued++;
+                    $queuedByUser++;
+                }
+            }
             if ($decision['queue']) {
-                $enqueue->execute([$systemID, $windowSeconds]);
+                $enqueue->execute([$systemID, $windowSeconds, $priority, $userID]);
                 if ($status !== 'running') $status = 'queued';
             }
             $pending = $decision['pending'];
@@ -106,7 +157,9 @@ function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, $queue =
         $result[$systemID] = [
             'complete' => $complete,
             'coveredFrom' => $from,
+            'coveredTo' => $from === null ? null : $highWater,
             'pending' => $pending,
+            'queueFull' => $queueFull,
             'status' => $status,
             'error' => $row ? (string) $row['error'] : '',
         ];
@@ -127,52 +180,79 @@ function zk_backfill_finish(PDO $db, $systemID, $status, $window, $completedAt, 
 }
 
 /**
- * Worker: run the oldest queued back-fill if the zKillboard API may be called now.
+ * Worker: run the most important queued back-fill if the zKillboard API may be called now. Any error marks the
+ * job failed (database errors are re-thrown after that so the worker reconnects).
  * @return string|null log line, or null when nothing was done
  */
 function zk_backfill_run_one(PDO $db) {
+    static $staleChecked = 0;
+    if (time() - $staleChecked >= 60) {
+        $staleChecked = time();
+        $db->exec("UPDATE zkill_backfill SET status = 'queued' WHERE status = 'running'
+            AND attemptedAt < UTC_TIMESTAMP() - INTERVAL " . ZK_BACKFILL_STALE_RUNNING . ' SECOND');
+    }
     if (!zk_http_ready('zkillboard.com')) return null;
-    $job = $db->query("SELECT systemID, windowSeconds FROM zkill_backfill WHERE status = 'queued' ORDER BY requestedAt LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    $job = $db->query("SELECT systemID, windowSeconds FROM zkill_backfill WHERE status = 'queued'
+        ORDER BY priority DESC, requestedAt LIMIT 1")->fetch(PDO::FETCH_ASSOC);
     if (!$job) return null;
     $systemID = (int) $job['systemID'];
     $db->prepare("UPDATE zkill_backfill SET status = 'running', attemptedAt = UTC_TIMESTAMP(), attempts = attempts + 1 WHERE systemID = ?")
         ->execute([$systemID]);
-
     $window = min(max(3600, (int) $job['windowSeconds']), zk_retention_seconds());
+    try {
+        return zk_backfill_job($db, $systemID, $window);
+    } catch (Throwable $error) {
+        try {
+            zk_backfill_finish($db, $systemID, 'failed', $window, null, null, 'error: ' . $error->getMessage());
+        } catch (Throwable $ignored) {
+            // the database is gone; the stale-running check re-queues the job later
+        }
+        if ($error instanceof PDOException) throw $error;
+        return "back-fill $systemID failed: " . $error->getMessage();
+    }
+}
+
+function zk_backfill_job(PDO $db, $systemID, $window) {
     $pastSeconds = min(604800, (int) ceil($window / 3600) * 3600);
     $started = time();
-    [$status, $body] = zk_http_get(ZK_API_BASE . 'systemID/' . $systemID . '/pastSeconds/' . $pastSeconds . '/', false);
-    $list = $status === 200 ? json_decode($body, true) : null;
+    [$status, $list] = zk_http_get_json(ZK_API_BASE . 'systemID/' . $systemID . '/pastSeconds/' . $pastSeconds . '/', false, ZK_BACKFILL_TIMEOUT);
     if (!is_array($list)) {
-        $error = $status === 200 ? 'zKillboard: invalid JSON' : ($status === -1 ? 'zKillboard: rate limited' : "zKillboard: HTTP $status");
-        zk_backfill_finish($db, $systemID, $status === -1 ? 'queued' : 'failed', $window, null, null, $error);
+        $error = $status === -1 ? 'zKillboard: rate limited' : ($status === 200 ? 'zKillboard: not JSON' : "zKillboard: HTTP $status");
+        zk_backfill_finish($db, $systemID, $status === -1 ? 'queued' : 'failed', $window, null, null, $status === -1 ? '' : $error);
         return "back-fill $systemID: $error";
     }
 
     $stored = 0;
-    $oldest = null;
-    $missing = [];   // ESI URL => zkb part, for entries without the killmail itself
-    foreach ($list as $entry) {
-        if (!is_array($entry)) continue;
-        $row = zk_killmail_row($entry);
+    $times = [];       // list index => kill time of stored entries
+    $missing = [];     // ESI URL => [list index, zkb part] for entries without the killmail itself
+    $firstSkipped = null;
+    $skip = function ($index) use (&$firstSkipped) { $firstSkipped = $firstSkipped === null ? $index : min($firstSkipped, $index); };
+    foreach (array_values($list) as $index => $entry) {
+        $row = is_array($entry) ? zk_killmail_row($entry) : null;
         if ($row !== null) {
-            $time = zk_unix($row['killTime']);
-            $oldest = $oldest === null ? $time : min($oldest, $time);
+            $times[$index] = zk_unix($row['killTime']);
             if (zk_store_killmail($db, $entry, 'backfill')) $stored++;
-        } elseif (isset($entry['killmail_id'], $entry['zkb']['hash']) && ctype_digit((string) $entry['killmail_id'])
+        } elseif (is_array($entry) && isset($entry['killmail_id'], $entry['zkb']['hash']) && ctype_digit((string) $entry['killmail_id'])
             && ctype_xdigit((string) $entry['zkb']['hash']) && count($missing) < ZK_BACKFILL_ESI_MAX) {
-            $missing[ZK_ESI_BASE . 'killmails/' . $entry['killmail_id'] . '/' . $entry['zkb']['hash'] . '/'] = $entry['zkb'];
+            $missing[ZK_ESI_BASE . 'killmails/' . $entry['killmail_id'] . '/' . $entry['zkb']['hash']] = [$index, $entry['zkb']];
+        } else {
+            $skip($index);
         }
     }
     $failed = 0;
     if ($missing) {
-        foreach (zk_http_get_many(array_keys($missing), 5) as $url => [$esiStatus, $esiBody]) {
+        $results = zk_http_get_many(array_keys($missing), 5, ZK_BACKFILL_TIMEOUT, microtime(true) + ZK_BACKFILL_BUDGET);
+        foreach ($results as $url => [$esiStatus, $esiBody]) {
+            [$index, $zkb] = $missing[$url];
             $killmail = $esiStatus === 200 ? json_decode($esiBody, true) : null;
-            if (!is_array($killmail)) { $failed++; continue; }
-            $killmail['zkb'] = $missing[$url];
-            $row = zk_killmail_row($killmail);
-            if ($row !== null) $oldest = $oldest === null ? zk_unix($row['killTime']) : min($oldest, zk_unix($row['killTime']));
-            if (zk_store_killmail($db, $killmail, 'backfill')) $stored++;
+            $row = is_array($killmail) ? zk_killmail_row($killmail + ['zkb' => $zkb]) : null;
+            if ($row === null) {
+                $skip($index);
+                if ($esiStatus !== -1) $failed++;
+                continue;
+            }
+            $times[$index] = zk_unix($row['killTime']);
+            if (zk_store_killmail($db, $killmail + ['zkb' => $zkb], 'backfill')) $stored++;
         }
     }
 
@@ -180,7 +260,8 @@ function zk_backfill_run_one(PDO $db) {
         zk_backfill_finish($db, $systemID, 'failed', $window, null, null, "ESI: $failed of " . count($missing) . ' killmails failed');
         return "back-fill $systemID: stored $stored, $failed killmails failed on ESI";
     }
-    $coveredFrom = count($list) >= ZK_BACKFILL_PAGE_FULL && $oldest !== null ? $oldest : $started - $pastSeconds;
+    $coveredFrom = zk_backfill_covered_from($started, $pastSeconds, count($list), $times, $firstSkipped);
     zk_backfill_finish($db, $systemID, 'done', $pastSeconds, gmdate('Y-m-d H:i:s', $started), gmdate('Y-m-d H:i:s', $coveredFrom), '');
-    return "back-fill $systemID: " . count($list) . " kills in the last {$pastSeconds}s, $stored new";
+    return "back-fill $systemID: " . count($list) . " kills in the last {$pastSeconds}s, $stored new"
+        . ($firstSkipped !== null ? ', partial (covered from ' . gmdate('Y-m-d H:i', $coveredFrom) . ')' : '');
 }

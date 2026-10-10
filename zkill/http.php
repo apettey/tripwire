@@ -2,8 +2,12 @@
 // Fork-owned: the single HTTP client of the zKillboard integration (see zkill/zkill.inc.php).
 //
 // Rate limits are per host and in-process: only zkill_feed.worker.php makes outgoing requests, so one process
-// holds the whole instance's budget. A host is "ready" when its next allowed time has passed; 429 (Retry-After),
-// 420/5xx and network errors push that time out, and ESI's error-limit headers pause ESI before it blocks us.
+// holds the whole instance's budget. A host is "ready" when its next allowed time has passed. Every request
+// reserves the host's spacing when it starts; 429 (Retry-After), 420/5xx and network errors push the next time
+// out exponentially; 403 or a non-JSON answer (e.g. a Cloudflare challenge page) block the host for at least
+// ZK_HTTP_BLOCK_FLOOR seconds; ESI's error-limit and rate-limit headers pause ESI before it blocks us.
+
+const ZK_HTTP_BLOCK_FLOOR = 600;    // seconds a host stays paused after a 403 / challenge page
 
 /** Minimum spacing (seconds) between requests per host */
 function zk_http_intervals() {
@@ -35,46 +39,79 @@ function zk_http_ready($host) {
     return zk_http_wait($host) <= 0.0;
 }
 
-/** Record the outcome of a request and set the host's next allowed time */
+/** Pause a host until at least $until (unix time, float) */
+function zk_http_pause($host, $until) {
+    $state = &zk_http_state();
+    $entry = $state[$host] ?? ['next' => 0.0, 'failures' => 0];
+    $entry['next'] = max($entry['next'], $until);
+    $state[$host] = $entry;
+}
+
+/** Reserve the host's spacing for a request starting now */
+function zk_http_reserve($host) {
+    $intervals = zk_http_intervals();
+    zk_http_pause($host, microtime(true) + ($intervals[$host] ?? 0.5));
+}
+
+/** Stop calling a host that refuses us (403, challenge page): at least ZK_HTTP_BLOCK_FLOOR seconds, logged loudly */
+function zk_http_block($host, $seconds, $reason) {
+    $seconds = max(ZK_HTTP_BLOCK_FLOOR, (int) $seconds);
+    zk_http_pause($host, microtime(true) + $seconds);
+    zk_log("BLOCKED by $host ($reason): no requests to it for " . round($seconds / 60) . ' min');
+}
+
+/** Record the outcome of a request (headers lower-cased) and push the host's next allowed time out if needed */
 function zk_http_record($host, $status, array $headers) {
     $state = &zk_http_state();
     $now = microtime(true);
-    $intervals = zk_http_intervals();
     $entry = $state[$host] ?? ['next' => 0.0, 'failures' => 0];
-    $next = $now + ($intervals[$host] ?? 0.5);
+    $retryAfter = isset($headers['retry-after']) && is_numeric($headers['retry-after']) ? (int) $headers['retry-after'] : 0;
 
+    if ($status === 403) {
+        $state[$host] = $entry;
+        zk_http_block($host, $retryAfter, 'HTTP 403');
+        return;
+    }
     if ($status === 429 || $status === 420 || $status === 0 || $status >= 500) {
         $entry['failures']++;
         $backoff = min(300, 10 * (2 ** min(5, $entry['failures'] - 1)));
-        $retryAfter = isset($headers['retry-after']) && is_numeric($headers['retry-after']) ? (int) $headers['retry-after'] : 0;
-        $next = max($next, $now + max($backoff, $retryAfter));
+        $entry['next'] = max($entry['next'], $now + max($backoff, $retryAfter));
     } else {
         $entry['failures'] = 0;
     }
     // ESI: stop before the error limit is used up (it resets every X-ESI-Error-Limit-Reset seconds)
     if (isset($headers['x-esi-error-limit-remain'], $headers['x-esi-error-limit-reset'])
         && (int) $headers['x-esi-error-limit-remain'] < 20) {
-        $next = max($next, $now + (int) $headers['x-esi-error-limit-reset'] + 1);
+        $entry['next'] = max($entry['next'], $now + (int) $headers['x-esi-error-limit-reset'] + 1);
     }
-    $entry['next'] = max($entry['next'], $next);
+    // ESI rate-limit groups (floating window, e.g. "3600/15m"): pause a minute when nearly used up
+    if (isset($headers['x-ratelimit-remaining']) && is_numeric($headers['x-ratelimit-remaining'])) {
+        $limit = isset($headers['x-ratelimit-limit']) ? (int) $headers['x-ratelimit-limit'] : 0;
+        if ((int) $headers['x-ratelimit-remaining'] < max(5, (int) ($limit * 0.05))) {
+            $entry['next'] = max($entry['next'], $now + 60);
+        }
+    }
     $state[$host] = $entry;
 }
 
-function zk_http_options($method, $body) {
+function zk_http_options($url, $method, $body, $timeout) {
+    $headers = ['Accept: application/json'];
+    if (zk_http_host($url) === 'esi.evetech.net') $headers[] = 'X-Compatibility-Date: ' . ZK_ESI_COMPATIBILITY_DATE;
     $options = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_USERAGENT      => zk_user_agent(),
         CURLOPT_ENCODING       => 'gzip',   // sends Accept-Encoding: gzip and decodes the response
-        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
+        CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS      => 3,
     ];
     if ($method === 'POST') {
+        $headers[] = 'Content-Type: application/json';
+        $options[CURLOPT_HTTPHEADER] = $headers;
         $options[CURLOPT_POST] = true;
         $options[CURLOPT_POSTFIELDS] = $body;
-        $options[CURLOPT_HTTPHEADER] = ['Accept: application/json', 'Content-Type: application/json'];
     }
     return $options;
 }
@@ -92,16 +129,17 @@ function zk_http_header_collector(array &$headers) {
  * One request. Waits for the host's rate limit when $wait is true, otherwise returns status -1 if not ready.
  * @return array [status (0 = network error, -1 = rate limited, not sent), body or error text, headers]
  */
-function zk_http_request($method, $url, $body = null, $wait = true) {
+function zk_http_request($method, $url, $body = null, $wait = true, $timeout = 30) {
     $host = zk_http_host($url);
     $delay = zk_http_wait($host);
     if ($delay > 0) {
         if (!$wait) return [-1, 'rate limited', []];
         usleep((int) ceil($delay * 1e6));
     }
+    zk_http_reserve($host);
     $headers = [];
     $curl = curl_init($url);
-    curl_setopt_array($curl, zk_http_options($method, $body));
+    curl_setopt_array($curl, zk_http_options($url, $method, $body, $timeout));
     curl_setopt($curl, CURLOPT_HEADERFUNCTION, zk_http_header_collector($headers));
     $response = curl_exec($curl);
     $status = $response === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
@@ -111,32 +149,52 @@ function zk_http_request($method, $url, $body = null, $wait = true) {
     return [$status, $response === false ? $error : $response, $headers];
 }
 
-function zk_http_get($url, $wait = true) {
-    return zk_http_request('GET', $url, null, $wait);
+function zk_http_get($url, $wait = true, $timeout = 30) {
+    return zk_http_request('GET', $url, null, $wait, $timeout);
 }
 
 /**
- * Several GETs to one host with bounded concurrency (curl_multi). Stops starting new requests once the host
- * is rate limited (429/5xx/ESI error limit); those URLs come back with status -1.
+ * JSON GET against the zKillboard / ESI APIs. A 200 that isn't JSON (Cloudflare challenge, maintenance page)
+ * blocks the host like a 403. @return array [status, decoded value or null, raw body]
+ */
+function zk_http_get_json($url, $wait = true, $timeout = 30) {
+    [$status, $body] = zk_http_get($url, $wait, $timeout);
+    $data = $status === 200 ? json_decode($body, true) : null;
+    if ($status === 200 && $data === null) {
+        zk_http_block(zk_http_host($url), 0, 'HTTP 200 without JSON: ' . substr(preg_replace('/\s+/', ' ', strip_tags((string) $body)), 0, 80));
+    }
+    return [$status, $data, $body];
+}
+
+/**
+ * Several GETs to one host with bounded concurrency (curl_multi). Each request keeps the host's spacing; no new
+ * request starts once the host is paused (429/5xx/403/ESI limits) or after $deadline (unix time). URLs that were
+ * not requested come back with status -1.
  * @return array url => [status, body]
  */
-function zk_http_get_many(array $urls, $concurrency = 5) {
+function zk_http_get_many(array $urls, $concurrency = 5, $timeout = 10, $deadline = null) {
     $results = [];
     $queue = array_values(array_unique($urls));
     if (!$queue) return $results;
     $host = zk_http_host($queue[0]);
+    $intervals = zk_http_intervals();
+    $spacing = $intervals[$host] ?? 0.5;
     $multi = curl_multi_init();
-    $active = [];   // (int) handle id => [handle, url, headers]
+    $active = [];   // spl_object_id(handle) => ['handle', 'url', 'headers']
 
-    $start = function () use (&$queue, &$active, $multi, $host) {
-        if (!$queue || !zk_http_ready($host)) return false;
+    $start = function () use (&$queue, &$active, $multi, $host, $spacing, $timeout, $deadline) {
+        if (!$queue || ($deadline !== null && microtime(true) >= $deadline)) return false;
+        $wait = zk_http_wait($host);
+        if ($wait > $spacing) return false;                 // paused (limits, errors): stop starting requests
+        if ($wait > 0) usleep((int) ceil($wait * 1e6));    // just the spacing
+        zk_http_reserve($host);
         $url = array_shift($queue);
-        $entry = ['handle' => curl_init($url), 'url' => $url, 'headers' => []];
-        curl_setopt_array($entry['handle'], zk_http_options('GET', null));
-        $active[(int) $entry['handle']] = $entry;
-        $headers = &$active[(int) $entry['handle']]['headers'];
-        curl_setopt($entry['handle'], CURLOPT_HEADERFUNCTION, zk_http_header_collector($headers));
-        curl_multi_add_handle($multi, $entry['handle']);
+        $handle = curl_init($url);
+        $id = spl_object_id($handle);
+        $active[$id] = ['handle' => $handle, 'url' => $url, 'headers' => []];
+        curl_setopt_array($handle, zk_http_options($url, 'GET', null, $timeout));
+        curl_setopt($handle, CURLOPT_HEADERFUNCTION, zk_http_header_collector($active[$id]['headers']));
+        curl_multi_add_handle($multi, $handle);
         return true;
     };
 
@@ -146,18 +204,19 @@ function zk_http_get_many(array $urls, $concurrency = 5) {
         if (curl_multi_select($multi, 1.0) === -1) usleep(10000);
         while ($info = curl_multi_info_read($multi)) {
             $handle = $info['handle'];
-            $entry = $active[(int) $handle];
+            $id = spl_object_id($handle);
+            $entry = $active[$id];
             $body = curl_multi_getcontent($handle);
             $status = $info['result'] === CURLE_OK ? (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE) : 0;
             zk_http_record($host, $status, $entry['headers']);
             $results[$entry['url']] = [$status, $status === 0 ? curl_error($handle) : $body];
             curl_multi_remove_handle($multi, $handle);
             curl_close($handle);
-            unset($active[(int) $handle]);
-            if (count($active) < $concurrency) $start();
+            unset($active[$id]);
         }
+        while (count($active) < $concurrency && $start()) {}
     }
     curl_multi_close($multi);
-    foreach ($queue as $url) $results[$url] = [-1, 'rate limited'];
+    foreach ($queue as $url) $results[$url] = [-1, 'not requested'];
     return $results;
 }
