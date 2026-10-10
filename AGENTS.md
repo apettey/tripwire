@@ -76,7 +76,11 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 ## 5. Commits and PRs
 
 - One feature per PR, branched from `main`. Describe what changed and link the change-log entry.
-- Pushing to `main` publishes `petdog/tripwire:latest` to Docker Hub, so `main` must always build and run.
+- Every merge to `main` is released automatically: it gets a `vX.Y.Z` tag, a GitHub Release and the
+  `petdog/tripwire:latest` image, so `main` must always build and run.
+- The version bump follows the PR: a What's New entry is minor, docs-only is no release, anything else is
+  patch. Override it with a `semver:major` / `semver:minor` / `semver:patch` / `semver:skip` label
+  (breaking changes need `semver:major`). Rules: [docker/README.md](docker/README.md#publishing).
 
 ## 6. Security
 
