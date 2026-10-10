@@ -21,6 +21,8 @@ const watchlist = {
 	URL: "watchlist.php",
 	HOLE_CLASS: "watchlist-hole",	// line modifier of a highlighted hole (the chain map renderers read its CSS)
 	POLL_MS: 60000,		// filters are read again this often (admins may change them)
+	MASK_RETRY_MS: 2000,	// after a mask switch, the filters are asked for again this often until they are the new mask's
+	MASK_RETRIES: 5,
 
 	/** System classes a filter can ask for, in the order the editor shows them */
 	CLASSES: [
@@ -688,6 +690,27 @@ const watchlist = {
 	contextKey: function(mask, tab) {
 		const t = tab === undefined || tab === null || tab === "" ? "viewing" : String(tab);
 		return String(mask === undefined || mask === null ? "" : mask) + "#" + t;
+	},
+
+	/** Whether two mask IDs are the same mask ("98000001.2", 98000001.2) */
+	sameMask: function(a, b) {
+		if (a === undefined || a === null || a === "" || b === undefined || b === null || b === "") { return false; }
+		return String(a) === String(b) || Number(a) === Number(b);
+	},
+
+	/** The loaded filters ({loaded, mask: {id}, filters}) to match with on the active mask: null while none are
+	loaded or they are another mask's (after a mask switch, until the new mask's have loaded) */
+	filtersFor: function(server, activeMask) {
+		if (!server || !server.loaded || !server.mask || !watchlist.sameMask(server.mask.id, activeMask)) { return null; }
+		return server.filters || [];
+	},
+
+	/** Whether to ask for the active mask's filters now: they aren't loaded, no request for this mask is under way,
+	and the last one for it (request: {mask, at, pending}) was at least MASK_RETRY_MS ago */
+	needsReload: function(server, activeMask, request, now) {
+		if (watchlist.filtersFor(server, activeMask) !== null) { return false; }
+		if (!request || !watchlist.sameMask(request.mask, activeMask)) { return true; }
+		return !request.pending && now - request.at >= watchlist.MASK_RETRY_MS;
 	}
 };
 
@@ -703,6 +726,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		let seen = loadSeen();		// {<context>: {<filterID|systemID>: last matched}}: already announced, per mask and chain tab
 		// The mask's filters (public/watchlist.php): every member reads them, the corporation's admins change them
 		const server = { loaded: false, available: false, canEdit: false, filters: [], csrf: "", mask: null, error: "", loadedAt: 0 };
+		let maskRequest = null;		// {mask, at, pending, retries}: the last request for the filters after a mask switch
 
 		function current() { return wl.settings(options); }
 		function trackedSystem() { return tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.systemID : null; }
@@ -719,10 +743,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(seen)); } catch (e) { /* private mode etc.: memory only */ }
 		}
 
+		function activeMask() { return options.masks ? options.masks.active : ""; }
+
 		function contextKey() {
 			const $tab = $("#chainTabs .current .name");
 			const tab = $tab.length ? $tab.data("tab") : "";
-			return wl.contextKey(options.masks ? options.masks.active : "", tab);
+			return wl.contextKey(activeMask(), tab);
 		}
 
 		// ---- The mask's filters ----
@@ -742,11 +768,27 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			server.loadedAt = Date.now();
 		}
 
+		/** After a mask switch: ask for the new mask's filters (the server answers for the mask of the session, which
+		follows options.save(), so ask again a few times while it still answers for the previous one) */
+		function reloadForMask() {
+			const mask = activeMask();
+			if (!wl.needsReload(server, mask, maskRequest, Date.now())) { return; }
+			const retries = maskRequest && wl.sameMask(maskRequest.mask, mask) ? maskRequest.retries + 1 : 0;
+			if (retries > wl.MASK_RETRIES) { return; }	// the minute's poll takes over
+			const request = maskRequest = { mask: mask, at: Date.now(), pending: true, retries: retries };
+			loadFilters().always(function() {
+				request.pending = false;
+				if (wl.filtersFor(server, activeMask()) === null) { setTimeout(reloadForMask, wl.MASK_RETRY_MS); }
+				else if (maskRequest === request) { maskRequest = null; }
+			});
+		}
+
 		function loadFilters() {
 			return $.ajax({ url: wl.URL, type: "GET", data: { mode: "get" }, dataType: "JSON", cache: false }).done(function(data) {
-				const before = JSON.stringify(server.filters) + server.canEdit;
+				const state = function() { return JSON.stringify(server.filters) + server.canEdit + (server.mask ? server.mask.id : ""); };
+				const before = state();
 				absorb(data);
-				if (JSON.stringify(server.filters) + server.canEdit !== before) { redrawChain(); }
+				if (state() !== before) { redrawChain(); }
 				renderAll();
 			}).fail(function(xhr) {
 				server.error = errorText(xhr);
@@ -806,14 +848,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function evaluate(result) {
 			const settings = current();
 			lastTracked = trackedSystem();
-			if (!server.available || !server.filters.length) {
+			// Only the active mask's filters: after a mask switch the previous mask's stay loaded until the new ones come
+			const filters = wl.filtersFor(server, activeMask());
+			if (server.loaded && filters === null) { reloadForMask(); }
+			if (!server.available || !filters || !filters.length) {
 				lastMatches = [];
 				lastHoles = {};
 				scheduleRender();
 				return;
 			}
 			const model = wl.chainModel(result, { typeFor: typeFor, sizeFor: sizeFor, trackedSystemID: lastTracked });
-			const matches = wl.match(server.filters, model, appData);
+			const matches = wl.match(filters, model, appData);
 			lastMatches = matches;
 			lastHoles = settings.markers ? wl.namesByHole(matches) : {};
 			if (settings.markers) {

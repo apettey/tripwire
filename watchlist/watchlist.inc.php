@@ -10,7 +10,7 @@
 // The matcher below is a port of the browser's (watchlist.normaliseConditions, classKeys, leadsToKeys, matchEntry,
 // entriesFromLinks, match). Both are run against the same cases, watchlist/tests/cases.json (mocha:
 // app/js-test/fork/watchlist.test.js, PHP: watchlist/tests/watchlist_test.php), so they can't drift apart.
-// Static data: watchlist/data.json, generated from public/js/combine.js (watchlist/tools/generate-watchlist-data.js).
+// Static data: appData in public/js/combine.js, the same file the browser matches with (read once per process).
 
 const WATCHLIST_MAX_FILTERS = 50;
 const WATCHLIST_MAX_NAME = 60;
@@ -29,6 +29,27 @@ const WATCHLIST_DDL = [
       `updatedAt` datetime NOT NULL,
       PRIMARY KEY (`maskID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // The Discord type (discord/watchlist.php): per mask and filter, the state the matches were last recorded for
+    // (stamp: when the type was turned on and the filter last saved / turned on). A new stamp records the chain's
+    // matches again without announcing them.
+    "CREATE TABLE IF NOT EXISTS `fork_watchlist_baseline` (
+      `maskID` decimal(12,1) NOT NULL,
+      `filterID` varchar(40) NOT NULL,
+      `stamp` varchar(64) NOT NULL,
+      `createdAt` datetime NOT NULL,
+      PRIMARY KEY (`maskID`, `filterID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // ... and every (filter, system, hole) seen matching since: kept while the hole exists (no expiry), so a hole is
+    // announced once however old it gets; removed when the hole is gone or the filter is paused / deleted.
+    "CREATE TABLE IF NOT EXISTS `fork_watchlist_seen` (
+      `maskID` decimal(12,1) NOT NULL,
+      `filterID` varchar(40) NOT NULL,
+      `systemID` int NOT NULL,
+      `wormholeID` int NOT NULL,
+      `createdAt` datetime NOT NULL,
+      PRIMARY KEY (`maskID`, `filterID`, `systemID`, `wormholeID`),
+      KEY `wormhole` (`maskID`, `wormholeID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
 function watchlist_ensure_schema(PDO $db) {
@@ -39,12 +60,53 @@ function watchlist_ensure_schema(PDO $db) {
 
 /** ['systems' => id => {name, security, regionID, constellationID?, factionID?, class?, effect?, statics?},
     'wormholes' => type => {leadsTo, jump}, 'regions' => id => name, 'byName' => UPPER NAME => system]. $set replaces
-    it (tests). Loaded once per process. */
+    it (tests). Read from public/js/combine.js once per process (the worker) or request (an admin's save). */
 function watchlist_data(?array $set = null) {
     static $data = null;
     if ($set !== null) $data = watchlist_index($set);
-    if ($data === null) $data = watchlist_index(json_decode(file_get_contents(__DIR__ . '/data.json'), true) ?: []);
+    if ($data === null) $data = watchlist_index(watchlist_data_from_combine(__DIR__ . '/../public/js/combine.js'));
     return $data;
+}
+
+/**
+ * The fields the matcher reads, from combine.js ("var appData = {...}", plain JSON after the "="): per system name,
+ * security, region, constellation, faction, wormhole class, effect and statics; per wormhole type where it leads and
+ * its max jump mass; region names. Empty lists when the file is missing or unreadable.
+ */
+function watchlist_data_from_combine($path) {
+    $text = is_readable($path) ? (string) file_get_contents($path) : '';
+    $start = strpos($text, '{');
+    $app = $start === false ? null : json_decode(substr($text, $start), true);
+    unset($text);
+    if (!is_array($app)) {
+        error_log('watchlist: cannot read appData from ' . $path);
+        return [];
+    }
+    return watchlist_data_from_app($app);
+}
+
+/** watchlist_data_from_combine's lists from a decoded appData */
+function watchlist_data_from_app(array $app) {
+    $systems = [];
+    foreach ($app['systems'] ?? [] as $id => $s) {
+        $id = (int) $id;
+        if ($id < 30000000 || $id >= 33000000 || !is_array($s)) continue;
+        $out = ['name' => (string) ($s['name'] ?? ''), 'security' => (float) ($s['security'] ?? 0), 'regionID' => (int) ($s['regionID'] ?? 0)];
+        if (!empty($s['constellationID'])) $out['constellationID'] = (int) $s['constellationID'];
+        if (!empty($s['factionID'])) $out['factionID'] = (int) $s['factionID'];
+        $class = is_array($s['class'] ?? null) ? ($s['class'][0] ?? null) : ($s['class'] ?? null);
+        if ($class) $out['class'] = (int) $class;
+        if (!empty($s['effect'])) $out['effect'] = (string) $s['effect'];
+        if (!empty($s['statics']) && is_array($s['statics'])) $out['statics'] = array_values($s['statics']);
+        $systems[$id] = $out;
+    }
+    $wormholes = [];
+    foreach ($app['wormholes'] ?? [] as $type => $w) {
+        if (is_array($w)) $wormholes[(string) $type] = ['leadsTo' => (string) ($w['leadsTo'] ?? ''), 'jump' => (float) ($w['jump'] ?? 0)];
+    }
+    $regions = [];
+    foreach ($app['regions'] ?? [] as $id => $r) $regions[(int) $id] = is_array($r) ? (string) ($r['name'] ?? '') : (string) $r;
+    return ['systems' => $systems, 'wormholes' => $wormholes, 'regions' => $regions];
 }
 
 function watchlist_index(array $data) {
@@ -409,13 +471,12 @@ function watchlist_public_filters(array $filters) {
 /**
  * Every wormhole of a mask as a link between two real systems: [wormholeID, a, b, type (real type, null when only the
  * K162 side or nothing is known), size (from the type), aSig, bSig (signature IDs as typed), typedSide ('a' / 'b':
- * the side the real type was scanned on), changed (latest change of its two signatures, app time)].
+ * the side the real type was scanned on)].
  * a is the wormhole's initial signature's system, b the secondary's.
  */
 function watchlist_mask_links(PDO $db, $maskID, array $data) {
     $stmt = $db->prepare("SELECT w.id AS wormholeID, w.type, w.parent,
-            a.systemID AS aSys, a.signatureID AS aSig, b.systemID AS bSys, b.signatureID AS bSig,
-            GREATEST(a.modifiedTime, b.modifiedTime) AS changed
+            a.systemID AS aSys, a.signatureID AS aSig, b.systemID AS bSys, b.signatureID AS bSig
         FROM wormholes w
         INNER JOIN signatures a ON a.id = w.initialID
         INNER JOIN signatures b ON b.id = w.secondaryID
@@ -438,6 +499,5 @@ function watchlist_link_from_row(array $row, array $data) {
         'type' => $type, 'size' => watchlist_size_of($jump),
         'aSig' => (string) $row['aSig'], 'bSig' => (string) $row['bSig'],
         'typedSide' => ($row['parent'] ?? '') === 'secondary' ? 'b' : 'a',
-        'changed' => (string) $row['changed'],
     ];
 }

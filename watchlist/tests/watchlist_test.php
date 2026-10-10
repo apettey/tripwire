@@ -76,36 +76,110 @@ check('uses location', [watchlist_uses_location(['maxJumpsMe' => 0]), watchlist_
 
 // --- links from the database rows ---
 $link = watchlist_link_from_row(['wormholeID' => '12', 'type' => 'h296', 'parent' => 'secondary', 'aSys' => '31002238', 'aSig' => 'kkk162',
-    'bSys' => '31001882', 'bSig' => 'abc123', 'changed' => '2026-10-10 12:00:00'], $data);
+    'bSys' => '31001882', 'bSig' => 'abc123'], $data);
 check('link from row', $link, ['wormholeID' => 12, 'a' => 31002238, 'b' => 31001882, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'kkk162', 'bSig' => 'abc123',
-    'typedSide' => 'b', 'changed' => '2026-10-10 12:00:00']);
-$unknown = watchlist_link_from_row(['wormholeID' => 13, 'type' => '????', 'parent' => 'initial', 'aSys' => '31002238', 'aSig' => '', 'bSys' => '5', 'bSig' => '', 'changed' => 'x'], $data);
+    'typedSide' => 'b']);
+$unknown = watchlist_link_from_row(['wormholeID' => 13, 'type' => '????', 'parent' => 'initial', 'aSys' => '31002238', 'aSig' => '', 'bSys' => '5', 'bSig' => ''], $data);
 check('link from row: unknown type and generic far side', [$unknown['type'], $unknown['size'], $unknown['b'], $unknown['typedSide']], [null, null, null, 'a']);
 
-// --- the Discord type: which matches are new, and the message ---
+// --- the Discord type: which matches are new (remembered per filter, system and hole), and the message ---
 $HOME = 31002238; $WR = 31001882; $C2 = 31000702;
 $links = [
-    ['wormholeID' => 1, 'a' => $HOME, 'b' => $WR, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'abc123', 'bSig' => '', 'typedSide' => 'a', 'changed' => '2026-10-10 12:00:00'],
-    ['wormholeID' => 3, 'a' => $C2, 'b' => $HOME, 'type' => 'N062', 'size' => 'L', 'aSig' => 'nnn062', 'bSig' => 'kkk162', 'typedSide' => 'a', 'changed' => '2026-10-10 10:00:00'],
-    ['wormholeID' => 4, 'a' => $WR, 'b' => $C2, 'type' => null, 'size' => null, 'aSig' => 'www111', 'bSig' => '', 'typedSide' => 'a', 'changed' => '2026-10-10 13:00:00'],
+    ['wormholeID' => 1, 'a' => $HOME, 'b' => $WR, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'abc123', 'bSig' => '', 'typedSide' => 'a'],
+    ['wormholeID' => 3, 'a' => $C2, 'b' => $HOME, 'type' => 'N062', 'size' => 'L', 'aSig' => 'nnn062', 'bSig' => 'kkk162', 'typedSide' => 'a'],
+    ['wormholeID' => 4, 'a' => $WR, 'b' => $C2, 'type' => null, 'size' => null, 'aSig' => 'www111', 'bSig' => '', 'typedSide' => 'a'],
 ];
-$t = function ($text) { return strtotime($text . ' UTC'); };
 $filters = [
-    ['id' => 'fa', 'name' => 'C5 WR', 'enabled' => true, 'conditions' => ['classes' => ['C5'], 'effects' => ['Wolf-Rayet Star']], 'updatedAt' => 0],
-    ['id' => 'fb', 'name' => 'Big C5 holes', 'enabled' => true, 'conditions' => ['whLeadsTo' => 'C5', 'minSize' => 'XL'], 'updatedAt' => 0],
-    ['id' => 'fc', 'name' => 'Near me', 'enabled' => true, 'conditions' => ['classes' => ['C2'], 'maxJumpsMe' => 3], 'updatedAt' => 0],
-    ['id' => 'fd', 'name' => 'Off', 'enabled' => false, 'conditions' => ['classes' => ['C2']], 'updatedAt' => 0],
-    ['id' => 'fe', 'name' => 'C2', 'enabled' => true, 'conditions' => ['classes' => ['C2']], 'updatedAt' => $t('2026-10-10 11:00:00')],
+    ['id' => 'fa', 'name' => 'C5 WR', 'enabled' => true, 'conditions' => ['classes' => ['C5'], 'effects' => ['Wolf-Rayet Star']], 'updatedAt' => 100],
+    ['id' => 'fb', 'name' => 'Big C5 holes', 'enabled' => true, 'conditions' => ['whLeadsTo' => 'C5', 'minSize' => 'XL'], 'updatedAt' => 100],
+    ['id' => 'fc', 'name' => 'Near me', 'enabled' => true, 'conditions' => ['classes' => ['C2'], 'maxJumpsMe' => 3], 'updatedAt' => 100],
+    ['id' => 'fd', 'name' => 'Off', 'enabled' => false, 'conditions' => ['classes' => ['C2']], 'updatedAt' => 100],
+    ['id' => 'fe', 'name' => 'C2', 'enabled' => true, 'conditions' => ['classes' => ['C2']], 'updatedAt' => 100],
 ];
-$refs = function ($candidates) { return array_map(function ($c) { return $c[3]; }, $candidates); };
-check('discord: oldest hole of the match, jump filters and disabled filters skipped', $refs(discord_watchlist_candidates($filters, $links, $data, $t('2026-10-10 09:00:00'), 'UTC')),
-    ['wl:fa:31001882:1', 'wl:fb:31002238:1', 'wl:fb:31001882:1']);
-check('discord: holes from before the type was turned on are not news', $refs(discord_watchlist_candidates($filters, $links, $data, $t('2026-10-10 12:30:00'), 'UTC')), []);
-check('discord: nor from before the filter was saved (C2 reached at 10:00, filter saved at 11:00)',
-    $refs(discord_watchlist_candidates([$filters[4]], $links, $data, 0, 'UTC')), []);
-$filters[4]['updatedAt'] = $t('2026-10-10 09:00:00');
-check('discord: the C2 filter with its oldest hole', $refs(discord_watchlist_candidates([$filters[4]], $links, $data, 0, 'UTC')), ['wl:fe:31000702:3']);
-check('discord: no filters, no links', [discord_watchlist_candidates([], $links, $data, 0), discord_watchlist_candidates($filters, [], $data, 0)], [[], []]);
+check('discord matches: holes of each match (ascending), jump filters and disabled filters skipped',
+    array_map(function ($m) { return [$m[0]['id'], $m[1], $m[2]]; }, discord_watchlist_matches($filters, $links, $data)),
+    [['fa', $WR, [1, 4]], ['fb', $HOME, [1]], ['fb', $WR, [1]], ['fe', $C2, [3, 4]]]);
+check('discord matches: no filters, no links', [discord_watchlist_matches([], $links, $data), discord_watchlist_matches($filters, [], $data)], [[], []]);
+
+// SQLite stands in for MySQL: the worker's records (fork_watchlist_baseline / fork_watchlist_seen) and the outbox
+$wl = new PDO('sqlite::memory:');
+$wl->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$wl->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$wl->exec('CREATE TABLE fork_watchlist_baseline (maskID TEXT, filterID TEXT, stamp TEXT, createdAt TEXT, PRIMARY KEY (maskID, filterID))');
+$wl->exec('CREATE TABLE fork_watchlist_seen (maskID TEXT, filterID TEXT, systemID INTEGER, wormholeID INTEGER, createdAt TEXT, PRIMARY KEY (maskID, filterID, systemID, wormholeID))');
+$wl->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT,
+    status TEXT, attempts INTEGER DEFAULT 0, nextAttemptAt TEXT, createdAt TEXT, sentAt TEXT, lastError TEXT DEFAULT '')");
+$wlMask = '98000001.2';
+$wlFilters = [$filters[0], $filters[4]];   // C5 WR (J122515), C2 (J150627)
+// One poll as the worker does it (sync, then queue and record each announced match); the systems announced
+$wlData = $cases['data'];   // plus two more C2s
+$wlData['systems'][31000703] = ['name' => 'J100703', 'security' => -1, 'regionID' => 11000007, 'class' => 2];
+$wlData['systems'][31000704] = ['name' => 'J100704', 'security' => -1, 'regionID' => 11000007, 'class' => 2];
+$wlData = watchlist_index($wlData);
+$poll = function (array $filters, array $links, $enabledAt = 1000) use ($wl, $wlMask, $wlData) {
+    $out = [];
+    foreach (discord_watchlist_sync($wl, $wlMask, $filters, $links, $wlData, $enabledAt) as [$filter, $systemID, $link, $ids]) {
+        $claim = function () use ($wl, $wlMask, $filter, $systemID, $ids) { return discord_watchlist_claim($wl, $wlMask, $filter['id'], $systemID, $ids); };
+        if (discord_enqueue_once($wl, $wlMask, 1, 'watchlist', ['filter' => $filter['name'], 'hole' => $link['wormholeID']], $claim) === null) continue;
+        $out[] = $filter['id'] . ':' . $systemID . ':' . $link['wormholeID'];
+    }
+    return $out;
+};
+$queuedCount = function () use ($wl) { return (int) $wl->query('SELECT COUNT(*) FROM discord_outbox')->fetchColumn(); };
+$C2b = 31000703;   // another C2 for "a new hole"
+$moreC2 = ['wormholeID' => 7, 'a' => $HOME, 'b' => $C2b, 'type' => null, 'size' => null, 'aSig' => 'ccc222', 'bSig' => '', 'typedSide' => 'a'];
+
+check('discord new: turning the type on records what is on the chain, announces nothing', $poll($wlFilters, $links), []);
+check('discord new: and nothing on the next polls either', [$poll($wlFilters, $links), $poll($wlFilters, $links), $queuedCount()], [[], [], 0]);
+// "Edited": an edit rewrites the signatures' modifiedTime and may swap or rename them; the link (wormhole) stays
+$edited = $links;
+$edited[0]['aSig'] = 'zzz999';
+$edited[0]['size'] = 'XL';
+check('discord new: an edited old hole is not announced', $poll($wlFilters, $edited), []);
+// The dedupe rows of the outbox (discord_sent) expire after DISCORD_DEDUPE_KEEP days; these records don't
+$wl->exec("UPDATE fork_watchlist_seen SET createdAt = '2020-01-01 00:00:00'");
+check('discord new: a link older than the dedupe retention is not announced again', $poll($wlFilters, $links), []);
+check('discord new: a new hole after the baseline is announced once', [$poll($wlFilters, array_merge($links, [$moreC2])), $poll($wlFilters, array_merge($links, [$moreC2])), $queuedCount()],
+    [['fe:' . $C2b . ':7'], [], 1]);
+$second = ['wormholeID' => 8, 'a' => $HOME, 'b' => $WR, 'type' => null, 'size' => null, 'aSig' => 'ddd333', 'bSig' => '', 'typedSide' => 'a'];
+check('discord new: a second way into a system already matched is not news', $poll($wlFilters, array_merge($links, [$moreC2, $second])), []);
+// The hole into the second C2 collapses: forgotten; the system reached again through a new wormhole is new
+check('discord new: a collapsed link is forgotten', [$poll($wlFilters, $links),
+    (int) $wl->query("SELECT COUNT(*) FROM fork_watchlist_seen WHERE wormholeID IN (7, 8)")->fetchColumn()], [[], 0]);
+$again = ['wormholeID' => 9] + $moreC2;
+check('discord new: ... and a new hole there later is announced', $poll($wlFilters, array_merge($links, [$again])), ['fe:' . $C2b . ':9']);
+check('discord new: one of two holes into a matched system collapsing, or another one appearing, is not news',
+    [$poll($wlFilters, array_merge([$links[0], $links[2]], [$again])), $poll($wlFilters, array_merge($links, [$again]))], [[], []]);
+$newC2 = ['wormholeID' => 10] + $moreC2;
+$saved = $wlFilters;
+$saved[1]['updatedAt'] = 200;   // the C2 filter saved again
+check('discord new: saving a filter records the chain again without announcing', $poll($saved, array_merge($links, [$again, $newC2])), []);
+check('discord new: ... then new holes are announced again', $poll($saved, array_merge($links, [$again, $newC2, ['wormholeID' => 11, 'b' => 31000704] + $moreC2])),
+    ['fe:31000704:11']);
+$paused = $saved;
+$paused[1]['enabled'] = false;
+check('discord new: a paused filter is forgotten', [$poll($paused, $links),
+    (int) $wl->query("SELECT COUNT(*) FROM fork_watchlist_seen WHERE filterID = 'fe'")->fetchColumn(),
+    (int) $wl->query("SELECT COUNT(*) FROM fork_watchlist_baseline WHERE filterID = 'fe'")->fetchColumn()], [[], 0, 0]);
+$reenabled = $saved;   // turned on again (public/watchlist.php also moves updatedAt; even without it there is no baseline)
+check('discord new: turned on again, what is on the chain is not announced', $poll($reenabled, array_merge($links, [$moreC2])), []);
+check('discord new: turning the type off and on again re-baselines', [$poll($reenabled, array_merge($links, [$moreC2, $newC2]), 5000),
+    $poll($reenabled, array_merge($links, [$moreC2, $newC2]), 5000)], [[], []]);
+check('discord new: no filters forgets everything', [$poll([], []), (int) $wl->query('SELECT COUNT(*) FROM fork_watchlist_seen')->fetchColumn(),
+    (int) $wl->query('SELECT COUNT(*) FROM fork_watchlist_baseline')->fetchColumn()], [[], 0, 0]);
+check('discord new: claim records the holes once', [discord_watchlist_claim($wl, $wlMask, 'fx', $WR, [1, 4]), discord_watchlist_claim($wl, $wlMask, 'fx', $WR, [1, 4])], [true, false]);
+
+// --- static data from public/js/combine.js (what the browser matches with) ---
+$app = watchlist_data_from_combine(__DIR__ . '/../../public/js/combine.js');
+check('combine.js: systems, wormhole types, regions', [count($app['systems']) > 8000, isset($app['wormholes']['H296']), $app['regions'][10000002] ?? null],
+    [true, true, 'The Forge']);
+check('combine.js: a system', $app['systems'][31001882], ['name' => 'J122515', 'security' => -0.99, 'regionID' => 11000024, 'constellationID' => 21000232,
+    'class' => 5, 'effect' => 'Wolf-Rayet Star', 'statics' => ['H296']]);
+check('combine.js: a wormhole type', $app['wormholes']['H296'], ['leadsTo' => 'Class-5', 'jump' => 2000000000.0]);
+check('combine.js: missing file', watchlist_data_from_combine(__DIR__ . '/missing.js'), []);
+$full = watchlist_index($app);
+check('combine.js: matches like the shared data', [watchlist_class_keys($full['systems'][30000142]), watchlist_leads_to_keys('Class-5', $full), $full['byName']['JITA']['regionID']],
+    [['HS'], ['C5'], 10000002]);
 
 discord_graph(null);   // the real gate graph for names and regions
 $type = ['enabled' => true, 'webhookID' => 1, 'template' => discord_default_templates()['watchlist'], 'ping' => '<@&111111111111111111>', 'enabledAt' => 1];

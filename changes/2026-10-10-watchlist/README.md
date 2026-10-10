@@ -60,11 +60,12 @@ Per mask: the filters (admins, Mask Admin > Watchlist; a filter can be paused fo
   the same masks and admins (`checkAdmin`) as the Discord notifications. `public/watchlist.php` (new): every member of
   the session's mask reads the filters (`GET`); admins save, delete and pause them (`POST` JSON with a per-session
   CSRF token header, `X-Requested-With`, same-origin check, like `public/discord.php`). The server normalises
-  conditions with the browser's rules, checks IDs and wormhole types against `watchlist/data.json`, and stamps
+  conditions with the browser's rules, checks IDs and wormhole types against the game data, and stamps
   `updatedAt` / `updatedBy`. Other masks (Private, Public, alliance, personal custom masks) have no watchlist.
   Per-user filters (`options.watchlist.filters`) are gone (the feature was never released) and ignored.
-- **Browser** (`app/js/fork/watchlist.js`): loads the mask's filters (and again every minute and when the tab comes
-  back), matches them on every chain draw, keeps the timestamped "already announced" keys per mask and chain tab as
+- **Browser** (`app/js/fork/watchlist.js`): loads the mask's filters (and again every minute, when the tab comes
+  back and right after a mask switch; until the new mask's filters are in, nothing is matched), matches them on every
+  chain draw, keeps the timestamped "already announced" keys per mask and chain tab as
   before, and per the user's settings shows pop-ups, plays the sound and marks matches: the node (eye in its top row),
   the hole (`watchlist-hole` line class, read by all four renderers; an eye in the connection's size tag, or an eye
   tag alone when there is no size tag, with the filter names in its tooltip) and the hole's signature row in the
@@ -74,10 +75,13 @@ Per mask: the filters (admins, Mask Admin > Watchlist; a filter can be paused fo
   The chain map hook is installed again on ready when another feature wrapped `chain.nodes` after it, so the marks go
   on last (after size tags rebuild `node.sizeTag`).
 - **Discord type "Watchlist match"** (`discord/watchlist.php`, new): `discord_notify.worker.php` matches each mask's
-  filters against every wormhole of the mask every 15 s (no new worker). One message per filter, system and hole (the
-  oldest hole of the system that makes the match), deduped through `discord_enqueue_once` / `discord_dedupe_once`
-  (`wl:<filter>:<system>:<wormhole>`); only holes changed after the type was turned on and after the filter was last
-  saved or turned on are announced; filters with jump limits are skipped (they depend on who is looking). Template
+  filters against every wormhole of the mask every 15 s (no new worker). What is new is decided from what the worker
+  has seen, never from edit times (every edit of a hole rewrites its signatures' `modifiedTime`): on the first poll
+  after the type is turned on or a filter is saved or turned on, the chain's matches are recorded without posting (`fork_watchlist_baseline`, `fork_watchlist_seen`); afterwards a
+  (filter, system) match is posted once, when none of its holes was seen before (the message names the oldest).
+  Holes seen matching are kept while they exist (no 7-day expiry like `discord_sent`, so old holes and gate links are
+  never posted again) and forgotten when they are gone, so a system reached again through a new wormhole is new;
+  filters with jump limits are skipped (they depend on who is looking). Template
   placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}`, `{region}`, `{sig}`, `{hole}`, `{from}`,
   `{map}` (link from `TRIPWIRE_DOMAIN`, not request headers); filter names and game data escaped,
   `allowed_mentions` only from the admin's ping/template. Fork files touched: `discord/discord.inc.php`,
@@ -86,14 +90,16 @@ Per mask: the filters (admins, Mask Admin > Watchlist; a filter can be paused fo
 - **One matcher, two languages**: `watchlist/watchlist.inc.php` ports `normaliseConditions`, `classKeys`,
   `leadsToKeys`, `matchEntry`, `entriesFromLinks` and `match`; both run the shared cases in
   `watchlist/tests/cases.json` (normalisation, classes, leadsTo incl. Drifter J-codes, sizes, entries, 33 match cases)
-  from mocha and from `watchlist/tests/watchlist_test.php` (110 checks, plus validation, links from DB rows, which
-  matches are new for Discord, the message, escaping and mentions, the type's settings). Static data:
-  `watchlist/data.json`, generated from `public/js/combine.js` by `watchlist/tools/generate-watchlist-data.js`.
+  from mocha and from `watchlist/tests/watchlist_test.php` (128 checks, plus validation, links from DB rows, which
+  matches are new for Discord against SQLite (edited old hole, link older than the dedupe retention, new hole, filter
+  saved / paused / turned on again, type turned on again, collapsed hole then a new one), the message, escaping and
+  mentions, the type's settings, the game data). Game data: read from `public/js/combine.js` (plain JSON after
+  `var appData =`) once per worker process / admin save, so it can't drift from the browser's.
 - `app/js/fork/size-tags.js`: `tagHtml` draws the watchlist eye (escaped filter names in the tooltip) when the watchlist
   set `sizeTag.watchlist`; otherwise unchanged.
 - `app/css/fork/watchlist.css`, `app/js-test/fork/watchlist.test.js` (shared cases, settings, holes, size tag eye),
-  `docker/README.md` (#watchlist, the Discord type, the new table), `docker/Dockerfile` (`watchlist/tests` and
-  `watchlist/tools` left out of the image), rebuilt `public/js/app.min.js` and `public/css/app.min.css`.
+  `docker/README.md` (#watchlist, the Discord type, the new tables), `docker/Dockerfile` (`watchlist/tests` left out
+  of the image), rebuilt `public/js/app.min.js` and `public/css/app.min.css`.
 - Upstream files touched: none (besides the rebuilt bundles). No new data sources or third-party hosts (Discord only
   through the existing worker and outbox).
 

@@ -386,6 +386,36 @@ describe('Watchlist', () => {
 		});
 	});
 
+	describe('mask switch', () => {
+		const loaded = (mask, filters) => ({ loaded: true, mask: { id: mask }, filters: filters });
+		const f = [filter('a', { classes: ['C5'] })];
+		it('Same mask in either form', () => {
+			assert.deepEqual([wl.sameMask('98000001.2', 98000001.2), wl.sameMask('98000001.2', '98000001.2'), wl.sameMask('98000001.2', '98000002.2'),
+				wl.sameMask('', ''), wl.sameMask(null, undefined)], [true, true, false, false, false]);
+		});
+		it('The loaded filters only for their own mask', () => {
+			assert.strictEqual(wl.filtersFor(loaded('98000001.2', f), '98000001.2'), f);
+			assert.deepEqual(wl.filtersFor(loaded('98000001.2', []), '98000001.2'), []);
+			assert.strictEqual(wl.filtersFor(loaded('98000001.2', f), '98000002.2'), null, 'the previous mask\'s filters are not matched on the new mask');
+			assert.strictEqual(wl.filtersFor({ loaded: false, mask: null, filters: [] }, '98000001.2'), null);
+		});
+		it('Asks for the new mask\'s filters at once, then retries while the server still answers for the old one', () => {
+			const old = loaded('98000001.2', f);
+			assert.strictEqual(wl.needsReload(old, '98000001.2', null, 0), false, 'nothing to do on the same mask');
+			assert.strictEqual(wl.needsReload(old, '98000002.2', null, 0), true, 'switched: ask now');
+			assert.strictEqual(wl.needsReload(old, '98000002.2', { mask: '98000001.2', at: 0, pending: true }, 1), true, 'a request for another mask does not count');
+			assert.strictEqual(wl.needsReload(old, '98000002.2', { mask: '98000002.2', at: 0, pending: true }, 99999), false, 'under way');
+			assert.strictEqual(wl.needsReload(old, '98000002.2', { mask: '98000002.2', at: 0, pending: false }, wl.MASK_RETRY_MS - 1), false, 'just asked');
+			assert.strictEqual(wl.needsReload(old, '98000002.2', { mask: '98000002.2', at: 0, pending: false }, wl.MASK_RETRY_MS), true, 'ask again');
+			assert.strictEqual(wl.needsReload(loaded('98000002.2', []), '98000002.2', { mask: '98000002.2', at: 0, pending: false }, 99999), false, 'loaded');
+		});
+		it('No match on the new mask with the previous mask\'s filters', () => {
+			const filters = wl.filtersFor(loaded('98000001.2', f), '98000002.2');
+			assert.deepEqual(filters ? wl.match(filters, model(), appData) : [], []);
+			assert.ok(wl.match(wl.filtersFor(loaded('98000002.2', f), '98000002.2'), model(), appData).length > 0);
+		});
+	});
+
 	describe('escape', () => {
 		it('HTML special characters', () => assert.equal(wl.escape(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;'));
 		it('null and undefined', () => assert.equal(wl.escape(null) + wl.escape(undefined), ''));

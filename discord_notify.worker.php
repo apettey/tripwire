@@ -48,6 +48,7 @@ function dn_connect() {
     $mysql->query('SELECT 1');
     discord_ensure_schema($mysql);
     zk_ensure_schema($mysql);
+    watchlist_ensure_schema($mysql);
     $resealed = discord_reseal_plain($mysql);
     if ($resealed) dn_log("encrypted $resealed stored webhook URLs with DISCORD_SECRET_KEY");
     return $mysql;
