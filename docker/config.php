@@ -43,3 +43,8 @@ define('ENABLE_SEARCH_SCOPE', tw_env_bool('ENABLE_SEARCH_SCOPE', true));
 if (tw_env('DISCORD_WEB_HOOK')) {
     define('DISCORD_WEB_HOOK', json_decode(tw_env('DISCORD_WEB_HOOK'), true));
 }
+
+// Kill Reporting (fork): zkill_feed.worker.php follows zKillboard's R2Z2 feed once for the instance;
+// public/kills.php marks kills by/against these corporations (plus the user's own) as friendly
+define('ZKILL_FEED_ENABLED', tw_env_bool('ZKILL_FEED_ENABLED', true));
+define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORATIONS', ''));

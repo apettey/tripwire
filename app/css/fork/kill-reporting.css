@@ -1,0 +1,138 @@
+/* Kill Reporting (fork-owned, see app/js/fork/kill-reporting.js) */
+
+/* Pop-ups, bottom-right, newest at the bottom */
+#kill-reporting-toasts {
+	position: fixed;
+	right: 12px;
+	bottom: 12px;
+	z-index: 10000;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 340px;
+	pointer-events: none;
+}
+
+.kill-toast {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 24px 6px 8px;
+	background: rgba(20, 20, 20, 0.94);
+	border: 1px solid #555;
+	border-left: 4px solid #888;
+	border-radius: 3px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+	color: #ddd;
+	font-size: 12px;
+	line-height: 1.35;
+	text-align: left;
+	pointer-events: auto;
+}
+
+.kill-toast-ship {
+	width: 32px;
+	height: 32px;
+	flex: 0 0 32px;
+}
+
+.kill-toast-text strong {
+	color: #fff;
+}
+
+.kill-toast a {
+	color: #4399F0;
+}
+
+.kill-toast-close {
+	position: absolute;
+	top: 3px;
+	right: 6px;
+	cursor: pointer;
+	color: #999;
+}
+
+.kill-toast-close:hover {
+	color: #fff;
+}
+
+.kill-toast-loss { border-left-color: #e0413a; background: rgba(60, 14, 14, 0.94); }
+.kill-toast-loss strong { color: #ff7b74; }
+.kill-toast-kill { border-left-color: #3fbf3f; background: rgba(14, 48, 14, 0.94); }
+.kill-toast-kill strong { color: #7ee07e; }
+.kill-toast-gank { border-left-color: #f08c1a; background: rgba(58, 34, 8, 0.94); }
+.kill-toast-gank strong { color: #ffb15c; }
+.kill-toast-neutral { border-left-color: #999; }
+
+/* Settings > Kill Reporting */
+#killReporting-section #killReporting-threshold {
+	width: 3.5em;
+}
+
+#killReporting-section table.kill-reporting-sounds {
+	margin-top: 8px;
+}
+
+#killReporting-section table.kill-reporting-sounds th,
+#killReporting-section table.kill-reporting-sounds td {
+	text-align: left;
+	vertical-align: middle;
+	padding: 2px 2px;
+}
+
+#killReporting-section table.kill-reporting-sounds tr:first-child th {
+	border-bottom: 1px solid #555;
+	font-weight: normal;
+	color: #999;
+}
+
+#killReporting-section table.kill-reporting-sounds select.kill-reporting-sound {
+	width: 120px;
+}
+
+#killReporting-section .kill-reporting-vol {
+	width: 60px;
+	vertical-align: middle;
+}
+
+#killReporting-section .kill-reporting-vol-label {
+	display: inline-block;
+	width: 3em;
+	font-size: 90%;
+}
+
+#killReporting-section .kill-reporting-volume {
+	white-space: nowrap;
+}
+
+#killReporting-section .kill-reporting-test {
+	padding: 0 6px;
+	cursor: pointer;
+}
+
+#killReporting-section .kill-reporting-desc {
+	font-weight: normal;
+	font-size: 85%;
+	color: #999;
+}
+
+#killReporting-section .kill-reporting-note {
+	font-size: 85%;
+	color: #999;
+	text-align: left;
+	margin: 6px 0 0 0;
+}
+
+.kill-reporting-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 4px;
+	background: #999;
+}
+
+.kill-reporting-dot-loss { background: #e0413a; }
+.kill-reporting-dot-kill { background: #3fbf3f; }
+.kill-reporting-dot-gank { background: #f08c1a; }

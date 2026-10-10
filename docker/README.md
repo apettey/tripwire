@@ -50,7 +50,8 @@ outside Docker, in which case replace them with real config files.
 
 ## The image
 
-One container runs nginx, php-fpm (listening on `127.0.0.1:9000` only) and busybox crond.
+One container runs nginx, php-fpm (listening on `127.0.0.1:9000` only), busybox crond and the
+kill feed worker (see [Kill Reporting](#kill-reporting)), all under supervisord.
 Cron runs `/etc/crontabs/www-data` as `www-data` (`system_activity` hourly, `account_update` every
 3 minutes); jobs inherit the container environment and their output goes to the container log,
 as do nginx access/error logs.
@@ -65,7 +66,8 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` (chain map rally point per mask, created by `public/rally.php`). The app user therefore
+`fork_rally` (chain map rally point per mask, created by `public/rally.php`) and `zkill_kills` /
+`zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -109,6 +111,8 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
 | `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`) | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}` |
+| `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting). `false` = the worker idles and nothing is requested from zKillboard |
+| `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
 | `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
 | `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
@@ -129,6 +133,23 @@ replaces them with `docker/analytics.inc.php` and `docker/donation_panel.inc` (t
 them over the repo copies), which send nothing to third parties unless `GA_MEASUREMENT_ID` /
 `DONATION_PANEL_HTML_FILE` are set. `docker/analytics.inc.php` always defines a no-op `ga()` because
 `tripwire.php` calls it every 4 minutes.
+
+### Kill Reporting
+
+`zkill_feed.worker.php` (supervisord program `zkill-feed`, runs as `www-data`) follows zKillboard's
+[R2Z2 feed](https://zkillboard.com/api/docs/) once for the whole instance: it requests
+`https://r2z2.zkillboard.com/ephemeral/<sequence>.json` one killmail at a time (at most ~4 requests/s
+while catching up, one every 6 s once caught up, exponential backoff up to 2 minutes on errors), with
+`USER_AGENT` (or `Tripwire kill feed (+https://github.com/apettey/tripwire)` when unset) as User-Agent.
+It keeps non-NPC kills in J-space and in any system that has a signature in Tripwire, stores them in
+`zkill_kills` for 24 hours, and saves its position in `zkill_feed_state` so a restart resumes where it
+stopped (after more than 20 hours down it starts from the current sequence). It logs every stored kill
+and a heartbeat every 5 minutes to the container log.
+
+Browsers never contact zKillboard: the client polls `public/kills.php` (logged-in users only), which
+returns the stored kills for the systems on the user's chain map and marks friendly victims/attackers
+(the user's corporation plus `KILL_REPORT_FRIENDLY_CORPORATIONS`). Set `ZKILL_FEED_ENABLED=false` to turn
+the feed off for the instance; the endpoint then simply returns no kills.
 
 ### Versions
 
