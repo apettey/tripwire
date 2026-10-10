@@ -1,0 +1,86 @@
+/* Chain Kill Feed (fork-owned, see app/js/fork/chain-killfeed.js). Rows use the System Kill Feed's .skf-* styles. */
+
+#chainKillFeedWidget .controls {
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+#chainKillFeedWidget .ckf-title {
+	color: #CCC;
+	font-weight: bold;
+}
+
+#chainKillFeedWidget .ckf-status {
+	color: #777;
+	margin-right: 4px;
+	font-size: 0.9em;
+}
+
+#chainKillFeedWidget .ckf-loading {
+	color: #999;
+	margin-right: 8px;
+	font-size: 0.9em;
+	animation: skf-pulse 1.4s ease-in-out infinite;
+}
+
+#chainKillFeedWidget .ckf-loading.hidden {
+	display: none;
+}
+
+#chainKillFeedWidget .content {
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+/* System of the kill: name in its class / security colour, the hole's name or signature under it */
+#chainKillFeedWidget .ckf-sys {
+	flex: 0 0 auto;	/* the system name wins over the pilot name */
+	min-width: 0;
+	max-width: 34%;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	line-height: 1.25;
+	cursor: pointer;
+	text-align: right;
+}
+
+#chainKillFeedWidget .ckf-sysname, #chainKillFeedWidget .ckf-sig {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#chainKillFeedWidget .ckf-sysname {
+	font-weight: bold;
+}
+
+#chainKillFeedWidget .ckf-sys:hover .ckf-sysname {
+	text-decoration: underline;
+}
+
+#chainKillFeedWidget .ckf-sig {
+	color: #777;
+	font-size: 0.85em;
+	font-weight: normal;
+}
+
+/* A kill that just arrived (8 s = chainKillFeed.HIGHLIGHT_MS; re-renders resume it with a negative animation-delay) */
+#chainKillFeedWidget .skf-row.ckf-new {
+	animation: ckf-flash 8s ease-out 1;
+}
+
+@keyframes ckf-flash {
+	0% { background: rgba(255, 170, 60, 0.35); }
+	60% { background: rgba(255, 170, 60, 0.12); }
+	100% { background: transparent; }
+}
+
+/* Panel width classes (systemKillFeed.widthClasses). The time is the sort key, so it stays longest; the pilot count
+   goes first at the narrowest size */
+#chainKillFeedWidget.skf-lt280 .ckf-sig { display: none; }
+#chainKillFeedWidget.skf-lt230 .ckf-sys { max-width: 40%; }
+#chainKillFeedWidget.skf-lt230 .skf-time { display: inline; min-width: 0; }
+#chainKillFeedWidget.skf-lt230 .skf-pilots { display: none; }
+#chainKillFeedWidget.skf-wide .ckf-sys { flex: 0 0 auto; max-width: 160px; min-width: 80px; }
