@@ -29,35 +29,45 @@ someone has already been to the far side (checked in this order):
 
 1. the far-side (return) signature already has a signature ID (at least its 3 letters): it was scanned from inside;
 2. the far-side signature already has a name (e.g. `<C`): someone recorded the return;
-   (1 and 2 are skipped when the sig's last edit, `modifiedByID`, was by one of this browser's characters: the
-   logged-in character, the tracked ones or the active one. So a first pilot who quickly pastes sigs / sets the
-   return sig during the 1.5/6/12 s re-checks doesn't suppress their own pop-up.)
+   (1 and 2 are skipped when one of this browser's characters - the logged-in one, the tracked ones or the
+   active one - made the far sig's last edit (`modifiedByID`) at or after this jump: `modifiedTime` no earlier
+   than 15 s before the client saw the jump (5 s ESI location polling plus lag; server-corrected clock). So a first
+   pilot who quickly pastes sigs / sets the return sig during the 1.5/6/12 s re-checks doesn't suppress their own
+   pop-up. Upstream sets `modifiedTime`/`modifiedByID` on **both** sigs of a hole on every wormhole edit
+   (EOL/mass, type, leads-to, return sig, automapper), so an edit of mine from the home side within those 15 s
+   also counts as "mine"; an older one doesn't.)
 3. this browser already copied the return bookmark for this hole (this session);
 4. the hole's jump log (upstream's mass log, `mass.php`, filled for every tracked character by the `jumpHistory`
-   trigger) has a jump through it, in either direction, by a character that is **not** one of this browser's
-   characters, made at or after the near-side (named) sig's last change (`modifiedTime`).
+   trigger, and by the automapper for the jump that creates a hole) has a jump through it, in either direction,
+   by a character that is **not** one of this browser's characters.
    - Names in the log carry upstream's tracking visibility suffix (`Name|P`, `Name|p`, `Name|x`, set in
      `refresh.php`); it is stripped before comparing, like upstream's mass dialog does. The log has no
      character IDs, so names are compared (case-insensitive).
-   - Jumps older than the near-side sig's last change don't count: a scout who jumped an un-entered sig (the
-     automapper then makes an unnamed hole, no pop-up) doesn't stop the first pilot after the hole gets named.
-     Any later edit of that sig also restarts the window, which errs on showing. Both times are server times
-     (`jumps.time` from MySQL, `signatures.modifiedTime` from PHP); they are compared as-is, which assumes MySQL
-     and PHP (`TZ`, UTC by default in our image) use the same time zone.
+   - The one exception: a jump logged within 5 s of the hole's creation (the named sig's `lifeTime`, which
+     wormhole edits don't change) is the automapper's creating jump. So a scout who jumped an un-entered sig
+     (automapper makes an unnamed hole, no pop-up) doesn't stop the first pilot after the hole gets named. The
+     scout's later jumps through it do count. `modifiedTime` is deliberately not used here: routine EOL/mass edits
+     bump it on both sigs.
+   - Times are server times (`jumps.time` from MySQL, sig times from PHP), compared as UTC; our image runs both
+     in UTC.
 
 All four use data that already exists and syncs to everyone on the mask; no new server state. If the jump log
 can't be loaded (error / 4 s timeout), only 1-3 decide (the pop-up errs on showing).
 
-Verified end to end with real trigger-logged jumps (tracking updates posted through `refresh.php` across the
-hole): first pilot (own `Test Pilot|P` jump already in the log) gets it; after `Other Pilot|P` jumped, the next
-pilot doesn't; after the near-side sig changed later than that jump, it shows again; a far-side sig ID set by the
-logged-in character doesn't suppress it, one set by someone else does.
+Verified end to end with real rows (tracking updates posted through `refresh.php` so the trigger logs the
+jumps, and real wormhole updates through `signatures.php`):
+- first pilot (own `Test Pilot|P` jump already in the log): shown; hole marked EOL 10 s later (both sigs'
+  `modifiedTime` bumped, `lifeTime` unchanged); next pilot: not shown ("already jumped by Test Pilot");
+- far-side sig ID set by someone else, then I marked the hole EOL from home 20 s+ before jumping: not shown;
+  EOL marked ~10 s before the jump: shown (within the 15 s window, see 1/2);
+- scout jumps an un-entered sig with the automapper on (hole created and jump logged at the same second), hole
+  named `D` 20 s later, next pilot through: shown.
 
 Edge cases:
 - Several pilots jumping within seconds: each client checks the log right after its own jump, and a jump only
   reaches the log on the jumper's next sync, so both may get the pop-up. Acceptable: worst case is the old behaviour.
-- Same pilot jumping back and forth: their own jumps never count; after they copied it once (or once someone
-  else gave the far-side sig an ID or name) it stays quiet.
+- Same pilot jumping back and forth: their own jumps never count; after they copied it once (or once the far-side
+  sig has an ID or name not set by them right after the jump) it stays quiet.
 - Several tracked characters in one browser: the pop-up still follows the active character only, and jumps by
   any of this browser's characters don't count (so an alt jumping alongside doesn't suppress it).
 - Unknown/unnamed holes: unchanged (no pop-up).

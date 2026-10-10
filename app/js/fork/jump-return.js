@@ -1,11 +1,13 @@
 const jumpReturn = {
 	// After the tracked character jumps outbound through a named hole (e.g. "AB", bookmarked "=AB ..." on the
 	// home side), offer the return bookmark string ("<AB") in a small click-to-copy panel - by default only to
-	// the first pilot through (see firstThrough). Setting: options.jumpReturn = {enabled, firstOnly} (missing = on).
+	// the first pilot through (see alreadyHandled). Setting: options.jumpReturn = {enabled, firstOnly} (missing = on).
 	AUTO_HIDE_MS: 60000,
 	RETRY_DELAYS_MS: [1500, 6000, 12000],
 	JUMP_LOG_TIMEOUT_MS: 4000,
 	COPIED_KEY: "tripwire_jumpReturn_copied",
+	CREATE_WINDOW_MS: 5000,	// the automapper logs the jump that created a hole within this of the sigs' lifeTime
+	OWN_EDIT_SLACK_MS: 15000,	// far-side edits by us this long before the jump was seen still count as "after it" (5 s ESI location poll + lag)
 
 	/** Detect a jump of the same character between two tracked locations.
 		@param prev previous tripwire.client.EVE (or undefined), next the new EVE data
@@ -70,29 +72,35 @@ const jumpReturn = {
 		return name === undefined || name === null ? "" : String(name).split("|")[0].trim();
 	},
 
-	/** "YYYY-MM-DD HH:MM:SS" (MySQL, both columns in the same server time zone) as a comparable string, or null */
-	dbTime: function(value) {
-		const m = String(value === undefined || value === null ? "" : value).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
-		return m ? m[1] + " " + m[2] : null;
+	/** Milliseconds for a server time "YYYY-MM-DD HH:MM:SS" (UTC, like sig-age), or NaN */
+	parseTime: function(value) {
+		const m = String(value === undefined || value === null ? "" : value).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+		return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
 	},
 
 	/** Has someone already started on the far side of this hole? Returns the reason (string), or null when
 		this pilot is first through. In order:
 		- the far-side (return) signature has a signature ID (at least its 3 letters): it was scanned from inside;
 		- the far-side signature has a name (e.g. "<AB"): someone recorded the return;
-		  (these two are skipped when one of our own characters made its last edit: the first pilot may already
-		  have pasted sigs / set the return sig before the hole was found in the client data)
+		  (these two are skipped when one of our characters edited the far sig at or after this jump - minus
+		  OWN_EDIT_SLACK_MS for location polling lag -: the first pilot may already have pasted sigs / set the return
+		  sig before the hole was found. Note upstream bumps modifiedTime/modifiedByID on BOTH sigs on any wormhole
+		  edit, so an edit from the home side made after the jump counts too; one before it doesn't.)
 		- this browser already copied the return bookmark for this hole (copiedBefore);
 		- the hole's jump log (upstream's mass log, mass.php) has a jump, either way, by a character that is not
-		  one of ours, made at or after the from-side sig's last change (fromSig.modifiedTime, i.e. since the hole
-		  got its name: jumps through a hole before anyone named it don't count).
-		me: {names: [...], ids: [...]} (this browser's characters; names compared without the "|P" suffix, any
-		case), or just an array of names. jumps: [{characterName, time, ...}] or null/undefined when unknown (= none). */
-	alreadyHandled: function(toSig, jumps, me, copiedBefore, fromSig) {
+		  one of ours, except the jump that created an automapped hole (within CREATE_WINDOW_MS of fromSig.lifeTime,
+		  which wormhole edits don't change): a scout jumping an un-entered sig doesn't count once it's named.
+		me: {names: [...], ids: [...]} (this browser's characters; names compared without upstream's "|P" suffix,
+		any case), or just an array of names. jumps: [{characterName, time, ...}] or null/undefined when unknown
+		(= none). jumpAt: ms (server clock) when this jump was seen, or undefined. */
+	alreadyHandled: function(toSig, jumps, me, copiedBefore, fromSig, jumpAt) {
 		const names = Array.isArray(me) ? me : (me && me.names) || [];
 		const ids = (!Array.isArray(me) && me && me.ids) || [];
 		const editedByMe = !!(toSig && toSig.modifiedByID && ids.some(function(id) { return id && id == toSig.modifiedByID; }));
-		if (!editedByMe) {
+		const editedAt = jumpReturn.parseTime(toSig && toSig.modifiedTime);
+		const editedSinceJump = editedByMe && isFinite(jumpAt) && isFinite(editedAt) &&
+			editedAt >= jumpAt - jumpReturn.OWN_EDIT_SLACK_MS;
+		if (!editedSinceJump) {
 			const sigID = toSig && toSig.signatureID ? String(toSig.signatureID) : "";
 			if (/^[a-z]{3}/i.test(sigID)) { return "far side already has a signature ID"; }
 			const name = toSig && toSig.name !== undefined && toSig.name !== null ? String(toSig.name).trim() : "";
@@ -101,12 +109,12 @@ const jumpReturn = {
 		if (copiedBefore) { return "already copied"; }
 		const mine = {};
 		names.forEach(function(n) { const b = jumpReturn.baseName(n).toLowerCase(); if (b) { mine[b] = true; } });
-		const since = jumpReturn.dbTime(fromSig && fromSig.modifiedTime);
+		const created = jumpReturn.parseTime(fromSig && fromSig.lifeTime);
 		const other = (Array.isArray(jumps) ? jumps : []).find(function(j) {
 			const n = jumpReturn.baseName(j && j.characterName).toLowerCase();
 			if (n === "" || mine[n]) { return false; }
-			const at = jumpReturn.dbTime(j.time);
-			return !(since && at && at < since);
+			const at = jumpReturn.parseTime(j.time);
+			return !(isFinite(created) && isFinite(at) && Math.abs(at - created) <= jumpReturn.CREATE_WINDOW_MS);
 		});
 		if (other) { return "already jumped by " + jumpReturn.baseName(other.characterName); }
 		return null;
@@ -253,24 +261,30 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		/** Show the panel unless someone was through first (and the user wants first-only) */
-		function decide(seq, from, to, result) {
+		// Server-clock now (sig-age's offset tracking when available), for comparing with server times
+		function serverNow() {
+			try { if (typeof sigAge !== "undefined" && typeof sigAge.now === "function") { return sigAge.now(); } } catch (e) { /* fall back */ }
+			return Date.now();
+		}
+
+		function decide(seq, from, to, result, jumpAt) {
 			if (!jumpReturn.firstOnly(opts())) { showPanel(from, to, result); return; }
 			const copied = copiedList().some(function(id) { return id == result.wormholeId; });
-			let reason = jumpReturn.alreadyHandled(result.toSig, null, myCharacters(), copied, result.fromSig);
+			let reason = jumpReturn.alreadyHandled(result.toSig, null, myCharacters(), copied, result.fromSig, jumpAt);
 			if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 			jumpLog(result.wormholeId).then(function(jumps) {
 				if (seq !== jumpSeq) { return; }	// superseded by a newer jump
 				const sigs = tripwire.client && tripwire.client.signatures;
 				const toSig = (sigs && result.toSig && sigs[result.toSig.id]) || result.toSig;	// may have synced meanwhile
 				const fromSig = (sigs && result.fromSig && sigs[result.fromSig.id]) || result.fromSig;
-				reason = jumpReturn.alreadyHandled(toSig, jumps, myCharacters(), false, fromSig);
+				reason = jumpReturn.alreadyHandled(toSig, jumps, myCharacters(), false, fromSig, jumpAt);
 				if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 				showPanel(from, to, result);
 			});
 		}
 
 		/** Check for a named hole; true if it was found (the panel may still be suppressed) */
-		function attempt(seq, from, to) {
+		function attempt(seq, from, to, jumpAt) {
 			if (seq !== jumpSeq) { return true; }	// superseded by a newer jump
 			let result = null;
 			try {
@@ -280,20 +294,21 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 			if (!result) { return false; }
 			clearRetries();
-			decide(seq, from, to, result);
+			decide(seq, from, to, result, jumpAt);
 			return true;
 		}
 
 		function onJump(from, to) {
 			jumpSeq++;
 			const seq = jumpSeq;
+			const jumpAt = serverNow();
 			clearRetries();
 			hidePanel();
 			if (!jumpReturn.enabled(opts())) { return; }
-			if (attempt(seq, from, to)) { return; }
+			if (attempt(seq, from, to, jumpAt)) { return; }
 			// The automapper may still be adding/updating the hole: re-check after the next syncs
 			jumpReturn.RETRY_DELAYS_MS.forEach(function(delay) {
-				retryTimers.push(setTimeout(function() { attempt(seq, from, to); }, delay));
+				retryTimers.push(setTimeout(function() { attempt(seq, from, to, jumpAt); }, delay));
 			});
 		}
 		jumpReturn.onJump = onJump;	// handy for testing from the console

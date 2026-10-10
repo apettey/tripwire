@@ -157,37 +157,67 @@ describe('Jump return', () => {
 		it('A lone suffix is ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: '|P' }], ME, false), null));
 		it('My names given with a suffix', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Test Pilot|P' }], ['Test Pilot|p'], false), null));
 
-		describe('jumps before the hole was named', () => {
-			const named = { id: 101, systemID: HOME, name: 'C', modifiedTime: '2026-10-10 12:00:00' };
+		// Times as the server writes them: PHP date('Y-m-d H:i:s') / MySQL timestamps, UTC
+		const T = s => Date.UTC(2026, 9, 10, +s.slice(0, 2), +s.slice(3, 5), +s.slice(6, 8));
+		const at = s => '2026-10-10 ' + s;
+
+		describe('the jump that created an automapped hole', () => {
+			// Scout jumps an un-entered sig: the automapper creates the hole (sigs' lifeTime 20:13:55) and logs the
+			// jump in the same request; the hole is named "C" later.
+			const home = { id: 101, systemID: HOME, name: 'C', lifeTime: at('20:13:55'), modifiedTime: at('20:30:00') };
 			const me = { names: ME, ids: [1] };
-			it('Scout jumped it before it was named: ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh,
-				[{ characterName: 'Scout|P', time: '2026-10-10 11:59:59' }], me, false, named), null));
-			it('Jump at the naming time counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
-				[{ characterName: 'Scout|P', time: '2026-10-10 12:00:00' }], me, false, named)));
-			it('Jump after the naming counts', () => assert.equal(jumpReturn.alreadyHandled(fresh,
-				[{ characterName: 'Scout|P', time: '2026-10-10 11:00:00' }, { characterName: 'Other|P', time: '2026-10-10 12:05:00' }], me, false, named),
-				'already jumped by Other'));
-			it('No time on the jump: counts', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Scout|P' }], me, false, named)));
-			it('No modifiedTime on the sig: counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
-				[{ characterName: 'Scout|P', time: '2026-10-10 11:00:00' }], me, false, { name: 'C' })));
-			it('ISO-style time', () => assert.equal(jumpReturn.dbTime('2026-10-10T12:00:00Z'), '2026-10-10 12:00:00'));
-			it('Bad time', () => assert.equal(jumpReturn.dbTime('soon'), null));
+			it('Scout\'s creating jump is ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: at('20:13:56') }], me, false, home), null));
+			it('A second or two either side', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: at('20:13:51') }], me, false, home), null));
+			it('The scout\'s later jumps count', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: at('20:13:56') }, { characterName: 'Scout|P', time: at('20:20:00') }], me, false, home),
+				'already jumped by Scout'));
+			it('Another pilot after creation counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Other|P', time: at('20:14:05') }], me, false, home)));
+			it('Hole edited (EOL/mass) after the first pilot\'s jump: later pilots still suppressed', () => {
+				// Named hole added 20:00, first pilot jumped 20:13:55, marked EOL 20:13:58: upstream bumps both sigs'
+				// modifiedTime/modifiedByID, lifeTime stays
+				const edited = { id: 101, systemID: HOME, name: 'C', lifeTime: at('20:00:00'), modifiedTime: at('20:13:58'), modifiedByID: 7 };
+				const far = { id: 102, systemID: CHILD, signatureID: null, name: null, lifeTime: at('20:00:00'), modifiedTime: at('20:13:58'), modifiedByID: 7 };
+				assert.equal(jumpReturn.alreadyHandled(far, [{ characterName: 'First Pilot|P', time: at('20:13:55') }],
+					{ names: ['Second Pilot'], ids: [8] }, false, edited, T('20:20:00')), 'already jumped by First Pilot');
+			});
+			it('No lifeTime on the sig: every jump counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: at('20:13:56') }], me, false, { name: 'C' })));
+			it('No time on the jump: counts', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Scout|P' }], me, false, home)));
+			it('parseTime', () => {
+				assert.equal(jumpReturn.parseTime('2026-10-10 20:13:55'), T('20:13:55'));
+				assert.equal(jumpReturn.parseTime('2026-10-10T20:13:55Z'), T('20:13:55'));
+				assert.ok(isNaN(jumpReturn.parseTime('soon')));
+				assert.ok(isNaN(jumpReturn.parseTime(null)));
+			});
 		});
 
 		describe('far side edited by one of my characters', () => {
 			const me = { names: ME, ids: [1, 196379789] };
-			it('My own sig ID on the return sig does not suppress', () => assert.equal(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', name: '<C', modifiedByID: 196379789 }, [], me, false), null));
+			const jumpAt = T('20:15:00');
+			const far = (by, when) => ({ signatureID: 'xyz987', name: '<C', modifiedByID: by, modifiedTime: at(when) });
+			it('I set the return sig right after my jump: not suppressed', () => assert.equal(jumpReturn.alreadyHandled(
+				far(196379789, '20:15:08'), [], me, false, undefined, jumpAt), null));
+			it('Within the polling slack before the jump seen', () => assert.equal(jumpReturn.alreadyHandled(
+				far(196379789, '20:14:50'), [], me, false, undefined, jumpAt), null));
+			it('My edit 30 s before the jump was seen (from home) still suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				far(196379789, '20:14:30'), [], me, false, undefined, jumpAt)));
 			it('ID as a string', () => assert.equal(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', modifiedByID: '196379789' }, [], me, false), null));
-			it('Someone else\'s edit still suppresses', () => assert.ok(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', modifiedByID: 555 }, [], me, false)));
+				far('196379789', '20:15:08'), [], me, false, undefined, jumpAt), null));
+			it('My edit well before this jump (e.g. EOL from home) still suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				far(196379789, '20:05:00'), [], me, false, undefined, jumpAt)));
+			it('Jump time unknown: suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				far(196379789, '20:15:08'), [], me, false, undefined, undefined)));
+			it('Someone else\'s edit suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				far(555, '20:15:08'), [], me, false, undefined, jumpAt)));
 			it('Copied before still suppresses', () => assert.equal(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', modifiedByID: 1 }, [], me, true), 'already copied'));
+				far(1, '20:15:08'), [], me, true, undefined, jumpAt), 'already copied'));
 			it('Other pilots in the log still suppress', () => assert.ok(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', modifiedByID: 1 }, [{ characterName: 'Other|P' }], me, false)));
+				far(1, '20:15:08'), [{ characterName: 'Other|P', time: at('20:10:00') }], me, false, undefined, jumpAt)));
 			it('No IDs known (array of names): suppresses', () => assert.ok(jumpReturn.alreadyHandled(
-				{ signatureID: 'xyz987', modifiedByID: 1 }, [], ME, false)));
+				far(1, '20:15:08'), [], ME, false, undefined, jumpAt)));
 		});
 	});
 
