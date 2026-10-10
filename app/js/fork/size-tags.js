@@ -181,14 +181,31 @@ const sizeTags = {
 		const children = el.querySelectorAll('*');
 		for (var i = 0; i < children.length; i++) {
 			const r = children[i].getBoundingClientRect();
-			// skip placeholders kept hidden until there's data (activity dots, the occupied badge)
-			if (sizeTags.outsideRects(box, [r]).length && getComputedStyle(children[i]).visibility != 'hidden') { rects.push(r); }
+			// Hidden placeholders count too: chain.draw shows the activity dots and occupied badge only after the
+			// renderer has drawn (and the tags have been placed)
+			if (sizeTags.outsideRects(box, [r]).length) { rects.push(r); }
+		}
+		// The node's text lines (class, name, hole type), measured as text so the empty ends of each line stay free
+		const texts = [];
+		if (typeof document !== 'undefined' && document.createRange) {
+			const lines = el.querySelectorAll('h4');
+			for (var j = 0; j < lines.length; j++) {
+				const range = document.createRange();
+				range.selectNodeContents(lines[j]);
+				const t = range.getBoundingClientRect();
+				if (t.width && t.height) { texts.push(sizeTags.toMapRect(t, origin, scale)); }
+			}
 		}
 		return { box: sizeTags.toMapRect(box, origin, scale),
-			badges: sizeTags.outsideRects(box, rects).map(function(r) { return sizeTags.toMapRect(r, origin, scale); }) };
+			badges: sizeTags.outsideRects(box, rects).map(function(r) { return sizeTags.toMapRect(r, origin, scale); }),
+			texts: texts };
 	},
 
-	growRect: function(r, margin) { return { x0: r.x0 - margin, y0: r.y0 - margin, x1: r.x1 + margin, y1: r.y1 + margin }; },
+	/** Rect grown by margin on each side (marginY for top and bottom, default margin) */
+	growRect: function(r, margin, marginY) {
+		if (marginY === undefined) { marginY = margin; }
+		return { x0: r.x0 - margin, y0: r.y0 - marginY, x1: r.x1 + margin, y1: r.y1 + marginY };
+	},
 
 	inRect: function(p, r) { return p.x > r.x0 && p.x < r.x1 && p.y > r.y0 && p.y < r.y1; },
 
@@ -227,39 +244,40 @@ const sizeTags = {
 		return { x: last.x, y: last.y };
 	},
 
-	/** The polyline point nearest (along the line) to target that is outside all the rects, or null if there is
-	none. Used to slide a tag off a badge when there's no free line between the nodes. */
-	nearestClearPoint: function(points, target, rects) {
-		if (!points || !points.length || !target) { return null; }
-		const clear = function(p) { return !(rects || []).some(function(r) { return sizeTags.inRect(p, r); }); };
-		if (clear(target)) { return target; }
-		var start = 0, best = Infinity;
-		points.forEach(function(p, i) {
-			const d = (p.x - target.x) * (p.x - target.x) + (p.y - target.y) * (p.y - target.y);
-			if (d < best) { best = d; start = i; }
-		});
-		for (var k = 1; k < points.length; k++) {
-			if (start - k >= 0 && clear(points[start - k])) { return points[start - k]; }
-			if (start + k < points.length && clear(points[start + k])) { return points[start + k]; }
-		}
-		return null;
+	/** Area two rects ({ x0, y0, x1, y1 }) have in common */
+	overlapArea: function(a, b) {
+		const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+		return w > 0 && h > 0 ? w * h : 0;
 	},
 
-	/** Where to centre a connection's tag on its traced path, given the boxes of the two nodes and of their badges
-	(map coordinates). In order of preference:
-	1. the middle of the line that is clear (by about half a tag) of the nodes and their badges;
-	2. the nearest point to the middle of the line between the node borders that is clear of the nodes and
-	   just clear of the badges (nodes very close together);
-	3. the same, allowed onto a node's edge but still off the badges;
-	4. the middle of the line between the node borders. */
-	pointOnPath: function(path, boxes, badges) {
-		const grow = function(m) { return badges.map(function(r) { return sizeTags.growRect(r, m); }); };
+	/** The point of the path where a tag (TAG_HALF around its centre) covers the least: badges count, the
+	nodes' text counts four times as much, a node's empty edge half as much, and the distance from target breaks ties.
+	For when there's no free stretch of line (nodes close together or crowded with badges). */
+	leastCoveredPoint: function(points, target, boxes, badges, texts) {
+		const half = sizeTags.TAG_HALF;
+		var best = null, bestCost = Infinity;
+		(points || []).forEach(function(p) {
+			const tag = { x0: p.x - half.x, y0: p.y - half.y, x1: p.x + half.x, y1: p.y + half.y };
+			const sum = function(rects, weight) {
+				return (rects || []).reduce(function(acc, r) { return acc + weight * sizeTags.overlapArea(tag, r); }, 0);
+			};
+			const distance = target ? Math.sqrt((p.x - target.x) * (p.x - target.x) + (p.y - target.y) * (p.y - target.y)) : 0;
+			const cost = sum(badges, 1) + sum(texts, 4) + sum(boxes, 0.5) + 0.01 * distance;
+			if (cost < bestCost) { bestCost = cost; best = p; }
+		});
+		return best;
+	},
+
+	/** Where to centre a connection's tag on its traced path, given the boxes of the two nodes, of their badges
+	and of their text lines (map coordinates): the middle of the stretch of line that is clear of the nodes (by
+	NODE_MARGIN) and of their badges (by half a tag), or, if there's too little of that, the point where the tag
+	covers the least (leastCoveredPoint). */
+	pointOnPath: function(path, boxes, badges, texts) {
+		const half = sizeTags.TAG_HALF;
+		const grownBadges = (badges || []).map(function(r) { return sizeTags.growRect(r, half.x, half.y); });
 		const grownBoxes = boxes.map(function(r) { return sizeTags.growRect(r, sizeTags.NODE_MARGIN); });
-		const point = sizeTags.visibleMidpoint(path, grownBoxes.concat(grow(sizeTags.BADGE_MARGIN)), sizeTags.MIN_VISIBLE);
-		if (point) { return point; }
-		const middle = sizeTags.visibleMidpoint(path, boxes);
-		return sizeTags.nearestClearPoint(path, middle, boxes.concat(grow(sizeTags.BADGE_GAP))) ||
-			sizeTags.nearestClearPoint(path, middle, grow(sizeTags.BADGE_GAP)) || middle;
+		return sizeTags.visibleMidpoint(path, grownBoxes.concat(grownBadges), sizeTags.MIN_VISIBLE) ||
+			sizeTags.leastCoveredPoint(path, sizeTags.visibleMidpoint(path, boxes), boxes, badges, texts);
 	},
 
 	/** Size tags by chain node id, from a decorated chain map ({ rows }) */
@@ -274,12 +292,10 @@ const sizeTags = {
 	/** Shortest stretch of line between the badges worth centring a tag on, in map px; with less, the tag goes
 	between the node borders instead */
 	MIN_VISIBLE: 4,
-	/** Gap kept between a tag slid along the line and a badge, in map px (about half a tag) */
-	BADGE_MARGIN: 8,
+	/** Half a tag's size in map px: how far a tag's centre stays from badges and text */
+	TAG_HALF: { x: 10, y: 7 },
 	/** Gap kept between a tag's centre and a node's border, in map px (about half a tag's height) */
 	NODE_MARGIN: 5,
-	/** Smallest gap kept between a tag and a badge when there's no room for BADGE_MARGIN */
-	BADGE_GAP: 3,
 
 	/** Canvas renderers (chain-map-renderer-base.js): put a tag on the middle of each drawn connection.
 	nodes are the renderer's laid-out nodes (position, requestedSize, parent, domNode).
@@ -291,7 +307,7 @@ const sizeTags = {
 		const measure = function(node) {
 			if (!node.sizeTagsMeasured) {
 				const m = sizeTags.measureNode(node);
-				node.sizeTagsMeasured = m || { box: sizeTags.nodeRect(node), badges: [] };
+				node.sizeTagsMeasured = m || { box: sizeTags.nodeRect(node), badges: [], texts: [] };
 				measured.push(node);
 			}
 			return node.sizeTagsMeasured;
@@ -305,7 +321,7 @@ const sizeTags = {
 				if (!container || node.domNode.style.display == 'none') { return; }	// child of a collapsed system
 				const path = sizeTags.tracePath(drawConnection, renderer, node);
 				const child = measure(node), parent = measure(node.parent);
-				const point = sizeTags.pointOnPath(path, [child.box, parent.box], child.badges.concat(parent.badges));
+				const point = sizeTags.pointOnPath(path, [child.box, parent.box], child.badges.concat(parent.badges), child.texts.concat(parent.texts));
 				if (point) { placed.push({ container: container, tag: tag, point: point }); }
 			} catch (e) {
 				if (typeof console !== 'undefined') { console.warn('size-tags: could not place tag', e); }
@@ -335,8 +351,9 @@ const sizeTags = {
 		});
 	},
 
-	/** Hook a chain renderer so tags are drawn after each draw and collapse. Idempotent. */
-	installRenderer: function(renderer) {
+	/** Hook a chain renderer so tags are drawn after each draw and collapse. Idempotent.
+	owner: the chain; while it is drawing, canvas tags wait for its draw to finish (see installRenderers). */
+	installRenderer: function(renderer, owner) {
 		if (!renderer || renderer.sizeTagsHooked) { return; }
 		if (typeof renderer.drawConnection === 'function' && typeof renderer.draw === 'function' && typeof renderer.collapse === 'function') {
 			renderer.sizeTagsHooked = true;
@@ -354,7 +371,9 @@ const sizeTags = {
 					finally {
 						const nodes = renderer.sizeTagsNodes;
 						renderer.sizeTagsNodes = null;
-						sizeTags.placeOnDrawnMap(renderer, drawConnection, nodes);
+						renderer.sizeTagsLast = { drawConnection: drawConnection, nodes: nodes };
+						if (owner && owner.drawing) { renderer.sizeTagsPending = true; }
+						else { sizeTags.placeOnDrawnMap(renderer, drawConnection, nodes); }
 					}
 				};
 			});
@@ -369,18 +388,63 @@ const sizeTags = {
 		}
 	},
 
+	/** Place the tags of the current canvas renderer again, e.g. after badges were added to the drawn nodes
+	without a redraw (system-threat's patchChain). The old org chart sits in connector cells and needs nothing. */
+	placeAgain: function(chainObj) {
+		const r = chainObj && chainObj.renderer;
+		if (!r || !r.sizeTagsLast || r.drawing) { return; }
+		const containers = [];
+		r.sizeTagsLast.nodes.forEach(function(node) {
+			const c = node.domNode && node.domNode.parentNode;
+			if (c && containers.indexOf(c) < 0) { containers.push(c); }
+		});
+		containers.forEach(function(c) { $(c).children(".size-tag-connector").remove(); });
+		sizeTags.placeOnDrawnMap(r, r.sizeTagsLast.drawConnection, r.sizeTagsLast.nodes);
+	},
+
 	/** Hook the chain's renderers: the current one now, others when the user switches, and the old org chart's
 	own collapse (Google redraws the table, then reports it through chain.updateCollapsed). */
 	installRenderers: function(chainObj) {
 		if (!chainObj || chainObj.sizeTagsRenderersHooked || typeof chainObj.useRenderer !== 'function') { return; }
 		chainObj.sizeTagsRenderersHooked = true;
-		sizeTags.installRenderer(chainObj.renderer);
+		sizeTags.installRenderer(chainObj.renderer, chainObj);
 		const useRenderer = chainObj.useRenderer;
 		chainObj.useRenderer = function() {
 			const result = useRenderer.apply(this, arguments);
-			sizeTags.installRenderer(chainObj.renderer);
+			sizeTags.installRenderer(chainObj.renderer, chainObj);
 			return result;
 		};
+		// chain.draw reveals the activity dots, occupied counts etc. only after the renderer has drawn: place the
+		// canvas tags once it's done, so they are measured with those badges
+		var inDraw = false;
+		if (typeof chainObj.draw === 'function') {
+			const draw = chainObj.draw;
+			chainObj.draw = function() {
+				const outer = !inDraw;
+				inDraw = true;
+				try { return draw.apply(this, arguments); }
+				finally {
+					if (outer) {
+						inDraw = false;
+						const r = chainObj.renderer;
+						if (r && r.sizeTagsPending) {
+							r.sizeTagsPending = false;
+							sizeTags.placeOnDrawnMap(r, r.sizeTagsLast.drawConnection, r.sizeTagsLast.nodes);
+						}
+					}
+				}
+			};
+		}
+		// ...and when they arrive later without a redraw (activity is fetched from ESI)
+		['activity', 'occupied'].forEach(function(name) {
+			if (typeof chainObj[name] !== 'function') { return; }
+			const original = chainObj[name];
+			chainObj[name] = function() {
+				const result = original.apply(this, arguments);
+				if (!inDraw) { sizeTags.placeAgain(chainObj); }
+				return result;
+			};
+		});
 		if (typeof chainObj.updateCollapsed === 'function') {
 			const updateCollapsed = chainObj.updateCollapsed;
 			chainObj.updateCollapsed = function() {
@@ -425,6 +489,16 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 	if (typeof chain !== "undefined") { sizeTags.install(chain); sizeTags.installRenderers(chain); }
 	$(function() {
 		if (typeof chain !== "undefined") { sizeTags.install(chain); sizeTags.installRenderers(chain); }
+		// Threat badges can arrive after the draw (async fetch): move tags off them
+		if (typeof systemThreat !== "undefined" && typeof systemThreat.patchChain === "function" && !systemThreat.patchChain.sizeTagsWrapped) {
+			const patchChain = systemThreat.patchChain;
+			systemThreat.patchChain = function() {
+				const result = patchChain.apply(this, arguments);
+				if (typeof chain !== "undefined" && sizeTags.enabled(options)) { sizeTags.placeAgain(chain); }
+				return result;
+			};
+			systemThreat.patchChain.sizeTagsWrapped = true;
+		}
 		const legend = $("#show-chainLegend");
 		const tip = legend.attr("data-tooltip");
 		if (tip && tip.indexOf("size-tag") < 0 && tip.indexOf("</table>") >= 0) {

@@ -57,6 +57,7 @@
 
 /* Old org chart: on the vertical connector cell above the child node (border on the cell's left or right edge) */
 #chainMap td.size-tag-cell { position: relative; }
-#chainMap .size-tag-connector.size-tag-orgchart { top: 50%; }
+/* The cell is shorter than the tag: keep the tag's bottom on the cell's bottom so it sits on the line, not the node */
+#chainMap .size-tag-connector.size-tag-orgchart { top: auto; bottom: 0; transform: translate(-50%, 0); }
 #chainMap .size-tag-connector.size-tag-orgchart.size-tag-on-left { left: 0; }
 #chainMap .size-tag-connector.size-tag-orgchart.size-tag-on-right { left: 100%; }

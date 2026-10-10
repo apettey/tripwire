@@ -163,27 +163,39 @@ describe('Chain map size tags', () => {
 			assert.deepEqual(sizeTags.toMapRect({ left: 1, top: 2, right: 3, bottom: 4 }, { left: 0, top: 0 }, 0), { x0: 1, y0: 2, x1: 3, y1: 4 });
 		});
 
-		it('nearestClearPoint slides off a rect along the line', () => {
+		it('overlapArea', () => {
+			assert.equal(sizeTags.overlapArea({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 5, y0: 8, x1: 20, y1: 20 }), 10);
+			assert.equal(sizeTags.overlapArea({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 10, y0: 0, x1: 20, y1: 10 }), 0);
+		});
+
+		it('leastCoveredPoint: off badges first, text counts more, then nearest the target', () => {
 			const pts = line(0, 0, 100, 0, 100);
-			near(sizeTags.nearestClearPoint(pts, { x: 50, y: 0 }, [{ x0: 45, x1: 52, y0: -5, y1: 5 }]), 52, 0);
-			near(sizeTags.nearestClearPoint(pts, { x: 50, y: 0 }, []), 50, 0);
-			assert.equal(sizeTags.nearestClearPoint(pts, { x: 50, y: 0 }, [{ x0: -1, x1: 101, y0: -5, y1: 5 }]), null);
+			// nothing in the way: the target
+			near(sizeTags.leastCoveredPoint(pts, { x: 50, y: 0 }, [], [], []), 50, 0);
+			// a badge around the target: just off it (tag half-width 10)
+			near(sizeTags.leastCoveredPoint(pts, { x: 50, y: 0 }, [], [{ x0: 45, x1: 55, y0: -3, y1: 3 }], []), 35, 0);
+			// text one side, a badge the other: covering a little badge beats covering text
+			const p = sizeTags.leastCoveredPoint(line(0, 0, 40, 0, 40), { x: 20, y: 0 }, [],
+				[{ x0: 28, x1: 40, y0: -3, y1: 3 }], [{ x0: 0, x1: 12, y0: -3, y1: 3 }]);
+			assert.ok(p.x > 20, JSON.stringify(p));
+			assert.equal(sizeTags.leastCoveredPoint([], null, [], [], []), null);
 		});
 
 		describe('pointOnPath', () => {
 			const pts = line(0, 0, 200, 0, 200);
 			const child = { x0: -30, x1: 30, y0: -20, y1: 20 }, parent = { x0: 170, x1: 230, y0: -20, y1: 20 };
-			it('middle of the free line', () => near(sizeTags.pointOnPath(pts, [child, parent], []), 100, 0, 0.5));
+			it('middle of the free line', () => near(sizeTags.pointOnPath(pts, [child, parent], [], []), 100, 0, 0.5));
 			it('keeps clear of a badge on the line', () => {
-				// badge over x 60..100: with margins the free line is 35..52 and 108..165
-				const p = sizeTags.pointOnPath(pts, [child, parent], [{ x0: 60, x1: 100, y0: -6, y1: 6 }]);
-				assert.ok(p.x >= 108 || p.x <= 52, JSON.stringify(p));
+				// badge over x 60..100: with margins the free line is 35..50 and 110..165
+				const p = sizeTags.pointOnPath(pts, [child, parent], [{ x0: 60, x1: 100, y0: -6, y1: 6 }], []);
+				assert.ok(p.x >= 110 || p.x <= 50, JSON.stringify(p));
 			});
-			it('nodes nearly touching: between the borders, off the badges', () => {
+			it('nodes nearly touching: between the borders, off the badges and the text', () => {
 				const a = { x0: -30, x1: 30, y0: -20, y1: 20 }, b = { x0: 40, x1: 100, y0: -20, y1: 20 };
-				near(sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], []), 35, 0, 0.5);
-				const p = sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], [{ x0: 31, x1: 36, y0: -3, y1: 3 }]);
-				assert.ok(p.x >= 39 || p.x <= 28, JSON.stringify(p));
+				near(sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], [], []), 35, 0, 0.5);
+				// a badge on the gap and text on the child: no free spot, so the tag avoids the text first
+				const p = sizeTags.pointOnPath(line(0, 0, 70, 0, 70), [a, b], [{ x0: 31, x1: 39, y0: -3, y1: 3 }], [{ x0: -20, x1: 28, y0: -4, y1: 4 }]);
+				assert.ok(p.x - sizeTags.TAG_HALF.x >= 28, JSON.stringify(p));
 			});
 		});
 	});
@@ -241,6 +253,28 @@ describe('Chain map size tags', () => {
 			});
 			assert.deepEqual(maps, [map]);
 			assert.ok(renderer.sizeTagsOrgChart);
+		});
+
+		it('while the chain draws, canvas tags wait for chain.draw to finish (badges shown after the renderer)', () => {
+			const order = [];
+			const radial = { drawConnection: () => {}, collapse: () => {},
+				draw: function() { this.drawConnection({}, { id: 2 }); order.push('renderer'); } };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				draw: function() { this.drawing = true; this.renderer.draw(); this.drawing = false; this.activity(); order.push('draw done'); },
+				activity: function() { order.push('activity'); }
+			};
+			withStub('placeOnDrawnMap', (r, dc, ns) => order.push('place ' + ns.map(n => n.id)), () => {
+				sizeTags.installRenderers(fakeChain);
+				fakeChain.draw();
+				assert.deepEqual(order, ['renderer', 'activity', 'draw done', 'place 2']);
+				order.length = 0;
+				fakeChain.activity();	// activity arriving later (ESI): tags placed again
+				assert.deepEqual(order, ['activity', 'place 2']);
+				order.length = 0;
+				radial.collapse();	// not in a chain draw: placed straight away
+				assert.deepEqual(order, ['place ']);
+			});
 		});
 
 		it('installRenderers hooks the current renderer, renderer switches and the org chart collapse', () => {

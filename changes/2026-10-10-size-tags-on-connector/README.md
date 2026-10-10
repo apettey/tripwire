@@ -47,14 +47,18 @@ collapse:
   `drawConnection` is wrapped to note which connections were drawn; after `draw`/`collapse` each one is traced
   through the renderer's own `drawConnection` with a recording context (so curves match the drawn line), and the
   tag is centred on the middle of the part of the line not covered by the two nodes or their badges (threat,
-  statics, occupied...), or slid off the badges when the nodes nearly touch. Tags are absolutely positioned in the
-  map's inner container, so they move with the map and don't change its size or the layout. Positions are worked
-  out once per draw (one layout read for all tags), never per frame.
-- Old legacy org chart (Google OrgChart): the tag is centred on the vertical connector cell above the child node
-  (the cell upstream colours for mass/EOL), after `draw` and after the chart's own collapse (via
-  `chain.updateCollapsed`).
+  statics, occupied count, activity dots). Where nodes are too close for that, it goes where it covers least,
+  avoiding the nodes' text first. Tags are absolutely positioned in the map's inner container, so they move with
+  the map and don't change its size or the layout. During `chain.draw` placement waits until the draw has shown
+  the activity dots and occupied counts; tags are placed again when activity/occupied data or threat badges
+  (`systemThreat.patchChain`) arrive later without a redraw. Positions are worked out once per draw or data
+  update (one layout read for all tags), never per frame.
+- Old legacy org chart (Google OrgChart): the tag sits on the vertical connector cell above the child node
+  (the cell upstream colours for mass/EOL), bottom-aligned to it so it rests on the line above the node, after
+  `draw` and after the chart's own collapse (via `chain.updateCollapsed`). Its rows are only a few px tall, so in
+  tight spots the tag can touch the parent's activity dots.
 - Renderers are hooked as they become active (`chain.useRenderer`).
 
-Pure geometry (bezier points, path tracing, visible midpoint, badge avoidance, screen to map coordinates) is
-covered in `app/js-test/fork/size-tags.test.js`. Styles in `app/css/fork/size-tags.css`. The chain map has a
+Pure geometry (bezier points, path tracing, visible midpoint, least-covered fallback, screen to map coordinates)
+and the hooks are covered in `app/js-test/fork/size-tags.test.js`. Styles in `app/css/fork/size-tags.css`. The chain map has a
 single (dark) theme. No upstream files touched.
