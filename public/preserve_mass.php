@@ -10,7 +10,8 @@
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header (as public/rally.php).
 //				Every answer: { flags: [ { wormholeID, setBy, setAt (unix seconds), reason } ] }.
 //
-//	Storage in preserve_mass.inc.php (fork_preserve_mass, created on first use, so no migration is needed).
+//	Storage in preserve_mass.inc.php (fork_preserve_mass, created on first use, so no migration is needed). Flags of
+//	deleted wormholes are never returned; they are deleted from the table when the mask's flags change.
 //***********************************************************
 $startTime = microtime(true);
 
@@ -65,13 +66,13 @@ try {
 			preserve_mass_fail(400, 'Unknown mode');
 		}
 		$output['result'] = true;
+		preserve_mass_clean($mysql, $mask);	// on changes only: GET polls never write
 	} else if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 		preserve_mass_fail(405, 'Method not allowed');
 	}
 
-	preserve_mass_clean($mysql, $mask);
 	$output['flags'] = preserve_mass_list($mysql, $mask);
-} catch (PDOException $e) {
+} catch (Throwable $e) {	// PDO may throw (ERRMODE_EXCEPTION) or return false (checked, thrown as PDOException)
 	error_log('preserve_mass.php: ' . $e->getMessage());
 	preserve_mass_fail(500, 'Database error');
 }

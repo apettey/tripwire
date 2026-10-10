@@ -6,33 +6,28 @@
 //	Purpose:	"Preserve mass" flags on chain map connections (wormholes), shared by everyone on a mask.
 //				Storage for public/preserve_mass.php. One row per flagged wormhole in fork_preserve_mass.
 //
-//	A flag belongs to a row of upstream's wormholes table: the foreign key (ON DELETE CASCADE) removes it when
-//	the wormhole is deleted (by hand, a collapsed hole, a deleted signature, or the wormholeClean event).
-//	preserve_mass_clean() removes flags whose wormhole is gone or now belongs to another mask too, for databases
-//	where the key could not be created.
+//	A flag belongs to a row of upstream's wormholes table but has no foreign key to it (a key from our table would
+//	block TRUNCATE / ALTER / DROP of upstream's table and add us to its cascade chain). Instead, flags whose wormhole
+//	is gone (deleted, collapsed, its signature deleted, the wormholeClean event) or now in another mask are never
+//	returned (preserve_mass_list joins wormholes), and preserve_mass_clean() deletes them when flags change.
 //
 //	preserve_mass_clean_reason() is pure; tests/preserve_mass_test.php exercises all of it against the dev database.
 //***********************************************************
 
 if (!defined('PRESERVE_MASS_REASON_MAX')) define('PRESERVE_MASS_REASON_MAX', 100);
 
-/** Create fork_preserve_mass if it doesn't exist (no migration needed). Tries with the foreign key to wormholes
-	first; if that can't be created (e.g. no REFERENCES privilege), without it. Throws PDOException on failure.
-	Doesn't change the connection's error mode (it may be persistent and shared): results are checked instead. */
+/** Create fork_preserve_mass if it doesn't exist (no migration needed). Throws PDOException on failure, whatever
+	the connection's error mode (it may be persistent and shared, so it isn't changed). */
 function preserve_mass_ensure_table($mysql) {
-	$columns = 'maskID decimal(12,1) NOT NULL,
+	$created = $mysql->exec('CREATE TABLE IF NOT EXISTS fork_preserve_mass (
+		maskID decimal(12,1) NOT NULL,
 		wormholeID int NOT NULL,
 		setBy varchar(100) DEFAULT NULL,
 		setAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		reason varchar(' . PRESERVE_MASS_REASON_MAX . ') NOT NULL DEFAULT \'\',
-		PRIMARY KEY (maskID, wormholeID),
-		KEY wormholeID (wormholeID)';
-	$withKey = $mysql->exec('CREATE TABLE IF NOT EXISTS fork_preserve_mass (' . $columns . ',
-		CONSTRAINT fork_preserve_mass_wormhole_fk FOREIGN KEY (wormholeID) REFERENCES wormholes (id) ON DELETE CASCADE
+		PRIMARY KEY (maskID, wormholeID)
 	) DEFAULT CHARSET=utf8mb4');
-	if ($withKey !== false) return;
-	$plain = $mysql->exec('CREATE TABLE IF NOT EXISTS fork_preserve_mass (' . $columns . ') DEFAULT CHARSET=utf8mb4');
-	if ($plain === false) {
+	if ($created === false) {
 		throw new PDOException('Could not create fork_preserve_mass: ' . implode(' ', $mysql->errorInfo()));
 	}
 }
@@ -100,10 +95,12 @@ function preserve_mass_clean($mysql, $mask) {
 	return $stmt->rowCount();
 }
 
-/** The mask's flags: list of array(wormholeID, setBy, setAt (unix seconds), reason), oldest first */
+/** The mask's flags whose wormhole still exists in the mask: list of array(wormholeID, setBy, setAt (unix seconds),
+	reason), oldest first. Read-only: orphans are skipped here and deleted by preserve_mass_clean. */
 function preserve_mass_list($mysql, $mask) {
-	$stmt = $mysql->prepare('SELECT wormholeID, setBy, UNIX_TIMESTAMP(setAt) AS setAt, reason FROM fork_preserve_mass
-		WHERE maskID = :mask ORDER BY setAt, wormholeID');
+	$stmt = $mysql->prepare('SELECT p.wormholeID, p.setBy, UNIX_TIMESTAMP(p.setAt) AS setAt, p.reason FROM fork_preserve_mass p
+		INNER JOIN wormholes w ON w.id = p.wormholeID AND w.maskID = p.maskID
+		WHERE p.maskID = :mask ORDER BY p.setAt, p.wormholeID');
 	if (!$stmt) throw new PDOException('Could not read fork_preserve_mass');
 	$stmt->bindValue(':mask', $mask);
 	if (!$stmt->execute()) throw new PDOException('Could not read fork_preserve_mass: ' . implode(' ', $stmt->errorInfo()));

@@ -126,6 +126,41 @@ describe('Preserve mass', () => {
 		});
 	});
 
+	describe('centredRect', () => {
+		it('box around the centre', () => assert.deepStrictEqual(preserveMass.centredRect(100, 50, 16, 10), { x0: 92, y0: 45, x1: 108, y1: 55 }));
+		it('bad numbers', () => assert.deepStrictEqual(preserveMass.centredRect('x', undefined, null, NaN), { x0: 0, y0: 0, x1: 0, y1: 0 }));
+	});
+
+	describe('layout', () => {
+		const tag = { width: 16, height: 11 };
+		it('avoids the size tag of another connection', () => {
+			// the tag of a neighbouring connection sits right of this one's tag
+			const other = preserveMass.centredRect(125, 50, 16, 11);
+			assert.deepStrictEqual(preserveMass.layout([{ point: { x: 100, y: 50 }, tag: tag, obstacles: [] }], [other]), [{ x: 82, y: 50 }]);
+		});
+		it('avoids markers placed before it', () => {
+			// two connections whose tags are 36 px apart: the first marker goes right of its tag, into the gap; the
+			// second has a node on its right and would go left of its tag (the gap), but the first marker is there: below
+			const items = [
+				{ point: { x: 100, y: 50 }, tag: tag, obstacles: [] },
+				{ point: { x: 136, y: 50 }, tag: tag, obstacles: [{ x0: 146, y0: 30, x1: 200, y1: 70 }] }
+			];
+			const tags = [preserveMass.centredRect(100, 50, 16, 11), preserveMass.centredRect(136, 50, 16, 11)];
+			const at = preserveMass.layout(items, tags);
+			assert.deepStrictEqual(at, [{ x: 118, y: 50 }, { x: 136, y: 63.5 }]);
+		});
+		it('markers never overlap each other here', () => {
+			const items = [0, 1, 2].map(i => ({ point: { x: 100 + 20 * i, y: 50 }, tag: tag, obstacles: [] }));
+			const at = preserveMass.layout(items, items.map(i => preserveMass.centredRect(i.point.x, i.point.y, 16, 11)));
+			for (let i = 0; i < at.length; i++) {
+				for (let j = i + 1; j < at.length; j++) {
+					assert.ok(Math.abs(at[i].x - at[j].x) >= 16 || Math.abs(at[i].y - at[j].y) >= 12, JSON.stringify(at));
+				}
+			}
+		});
+		it('empty', () => assert.deepStrictEqual(preserveMass.layout([], []), []));
+	});
+
 	describe('enabled', () => {
 		it('missing key means on', () => assert.ok(preserveMass.enabled({})));
 		it('no options', () => assert.ok(preserveMass.enabled(undefined)));

@@ -155,6 +155,26 @@ const preserveMass = {
 		return best;
 	},
 
+	/** Rect ({ x0, y0, x1, y1 }) of a box of the given size centred on x, y (NaN-safe: an empty rect at 0, 0) */
+	centredRect: function(x, y, width, height) {
+		x = Number(x) || 0; y = Number(y) || 0;
+		const w = (Number(width) || 0) / 2, h = (Number(height) || 0) / 2;
+		return { x0: x - w, y0: y - h, x1: x + w, y1: y + h };
+	},
+
+	/** Centres for several markers on one map: each goes next to its own tag (besidePoint), avoiding its nodes'
+	boxes (item.obstacles), every size tag on the map (tagRects) and the markers placed before it.
+	@param items [{ point, tag, obstacles }] @return [{ x, y }] in the same order */
+	layout: function(items, tagRects) {
+		const h = preserveMass.MARKER_HALF;
+		const markers = [];
+		return (items || []).map(function(item) {
+			const at = preserveMass.besidePoint(item.point, item.tag, (item.obstacles || []).concat(tagRects || [], markers));
+			markers.push({ x0: at.x - h.x, y0: at.y - h.y, x1: at.x + h.x, y1: at.y + h.y });
+			return at;
+		});
+	},
+
 	/** Whether the markers are switched on (options.preserveMass.enabled; on unless explicitly false) */
 	enabled: function(opts) {
 		return !(opts && opts.preserveMass && opts.preserveMass.enabled === false);
@@ -187,7 +207,7 @@ const preserveMass = {
 	the size tag on the same connection, or on the line's visible midpoint when there is no tag */
 	placeOnDrawnMap: function(renderer, drawConnection, nodes) {
 		if (!preserveMass.enabled(preserveMass.options()) || typeof sizeTags === "undefined") { return; }
-		const placed = [];
+		const placed = [], containers = [];
 		(nodes || []).forEach(function(node) {
 			try {
 				const flag = preserveMass.flagForNode(node, preserveMass.flags);
@@ -203,15 +223,24 @@ const preserveMass = {
 				const tag = Array.prototype.filter.call(container.querySelectorAll(".size-tag.size-tag-connector"), function(t) {
 					return t.style.left === left && t.style.top === top;
 				})[0];
+				if (containers.indexOf(container) < 0) { containers.push(container); }
 				placed.push({ container: container, flag: flag, point: point, tag: tag ? { width: tag.offsetWidth, height: tag.offsetHeight } : null,
 					obstacles: [child.box, parent.box].concat(child.badges, parent.badges, child.texts, parent.texts) });
 			} catch (e) {
 				if (typeof console !== "undefined") { console.warn("preserve-mass: could not place marker", e); }
 			}
 		});
-		placed.forEach(function(p) {
-			const at = preserveMass.besidePoint(p.point, p.tag, p.obstacles);
-			p.container.insertAdjacentHTML("beforeend", preserveMass.markerHtml(p.flag, "pm-centred", { left: at.x, top: at.y }));
+		// Every size tag on the map (other connections' too) is an obstacle; read before any marker is added
+		const tagRects = containers.map(function(container) {
+			return Array.prototype.map.call(container.querySelectorAll(".size-tag.size-tag-connector"), function(t) {
+				return preserveMass.centredRect(parseFloat(t.style.left), parseFloat(t.style.top), t.offsetWidth, t.offsetHeight);
+			});
+		});
+		containers.forEach(function(container, i) {
+			const mine = placed.filter(function(p) { return p.container === container; });
+			preserveMass.layout(mine, tagRects[i]).forEach(function(at, j) {
+				container.insertAdjacentHTML("beforeend", preserveMass.markerHtml(mine[j].flag, "pm-centred", { left: at.x, top: at.y }));
+			});
 		});
 	},
 
@@ -418,9 +447,28 @@ const preserveMass = {
 		};
 	},
 
+	/** Threat badges arrive after the draw (async): size-tags moves its tags (and so the markers) off them, but only
+	while size tags are on; with them off, move the markers here */
+	hookThreatBadges: function() {
+		if (typeof systemThreat === "undefined" || typeof systemThreat.patchChain !== "function" || systemThreat.patchChain.preserveMassWrapped) { return; }
+		const patchChain = systemThreat.patchChain;
+		const wrapped = function() {
+			const result = patchChain.apply(this, arguments);
+			try {
+				if (typeof sizeTags !== "undefined" && !sizeTags.enabled(preserveMass.options()) &&
+					preserveMass.enabled(preserveMass.options()) && Object.keys(preserveMass.flags).length) { sizeTags.placeAgain(chain); }
+			} catch (e) { console.warn("preserve-mass: could not move markers", e); }
+			return result;
+		};
+		Object.keys(patchChain).forEach(function(k) { wrapped[k] = patchChain[k]; });
+		wrapped.preserveMassWrapped = true;
+		systemThreat.patchChain = wrapped;
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain) { return; }
 		preserveMass.hookSizeTags();
+		preserveMass.hookThreatBadges();
 		preserveMass.setupSettings();
 
 		const legend = $("#show-chainLegend");

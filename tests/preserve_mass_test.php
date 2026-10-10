@@ -106,32 +106,40 @@ try {
 	preserve_mass_clear($mysql, $maskB, $w1['id']);	// another mask can't clear it
 	check('other mask clear does nothing', pm_ids(preserve_mass_list($mysql, $maskA)), array($w1['id']));
 
-	// The flag goes with the wormhole: deleting the wormhole row (removeWormhole) ...
+	function pm_rows($mysql, $mask) {
+		$stmt = $mysql->prepare('SELECT wormholeID FROM fork_preserve_mass WHERE maskID = ? ORDER BY wormholeID');
+		$stmt->execute(array($mask));
+		return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+	}
+
+	// No foreign key to upstream's wormholes (it would block TRUNCATE / ALTER / DROP of that table)
+	$keys = (int)$mysql->query("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+		WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'fork_preserve_mass' AND CONSTRAINT_TYPE = 'FOREIGN KEY'")->fetchColumn();
+	check('no foreign key', $keys, 0);
+
+	// A deleted wormhole's flag is no longer listed (read-only), and clean deletes it
 	preserve_mass_set($mysql, $maskA, $w2['id'], 'x', '');
 	$mysql->prepare('DELETE FROM wormholes WHERE id = ?')->execute(array($w2['id']));
-	preserve_mass_clean($mysql, $maskA);
-	check('wormhole deleted: flag gone', pm_ids(preserve_mass_list($mysql, $maskA)), array($w1['id']));
-	// ... or a signature of it (wormholes cascade from signatures)
+	check('wormhole deleted: not listed', pm_ids(preserve_mass_list($mysql, $maskA)), array($w1['id']));
+	check('wormhole deleted: row still there until clean', pm_rows($mysql, $maskA), array($w1['id'], $w2['id']));
+	check('clean count', preserve_mass_clean($mysql, $maskA), 1);
+	check('wormhole deleted: row gone after clean', pm_rows($mysql, $maskA), array($w1['id']));
+	// ... same when a signature of it is deleted (upstream's wormholes cascade from signatures)
 	$mysql->prepare('DELETE FROM signatures WHERE id = ?')->execute(array($w1['a']));
+	check('signature deleted: not listed', preserve_mass_list($mysql, $maskA), array());
 	preserve_mass_clean($mysql, $maskA);
-	check('signature deleted: flag gone', preserve_mass_list($mysql, $maskA), array());
+	check('signature deleted: row gone after clean', pm_rows($mysql, $maskA), array());
 
-	// With the foreign key the row goes at once, without preserve_mass_clean
-	$hasKey = (int)$mysql->query("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
-		WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'fork_preserve_mass' AND CONSTRAINT_TYPE = 'FOREIGN KEY'")->fetchColumn() > 0;
-	check('foreign key created', $hasKey, true);
-	$w4 = pm_test_wormhole($mysql, $maskA);
-	preserve_mass_set($mysql, $maskA, $w4['id'], 'x', '');
-	$mysql->prepare('DELETE FROM signatures WHERE id = ?')->execute(array($w4['b']));
-	$left = (int)$mysql->query('SELECT COUNT(*) FROM fork_preserve_mass WHERE wormholeID = ' . (int)$w4['id'])->fetchColumn();
-	check('cascade without clean', $left, 0);
-
-	// Orphans the key can't catch (a row pointing at a wormhole of another mask) are removed by clean
+	// A row pointing at a wormhole of another mask is neither listed nor kept
 	$stmt = $mysql->prepare('INSERT INTO fork_preserve_mass (maskID, wormholeID, setBy, reason) VALUES (?, ?, ?, ?)');
 	$stmt->execute(array($maskA, $w3['id'], 'x', ''));
-	check('clean count', preserve_mass_clean($mysql, $maskA), 1);
-	check('orphan removed', preserve_mass_list($mysql, $maskA), array());
+	check('other mask wormhole: not listed', preserve_mass_list($mysql, $maskA), array());
+	check('other mask wormhole: cleaned', preserve_mass_clean($mysql, $maskA), 1);
 	check('clean nothing', preserve_mass_clean($mysql, $maskA), 0);
+	// clean only touches its own mask
+	preserve_mass_set($mysql, $maskB, $w3['id'], 'x', '');
+	preserve_mass_clean($mysql, $maskA);
+	check('other mask untouched', pm_ids(preserve_mass_list($mysql, $maskB)), array($w3['id']));
 } catch (Throwable $e) {
 	$failures++;
 	fwrite(STDERR, 'ERROR ' . $e->getMessage() . "\n");
