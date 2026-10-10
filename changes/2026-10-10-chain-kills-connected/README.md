@@ -76,4 +76,4 @@ The home system is required for chain kills rather than optional, so the result 
 
 Files: `discord/chain.php` (new), `discord/kills.php`, `discord/settings.php`, `discord/discord.inc.php`,
 `discord/tests/discord_test.php`, `app/js/fork/discord-notifications.js`, `app/css/fork/discord-notifications.css`,
-`app/js-test/fork/discord-notifications.test.js`, bundles. Upstream files touched: none.
+`app/js-test/fork/discord-notifications.test.js`. Upstream files touched: none.
