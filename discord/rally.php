@@ -87,59 +87,6 @@ function discord_rally_current(PDO $db, $maskID) {
 }
 
 /**
- * The chain label of a system in a mask's chain, as the chain map shows it (app/js/chain-map.js, sigNameLocation):
- * the trimmed name of the wormhole signature *leading into* the system, i.e. the signature on the far side of the
- * wormhole, in the neighbouring system (chain-map.js: node.child.name = the parent system's signature's name).
- * '' when there is none (home, k-space without a named hole, no wormhole, or the lookup fails).
- *
- * The chain map picks the inbound hole by walking out from the active chain tab's home system(s), which are each
- * user's own option, so the server can't repeat that walk. It uses the rule the Add Signature dialog uses without a
- * home tab (holeNaming.incomingFromWormholes, app/js/fork/hole-naming.js): a wormhole of the mask touching the system
- * leads into it when its far-side signature has a name starting with a letter or digit (its leading token, so not a
- * return bookmark) and its near-side signature (in the system) has none or is a
- * return bookmark ("<C"); a named near side is a hole out of the system. With several (a system reached more than
- * once, loops) the one closest to home wins: the shortest leading name token ("AB" before "ABC"), then the lowest
- * wormhole id. One query (both directions of the wormhole, UNION ALL), prepared.
- */
-function discord_chain_label(PDO $db, $maskID, $systemID) {
-    $systemID = (int) $systemID;
-    if ($systemID <= 0) return '';
-    $side = "SELECT w.id AS wormholeID, n.name AS nearName, f.name AS farName, f.systemID AS farSystem
-        FROM signatures n INNER JOIN wormholes w ON w.%s = n.id AND w.maskID = n.maskID INNER JOIN signatures f ON f.id = w.%s
-        WHERE n.systemID = ? AND n.maskID = ? AND n.type = 'wormhole'";
-    try {
-        $stmt = $db->prepare(sprintf($side, 'initialID', 'secondaryID') . ' UNION ALL ' . sprintf($side, 'secondaryID', 'initialID'));
-        if (!$stmt || !$stmt->execute([$systemID, (string) $maskID, $systemID, (string) $maskID])) return '';
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $error) {
-        return '';   // e.g. no such tables (tests, a fresh database)
-    }
-    return discord_chain_label_pick($rows, $systemID);
-}
-
-/** The label from discord_chain_label's rows (wormholeID, nearName, farName, farSystem): see there for the rule */
-function discord_chain_label_pick(array $rows, $systemID) {
-    $best = null;
-    foreach ($rows as $row) {
-        if ((int) $row['farSystem'] === (int) $systemID) continue;
-        $far = discord_chain_label_clean($row['farName']);
-        if ($far === '') continue;
-        $near = discord_chain_label_clean($row['nearName']);
-        if ($near !== '' && $near[0] !== '<') continue;   // a hole out of the system
-        if (!preg_match('/^[A-Za-z0-9]+/', $far, $m)) continue;   // no name token (e.g. a return bookmark "<C"), as holeNaming
-        $rank = [strlen($m[0]), (int) $row['wormholeID']];
-        if ($best === null || $rank < $best[0]) $best = [$rank, $far];
-    }
-    return $best ? $best[1] : '';
-}
-
-/** A signature name as a label: one line, trimmed, at most 100 characters (the column's size). Escaped when rendered. */
-function discord_chain_label_clean($name) {
-    $name = trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string) $name) ?? '');
-    return mb_substr($name, 0, 100);
-}
-
-/**
  * Message context of a rally row. $rally: the rally as stored now (discord_rally_current); false = unknown, then the
  * change itself is shown (a clear as cleared; a set without the system can't be shown, null). $labelOf(systemID):
  * the system's chain label (discord_chain_label), looked up only for the system shown; null = no labels.
