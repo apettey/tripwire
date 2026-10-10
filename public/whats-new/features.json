@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 29,
+      "date": "2026-10-10",
+      "title": "Threat badges and system residents",
+      "description": "Each system on the chain map now shows a small badge with its kills in the last 7 days, coloured from grey (quiet) to red (busy), with a glow after a kill in the last hour. Hover it for the last hour, day, week, month and 90 days.\n\nThe system info panel shows the system's threat level and the corporations active there, with likely residents and lost structures marked. Turn the badges off in Settings > Chain Map Settings, and the info panel part in Settings > General Preferences.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-29-system-threat.png",
+          "caption": "Threat badges on the chain map and residents in the system info panel"
+        }
+      ]
+    },
+    {
       "pr": 28,
       "date": "2026-10-10",
       "title": "Rally point to Discord",
