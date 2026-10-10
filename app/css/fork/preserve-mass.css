@@ -1,0 +1,75 @@
+/* "Preserve mass" flag on chain map connections (fork feature: preserve-mass, see app/js/fork/preserve-mass.js) */
+
+/* Marker: same size as the hole size tags (size-tags.css), violet so it doesn't read as a mass state (red/orange) */
+.preserve-mass-marker {
+	display: inline-block;
+	padding: 0 2px;
+	min-width: 9px;
+	font-size: 10px;
+	font-weight: bold;
+	line-height: 9px;
+	text-align: center;
+	color: #f0c8ff;
+	background: #7a2fa8;
+	border: 1px solid #d690ff;
+	border-radius: 2px;
+	white-space: nowrap;
+	cursor: help;
+}
+
+/* On the line (radial, new org charts): absolutely positioned in the map's inner container, like the size tags */
+#chainMap .preserve-mass-marker.size-tag-connector {
+	position: absolute;
+	z-index: 2;
+	margin: 0;
+	box-shadow: 0 0 3px rgba(214, 144, 255, 0.8);
+}
+/* Centred on the point worked out in preserve-mass.js: next to the connection's size tag, or on the line */
+#chainMap .preserve-mass-marker.pm-centred { transform: translate(-50%, -50%); }
+
+/* Old org chart: in the vertical connector cell, bottom-aligned like the size tag; an inline transform moves it
+   right of the tag when there is one */
+#chainMap .preserve-mass-marker.pm-orgchart { top: auto; bottom: 0; transform: translate(-50%, 0); }
+#chainMap .preserve-mass-marker.pm-orgchart.pm-on-left { left: 0; }
+#chainMap .preserve-mass-marker.pm-orgchart.pm-on-right { left: 100%; }
+
+/* Chain legend */
+#guide .preserve-mass-marker { margin-right: 3px; }
+
+/* Mass dialog: above the rolling guidance */
+#preserve-mass-panel {
+	margin: 4px 0 6px;
+}
+#preserve-mass-panel .pm-mark {
+	color: #b9a2c8;
+	font-size: 11px;
+}
+#preserve-mass-panel .pm-mark:hover { color: #f0c8ff; }
+
+#preserve-mass-panel .pm-warning {
+	padding: 4px 8px;
+	color: #ffffff;
+	font-weight: bold;
+	background: #5e1f86;
+	border: 1px solid #d690ff;
+	border-radius: 3px;
+}
+#preserve-mass-panel .pm-warning .pm-glyph { font-size: 13px; }
+#preserve-mass-panel .pm-warning .pm-clear {
+	float: right;
+	font-weight: normal;
+	font-size: 11px;
+	color: #f0c8ff;
+}
+#preserve-mass-panel .pm-meta {
+	margin: 2px 0 0 2px;
+	color: #c8b4d6;
+	word-wrap: break-word;
+}
+#preserve-mass-panel .pm-reason { font-style: italic; }
+
+/* Reason dialog */
+#dialog-preserve-mass .pm-dialog-hole { font-weight: bold; }
+#dialog-preserve-mass .pm-dialog-help { color: #9aa6ae; }
+#dialog-preserve-mass .pm-dialog-reason { width: 95%; }
+#dialog-preserve-mass p { margin: 0 0 6px; }

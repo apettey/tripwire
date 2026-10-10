@@ -142,7 +142,8 @@ $row = ['wormholeID' => 7, 'type' => 'N110', 'parent' => 'initial',
 check('candidates: k-space side, hole in the J-space system', discord_kspace_candidates($row),
     [['systemID' => 30000142, 'sigRowID' => 2, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'N110', 'mapper' => 'Jumper', 'label' => 'AB']]);
 check('candidates: no label when the k-space side is named (a hole out) or the far side is a return bookmark',
-    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '<A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB']);
+    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '!A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '!A'] + $row)[0]['label'],
+     discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB', 'AB']);
 check('candidates: no label without a name on the far side', discord_kspace_candidates(['aName' => null] + $row)[0]['label'], '');
 check('candidates: K162 side', discord_kspace_candidates(['parent' => 'secondary'] + $row)[0]['hole'], 'K162');
 check('candidates: unknown far side', discord_kspace_candidates(['bSys' => 3] + $row), []);
@@ -407,7 +408,7 @@ check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types
 check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
 check('rally: stamped like the other types', discord_settings_stamp($rs, discord_settings_defaults(), 4000)['types']['rally']['enabledAt'], 4000);
 check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'label', 'labelSystem', 'who', 'time', 'rally', 'was']);
-check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, false]);
+check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, true]);   // kills too since the kill chain label
 
 // Data queued by public/rally.php: the type's texts, who, and nothing from before the type was turned on
 $rtype = ['enabledAt' => 1000] + $rs['types']['rally'];
@@ -594,7 +595,7 @@ $hole = function ($id, $from, $fromName, $to, $toName, $mask = '98000001.2', $sw
 // Home 31000001 -A-> 31000002 -AB-> 31000003 -ABC-> 30000142 (Jita); a loop: 31000001 -B-> 31000005 -BAA-> 31000003
 $hole(1, 31000001, 'A', 31000002, '');
 $hole(2, 31000002, 'AB', 31000003, '', '98000001.2', true);         // stored with the far side as secondary
-$hole(3, 31000003, ' ABC  ', 30000142, '<AB');                       // return bookmark on the near side
+$hole(3, 31000003, ' ABC  ', 30000142, '!AB');                       // return bookmark on the near side
 $hole(4, 31000001, 'B', 31000005, null);
 $hole(5, 31000005, 'BAA', 31000003, '');
 $hole(6, 31000003, 'X', 31000009, '', '98000002.2');                 // another mask's chain
@@ -615,6 +616,11 @@ check('chain label pick: a hole out (named near side) and a hole to itself are n
 check('chain label pick: a far name without a name token (return bookmark "<H", "?") is not a label', discord_chain_label_pick([
     ['wormholeID' => 1, 'nearName' => '', 'farName' => '<H', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => '?', 'farSystem' => 2],
     ['wormholeID' => 3, 'nearName' => '', 'farName' => 'AB - drifter', 'farSystem' => 4]], 3), 'AB - drifter');
+check('chain label pick: a near side named as a return bookmark, "!" or the older "<", still leads in', [discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => '!AB', 'farName' => 'AB', 'farSystem' => 1]], 3), discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => ' <AB', 'farName' => 'AB', 'farSystem' => 1]], 3)], ['AB', 'AB']);
+check('chain label pick: a far return bookmark "!H" is not a label', discord_chain_label_pick([['wormholeID' => 1, 'nearName' => '', 'farName' => '!H', 'farSystem' => 1]], 3), '');
+check('return bookmark names', array_map('discord_is_return_bookmark', ['!AB', '<AB', ' !C ', 'AB', '', '?', null]), [true, true, true, false, false, false, false]);
 check('chain label: one line, at most 100 characters', [discord_chain_label_clean("A\nB"), mb_strlen(discord_chain_label_clean(str_repeat('x', 300)))], ['A B', 100]);
 
 // --- rally messages with the chain label ---
@@ -790,6 +796,173 @@ check('sequence: production', $seqView(), [[[str_replace('Kytus Bos', 'Commander
 $seqReset(); $seqChange('set', 'Kytus Bos', $jA); $seqSend(); $seqType['enabledAt'] = $seqClock + 5; $seqClock += 10; $seqChange('clear', 'Aashai Modor'); $seqSend();
 check('sequence: type turned off and on: a clear sends nothing', [$requests, $seqView()[0][0][2]], [['POST'], false]);
 discord_http_transport(null, true);
+
+// --- the chain of a mask (discord/chain.php): systems connected to home through live wormholes ---
+check('chain walk: no links is just home', discord_chain_walk([], 31000001), [31000001 => true]);
+check('chain walk: no home is nothing', discord_chain_walk([[31000001, 31000002]], 0), []);
+check('chain walk: both directions, breadth-first, loops once', discord_chain_walk([[31000002, 31000001], [31000002, 31000003], [31000003, 31000001], [31000008, 31000009]], 31000001),
+    [31000001 => true, 31000002 => true, 31000003 => true]);
+
+$ch = new PDO('sqlite::memory:');
+$ch->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$ch->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, name TEXT, maskID TEXT, lifeLeft TEXT, lifeLength INTEGER)");
+$ch->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, maskID TEXT)");
+$chNow = time();
+$at = function ($seconds) use ($chNow) { return date('Y-m-d H:i:s', $chNow + $seconds); };
+$chSig = 0; $chHole = 0;
+// A hole of $mask between $from and $to; $life*: seconds of life left on each side (lifeLength 86400), null = lifeLength 0
+$link = function ($from, $to, $lifeFrom = 3600, $lifeTo = 3600, $mask = '98000001.2') use ($ch, &$chSig, &$chHole, $at) {
+    $ids = [];
+    foreach ([[$from, $lifeFrom], [$to, $lifeTo]] as [$system, $life]) {
+        $ids[] = $id = ++$chSig;
+        $ch->prepare("INSERT INTO signatures VALUES (?, 'abc123', ?, 'wormhole', '', ?, ?, ?)")
+            ->execute([$id, $system, $mask, $at($life ?? -999999), $life === null ? 0 : 86400]);
+    }
+    $ch->prepare('INSERT INTO wormholes VALUES (?, ?, ?, ?)')->execute([++$chHole, $ids[0], $ids[1], $mask]);
+    return $ids;
+};
+// Home H 31000001 - A 31000002 - Tama 30002813 (low-sec exit) - B 31000003: connected, through k-space too
+$link(31000001, 31000002);
+$link(31000002, 30002813);
+$link(30002813, 31000003);
+$link(31000001, 31000006, 7200, 7200);                  // EOL (critical) but not expired yet: still live
+$link(31000001, 31000007, null, null);                  // no life known (lifeLength 0): live
+// An old fragment C - D: holes still in the mask but nothing connects them to home any more
+$link(31000010, 31000011);
+// Expired: A - E with E's side past its life (nobody deleted it yet), and E - F live: E and F are cut off
+$link(31000002, 31000004, 3600, -60);
+$link(31000004, 31000005);
+// A hole whose far signature was deleted: A - G
+[, $gSig] = $link(31000002, 31000012);
+$ch->exec("DELETE FROM signatures WHERE id = $gSig");
+// Two holes with unknown far sides (generic placeholder 3) must not join A and the old fragment
+$link(31000002, 3);
+$link(31000011, 3);
+// Another mask's hole from home
+$link(31000001, 31000020, 3600, 3600, '98000002.2');
+$link(31000020, 31000021, 3600, 3600, '98000002.2');
+// A site (not a wormhole) in a system nobody connects
+$ch->prepare("INSERT INTO signatures VALUES (999, 'def456', 31000030, 'combat', '', '98000001.2', ?, 0)")->execute([$at(3600)]);
+
+$chains = discord_chain_systems($ch, ['98000001.2' => 31000001, '98000002.2' => 31000001, '98000003.2' => 0, '98000004.2' => 31000099], $chNow);
+$sorted = function ($set) { $ids = array_keys($set); sort($ids); return $ids; };
+check('chain: connected systems only (home, holes, k-space exit and beyond, EOL and no-life holes)', $sorted($chains['98000001.2']),
+    [30002813, 31000001, 31000002, 31000003, 31000006, 31000007]);
+check('chain: the old disconnected fragment is not in it', [isset($chains['98000001.2'][31000010]), isset($chains['98000001.2'][31000011])], [false, false]);
+check('chain: an expired hole breaks the chain (and what is behind it)', [isset($chains['98000001.2'][31000004]), isset($chains['98000001.2'][31000005])], [false, false]);
+check('chain: a hole with a deleted signature does not count', isset($chains['98000001.2'][31000012]), false);
+check('chain: unknown far sides never join chains', [isset($chains['98000001.2'][3]), isset($chains['98000001.2'][31000010])], [false, false]);
+check('chain: only the mask\'s own holes', $sorted($chains['98000002.2']), [31000001, 31000020, 31000021]);
+check('chain: no home is no chain (never everything)', $chains['98000003.2'], []);
+check('chain: home without holes is just home', $chains['98000004.2'], [31000099 => true]);
+check('chain: a site is not a hole', isset($chains['98000001.2'][31000030]), false);
+check('chain: an hour later the A-Tama hole has expired too', $sorted(discord_chain_systems($ch, ['98000001.2' => 31000001], $chNow + 3601)['98000001.2']),
+    [31000001, 31000006, 31000007]);
+check('chain: another home, another chain', $sorted(discord_chain_systems($ch, ['98000001.2' => 31000010], $chNow)['98000001.2']), [31000010, 31000011]);
+check('chain: no masks, no query', discord_chain_systems($ch, []), []);
+// Cached per mask and home for DISCORD_CHAIN_CACHE seconds
+$first = discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow);
+$link(31000011, 31000040);
+check('chain cache: reused within the minute', discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow + 30), $first);
+check('chain cache: reloaded after it', isset(discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow + DISCORD_CHAIN_CACHE)[31000040]), true);
+check('chain cache: another home for the mask is loaded at once', isset(discord_chain_systems_cached($ch, '98000001.2', 31000001, $chNow + DISCORD_CHAIN_CACHE + 1)[31000002]), true);
+
+// --- home system setting ---
+$hd = discord_settings_defaults();
+check('home: off by default', $hd['homeSystemID'], 0);
+check('home: a wormhole system, a k-space system, as text', [discord_settings_normalise(['homeSystemID' => 31000005], $hd)[0]['homeSystemID'],
+    discord_settings_normalise(['homeSystemID' => 30000142], $hd)[0]['homeSystemID'], discord_settings_normalise(['homeSystemID' => '31000005'], $hd)[0]['homeSystemID']],
+    [31000005, 30000142, 31000005]);
+foreach (['unknown' => 31999999, 'junk' => 'Jita', 'negative' => -1, 'float' => 31000005.5, 'list' => [31000005], 'null' => null] as $label => $bad) {
+    check("home: $label refused", discord_settings_normalise(['homeSystemID' => $bad], $hd), [$hd, ['home system: unknown system']]);
+}
+check('home: 0 clears it', discord_settings_normalise(['homeSystemID' => 0], ['homeSystemID' => 31000005] + $hd)[0]['homeSystemID'], 0);
+check('home: kept when not sent', discord_settings_normalise(['types' => []], ['homeSystemID' => 31000005] + $hd)[0]['homeSystemID'], 31000005);
+check('home: stored settings from before have none', discord_settings_normalise(json_decode('{"types":{"chainKill":{"enabled":true,"webhookID":1}}}', true), $hd)[0]['homeSystemID'], 0);
+[$noHome, $noHomeErrors] = discord_settings_normalise(['types' => ['chainKill' => ['enabled' => true, 'webhookID' => 1]]], $hd, [1]);
+check('home: chain kills without a home can be saved (the page warns)', [$noHome['types']['chainKill']['enabled'], $noHomeErrors], [true, []]);
+
+// --- chain kills use it (discord_kill_state against SQLite) ---
+$ch->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
+$ch->exec("CREATE TABLE discord_webhooks (id INTEGER PRIMARY KEY, maskID TEXT, status TEXT)");
+$ch->exec('CREATE TABLE masks (maskID TEXT PRIMARY KEY, ownerID INTEGER, ownerType INTEGER)');
+$ch->exec('CREATE TABLE characters (characterID INTEGER, corporationID INTEGER, admin INTEGER)');
+$ch->exec("INSERT INTO characters VALUES (1, 98000001, 1), (2, 98000002, 1)");
+$ch->exec("INSERT INTO discord_webhooks VALUES (1, '98000001.2', 'ok'), (2, '98000001.2', 'ok'), (3, '98000002.2', 'ok')");
+$kset = function ($home, $chainHook, $corpHook = 0) {
+    $s = discord_settings_defaults(98000001);
+    $s['homeSystemID'] = $home;
+    $s['types']['chainKill'] = ['enabled' => true, 'webhookID' => $chainHook] + $s['types']['chainKill'];
+    if ($corpHook) $s['types']['corpKill'] = ['enabled' => true, 'webhookID' => $corpHook] + $s['types']['corpKill'];
+    return json_encode($s);
+};
+$ch->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000001.2', $kset(31000001, 1, 2)]);
+$ch->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000002.2', $kset(0, 3)]);
+$ks2 = discord_kill_state($ch, true);
+$kf = ['systemID' => 31000003, 'time' => time()] + $facts;   // $facts: our kill (corpKill) from above
+check('kill state: chain kills only in systems connected to home now', $sorted($ks2['chains']['98000001.2']), $sorted(discord_chain_systems($ch, ['98000001.2' => 31000001])['98000001.2']));
+check('kill state: connected system posts a chain kill', discord_classify_kill($kf, $ks2['masks']['98000001.2'], $ks2['chains']['98000001.2']), ['corpKill' => 2, 'chainKill' => 1]);
+check('kill state: old fragment posts no chain kill (corp kill unaffected)',
+    discord_classify_kill(['systemID' => 31000010] + $kf, $ks2['masks']['98000001.2'], $ks2['chains']['98000001.2']), ['corpKill' => 2]);
+check('kill state: no home set: no chain kills at all', [$ks2['chains']['98000002.2'],
+    discord_classify_kill(['systemID' => 31000001] + $kf, $ks2['masks']['98000002.2'], $ks2['chains']['98000002.2'])], [[], []]);
+
+// --- kill messages with the chain label (discord_chain_labels, loaded with the kill state) ---
+// Every system's batch label equals the one-system lookup (same rule), per mask; only labelled systems are listed
+$batch = discord_chain_labels($cl, ['98000001.2', '98000002.2', '98000003.2']);
+$single = [];
+foreach (['98000001.2', '98000002.2', '98000003.2'] as $m) {
+    foreach ([31000001, 31000002, 31000003, 31000005, 31000009, 30000142, 30002187] as $s) { $l = discord_chain_label($cl, $m, $s); if ($l !== '') $single[$m][$s] = $l; }
+}
+ksort($batch['98000001.2']);
+ksort($single['98000001.2']);
+check('chain labels: batch equals the one-system lookup', $batch, $single);
+check('chain labels: values', $batch['98000001.2'], [30000142 => 'ABC', 31000002 => 'A', 31000003 => 'AB', 31000005 => 'B']);
+check('chain labels: no masks, no tables', [discord_chain_labels($cl, []), discord_chain_labels(new PDO('sqlite::memory:'), ['98000001.2'])], [[], []]);
+// The kill state loads them for every mask with a kill type (one query per refresh, none per kill)
+check('kill state: no named holes, no labels', $ks2['labels'], []);
+$ch->exec("UPDATE signatures SET name = 'A' WHERE id = 1");   // home's side of home - 31000002
+$ks3 = discord_kill_state($ch, true);
+check('kill state: labels of the mask\'s chain', $ks3['labels'], ['98000001.2' => [31000002 => 'A']]);
+$kd = discord_kill_data('chainKill', ['systemID' => 31000002] + $facts, $ks3['masks']['98000001.2']['types']['chainKill'], 'Corp', $ks3['labels']['98000001.2'][31000002] ?? '');
+check('kill data: carries the label', [$kd['label'], discord_kill_context($kd, [])['label']], ['A', 'A']);
+check('kill data: no label by default; rows queued before have none', [discord_kill_data('corpKill', $facts, $ks['types']['corpKill'], 'Corp')['label'],
+    discord_kill_context(array_diff_key($kd, ['label' => 1]), [])['label']], ['', '']);
+
+$kctx = ['kind' => 'chainKill', 'template' => discord_default_templates()['chainKill'], 'ping' => '', 'mask' => 'Corp', 'system' => 'J105246',
+    'security' => null, 'class' => 'C5', 'region' => 'E-R00028', 'killID' => 1, 'victim' => 'Voidlord Pandora', 'corp' => 'All You Can Eat Holes',
+    'ship' => 'Coercer Navy Issue', 'value' => 44070000, 'zkill' => 'https://zkillboard.com/kill/1/', 'time' => 1791633600];
+$kp = discord_payload(['label' => 'AABCA'] + $kctx);
+check('kill label: default text', $kp['content'], 'Kill in the chain: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in AABCA · J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>');
+check('kill label: embed title and system line', [$kp['embeds'][0]['title'], $kp['embeds'][0]['description']],
+    ['Kill in the chain: Coercer Navy Issue in AABCA · J105246', 'AABCA · J105246 (C5), E\\-R00028']);
+$kp = discord_payload(['label' => ''] + $kctx);
+check('kill label: none, as before', [$kp['content'], $kp['embeds'][0]['title'], $kp['embeds'][0]['description']],
+    ['Kill in the chain: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>',
+     'Kill in the chain: Coercer Navy Issue in J105246', 'J105246 (C5), E\\-R00028']);
+check('kill label: old context without one, as before', discord_payload($kctx)['content'], $kp['content']);
+$tpl = discord_default_templates();
+check('kill label: corp kill and loss defaults', [
+    discord_payload(['kind' => 'corpKill', 'template' => $tpl['corpKill'], 'label' => 'AB', 'attackers' => 3] + $kctx)['content'],
+    discord_payload(['kind' => 'corpLoss', 'template' => $tpl['corpLoss'], 'label' => 'AB'] + $kctx)['content']], [
+    'Corp kill: Voidlord Pandora (All You Can Eat Holes) lost a Coercer Navy Issue in AB · J105246, 44.07m ISK, 3 pilots. <https://zkillboard.com/kill/1/>',
+    'Corp loss: Voidlord Pandora lost a Coercer Navy Issue in AB · J105246, 44.07m ISK. <https://zkillboard.com/kill/1/>']);
+check('kill label: {label} and {system} on their own', discord_payload(['template' => '{label}|{labelSystem}|{system}', 'label' => 'AB'] + $kctx)['content'], 'AB|AB · J105246|J105246');
+$kp = discord_payload(['label' => "@everyone **x** <@&999999999999999999> [l](https://e.example)"] + $kctx);
+check('kill label: escaped, cannot ping, format or link', [strpos($kp['content'], '@everyone'), strpos($kp['content'], '<@&'), strpos($kp['content'], '**x'),
+    strpos($kp['content'], '](https:'), strpos($kp['embeds'][0]['description'], '@everyone'), strpos($kp['embeds'][0]['description'], '**x'), $kp['allowed_mentions']],
+    [false, false, false, false, false, false, ['parse' => []]]);
+$kp = discord_payload(['label' => '||**[x](https://evil.example)** <t:0:R> <:e:123456789012345678> <@&999999999999999999> `c` ~~s~~ _i_'] + $kctx);
+check('kill label: escaped in the embed title too (titles render markdown)', $kp['embeds'][0]['title'],
+    'Kill in the chain: Coercer Navy Issue in \\|\\|\\*\\*\\[x\\]\\(https\\://evil.example\\)\\*\\* \\<t\\:0\\:R\\> \\<\\:e\\:123456789012345678\\> \\<@' . DISCORD_ZWSP . '&999999999999999999\\> \\`c\\` \\~\\~s\\~\\~ \\_i\\_ · J105246');
+// Stored default texts from before the label become today's; customised texts stay
+foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
+    $old = discord_retired_templates()[$kind]['template'][0];
+    check("kill label: $kind's earlier default upgraded", [discord_template_upgrade($kind, 'template', $old . "\r\n"), discord_template_upgrade($kind, 'template', $old . '!'),
+        discord_settings_normalise(['types' => [$kind => ['template' => $old]]], discord_settings_defaults())[0]['types'][$kind]['template'],
+        discord_kill_context(['kind' => $kind, 'template' => $old] + $kd, [])['template']], [$tpl[$kind], $old . '!', $tpl[$kind], $tpl[$kind]]);
+}
+check('kill label: placeholders listed', [isset(discord_placeholders()['chainKill']['labelSystem']), isset(discord_placeholders()['corpLoss']['label'])], [true, true]);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

@@ -13,6 +13,14 @@ describe('Hole naming', () => {
 		it('Empty', () => assert.equal(holeNaming.leadingToken(''), ''));
 		it('Missing', () => assert.equal(holeNaming.leadingToken(undefined), ''));
 		it('No token', () => assert.equal(holeNaming.leadingToken('- foo'), ''));
+		it('Return bookmarks have no token', () => assert.deepEqual([holeNaming.leadingToken('!AB'), holeNaming.leadingToken('<AB')], ['', '']));
+	});
+
+	describe('isReturnBookmark', () => {
+		it('"!" prefix', () => assert.equal(holeNaming.isReturnBookmark('!AB'), true));
+		it('Older "<" prefix', () => assert.equal(holeNaming.isReturnBookmark(' <C '), true));
+		it('Hole names, empty and missing are not', () => assert.deepEqual(['AB', 'C - frig', '', undefined, null, '?'].map(holeNaming.isReturnBookmark), [false, false, false, false, false, false]));
+		it('New ones use "!"', () => assert.equal(holeNaming.RETURN_PREFIX, '!'));
 	});
 
 	describe('sizeClass', () => {
@@ -104,7 +112,8 @@ describe('Hole naming', () => {
 	describe('incomingFromWormholes', () => {
 		it('Far side named, near side unnamed', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('')), 'C'));
 		it('Near side missing name', () => assert.equal(holeNaming.incomingFromWormholes(String(J135100), whs, whSigs(undefined)), 'C'));
-		it('Near side return bookmark', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('<C')), 'C'));
+		it('Near side return bookmark', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('!C')), 'C'));
+		it('Near side older "<" return bookmark', () => assert.equal(holeNaming.incomingFromWormholes(J135100, whs, whSigs('<C')), 'C'));
 		it('Reversed initial/secondary', () => assert.equal(holeNaming.incomingFromWormholes(J135100,
 			{ 100: { id: 100, initialID: 11, secondaryID: 10 } }, whSigs('')), 'C'));
 		it('Deeper system', () => assert.equal(holeNaming.incomingFromWormholes(CA_SYS, whs, whSigs('')), 'CA'));
@@ -156,9 +165,10 @@ describe('Hole naming', () => {
 			assert.equal(prefix, 'C');
 			assert.deepEqual(sizes(prefix), ['CA', 'C1', 'C6']);
 		});
-		it('No tab: return bookmark near side', () => assert.equal(holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, whSigs('<C')), 'C'));
+		it('No tab: return bookmark near side', () => assert.equal(holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, whSigs('!C')), 'C'));
+		it('No tab: older "<" return bookmark near side', () => assert.equal(holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, whSigs('<C')), 'C'));
 		it('No tab: siblings skip used CA and ignore the incoming sig', () => {
-			const sigs = whSigs('<C');
+			const sigs = whSigs('!C');
 			const prefix = holeNaming.resolvePrefix(J135100, null, viewedRooted, whs, sigs);
 			assert.equal(holeNaming.nextName(prefix, holeNaming.siblingNames(sigs, J135100), 'large'), 'CB');
 		});
