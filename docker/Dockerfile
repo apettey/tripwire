@@ -45,7 +45,7 @@ RUN rm -rf \
       bitbucket-pipelines.yml crontab-tw.txt composer.json 403.html 404.html \
       config.example.php db.inc.example.php db.inc.docker.example.php config.php db.inc.php \
       analytics.inc.php donation_panel.inc public/donate.html \
-      app gulpfile.js package.json package-lock.json node_modules tools zkill/tests zkill/tools discord/tests discord/tools \
+      app gulpfile.js package.json package-lock.json node_modules tools tests zkill/tests zkill/tools discord/tests discord/tools \
  && mv .docker/mysql/tripwire.sql /tmp/tripwire.sql \
  && rm -rf .docker \
  && mkdir -p .docker/mysql \

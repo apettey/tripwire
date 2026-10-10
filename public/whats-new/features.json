@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 28,
+      "date": "2026-10-10",
+      "title": "Rally point to Discord",
+      "description": "When you set, move or clear the rally point, Tripwire also posts it to your mask's Discord channel (the same one chain map pings go to), with the system, its class and region, who set it and a link back to the map. Several changes within half a minute update the same Discord message instead of posting new ones.\n\nUntick \"Also post to Discord\" in the chain map's right-click menu to keep a rally change off Discord; Tripwire remembers your choice. You can also turn it off in Settings > Chain Map Settings.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-28-rally-discord.png",
+          "caption": "Right-click a system: Rally here, and Also post to Discord"
+        }
+      ]
+    },
+    {
       "pr": 27,
       "date": "2026-10-10",
       "title": "Discord notifications",
