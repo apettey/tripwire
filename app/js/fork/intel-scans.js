@@ -25,11 +25,12 @@ const intelScans = {
 		{ key: "capital", label: "Capitals", one: "Capital", notable: true },
 		{ key: "battleship", label: "Battleships", one: "Battleship" },
 		{ key: "battlecruiser", label: "Battlecruisers", one: "Battlecruiser" },
-		{ key: "t3", label: "T3s", one: "T3" },
+		{ key: "t3c", label: "T3 cruisers", one: "T3 cruiser" },
 		{ key: "hic", label: "HICs", one: "HIC", notable: true },
 		{ key: "dictor", label: "Interdictors", one: "Interdictor", notable: true, short: "dictor", shorts: "dictors" },
 		{ key: "logistics", label: "Logistics", one: "Logistics", notable: true, short: "logi", shorts: "logi" },
 		{ key: "cruiser", label: "Cruisers", one: "Cruiser" },
+		{ key: "t3d", label: "T3 destroyers", one: "T3 destroyer" },
 		{ key: "destroyer", label: "Destroyers", one: "Destroyer" },
 		{ key: "frigate", label: "Frigates", one: "Frigate" },
 		{ key: "industrial", label: "Industrials", one: "Industrial" },
@@ -38,11 +39,13 @@ const intelScans = {
 	],
 	/** Everything else on d-scan, in summary order; key = kind in types.json (structure-like kinds are merged) */
 	OTHER_KINDS: [
+		{ key: "cyno", label: "Lit cynos", one: "Lit cyno", notable: true, short: "lit cyno", shorts: "lit cynos" },
 		{ key: "pod", label: "Pods", one: "Pod" },
 		{ key: "fighter", label: "Fighters", one: "Fighter" },
 		{ key: "drone", label: "Drones", one: "Drone" },
 		{ key: "structure", label: "Structures", one: "Structure" },
 		{ key: "deployable", label: "Deployables", one: "Deployable" },
+		{ key: "container", label: "Containers", one: "Container" },
 		{ key: "celestial", label: "Celestials", one: "Celestial" },
 		{ key: "unknown", label: "Unknown", one: "Unknown" }
 	],
@@ -80,21 +83,35 @@ const intelScans = {
 		return String(text || "").indexOf("\t") >= 0 ? "dscan" : "local";
 	},
 
+	// Same explicit classes as intel/intel.inc.php (JavaScript's \s and PCRE's \s differ on Unicode spaces)
+	stripInvisible: function(value) {
+		return String(value === undefined || value === null ? "" : value).replace(/[\x00-\x08\x0E-\x1F\x7F\p{Cf}]/gu, "");
+	},
+
+	trim: function(value) {
+		return String(value).replace(/^[\t\n\x0B\f\r\p{Z}]+|[\t\n\x0B\f\r\p{Z}]+$/gu, "");
+	},
+
 	lines: function(text) {
 		return String(text || "").split(/\r\n|\r|\n/).map(function(l) { return l.replace(/[ \x0B\0]+$/, ""); })
-			.filter(function(l) { return l.trim() !== ""; });
+			.filter(function(l) { return intelScans.trim(intelScans.stripInvisible(l)) !== ""; });
 	},
 
 	cleanField: function(value) {
-		return Array.from(String(value === undefined || value === null ? "" : value).trim().replace(/[\x00-\x1F\x7F]/g, ""))
-			.slice(0, intelScans.FIELD_MAX).join("");
+		const s = String(value === undefined || value === null ? "" : value).replace(/[\x00-\x1F\x7F\p{Cf}]/gu, "");
+		return Array.from(intelScans.trim(s)).slice(0, intelScans.FIELD_MAX).join("");
 	},
 
-	/** Distance in km (0.1 km), or null for "-", empty or unreadable values */
+	/** Distance in km (0.1 km), or null for "-", empty, unreadable or impossible (beyond d-scan range) values */
 	parseDistanceKm: function(value) {
-		const s = String(value === undefined || value === null ? "" : value).replace(/[   ]/g, " ").trim();
+		const km = intelScans.parseDistanceRaw(value);
+		return km === null || km > 15 * intelScans.AU_KM ? null : km;
+	},
+
+	parseDistanceRaw: function(value) {
+		const s = intelScans.trim(intelScans.stripInvisible(value).replace(/\p{Z}/gu, " "));
 		if (s === "" || s === "-") { return null; }
-		const m = /^([0-9][0-9 .,']*)\s*([^\s0-9]\S*)$/.exec(s);
+		const m = /^([0-9][0-9 .,']*) *([^ 0-9][^ ]*)$/u.exec(s);
 		if (!m) { return null; }
 		let number = m[1].replace(/[ ']/g, "");
 		const unit = m[2].replace(/\./g, "").toLowerCase();
@@ -121,8 +138,9 @@ const intelScans = {
 		intelScans.lines(text).forEach(function(line) {
 			const f = line.split("\t");
 			let typeID, name, type, distance;
-			if (f.length >= 4 && /^\s*\d{1,10}\s*$/.test(f[0])) {
-				typeID = parseInt(f[0], 10); name = f[1]; type = f[2]; distance = f[3];
+			const first = f.length >= 4 ? intelScans.trim(intelScans.stripInvisible(f[0])) : "";
+			if (f.length >= 4 && /^[0-9]{1,10}$/.test(first)) {
+				typeID = parseInt(first, 10); name = f[1]; type = f[2]; distance = f[3];
 			} else if (f.length === 3) {
 				typeID = null; name = f[0]; type = f[1]; distance = f[2];
 			} else { invalid++; return; }
@@ -144,7 +162,7 @@ const intelScans = {
 		const seen = {};
 		let invalid = 0;
 		intelScans.lines(text).forEach(function(line) {
-			const name = line.trim().replace(/\s+/g, " ");
+			const name = intelScans.trim(intelScans.stripInvisible(line)).replace(/[\t\n\x0B\f\r\p{Z}]+/gu, " ");
 			if (!intelScans.validCharacterName(name)) { invalid++; return; }
 			const key = name.toLowerCase();
 			if (seen[key]) { return; }
@@ -156,9 +174,10 @@ const intelScans = {
 
 	/** {kind, data} or {error} (same rules as the server) */
 	parse: function(text) {
-		if (typeof text !== "string" || text.trim() === "") { return { error: "Nothing pasted" }; }
+		if (typeof text !== "string") { return { error: "Nothing pasted" }; }
 		const bytes = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(text).length : text.length;
 		if (bytes > intelScans.MAX_BYTES) { return { error: "Too much text (at most " + Math.round(intelScans.MAX_BYTES / 1000) + " kB)" }; }
+		if (!intelScans.lines(text).length) { return { error: "Nothing pasted" }; }
 		if (intelScans.lines(text).length > intelScans.MAX_LINES) { return { error: "Too many lines (at most " + intelScans.MAX_LINES + ")" }; }
 		const kind = intelScans.detectKind(text);
 		if (kind === "dscan") {
@@ -189,7 +208,7 @@ const intelScans = {
 		if (!t) { return null; }
 		const g = types.groups[String(t[1])];
 		if (!g) { return null; }
-		return { name: t[0], groupName: g[0], kind: g[1], shipClass: g[2] || "", cyno: !!g[3] };
+		return { name: t[0], groupName: g[0], kind: g[1], shipClass: g[2] || "", cyno: !!t[2] };
 	},
 
 	/** Summary bucket key for a type: a ship class, "pod", or one of OTHER_KINDS */
@@ -197,13 +216,13 @@ const intelScans = {
 		if (!info) { return "unknown"; }
 		if (info.kind === "ship") { return info.shipClass === "pod" ? "pod" : (info.shipClass || "ship"); }
 		if (intelScans.STRUCTURE_KINDS.indexOf(info.kind) >= 0) { return "structure"; }
-		if (["fighter", "drone", "deployable", "celestial"].indexOf(info.kind) >= 0) { return info.kind; }
+		if (["fighter", "drone", "deployable", "container", "cyno", "celestial"].indexOf(info.kind) >= 0) { return info.kind; }
 		return "unknown";
 	},
 
 	/**
 	 * Summary of d-scan rows.
-	 * @return {total, ships, shipsOnGrid, onGrid, offGrid, noDistance, buckets: [{key, label, one, count, onGrid,
+	 * @return {total, ships, shipsOnGrid, shipsOffGrid, onGrid / offGrid / noDistance (all objects), buckets: [{key, label, one, count, onGrid,
 	 *          ship, types: [{name, count}]}] (non-empty, in order), notable: [{key, label, count}], cyno: n,
 	 *          structures: [{type, name, km}], deployables: [{type, name, km}], invalid}
 	 */
@@ -211,7 +230,7 @@ const intelScans = {
 		const rows = data && Array.isArray(data.rows) ? data.rows : [];
 		const grid = gridKm > 0 ? gridKm : intelScans.DEFAULT_GRID_KM;
 		const buckets = {};
-		const out = { total: 0, ships: 0, shipsOnGrid: 0, onGrid: 0, offGrid: 0, noDistance: 0, buckets: [], notable: [], cyno: 0,
+		const out = { total: 0, ships: 0, shipsOnGrid: 0, shipsOffGrid: 0, onGrid: 0, offGrid: 0, noDistance: 0, buckets: [], notable: [], cyno: 0,
 			structures: [], deployables: [], invalid: data && data.invalid ? data.invalid : 0 };
 		const deployableNotes = {};
 		rows.forEach(function(row) {
@@ -230,7 +249,7 @@ const intelScans = {
 			b.typeCounts[typeName] = (b.typeCounts[typeName] || 0) + 1;
 			if (info && info.kind === "ship" && key !== "pod") {
 				out.ships++;
-				if (onGrid) { out.shipsOnGrid++; }
+				if (onGrid) { out.shipsOnGrid++; } else if (km !== null) { out.shipsOffGrid++; }
 				if (info.cyno) { out.cyno++; }
 			}
 			if (key === "structure") { out.structures.push({ type: typeName, name: String(name || ""), km: km }); }
@@ -258,6 +277,8 @@ const intelScans = {
 			const words = intelScans.NOTABLE_DEPLOYABLES[g];
 			out.notable.push({ key: g, label: deployableNotes[g] === 1 ? words[0] : words[1], count: deployableNotes[g] });
 		});
+		// A lit cyno is the most urgent call-out
+		out.notable.sort(function(a, z) { return (z.key === "cyno") - (a.key === "cyno"); });
 		const byDistance = function(a, z) { return (a.km === null ? Infinity : a.km) - (z.km === null ? Infinity : z.km); };
 		out.structures.sort(byDistance);
 		out.deployables.sort(byDistance);
@@ -337,11 +358,13 @@ const intelScans = {
 			if (summary.invalid) { html += "<div class='intel-muted'>" + esc(intelScans.plural(summary.invalid, "line", "lines")) + " not understood</div>"; }
 			return html + "</div>";
 		}
-		html += "<div>" + esc(intelScans.plural(summary.ships, "ship", "ships") + " · " + summary.onGrid + " on grid (≤ " + f(gridKm) + ") · "
-			+ summary.offGrid + " off grid" + (summary.noDistance ? " · " + summary.noDistance + " without distance" : "")) + "</div>";
+		const shipsNoDistance = summary.ships - summary.shipsOnGrid - summary.shipsOffGrid;
+		html += "<div>" + esc(intelScans.plural(summary.ships, "ship", "ships") + ": " + summary.shipsOnGrid + " on grid (≤ " + f(gridKm) + "), "
+			+ summary.shipsOffGrid + " off grid" + (shipsNoDistance ? ", " + shipsNoDistance + " without distance" : "")
+			+ " · " + intelScans.plural(summary.total, "object", "objects") + " in total") + "</div>";
 		if (summary.cyno) {
-			html += "<div class='intel-warn' title='Hulls that can fit a cynosural field generator (normal or covert); the fit is unknown'>"
-				+ esc(intelScans.plural(summary.cyno, "cyno-capable hull", "cyno-capable hulls")) + "</div>";
+			html += "<div class='intel-warn' title='Hulls that can fit a normal, covert or industrial cyno; the fit itself is unknown'>"
+				+ esc(intelScans.plural(summary.cyno, "hull", "hulls") + " that can fit a cyno") + "</div>";
 		}
 		html += "<table class='intel-table'>";
 		summary.buckets.forEach(function(b) {
@@ -434,12 +457,46 @@ const intelScans = {
 		return intelScans.markerFor(intelScans.latestNow()[String(systemID)], intelScans.freshMinutes(opts) * 60);
 	},
 
+	/**
+	 * Fill in the rows of scans the server left out (it sends `data` only for IDs not in `have`; scans never change).
+	 * @param cache {id: data} of earlier responses
+	 * @return {scans (with data where known), cache (only the listed scans), missing (IDs without rows)}
+	 */
+	mergeScans: function(scans, cache) {
+		const next = {};
+		const missing = [];
+		const out = (Array.isArray(scans) ? scans : []).map(function(s) {
+			const id = String(s.id);
+			const data = s.data !== undefined ? s.data : (cache && Object.prototype.hasOwnProperty.call(cache, id) ? cache[id] : undefined);
+			if (data === undefined) { missing.push(s.id); return s; }
+			next[id] = data;
+			return Object.assign({}, s, { data: data });
+		});
+		return { scans: out, cache: next, missing: missing };
+	},
+
+	dataCache: {},	// scan id => rows
+
+	/** The `have` parameter: IDs whose rows the browser keeps */
+	haveParam: function() {
+		return Object.keys(intelScans.dataCache).slice(0, 60).join(",");
+	},
+
 	absorb: function(response) {
 		if (!response) { return; }
 		if (response.latest) { intelScans.latest = response.latest; intelScans.latestAt = Date.now(); }
 		if (Array.isArray(response.scans) && String(response.systemID) === String(intelScans.scansSystemID)) {
-			intelScans.scans = response.scans;
+			const merged = intelScans.mergeScans(response.scans, intelScans.dataCache);
+			intelScans.scans = merged.scans;
+			intelScans.dataCache = merged.cache;
 			intelScans.scansAt = Date.now();
+			if (merged.missing.length && !intelScans.refetched) {
+				// Rows the server thought we had (should not happen): ask once more without `have`
+				intelScans.refetched = true;
+				setTimeout(intelScans.fetch, 0);
+			} else {
+				intelScans.refetched = false;
+			}
 		}
 	},
 
@@ -448,6 +505,7 @@ const intelScans = {
 		if (document.hidden) { intelScans.missed = true; return; }
 		if (intelScans.xhr) { intelScans.xhr.abort(); }
 		const data = intelScans.isSystem(intelScans.scansSystemID) ? { systemID: intelScans.scansSystemID } : {};
+		if (data.systemID && !intelScans.refetched) { data.have = intelScans.haveParam(); }
 		const xhr = $.ajax({ url: intelScans.URL, type: "GET", data: data, dataType: "JSON", cache: false, timeout: 15000 });
 		intelScans.xhr = xhr;
 		xhr.done(function(response) {
@@ -465,6 +523,9 @@ const intelScans = {
 	},
 
 	post: function(params) {
+		if (params.systemID !== undefined && String(params.systemID) === String(intelScans.scansSystemID)) {
+			params = Object.assign({ have: intelScans.haveParam() }, params);
+		}
 		return $.ajax({ url: intelScans.URL, type: "POST", data: params, dataType: "JSON", timeout: 20000,
 			headers: { "X-Requested-With": "XMLHttpRequest" } });
 	},
@@ -605,7 +666,7 @@ const intelScans = {
 		if (shown.length) {
 			html += "<div class='intel-chips'>";
 			shown.forEach(function(s) {
-				const summary = s.kind === "local" || intelScans.types ? intelScans.summarize(s, intelScans.types, gridKm) : null;
+				const summary = s.data !== undefined && (s.kind === "local" || intelScans.types) ? intelScans.summarize(s, intelScans.types, gridKm) : null;
 				const open = s.id === intelScans.openScanID;
 				html += intelScans.chipHtml(s, summary, s.age < freshSeconds, open);
 				if (open) { html += intelScans.detailHtml(s, summary, gridKm); }
@@ -627,7 +688,7 @@ const intelScans = {
 		if (!$dialog.length) {
 			$dialog = $("<div id='" + intelScans.DIALOG_ID + "' class='intel-dialog'>"
 				+ "<p class='intel-help'>Copy the d-scan results (click a result, Ctrl+A, Ctrl+C) or the local member list, and paste it here (Ctrl+V). It is shared with your mask, pinned to this system.</p>"
-				+ "<textarea class='intel-text' rows='9' spellcheck='false' autocomplete='off' maxlength='" + intelScans.MAX_BYTES + "' placeholder='Paste d-scan or local here'></textarea>"
+				+ "<textarea class='intel-text' rows='9' spellcheck='false' autocomplete='off' placeholder='Paste d-scan or local here'></textarea>"
 				+ "<div class='intel-preview'></div><div class='intel-error'></div></div>").appendTo("body");
 			$dialog.dialog({
 				autoOpen: false,

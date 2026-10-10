@@ -1,10 +1,11 @@
 /* D-scan & local intel (fork feature): chain map marker, system info panel block and the paste dialog.
    The marker is not scoped to #chainMap: the renderers measure node markup outside the map. */
 .intel-marker {
-	position: absolute;	/* top-right corner of the node ([data-nodeid] is position: relative) */
+	position: absolute;	/* bottom-right corner of the node ([data-nodeid] is position: relative); corners: top-left threat
+				   badge, top-right upstream's pilots marker, bottom-left watchlist */
 	z-index: 1;
-	top: -6px;
-	right: -6px;
+	bottom: -6px;
+	right: -11px;	/* clear of the statics row (H L N) along the bottom edge */
 	padding: 0 2px;
 	min-width: 8px;
 	font-size: 8px;

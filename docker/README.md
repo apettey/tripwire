@@ -395,7 +395,8 @@ Pilots paste a d-scan or local member list into the Intel dialog (system info pa
 200 kB and 2000 lines; d-scan rows with or without the leading type ID, character names for local) and stores the
 normalised rows, not the pasted text, in `fork_intel_scans` (created on first use). Same session/mask checks and
 `X-Requested-With` rule as `rally.php`; at most 20 scans per user per minute; rows are deleted after 24 hours and
-only the newest 30 per mask and system are kept. The browser builds the summary from the rows and
+only the newest 30 per mask and system are kept. Requests may pass `have=<ids>`: the rows of those (immutable)
+scans are left out, so polls carry only metadata. The browser builds the summary from the rows and
 `public/intel/types.json`, static type data regenerated from ESI's public universe endpoints with
 `node intel/tools/generate-types.js` after a game update (no runtime ESI calls). No configuration.
 Tests: `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/intel_test.php` and, against the dev

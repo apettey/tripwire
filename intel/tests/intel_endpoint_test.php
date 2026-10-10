@@ -77,6 +77,19 @@ check('latest has the system', isset($body['latest'][(string) SYSTEM]['dscan']),
 [$status, $body] = call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => "Chribba\nSome Pilot\nchribba"]);
 check('add local', [$status, $body['scans'][0]['kind'], $body['scans'][0]['data']['names']], [200, 'local', ['Chribba', 'Some Pilot']]);
 
+// --- Payload: rows only for scans the browser doesn't have ---
+[$status, $body] = call('GET', ['systemID' => SYSTEM]);
+check('without have: rows of every scan', array_map(function ($s) { return isset($s['data']); }, $body['scans']), [true, true]);
+$ids = array_map(function ($s) { return $s['id']; }, $body['scans']);
+[$status, $body] = call('GET', ['systemID' => SYSTEM, 'have' => implode(',', $ids)]);
+check('with have: metadata only', array_map(function ($s) { return array_keys($s); }, $body['scans']),
+    [['id', 'systemID', 'kind', 'createdBy', 'mine', 'age'], ['id', 'systemID', 'kind', 'createdBy', 'mine', 'age']]);
+[$status, $body] = call('GET', ['systemID' => SYSTEM, 'have' => (string) $ids[1]]);
+check('with part of them: rows of the others', array_map(function ($s) { return isset($s['data']); }, $body['scans']), [true, false]);
+[$status, $body] = call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => 'Ann Example', 'have' => implode(',', $ids)]);
+check('add with have: rows of the new scan only', array_map(function ($s) { return isset($s['data']); }, $body['scans']), [true, false, false]);
+$mysql->exec('DELETE FROM fork_intel_scans WHERE id = ' . (int) $body['added']);
+
 // --- Other masks and users ---
 [$status, $body] = call('GET', ['systemID' => SYSTEM], ['userID' => 900002, 'mask' => MASK_B]);
 check('other mask sees nothing', [$status, $body['scans'], (array) $body['latest']], [200, [], []]);
@@ -102,15 +115,16 @@ check('latest age', intel_latest($mysql, MASK_A)[(string) OTHER_SYSTEM]['local']
 intel_prune($mysql);
 $left = array_map('intval', $mysql->query('SELECT id FROM fork_intel_scans WHERE maskID IN (' . MASK_A . ', ' . MASK_B . ') ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
 check('prune deletes expired rows only', $left, [$fresh]);
+$inserted = [];
 for ($i = 0; $i < INTEL_MAX_PER_SYSTEM + 5; $i++) {
-    intel_insert($mysql, MASK_A, SYSTEM, 'local', $data, 'Pilot', 900003, 100 - $i);
+    $inserted[] = intel_insert($mysql, MASK_A, SYSTEM, 'local', $data, 'Pilot', 900003, 1000 - 10 * $i);	// oldest first
 }
 intel_insert($mysql, MASK_B, SYSTEM, 'local', $data, 'Pilot', 900003, 0);
 intel_prune($mysql, MASK_A, SYSTEM);
 $perSystem = (int) $mysql->query('SELECT COUNT(*) FROM fork_intel_scans WHERE maskID = ' . MASK_A . ' AND systemID = ' . SYSTEM)->fetchColumn();
 check('prune keeps the newest per system', $perSystem, INTEL_MAX_PER_SYSTEM);
-$oldestKept = (int) $mysql->query('SELECT MAX(TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP())) FROM fork_intel_scans WHERE maskID = ' . MASK_A . ' AND systemID = ' . SYSTEM)->fetchColumn();
-check('the oldest ones went', $oldestKept <= 100 - 5 + 2, true);
+$kept = array_map('intval', $mysql->query('SELECT id FROM fork_intel_scans WHERE maskID = ' . MASK_A . ' AND systemID = ' . SYSTEM . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+check('the oldest ones went', $kept, array_slice($inserted, 5));
 check('other systems and masks untouched', (int) $mysql->query('SELECT COUNT(*) FROM fork_intel_scans WHERE (maskID = ' . MASK_A . ' AND systemID = ' . OTHER_SYSTEM . ') OR maskID = ' . MASK_B)->fetchColumn(), 2);
 
 // --- Rate limit ---

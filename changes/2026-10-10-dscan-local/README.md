@@ -7,7 +7,7 @@
 Pilots paste a directional scan or a local member list into Tripwire and share a summary with their mask, pinned to
 the system, instead of linking third-party sites such as dscan.info. The system info panel lists the system's scans
 as chips ("D-scan 2 min ago · 11 ships (9 on grid) · 1 Capital · 1 HIC") that expand to the full summary, and chain
-map nodes with a fresh scan get a small D / L / DL marker.
+map nodes with a fresh scan get a small D / L / DL marker on their bottom-right corner.
 
 ## Before / After
 
@@ -18,6 +18,12 @@ map nodes with a fresh scan get a small D / L / DL marker.
 The paste dialog with its live preview (also opened from the chain map's right-click "Paste d-scan / local"):
 
 ![paste dialog](after-dialog.png)
+
+The marker in the four chain map renderers (radial, org chart top, org chart side, Google org chart), with
+upstream's pilots-in-system marker shown on every node, the rally point set on J163701 and a d-scan / local in two
+systems (2× zoom):
+
+![renderers](after-renderers.png)
 
 ## Settings
 
@@ -36,26 +42,36 @@ requests.
   current clients copy `typeID \t name \t type \t distance` (checked against open-source d-scan tools: Nimos/dscantool
   reads the type ID from the first column; evepraisal's older parser reads `name \t type \t distance`); both are
   accepted. Distances in m / km / AU with `,` `.` spaces, non-breaking spaces or `'` as separators, a few client
-  languages' units (км, а.е., AE, UA …) and `-` (no distance). With type IDs the summary is language-independent;
-  without them, types are matched by English name, anything else is listed under "Unknown" with the pasted name.
-- **Summary** (browser): ships by class (titans, supercarriers, capitals, battleships, battlecruisers, T3s, HICs,
-  interdictors, logistics, cruisers, destroyers, frigates, industrials, shuttles), pods, fighters, drones,
-  structures and deployables listed by name and distance, total ships (without pods), on grid (≤ configurable km)
-  vs off grid, notable items (capitals, HICs, dictors, logistics, warp disruption bubbles, cyno inhibitors) and the
-  number of cyno-capable hulls (force recons, black ops, covert ops, bombers, expedition frigates, blockade runners,
-  strategic cruisers; the fit itself is unknown). Structures are shown in the summary only; nothing is stored about
-  structures or system ownership.
+  languages' units (км, а.е., AE, UA …) and `-` (no distance); distances beyond d-scan range (> 15 AU) count as no
+  distance. With type IDs the summary is language-independent; without them, types are matched by English name,
+  anything else is listed under "Unknown" with the pasted name. Server and preview use the same explicit whitespace
+  class (ASCII whitespace + Unicode spaces) and drop control and format characters (bidi controls, zero-width
+  spaces), so the preview never accepts what the server rejects.
+- **Summary** (browser): ships by class (titans, supercarriers, capitals, battleships, battlecruisers, T3 cruisers,
+  HICs, interdictors, logistics, cruisers, T3 destroyers, destroyers, frigates, industrials, shuttles), lit cynos,
+  pods, fighters, drones, containers, structures (incl. POS force fields) and deployables listed by name and
+  distance; ships (without pods) on and off grid (≤ configurable km) next to the total number of objects; notable
+  items (lit cynos first, capitals, HICs, dictors, logistics, warp disruption bubbles, cyno inhibitors) and the number
+  of hulls that can fit a normal, covert or industrial cyno (from the three cyno generators' `canFitShipGroup*` /
+  `canFitShipType*` dogma attributes: force recons, black ops, HICs, covert ops, bombers, strategic cruisers,
+  blockade runners, haulers, deep space transports, Etana, Rabisu, Prospect, Venture; the fit itself is unknown).
+  Structures are shown in the summary only; nothing is stored about structures or system ownership.
 - **Local**: one character name per line; count and list (unique, valid EVE names only). Corporation / alliance
   affiliation is not in v1 (see below).
-- **Static type data**: `public/intel/types.json` (≈70 kB, loaded once when a d-scan is shown), built by
-  `intel/tools/generate-types.js` from ESI's public, unauthenticated `/universe/categories`, `/universe/groups` and
-  `/universe/names` (a one-off build step, not a runtime call; no new third-party hosts at runtime).
+- **Static type data**: `public/intel/types.json` (≈71 kB, loaded once when a d-scan is shown), built by
+  `intel/tools/generate-types.js` from ESI's public, unauthenticated `/universe/categories`, `/universe/groups`,
+  `/universe/names`, `/universe/types` and `/dogma/attributes` (a one-off build step, not a runtime call; no new
+  third-party hosts at runtime).
+- **Chain map marker**: bottom-right corner, a little outside the node so it clears the statics row (corners: top-left
+  threat badge, top-right upstream's pilots marker, bottom-left watchlist). Checked in all four renderers.
 - **Storage / endpoint**: new `public/intel_scans.php` (GET latest + system scans, POST `add` / `delete`; same
   session/mask checks and `X-Requested-With` CSRF rule as `rally.php`) and table `fork_intel_scans` (mask, system,
   kind, normalised rows as JSON, creator, created/expires), created on first use. The server validates everything
   (200 kB / 2000 lines, UTF-8, field lengths, control characters dropped, system ID range), stores the normalised
   rows, never the pasted text, allows 20 scans per user per minute, deletes rows after 24 h and keeps the newest 30
-  per mask and system. Users can delete their own scans.
+  per mask and system. Users can delete their own scans. Scans never change, so the browser sends the IDs whose rows
+  it already has (`have=`) and the server leaves those rows out: a 30 s poll of a system with 15 scans of 2000 lines
+  is about 1.5 kB instead of 1.5 MB (the rows of each scan are sent once per viewer).
 - **Security**: everything pasted (ship, structure and character names) is escaped when rendered; tests use hostile
   names such as `<img src=x onerror=alert(1)>`.
 - **Tests**: mocha `app/js-test/fork/intel-scans.test.js` (parsers, summaries, chips, escaping, markers);

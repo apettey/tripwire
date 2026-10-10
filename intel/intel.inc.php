@@ -19,6 +19,23 @@ const INTEL_MAX_PER_SYSTEM = 30;      // newest scans kept per mask and system
 const INTEL_LIST_LIMIT    = 20;       // scans returned for a system
 const INTEL_RATE_PER_MIN  = 20;       // scans a user may share per minute
 const INTEL_AU_KM         = 149597870.7;
+const INTEL_MAX_KM        = 15 * INTEL_AU_KM;  // d-scan reaches about 14.3 AU; farther distances are junk
+
+// Whitespace and invisible characters are matched with the same explicit classes as app/js/fork/intel-scans.js
+// (PCRE's \s and JavaScript's \s differ on non-breaking and other Unicode spaces)
+const INTEL_WS = '[\t\n\x0B\f\r\p{Z}]';
+
+/** Drop control characters (\x00-\x1F except tab and line breaks, \x7F) and format characters such as bidi controls */
+function intel_strip_invisible($value) {
+    $value = preg_replace('/[\x00-\x08\x0E-\x1F\x7F\p{Cf}]/u', '', (string) $value);
+    return $value === null ? '' : $value;
+}
+
+/** Trim whitespace including Unicode spaces */
+function intel_trim($value) {
+    $value = preg_replace('/^' . INTEL_WS . '+|' . INTEL_WS . '+$/u', '', (string) $value);
+    return $value === null ? '' : $value;
+}
 
 /** 'dscan' if any line has a tab, else 'local' */
 function intel_detect_kind($text) {
@@ -30,16 +47,15 @@ function intel_lines($text) {
     $out = [];
     foreach (preg_split('/\r\n|\r|\n/', (string) $text) as $line) {
         $line = rtrim($line, " \x0B\0");
-        if (trim($line) !== '') $out[] = $line;
+        if (intel_trim(intel_strip_invisible($line)) !== '') $out[] = $line;
     }
     return $out;
 }
 
-/** Cut to $max characters and drop control characters */
+/** Cut to $max characters and drop control and format characters */
 function intel_clean_field($value, $max = INTEL_FIELD_MAX) {
-    $value = preg_replace('/[\x00-\x1F\x7F]/u', '', trim((string) $value));
-    if ($value === null) return '';
-    return mb_substr($value, 0, $max, 'UTF-8');
+    $value = preg_replace('/[\x00-\x1F\x7F\p{Cf}]/u', '', (string) $value);
+    return mb_substr(intel_trim($value === null ? '' : $value), 0, $max, 'UTF-8');
 }
 
 /**
@@ -48,9 +64,15 @@ function intel_clean_field($value, $max = INTEL_FIELD_MAX) {
  * as whole numbers; for AU the last "," or "." is the decimal point.
  */
 function intel_parse_distance_km($value) {
-    $s = trim(str_replace(["\xC2\xA0", "\xE2\x80\xAF", "\xE2\x80\x89"], ' ', (string) $value));
+    $km = intel_parse_distance_raw($value);
+    return $km === null || $km > INTEL_MAX_KM ? null : $km;
+}
+
+function intel_parse_distance_raw($value) {
+    $s = preg_replace('/\p{Z}/u', ' ', intel_strip_invisible($value));
+    $s = intel_trim($s === null ? '' : $s);
     if ($s === '' || $s === '-') return null;
-    if (!preg_match('/^([0-9][0-9 .,\']*)\s*([^\s0-9][^\s]*)$/u', $s, $m)) return null;
+    if (!preg_match('/^([0-9][0-9 .,\']*) *([^ 0-9][^ ]*)$/u', $s, $m)) return null;
     $number = str_replace([' ', "'"], '', $m[1]);
     $unit = mb_strtolower(str_replace('.', '', $m[2]), 'UTF-8');
     if (in_array($unit, ['m', 'м', '米'], true)) {
@@ -85,8 +107,8 @@ function intel_parse_dscan($text) {
     $invalid = 0;
     foreach (intel_lines($text) as $line) {
         $f = explode("\t", $line);
-        if (count($f) >= 4 && preg_match('/^\s*\d{1,10}\s*$/', $f[0])) {
-            $typeID = (int) trim($f[0]);
+        if (count($f) >= 4 && preg_match('/^[0-9]{1,10}$/', intel_trim(intel_strip_invisible($f[0])))) {
+            $typeID = (int) intel_trim(intel_strip_invisible($f[0]));
             [$name, $type, $distance] = [$f[1], $f[2], $f[3]];
         } elseif (count($f) === 3) {
             $typeID = null;
@@ -114,7 +136,7 @@ function intel_parse_local($text) {
     $seen = [];
     $invalid = 0;
     foreach (intel_lines($text) as $line) {
-        $name = preg_replace('/\s+/u', ' ', trim($line));
+        $name = preg_replace('/' . INTEL_WS . '+/u', ' ', intel_trim(intel_strip_invisible($line)));
         if (!intel_valid_character_name($name)) { $invalid++; continue; }
         $key = mb_strtolower($name, 'UTF-8');
         if (isset($seen[$key])) continue;
@@ -128,9 +150,10 @@ function intel_parse_local($text) {
  * Validate and normalise a paste. @return array [kind, data] on success, or [null, error message]
  */
 function intel_parse($text) {
-    if (!is_string($text) || trim($text) === '') return [null, 'Nothing pasted'];
+    if (!is_string($text)) return [null, 'Nothing pasted'];
     if (strlen($text) > INTEL_MAX_BYTES) return [null, 'Too much text (at most ' . round(INTEL_MAX_BYTES / 1000) . ' kB)'];
     if (!mb_check_encoding($text, 'UTF-8')) return [null, 'The text is not valid UTF-8'];
+    if (!intel_lines($text)) return [null, 'Nothing pasted'];
     if (count(intel_lines($text)) > INTEL_MAX_LINES) return [null, 'Too many lines (at most ' . INTEL_MAX_LINES . ')'];
     $kind = intel_detect_kind($text);
     if ($kind === 'dscan') {
@@ -210,27 +233,51 @@ function intel_insert(PDO $db, $mask, $systemID, $kind, array $data, $createdBy,
     return (int) $db->lastInsertId();
 }
 
-/** Newest unexpired scans of a system for the mask */
-function intel_list(PDO $db, $mask, $systemID, $userID) {
-    $stmt = $db->prepare('SELECT id, systemID, kind, data, createdBy, createdByUser, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS age
+/** Scan IDs the browser already has the rows of ("have=12,13"): at most INTEL_LIST_LIMIT * 3 positive integers */
+function intel_have_param($value) {
+    $ids = [];
+    foreach (explode(',', substr((string) $value, 0, 1000)) as $part) {
+        $id = filter_var(trim($part), FILTER_VALIDATE_INT);
+        if ($id !== false && $id > 0) $ids[$id] = true;
+        if (count($ids) >= INTEL_LIST_LIMIT * 3) break;
+    }
+    return array_keys($ids);
+}
+
+/**
+ * Newest unexpired scans of a system for the mask. Scans never change, so `data` (the rows) is only included for
+ * scans whose ID is not in $have; the browser keeps the rows it has and polls the small metadata.
+ */
+function intel_list(PDO $db, $mask, $systemID, $userID, array $have = []) {
+    $stmt = $db->prepare('SELECT id, systemID, kind, createdBy, createdByUser, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS age
         FROM fork_intel_scans WHERE maskID = :mask AND systemID = :systemID AND expiresAt > UTC_TIMESTAMP()
         ORDER BY createdAt DESC, id DESC LIMIT ' . (int) INTEL_LIST_LIMIT);
     $stmt->bindValue(':mask', $mask);
     $stmt->bindValue(':systemID', (int) $systemID, PDO::PARAM_INT);
     if (!$stmt->execute()) throw new PDOException('Could not read fork_intel_scans');
     $out = [];
+    $need = [];
+    $haveSet = array_flip(array_map('intval', $have));
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $out[] = [
-            'id' => (int) $row['id'],
+        $id = (int) $row['id'];
+        $out[$id] = [
+            'id' => $id,
             'systemID' => (int) $row['systemID'],
             'kind' => $row['kind'],
             'createdBy' => $row['createdBy'],
             'mine' => $userID !== null && $row['createdByUser'] !== null && (int) $row['createdByUser'] === (int) $userID,
             'age' => max(0, (int) $row['age']),
-            'data' => json_decode($row['data'], true),
         ];
+        if (!isset($haveSet[$id])) $need[] = $id;
     }
-    return $out;
+    if ($need) {
+        $data = $db->prepare('SELECT id, data FROM fork_intel_scans WHERE id IN (' . implode(',', array_fill(0, count($need), '?')) . ')');
+        if (!$data->execute($need)) throw new PDOException('Could not read fork_intel_scans');
+        foreach ($data->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['id']]['data'] = json_decode($row['data'], true);
+        }
+    }
+    return array_values($out);
 }
 
 /** Age in seconds of the newest unexpired scan of each kind, per system of the mask: [systemID => [kind => age]] */

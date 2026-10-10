@@ -31,6 +31,11 @@ check('dash', intel_parse_distance_km('-'), null);
 check('empty', intel_parse_distance_km(''), null);
 check('unknown unit', intel_parse_distance_km('12 parsecs'), null);
 check('garbage', intel_parse_distance_km('<img src=x onerror=alert(1)>'), null);
+check('14.3 AU is in range', intel_parse_distance_km('14.3 AU'), round(14.3 * INTEL_AU_KM, 1));
+check('beyond d-scan range', intel_parse_distance_km('999999999999999999999 km'), null);
+check('16 AU is beyond range', intel_parse_distance_km('16 AU'), null);
+check('Unicode spaces around the value', intel_parse_distance_km("\u{00A0}1,234\u{00A0}km\u{2003}"), 1234.0);
+check('bidi control before the value', intel_parse_distance_km("\u{202E}1,234 km"), 1234.0);
 
 // --- Kind detection ---
 check('detect dscan', intel_detect_kind("670\tCapsule\tCapsule\t-"), 'dscan');
@@ -62,11 +67,17 @@ check('hostile name kept verbatim', $hostile['rows'][0][2], '<img src=x onerror=
 check('type ID 0 and empty type are invalid', $hostile['invalid'], 2);
 check('long names cut', mb_strlen($hostile['rows'][1][2]), INTEL_FIELD_MAX);
 check('control characters dropped', intel_clean_field("ab\x07c\x1b"), 'abc');
+check('bidi and format characters dropped', intel_parse_dscan("22456\tEvil\u{202E}epyT\u{200B}\tSabre\t5 km")['rows'][0][2], 'EvilepyT');
+check('type ID with non-breaking spaces', intel_parse_dscan("\u{00A0}22456\u{00A0}\tSabre\tSabre\t5 km")['rows'][0][0], 22456);
 
 // --- Local ---
 $local = intel_parse_local("Chribba\n  Some Pilot  \nchribba\nO'Neil Smith-Jones\n<script>alert(1)</script>\nab\n" . str_repeat('x', 40) . "\nZoë Mäkinen");
 check('local names: unique, trimmed, valid', $local['names'], ['Chribba', 'Some Pilot', "O'Neil Smith-Jones", 'Zoë Mäkinen']);
 check('local invalid lines', $local['invalid'], 3);
+$nbsp = intel_parse_local("\u{00A0}Some\u{00A0}Pilot\u{00A0}\n\u{00A0}\u{3000}\nAnn\u{2003}Example");
+check('non-breaking spaces count as spaces (same as the browser)', [$nbsp['names'], $nbsp['invalid']], [['Some Pilot', 'Ann Example'], 0]);
+check('only invisible characters: nothing pasted', intel_parse("\u{00A0}\n\u{200B}"), [null, 'Nothing pasted']);
+check('have param', intel_have_param('3, 5,x,-1,0,5,' . str_repeat('7,', 10)), [3, 5, 7]);
 
 // --- intel_parse: limits and errors ---
 check('empty paste', intel_parse('  '), [null, 'Nothing pasted']);

@@ -23,11 +23,19 @@ const CATEGORIES = {
 	3: 'station'
 };
 // Further groups by ID: celestial (category 2) groups worth naming (the rest of the category is thousands of beacons
-// and effects), and the customs office group, which ESI lists as unpublished
+// and effects), containers, active cynosural fields, the POS force field and the customs office group (several of
+// these are unpublished in ESI but do show up on d-scan)
 const EXTRA_GROUPS = {
 	6: ['Sun', 'celestial'], 7: ['Planet', 'celestial'], 8: ['Moon', 'celestial'], 9: ['Asteroid Belt', 'celestial'],
-	10: ['Stargate', 'celestial'], 186: ['Wreck', 'celestial'], 988: ['Wormhole', 'celestial'], 1025: ['Customs Office', 'orbital']
+	10: ['Stargate', 'celestial'], 186: ['Wreck', 'celestial'], 988: ['Wormhole', 'celestial'],
+	12: ['Cargo Container', 'container'], 340: ['Secure Cargo Container', 'container'],
+	448: ['Audit Log Secure Container', 'container'], 649: ['Freight Container', 'container'],
+	2020: ['Cynosural Field', 'cyno'], 897: ['Covert Cynosural Field', 'cyno'],
+	411: ['Force Field', 'starbase'], 1025: ['Customs Office', 'orbital']
 };
+// Cynosural field generators (normal, covert, industrial): the hulls that can fit one come from their dogma
+// attributes canFitShipGroupNN / canFitShipTypeNN
+const CYNO_MODULES = [21096, 28646, 52694];
 
 // Ship class by ESI group name. Order in the summary: see SHIP_CLASSES in app/js/fork/intel-scans.js
 const SHIP_CLASS = {
@@ -37,7 +45,7 @@ const SHIP_CLASS = {
 	'Capital Industrial Ship': 'capital', 'Command Carrier': 'capital', 'Jump Freighter': 'industrial', 'Freighter': 'industrial',
 	'Battleship': 'battleship', 'Black Ops': 'battleship', 'Marauder': 'battleship',
 	'Combat Battlecruiser': 'battlecruiser', 'Attack Battlecruiser': 'battlecruiser', 'Command Ship': 'battlecruiser',
-	'Strategic Cruiser': 't3', 'Tactical Destroyer': 't3',
+	'Strategic Cruiser': 't3c', 'Tactical Destroyer': 't3d',
 	'Heavy Interdiction Cruiser': 'hic',
 	'Interdictor': 'dictor',
 	'Logistics': 'logistics', 'Logistics Frigate': 'logistics',
@@ -51,8 +59,6 @@ const SHIP_CLASS = {
 	'Mining Barge': 'industrial', 'Exhumer': 'industrial', 'Industrial Command Ship': 'industrial',
 	'Capsule': 'pod', 'Shuttle': 'shuttle'
 };
-// Hulls that can fit a cynosural field generator (normal or covert)
-const CYNO_GROUPS = ['Force Recon Ship', 'Black Ops', 'Covert Ops', 'Stealth Bomber', 'Expedition Frigate', 'Blockade Runner', 'Strategic Cruiser'];
 
 async function get(url, body) {
 	for (let attempt = 1; ; attempt++) {
@@ -67,8 +73,29 @@ async function get(url, body) {
 	}
 }
 
+/** {groups: Set of ship group IDs, types: Set of ship type IDs} that can fit one of CYNO_MODULES */
+async function cynoFits() {
+	const groups = new Set();
+	const types = new Set();
+	const attributeNames = {};
+	for (const moduleID of CYNO_MODULES) {
+		const module = await get(ESI + '/universe/types/' + moduleID + '/');
+		for (const a of module.dogma_attributes || []) {
+			if (!(a.attribute_id in attributeNames)) {
+				attributeNames[a.attribute_id] = (await get(ESI + '/dogma/attributes/' + a.attribute_id + '/')).name || '';
+			}
+			const name = attributeNames[a.attribute_id];
+			if (/^canFitShipGroup\d+$/.test(name)) { groups.add(Math.round(a.value)); }
+			if (/^canFitShipType\d+$/.test(name)) { types.add(Math.round(a.value)); }
+		}
+		console.log(module.name + ': fits groups/types from its canFitShip* attributes');
+	}
+	return { groups, types };
+}
+
 async function main() {
-	const groups = {};	// id -> [name, kind, shipClass, cyno]
+	const cyno = await cynoFits();
+	const groups = {};	// id -> [name, kind, shipClass]
 	const typeGroup = {};	// typeID -> groupID
 	const unmapped = [];
 	for (const [categoryID, kind] of Object.entries(CATEGORIES)) {
@@ -81,13 +108,13 @@ async function main() {
 				shipClass = SHIP_CLASS[group.name] || '';
 				if (!shipClass) { unmapped.push(group.name); }
 			}
-			groups[groupID] = [group.name, kind, shipClass, CYNO_GROUPS.indexOf(group.name) >= 0 ? 1 : 0];
+			groups[groupID] = [group.name, kind, shipClass];
 			group.types.forEach((t) => { typeGroup[t] = groupID; });
 		}
 	}
 	for (const [groupID, [name, kind]] of Object.entries(EXTRA_GROUPS)) {
 		const group = await get(ESI + '/universe/groups/' + groupID + '/');
-		groups[groupID] = [name, kind, '', 0];
+		groups[groupID] = [name, kind, ''];
 		// Planets and moons come in a few types each; wrecks are many, which is fine
 		group.types.forEach((t) => { typeGroup[t] = Number(groupID); });
 	}
@@ -106,11 +133,14 @@ async function main() {
 		const name = names[id];
 		// Skip test / placeholder types
 		if (!name || /^#|\bQA\b|^Test |\(Test\)|^\[?DEPRECATED/i.test(name)) { skipped++; continue; }
-		types[id] = [name, typeGroup[id]];
+		const group = groups[typeGroup[id]];
+		const canCyno = group[1] === 'ship' && (cyno.groups.has(typeGroup[id]) || cyno.types.has(id));
+		types[id] = canCyno ? [name, typeGroup[id], 1] : [name, typeGroup[id]];
 	}
 	const out = {
-		comment: 'Generated by intel/tools/generate-types.js from ESI /universe (public data); do not edit. '
-			+ 'types: typeID -> [name, groupID]; groups: groupID -> [name, kind, shipClass, cynoCapable]',
+		comment: 'Generated by intel/tools/generate-types.js from ESI /universe and /dogma (public data); do not edit. '
+			+ 'types: typeID -> [name, groupID, 1 if it can fit a normal, covert or industrial cyno]; '
+			+ 'groups: groupID -> [name, kind, shipClass]',
 		generated: new Date().toISOString().slice(0, 10),
 		groups: groups,
 		types: types

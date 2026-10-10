@@ -9,6 +9,8 @@
 //				POST mode=add&systemID=<id>&text=<paste>     -> validate, normalise and store a scan
 //				POST mode=delete&id=<id>                     -> delete one of your own scans
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header (like rally.php).
+//				Any request may pass have=<id>,<id>: scans never change, so their rows ("data") are left out of
+//				`scans` for the IDs the browser already has (polls then carry only the small metadata).
 //
 //	The fork_intel_scans table is created on first use, so existing databases need no migration. Scans are kept
 //	for INTEL_RETENTION_H hours; the browser decides how long a scan counts as fresh.
@@ -84,7 +86,8 @@ try {
 	$output['latest'] = (object) intel_latest($mysql, $mask);
 	if ($systemID !== null) {
 		$output['systemID'] = $systemID;
-		$output['scans'] = intel_list($mysql, $mask, $systemID, $userID);
+		$have = $_SERVER['REQUEST_METHOD'] === 'POST' ? (isset($_POST['have']) ? $_POST['have'] : '') : (isset($_GET['have']) ? $_GET['have'] : '');
+		$output['scans'] = intel_list($mysql, $mask, $systemID, $userID, intel_have_param($have));
 	}
 	$output['retentionSeconds'] = INTEL_RETENTION_H * 3600;
 } catch (PDOException $e) {

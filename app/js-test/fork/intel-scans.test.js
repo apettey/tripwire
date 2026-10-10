@@ -60,6 +60,15 @@ describe('Intel scans', () => {
 		it('null for dash, empty, unknown units and garbage', () => {
 			[undefined, null, '', '-', '12 parsecs', '<img src=x onerror=alert(1)>', 'km'].forEach(v => assert.strictEqual(d(v), null, String(v)));
 		});
+		it('null beyond d-scan range (about 14.3 AU)', () => {
+			assert.equal(d('14.3 AU'), Math.round(14.3 * AU * 10) / 10);
+			assert.strictEqual(d('999999999999999999999 km'), null);
+			assert.strictEqual(d('16 AU'), null);
+		});
+		it('ignores Unicode spaces and bidi controls around the value', () => {
+			assert.equal(d(' 1,234 km '), 1234);
+			assert.equal(d('‮1,234 km'), 1234);
+		});
 	});
 
 	describe('parseDscan', () => {
@@ -80,6 +89,13 @@ describe('Intel scans', () => {
 			assert.equal(p.invalid, 2);
 			assert.equal(p.rows[0][2].length, 100);
 		});
+		it('strips bidi and other format characters from names', () => {
+			const p = intelScans.parseDscan("22456\tEvil‮epyT​\tSabre\t5 km");
+			assert.equal(p.rows[0][2], 'EvilepyT');
+		});
+		it('a type ID with non-breaking spaces is still a type ID', () => {
+			assert.equal(intelScans.parseDscan(" 22456 \tSabre\tSabre\t5 km").rows[0][0], 22456);
+		});
 	});
 
 	describe('parseLocal', () => {
@@ -91,6 +107,10 @@ describe('Intel scans', () => {
 		it('<img onerror> is not a character name', () => {
 			assert.deepEqual(intelScans.parseLocal('<img src=x onerror=alert(1)>').names, []);
 		});
+		it('non-breaking spaces count as spaces (same as the server)', () => {
+			assert.deepEqual(intelScans.parseLocal(' Some Pilot \n 　\nAnn Example').names, ['Some Pilot', 'Ann Example']);
+			assert.equal(intelScans.parseLocal(' Some Pilot \n 　\nAnn Example').invalid, 0);
+		});
 	});
 
 	describe('parse', () => {
@@ -100,6 +120,7 @@ describe('Intel scans', () => {
 		});
 		it('reports errors like the server', () => {
 			assert.equal(intelScans.parse('   ').error, 'Nothing pasted');
+			assert.equal(intelScans.parse(' \n​').error, 'Nothing pasted');
 			assert.ok(intelScans.parse('x'.repeat(200001)).error.indexOf('Too much text') === 0);
 			assert.ok(intelScans.parse("Pilot Name\n".repeat(2001)).error.indexOf('Too many lines') === 0);
 			assert.ok(intelScans.parse("a\tb").error.indexOf('No d-scan lines') === 0);
@@ -112,6 +133,22 @@ describe('Intel scans', () => {
 			assert.equal(intelScans.typeInfo(22456, 'Sabre', types).shipClass, 'dictor');
 			assert.equal(intelScans.typeInfo(null, 'onyx', types).shipClass, 'hic');
 			assert.equal(intelScans.typeInfo(null, 'Tengu', types).cyno, true);
+		});
+		it('cyno hulls come from the cyno generators\' fitting rules (normal, covert, industrial)', () => {
+			const cyno = name => intelScans.typeInfo(null, name, types).cyno;
+			['Broadsword', 'Falcon', 'Sin', 'Buzzard', 'Hound', 'Loki', 'Prowler', 'Etana', 'Rabisu', 'Prospect', 'Venture', 'Badger', 'Bustard']
+				.forEach(n => assert.equal(cyno(n), true, n));
+			['Endurance', 'Guardian', 'Sabre', 'Huginn', 'Avatar', 'Rifter'].forEach(n => assert.equal(cyno(n), false, n));
+		});
+		it('T3 cruisers and T3 destroyers are separate classes', () => {
+			assert.equal(intelScans.typeInfo(null, 'Tengu', types).shipClass, 't3c');
+			assert.equal(intelScans.typeInfo(null, 'Svipul', types).shipClass, 't3d');
+		});
+		it('knows lit cynos, containers and POS force fields', () => {
+			assert.equal(intelScans.bucketFor(intelScans.typeInfo(21094, 'Cynosural Field', types)), 'cyno');
+			assert.equal(intelScans.bucketFor(intelScans.typeInfo(28650, 'Covert Cynosural Field I', types)), 'cyno');
+			assert.equal(intelScans.bucketFor(intelScans.typeInfo(3467, 'Small Secure Container', types)), 'container');
+			assert.equal(intelScans.bucketFor(intelScans.typeInfo(16103, 'Force Field', types)), 'structure');
 		});
 		it('the pasted name does not matter when the ID is known (other client languages)', () => {
 			assert.equal(intelScans.typeInfo(22456, 'Сабля', types).name, 'Sabre');
@@ -131,13 +168,14 @@ describe('Intel scans', () => {
 			assert.equal(s.total, 12);
 			assert.equal(s.ships, 7);	// 2 Sabres, Broadsword, Guardian, Tengu, Hound, Avatar
 			assert.equal(s.shipsOnGrid, 4);	// Sabres, Broadsword, Tengu
+			assert.equal(s.shipsOffGrid, 3);	// Guardian, Hound, Avatar
 			assert.equal(s.onGrid, 7);	// + Warrior II, bubble, unknown ship
 			assert.equal(s.noDistance, 1);	// the pod
 			assert.equal(s.offGrid, 4);
 		});
 		it('buckets by class in summary order', () => {
 			assert.deepEqual(s.buckets.map(b => b.key),
-				['titan', 't3', 'hic', 'dictor', 'logistics', 'frigate', 'pod', 'drone', 'structure', 'deployable', 'unknown']);
+				['titan', 't3c', 'hic', 'dictor', 'logistics', 'frigate', 'pod', 'drone', 'structure', 'deployable', 'unknown']);
 			assert.equal(s.buckets[0].key, 'titan');
 			assert.deepEqual(bucket('dictor').types, [{ name: 'Sabre', count: 2 }]);
 			assert.equal(bucket('dictor').onGrid, 2);
@@ -152,7 +190,12 @@ describe('Intel scans', () => {
 			assert.equal(notable.dictor, 'dictors:2');
 			assert.equal(notable.logistics, 'logi:1');
 			assert.equal(notable['Mobile Warp Disruptor'], 'bubble:1');
-			assert.equal(s.cyno, 2);	// Tengu (covert ops subsystem), Hound
+			assert.equal(s.cyno, 3);	// Broadsword (normal), Tengu and Hound (covert)
+		});
+		it('a lit cyno is the first call-out', () => {
+			const c = intelScans.summarizeDscan(intelScans.parseDscan(DSCAN + "\n21094\tCynosural Field\tCynosural Field\t12 km"), types, 10000);
+			assert.deepEqual(c.notable[0], { key: 'cyno', label: 'lit cyno', count: 1 });
+			assert.equal(c.ships, 7);
 		});
 		it('lists structures with their names, nearest first', () => {
 			assert.deepEqual(s.structures, [{ type: 'Astrahus', name: 'J123456 - <b>Home</b>', km: Math.round(4.2 * AU * 10) / 10 }]);
@@ -206,8 +249,27 @@ describe('Intel scans', () => {
 		it('detail lists classes and cyno hulls', () => {
 			const html = intelScans.detailHtml(scan, summary, 10000);
 			assert.ok(html.indexOf('Sabre ×2') >= 0);
-			assert.ok(html.indexOf('2 cyno-capable hulls') >= 0);
+			assert.ok(html.indexOf('3 hulls that can fit a cyno') >= 0);
 			assert.ok(html.indexOf('1 line not understood') >= 0);
+		});
+		it('the detail line counts ships on and off grid, and objects separately', () => {
+			const html = intelScans.detailHtml(scan, summary, 10000);
+			assert.ok(html.indexOf('7 ships: 4 on grid (≤ 10,000 km), 3 off grid · 12 objects in total') >= 0, html);
+		});
+	});
+
+	describe('mergeScans', () => {
+		it('keeps the rows of scans the server left out, and forgets scans no longer listed', () => {
+			const cache = { 1: { names: ['A Pilot'] }, 9: { names: ['Old'] } };
+			const m = intelScans.mergeScans([{ id: 2, kind: 'local', data: { names: ['B Pilot'] } }, { id: 1, kind: 'local' }], cache);
+			assert.deepEqual(m.scans.map(s => s.data.names[0]), ['B Pilot', 'A Pilot']);
+			assert.deepEqual(Object.keys(m.cache).sort(), ['1', '2']);
+			assert.deepEqual(m.missing, []);
+		});
+		it('reports scans without rows', () => {
+			const m = intelScans.mergeScans([{ id: 3, kind: 'dscan' }], {});
+			assert.deepEqual(m.missing, [3]);
+			assert.strictEqual(m.scans[0].data, undefined);
 		});
 	});
 
