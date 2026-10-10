@@ -1,0 +1,148 @@
+# Deploys a release of this fork to production by opening a PR in apettey/eve-infrastructure that
+# pins petdog/tripwire:X.Y.Z by digest (see docker/README.md#deploying-to-eve-infrastructure).
+#
+# workflow_call:      docker-publish.yml runs it after every release.
+# workflow_dispatch:  deploy an existing release by hand (first rollout, re-deploy, rollback).
+#
+# Needs INFRA_REPO_TOKEN (fine-grained PAT or GitHub App token for eve-infrastructure; not
+# GITHUB_TOKEN, whose PRs and merges would not start that repo's checks and deploy) as a secret of
+# the `infra-deploy` environment, which only `main` may use: the token can deploy to production.
+# Without it the job only writes a warning, so releases never fail because of it.
+# Runs only on main. This repo is public: never print infra file contents (see the script).
+name: Deploy release to infra
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      auto_merge:
+        type: boolean
+        default: true
+      allow_downgrade:
+        type: boolean
+        default: false
+      dry_run:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release to deploy, X.Y.Z (empty = latest vX.Y.Z tag)
+        type: string
+        default: ""
+      auto_merge:
+        description: Enable auto-merge (still off when a PR in the release has deploy:manual)
+        type: boolean
+        default: true
+      allow_downgrade:
+        description: Allow an older version than infra runs now (rollback; never auto-merged)
+        type: boolean
+        default: false
+      dry_run:
+        description: Dry run, only report the image change, PRs and auto-merge decision (no push, no PR)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  IMAGE: petdog/tripwire
+  INFRA_REPO: apettey/eve-infrastructure
+
+jobs:
+  not-main:
+    name: Refuse refs other than main
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Deploy release to infra runs on main only (got $GITHUB_REF)"
+          exit 1
+
+  infra-pr:
+    name: Open eve-infrastructure PR
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Holds INFRA_REPO_TOKEN; deployment branches: main only (owner setting)
+    environment: infra-deploy
+    # Separate queue for dry runs, so one can never replace a pending real deploy
+    concurrency:
+      group: infra-deploy-${{ inputs.dry_run && 'dry-run' || 'deploy' }}
+      cancel-in-progress: false
+    steps:
+      - name: Check for INFRA_REPO_TOKEN
+        id: token
+        env:
+          TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::INFRA_REPO_TOKEN is not set in the infra-deploy environment: no eve-infrastructure PR was opened (docker/README.md#deploying-to-eve-infrastructure)"
+            {
+              echo "### eve-infrastructure"
+              echo ""
+              echo "- **Skipped**: no \`INFRA_REPO_TOKEN\` secret in the \`infra-deploy\` environment, so no deploy PR was opened."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          fetch-depth: 0 # tags and history for the PR list
+          persist-credentials: false
+
+      - name: Resolve version and image digest
+        if: steps.token.outputs.present == 'true'
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION#v}"
+          if [ -z "$version" ]; then
+            version=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 | sed 's/^v//')
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "::error::No release tag v$version"
+            exit 1
+          fi
+          digest=$(docker buildx imagetools inspect "$IMAGE:$version" --format '{{json .Manifest}}' | jq -r '.digest')
+          if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not resolve the digest of $IMAGE:$version"
+            exit 1
+          fi
+          echo "$IMAGE:$version is $digest"
+          {
+            echo "version=$version"
+            echo "digest=$digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          repository: ${{ env.INFRA_REPO }}
+          ref: main
+          token: ${{ secrets.INFRA_REPO_TOKEN }}
+          path: .infra
+          # Shallow on purpose: fetch-depth 0 would print every infra branch name in this public
+          # log. The script fetches main and the bump branches it needs, quietly, with full history.
+          fetch-depth: 1
+
+      - name: Bump Tripwire in eve-infrastructure and open the PR
+        if: steps.token.outputs.present == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          DIGEST: ${{ steps.release.outputs.digest }}
+          INFRA_DIR: .infra
+          INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          AUTO_MERGE: ${{ inputs.auto_merge }}
+          ALLOW_DOWNGRADE: ${{ inputs.allow_downgrade }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bash .github/scripts/open-infra-pr.sh
