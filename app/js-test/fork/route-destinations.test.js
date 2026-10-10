@@ -95,6 +95,35 @@ describe('Route destinations', () => {
 		));
 		it('K-space root', () => assert.deepEqual(routeDestinations.chainExits([root(1, '' + AMARR)]), [{ systemID: AMARR, nodeID: 1, holeName: '' }]));
 		it('Ignores synthetic rows', () => assert.deepEqual(routeDestinations.chainExits([{ c: [{ v: 'dest-1-1', systemID: 0 }, { v: 1 }], destination: {} }]), []));
+		it('Ignores systems drawn through an EVE-Scout link', () => assert.deepEqual(
+			routeDestinations.chainExits(rows, [[2, 1, [], 11], [5, 4, [], 'ES-123']]),
+			[{ systemID: RENS, nodeID: 2, holeName: 'Exit R' }]));
+		it('Chain systems: k-space and J-space, no calculated, EVE-Scout or unknown ones', () => assert.deepEqual(
+			routeDestinations.chainSystems(rows, [[5, 4, [], 'ES-123']]), [J152820, RENS, sid('J135100')]));
+	});
+
+	describe('Through Thera', () => {
+		const exits = [{ systemID: RENS, nodeID: 2, holeName: 'R' }];
+		afterEach(() => { delete routeDestinations.scoutRoute; });
+		it('Shown when it has fewer jumps than the gates', () => {
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: 5 });
+			const ev = routeDestinations.evaluate(exits, JITA, 15);
+			assert.equal(ev.scout.total, 5);
+			assert.equal(ev.best.exit.systemID, RENS, 'the gate route stays for the map');
+		});
+		it('Not when the gates are as short', () => {
+			const gates = routeDestinations.evaluate(exits, JITA, 15).best.jumps;
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: gates });
+			assert.equal(routeDestinations.evaluate(exits, JITA, 15).scout, null);
+		});
+		it('Not asked when the destination is on the chain', () => {
+			routeDestinations.scoutRoute = () => { throw new Error('asked'); };
+			assert.equal(routeDestinations.evaluate(exits, RENS, 15).scout, null);
+		});
+		it('Shown when there is no gate route', () => {
+			routeDestinations.scoutRoute = () => ({ status: 'ok', kind: 'scout', total: 9 });
+			assert.equal(routeDestinations.evaluate([], JITA, 15).scout.total, 9);
+		});
 	});
 
 	describe('Best exit', () => {

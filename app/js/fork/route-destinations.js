@@ -116,12 +116,15 @@ const routeDestinations = {
 
 	/** K-space systems on the chain map, from chain.nodes() rows, in chain order:
 	[{systemID, nodeID, holeName}]. Skips J-space, unknown "x|y" systems, calculated route nodes
-	(viewing/favorite systems), our own synthetic nodes and repeated (loop) occurrences. */
-	chainExits: function(rows) {
+	(viewing/favorite systems), our own synthetic nodes and repeated (loop) occurrences. With the chain's lines, also
+	skips systems drawn through an EVE-Scout link (Thera/Turnur routes come from theraRoute, which applies its filters). */
+	chainExits: function(rows, lines) {
 		const seen = {}, exits = [];
+		const scout = routeDestinations.scoutNodes(lines);
 		(Array.isArray(rows) ? rows : []).forEach(function(row) {
 			if (!row || !row.c || !row.c[0] || row.destination) return;
 			const node = row.c[0];
+			if (scout[node.v]) return;
 			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
 			const last = pathHome[pathHome.length - 1];
 			if (last && last.path) return;	// calculated route node (show viewing / favorites)
@@ -131,6 +134,32 @@ const routeDestinations = {
 			exits.push({systemID: id, nodeID: node.v, holeName: last && last.name ? String(last.name) : ""});
 		});
 		return exits;
+	},
+
+	/** Node ids drawn through an EVE-Scout link: lines [child, parent, modifiers, 'ES-<id>'] -> {<child node id>: true} */
+	scoutNodes: function(lines) {
+		const result = {};
+		(Array.isArray(lines) ? lines : []).forEach(function(line) {
+			if (line && typeof line[3] === "string" && line[3].indexOf("ES-") === 0) result[line[0]] = true;
+		});
+		return result;
+	},
+
+	/** Every real system on the chain map (k-space and J-space), as numbers, skipping the same rows as chainExits */
+	chainSystems: function(rows, lines) {
+		const seen = {}, result = [];
+		const scout = routeDestinations.scoutNodes(lines);
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			if (!row || !row.c || !row.c[0] || row.destination || scout[row.c[0].v]) return;
+			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
+			const last = pathHome[pathHome.length - 1];
+			if (last && last.path) return;
+			const id = routeDestinations.toID(row.c[0].systemID);
+			if (!id || seen[id] || !appData.systems[id]) return;
+			seen[id] = true;
+			result.push(id);
+		});
+		return result;
 	},
 
 	/** Gate route from one system to another, using the user's route preferences.
@@ -158,8 +187,11 @@ const routeDestinations = {
 		}).filter(function(r) { return r; }).sort(function(a, b) { return a.jumps - b.jumps || a.index - b.index; });
 		const best = routes[0] || null;
 		const near = routes.filter(function(r) { return r.jumps <= limit; });
+		// A route through Thera/Turnur (theraRoute), when it has fewer jumps than the best gate route
+		const alt = typeof routeDestinations.scoutRoute === "function" && !(best && best.jumps === 0) ? routeDestinations.scoutRoute(id) : null;
 		return {
 			systemID: id,
+			scout: alt && alt.status === "ok" && (!best || alt.total < best.jumps) ? alt : null,
 			best: best,
 			routes: routes,
 			onMap: !best || best.jumps === 0 ? [] : (near.length ? near : [best])
@@ -206,8 +238,9 @@ const routeDestinations = {
 	/** Add destination nodes to the result of chain.nodes(). Mutates and returns it. */
 	decorate: function(result, destinations, limit) {
 		if (!result || !result.map || !Array.isArray(result.map.rows)) return result;
-		const exits = routeDestinations.chainExits(result.map.rows);
+		const exits = routeDestinations.chainExits(result.map.rows, result.lines);
 		routeDestinations.lastExits = exits;
+		routeDestinations.lastChainSystems = routeDestinations.chainSystems(result.map.rows, result.lines);
 		const extra = routeDestinations.syntheticRows(exits, destinations === undefined ? routeDestinations.saved() : destinations,
 			limit === undefined ? routeDestinations.routingLimit() : limit);
 		if (extra.rows.length) {
@@ -236,7 +269,13 @@ const routeDestinations = {
 			const system = systemAnalysis.analyse(d.systemID);
 			const ev = routeDestinations.evaluate(exits, d.systemID, limit);
 			var exitCell, jumpsCell = "&ndash;";
-			if (!(exits || []).length) {
+			if (ev.scout && typeof theraRoute !== "undefined") {
+				const name = function(id) { return (appData.systems[id] || {}).name || String(id); };
+				const detail = theraRoute.planDetail(ev.scout, system.name, name, Date.now());
+				exitCell = "<span class='route-dest-scout' title='" + esc(detail) + "'><span class='route-dest-scout-text'>" + esc(theraRoute.planText(ev.scout)) + "</span> "
+					+ "<span class='route-dest-scout-line'>" + esc(theraRoute.lineText(ev.scout, name)) + "</span></span>";
+				jumpsCell = "<span title='" + esc(detail) + "'>" + ev.scout.total + "</span>";
+			} else if (!(exits || []).length) {
 				exitCell = "<span class='route-dest-muted'>No k-space exit on the chain</span>";
 			} else if (!ev.best) {
 				exitCell = "<span class='route-dest-muted'>No gate route</span>";
@@ -385,7 +424,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<tbody></tbody></table>"
 				+ "<p class='route-dest-note'>Jumps are gate jumps from the nearest k-space system on the current chain map, using your "
 				+ "K-space route selection (Settings &gt; General Preferences). Holes to unidentified systems (e.g. just \"Low-Sec\") can't be routed. "
-				+ "On the map, a destination is attached to every exit within the \"Show Route as Blobs\" limit, or else to the nearest one.</p>"
+				+ "On the map, a destination is attached to every exit within the \"Show Route as Blobs\" limit, or else to the nearest one. "
+				+ "A route through Thera or Turnur (EVE-Scout's connections) is shown instead when it has fewer jumps, gates plus the two holes "
+				+ "(Settings &gt; General Preferences &gt; Routes through).</p>"
 				+ "</div>"
 			);
 

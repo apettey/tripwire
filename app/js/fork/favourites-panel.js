@@ -334,10 +334,16 @@ const favouritesPanel = {
 		const chain = favouritesPanel.chainSystems(rows);
 		return {
 			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {}, ignore: ignore || null,
-			connections: rally.systemConnections(rows, lines),
+			// EVE-Scout links drawn on the chain are left to theraRoute, which applies the Thera/Turnur filters
+			connections: rally.systemConnections(rows, lines).filter(function(c) { return !favouritesPanel.isScoutLine(lines[c[3]]); }),
 			startOnChain: !!(start && chain[String(start)]),
 			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start]))
 		};
+	},
+
+	/** A chain line for an EVE-Scout connection (upstream's supplier gives them wormhole id 'ES-<id>') */
+	isScoutLine: function(line) {
+		return !!line && typeof line[3] === "string" && line[3].indexOf("ES-") === 0;
 	},
 
 	/** Quickest way from the tracked location to a favourite, for one route mode ("shortest" or "safe": your
@@ -397,7 +403,7 @@ const favouritesPanel = {
 	/** Mark a plan on the chain: wormhole connections, the system you enter the chain at (when you gate to it),
 	and where you leave it: the favourite's own node, its calculated route node (plus that connection), or the exit */
 	highlight: function(ctx, favID, plan) {
-		if (!plan || plan.status !== "ok" || plan.kind !== "chain") { return; }
+		if (!plan || plan.status !== "ok" || (plan.kind !== "chain" && plan.kind !== "scout")) { return; }
 		const id = favouritesPanel.toID(favID);
 		const safe = plan.mode === "safe";
 		const lineClass = safe ? favouritesPanel.SAFE_ROUTE_CLASS : favouritesPanel.ROUTE_CLASS;
@@ -419,6 +425,10 @@ const favouritesPanel = {
 			return function(row, node) { return !row.destination && !favouritesPanel.isCalcRow(row) && favouritesPanel.toID(node.systemID) === systemID; };
 		};
 		plan.lineIndexes.forEach(addLine);
+		if (plan.kind === "scout") {	// through Thera/Turnur: the chain's wormholes, and EVE-Scout links if the tab draws them
+			lines.forEach(function(line, index) { if (line && (plan.scoutLineIDs || []).indexOf(line[3]) >= 0) { addLine(index); } });
+			return;
+		}
 		if (plan.gatesIn > 0) { markFirst(realNode(plan.entrySystemID), exitClass); }
 		if (plan.exitSystemID === id) { markFirst(realNode(id), nodeClass); return; }
 		const exitNodes = {};
@@ -438,8 +448,9 @@ const favouritesPanel = {
 
 	/** Decorate chain.nodes() output in place for the favourites with Route on, and work out both modes for
 	each (the row's tooltip compares them). Returns {<favID>: {mode, shortest, safe}}.
-	@param routeFavorites [{systemID, mode}] */
-	decorate: function(result, routeFavorites, startSystemID, exits, distances, systems, ignore) {
+	@param routeFavorites [{systemID, mode}]
+	@param scout optional function(ctx, favID, mode) -> a route through Thera/Turnur (theraRoute), used when it is shorter */
+	decorate: function(result, routeFavorites, startSystemID, exits, distances, systems, ignore, scout) {
 		const lines = (result && result.lines) || [];
 		const own = [favouritesPanel.ROUTE_CLASS, favouritesPanel.SAFE_ROUTE_CLASS];
 		lines.forEach(function(line) {
@@ -452,6 +463,12 @@ const favouritesPanel = {
 		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems, ignore);
 		routeFavorites.forEach(function(f) {
 			const info = { mode: f.mode, shortest: favouritesPanel.plan(ctx, f.systemID, "shortest"), safe: favouritesPanel.plan(ctx, f.systemID, "safe") };
+			if (scout && typeof theraRoute !== "undefined") {
+				["shortest", "safe"].forEach(function(mode) {
+					const alt = info[mode] && info[mode].status === "here" ? null : scout(ctx, f.systemID, mode);
+					if (theraRoute.better(info[mode], alt)) { info[mode] = alt; }
+				});
+			}
 			routes[f.systemID] = info;
 			favouritesPanel.highlight(ctx, f.systemID, info[f.mode === "safe" ? "safe" : "shortest"]);
 		});
@@ -464,6 +481,7 @@ const favouritesPanel = {
 		if (plan.status === "here") { return "here"; }
 		if (plan.status !== "ok") { return ""; }
 		if (plan.kind === "direct") { return "direct " + plan.gatesIn + "g"; }
+		if (plan.kind === "scout") { return theraRoute.planText(plan); }
 		const parts = [];
 		if (plan.gatesIn) { parts.push(plan.gatesIn + "g"); }
 		parts.push(plan.holes + "wh");
@@ -483,6 +501,7 @@ const favouritesPanel = {
 			return plan.mode === "safe" ? "no high-sec-only route" : "no route from here";
 		}
 		if (plan.kind === "direct") { return "direct: " + plural(plan.gatesIn, "gate jump") + ", no wormholes"; }
+		if (plan.kind === "scout") { return theraRoute.planDetail(plan, favName, name, Date.now()); }
 		const steps = [];
 		if (plan.gatesIn) { steps.push(plural(plan.gatesIn, "gate jump") + " to " + name(plan.entrySystemID)); }
 		steps.push(plural(plan.holes, "wormhole jump") + " to " + name(plan.exitSystemID));
@@ -537,8 +556,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				try {
 					lastTracked = trackedSystem();
 					const routeFavs = on ? fp.routeModes(favorites, settings) : [];
-					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows) : [];
-					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems, avoidList());
+					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows, result.lines) : [];
+					const scout = typeof theraRoute !== "undefined" ? theraRoute.favouriteScout : null;
+					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems, avoidList(), scout);
 				} catch (e) { console.error("Favourites panel: route decorate failed", e); }
 				clearTimeout(renderTimer);
 				renderTimer = setTimeout(render, 0);
@@ -609,7 +629,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<i class='fav-route" + (flags.route ? " active" : "") + routeState + "' data-icon='connection' title='" + esc(routeTitle) + "'></i>"
 				+ "<i class='fav-remove' data-icon='times' title='Remove " + esc(system.name) + " from favourites'></i>"
 				+ "</span>"
+				+ scoutLine(info)
 				+ "</li>";
+		}
+
+		/** Second line of a row routed through Thera/Turnur: the systems and signatures to warp to */
+		function scoutLine(info) {
+			const plan = info ? info[info.mode] : null;
+			if (!plan || plan.kind !== "scout" || typeof theraRoute === "undefined") { return ""; }
+			return "<span class='fav-scout-line' title='" + fp.escape(theraRoute.planDetail(plan, "", systemName, Date.now())) + "'>"
+				+ fp.escape(theraRoute.lineText(plan, systemName)) + "</span>";
 		}
 
 		function render() {
