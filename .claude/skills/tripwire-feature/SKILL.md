@@ -1,6 +1,6 @@
 ---
 name: tripwire-feature
-description: End-to-end checklist for implementing and shipping a user-facing feature in this Tripwire fork - branch, fork-owned JS/CSS files, mocha tests, dev stack and bundles, seeding test data, screenshots, change-log entry, What's New entry, PR and merge. Use when building, testing, screenshotting or opening a PR for a UI/feature change (not for docs-only or infrastructure changes).
+description: End-to-end checklist for implementing and shipping a user-facing feature in this Tripwire fork - branch, fork-owned JS/CSS files, mocha tests, dev stack and bundles, seeding test data, screenshots, change-log entry, review loop until no findings, What's New entry, PR and merge. Use when building, testing, screenshotting or opening a PR for a UI/feature change (not for docs-only or infrastructure changes).
 ---
 
 # Shipping a Tripwire fork feature
@@ -75,7 +75,28 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] `changes/YYYY-MM-DD-<feature>/README.md` from `changes/_template.md` with `before.png` /
       `after.png`; add the top row to `changes/README.md`.
 
-## 7. PR and What's New
+## 7. Review loop (required, before the PR)
+Every feature is reviewed until a review comes back with **no findings**. Don't open the PR before that.
+- [ ] Commit, then hand the branch to a **fresh reviewer** (a new agent/session that didn't write the
+      code; when an agent built it, the coordinating session spawns the reviewer). Give it the branch,
+      the diff against `origin/main` (`git diff origin/main...HEAD`), the feature's spec, and this list.
+- [ ] The reviewer checks, and reports each finding with file:line, what's wrong and why:
+  - correctness and edge cases against the spec (unknown/missing data, empty chain, several tracked
+    characters, other users' changes arriving via sync);
+  - AGENTS.md rules: change-log entry and row, Settings toggle decision (on by default, applied on
+    Save, survives Reset), fork-owned files, small upstream edits listed in the entry, no reformatting
+    or line-ending changes, bundles additive only;
+  - security: pasted/user text escaped when rendered, no new CSRF/XSS, no secrets, no new third-party
+    hosts unless logged; all zKillboard access only through the pooled worker;
+  - tests: pure logic covered by mocha, tests pass
+    (`MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx mocha --recursive app/js-test`);
+  - it actually works in the dev stack, and the screenshots show the final version.
+- [ ] The author fixes every finding (or answers why it's not a problem), commits, and the reviewer
+      reviews **again from the new diff**. Repeat until a round returns no findings. Where possible use
+      the same reviewer each round so it can check its earlier findings were addressed.
+- [ ] Note the number of review rounds in the PR body.
+
+## 8. PR and What's New
 - [ ] Commit, push, open the PR against `main` **first** to learn its number `<N>`.
 - [ ] Add the entry at the top of `public/whats-new/features.json`: `pr: <N>`, `date`, `title`,
       plain-text `description`, `images` saved as `public/whats-new/img/pr-<N>-<name>.png`.
@@ -84,7 +105,7 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
       survive branch deletion). End with the attribution line.
 - [ ] Image builds: `docker build -f docker/Dockerfile -t tripwire:local .`
 
-## 8. Merge
+## 9. Merge
 - [ ] Merge with a **merge commit** (not squash/rebase).
 - [ ] When later branches conflict on `public/js/app.min.js` / `app.min.css`, don't hand-merge:
       merge main, take either side of the bundle, then rebuild from the merged sources with
