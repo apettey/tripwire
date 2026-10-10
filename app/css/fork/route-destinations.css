@@ -1,0 +1,122 @@
+/* Saved destinations (fork-owned, see app/js/fork/route-destinations.js) */
+
+/* Destination nodes on the chain map: like a system node, but dashed and muted */
+#chainMap div.node.destination-node {
+	position: relative;
+	text-align: center;
+	border: 2px dashed #555;
+	background: #0b0b0b;
+	opacity: 0.8;
+	box-shadow: none;
+	cursor: default;
+}
+
+#chainMap div.node.destination-node:hover {
+	opacity: 1;
+}
+
+#chainMap .destination-node h4 {
+	font-weight: normal;
+	white-space: nowrap;
+}
+
+#chainMap .destination-node .destName a {
+	color: #BBB;
+}
+
+#chainMap .destination-node .destJumps {
+	color: #DDD;
+}
+
+/* Connection to a destination node: thin, dashed, grey, no aura.
+   Radial/new org chart renderers read these from a hidden ".temp" element; the old org chart styles its line cells directly. */
+.temp.destination-route {
+	border-style: dashed;
+	border-width: 1px;
+	border-color: #666;
+	color: rgba(0, 0, 0, 0);
+}
+
+#chainMap td.destination-route,
+#chainMap td.left-destination-route,
+#chainMap td.right-destination-route,
+#chainMap td.bottom-destination-route {
+	border-style: dashed !important;
+	border-color: #666 !important;
+}
+
+/* Toolbar button: ".active" when a destination is shown (colour from base.css) */
+#show-destinations {
+	cursor: pointer;
+}
+
+/* Destinations window */
+#dialog-routeDestinations {
+	text-align: left;
+	overflow-y: auto;
+}
+
+#dialog-routeDestinations .route-dest-add {
+	margin: 2px 0 8px 0;
+}
+
+#dialog-routeDestinations #routeDestinationInput {
+	width: 220px;
+}
+
+#dialog-routeDestinations .route-dest-toggle-all {
+	float: right;
+}
+
+#dialog-routeDestinations .route-dest-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+#dialog-routeDestinations .route-dest-table th {
+	text-align: left;
+	color: #999;
+	font-weight: normal;
+	border-bottom: 1px solid #555;
+	padding: 3px 4px;
+}
+
+#dialog-routeDestinations .route-dest-table td {
+	padding: 4px;
+	border-bottom: 1px solid #333;
+	white-space: nowrap;
+}
+
+#dialog-routeDestinations .route-dest-class {
+	display: inline-block;
+	min-width: 2.2em;
+	font-size: 0.85em;
+}
+
+#dialog-routeDestinations .route-dest-jumps {
+	text-align: right;
+	padding-right: 12px;
+}
+
+#dialog-routeDestinations .route-dest-hole,
+#dialog-routeDestinations .route-dest-muted,
+#dialog-routeDestinations .route-dest-none td {
+	color: #888;
+}
+
+#dialog-routeDestinations .route-dest-remove-link {
+	color: #888;
+	text-decoration: none;
+}
+
+#dialog-routeDestinations .route-dest-remove-link:hover {
+	color: #FF4747;
+}
+
+#dialog-routeDestinations .route-dest-note {
+	margin: 8px 0 0 0;
+	color: #888;
+	font-size: 0.85em;
+	line-height: 1.4;
+	white-space: normal;
+}
