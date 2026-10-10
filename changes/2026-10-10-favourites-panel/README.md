@@ -12,10 +12,11 @@ favourites no longer clutter it) and "Route" highlights the quickest way there f
 
 | Before | After |
 | --- | --- |
-| ![before](before.jpg) | ![after](after.jpg) |
+| ![before](before.png) | ![after](after.png) |
 
 Before: with "Add favorite systems to chain" on, every k-space exit gets a node for every favourite. After: only
-Jita, Amarr and Hek are shown on the map, and Route is on for Jita and Hek (white dashes on a blue glow, end node ringed).
+Amarr, Hek, Jita and Rancer are shown on the map, and Route is on for Hek and Jita (white dashes on a blue glow, end
+node ringed). `whats-new.png` is a taller crop of the same for the What's New entry.
 
 ## Settings
 
@@ -32,7 +33,9 @@ Stored in `options.favoritesPanel.enabled`; a missing key means on; Settings > R
   `options.favoritesPanel.systems[<id>] = {map, route}` (missing = map on, route off; removed with the favourite).
   The panel's last position is kept in `options.favoritesPanel.position` while it is switched off.
 - "Show on map" works by wrapping `chain.nodes`: during the build `options.favorites` is swapped for the shown
-  favourites (with `indexOf` still covering all of them, so the stars on nodes stay).
+  favourites (with `indexOf` still covering all of them, so the stars on nodes stay). While the toolbar star
+  ("Add favorite systems to chain") is off the eyes are dimmed; clicking one switches the star on and shows that
+  system. J-space favourites have a disabled eye (upstream never draws them).
 - Route: from the tracked character's system (if it is on the chain) through wormholes to the exit with the fewest
   wormhole + gate jumps, then the calculated node if one is drawn (otherwise the exit node is ringed). The row shows
   e.g. `1+6j` (holes + gates); a dimmed route icon with a tooltip means no route (not on the chain / no exit).
@@ -42,3 +45,12 @@ Stored in `options.favoritesPanel.enabled`; a missing key means on; Settings > R
 - `app/css/fork/favourites-panel.css` (new), `app/js-test/fork/favourites-panel.test.js` (new), rebuilt
   `public/js/app.min.js` and `public/css/app.min.css`.
 - Upstream files touched: none (besides the rebuilt bundles).
+
+## Limitations
+
+- Routes start at the tracked character's system and need it on the chain (not on a calculated or destination node).
+- Gate jumps of upstream's calculated nodes come from `guidance.findShortestPath(tripwire.map.shortest, favourite, exit)`;
+  exit candidates (when no calculated node is drawn) use `routeDestinations.jumps`, the same function and map from exit
+  to favourite. Both honour the route-security preferences; the direction differs, which can rarely change a count by one.
+- The info panel's list of routes to favourites refreshes on the next system change, not on edits in the panel.
+- The panel and rally each redraw the map when the tracked character moves (two cheap checks, not shared).

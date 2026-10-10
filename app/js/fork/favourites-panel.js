@@ -151,6 +151,23 @@ const favouritesPanel = {
 		return shown;
 	},
 
+	/** Run fn() with options.favorites swapped for chainFavorites(...), always restoring the real list
+	(also when fn throws). opts is the options object; returns fn's result. */
+	withChainFavorites: function(opts, settings, fn) {
+		const favorites = opts.favorites;
+		opts.favorites = favouritesPanel.chainFavorites(favorites, settings);
+		try {
+			return fn();
+		} finally {
+			opts.favorites = favorites;
+		}
+	},
+
+	/** Whether upstream ever draws a favourite on the chain map: only k-space ones (not J-space, Thera...) */
+	canShowOnMap: function(system) {
+		return !!system && !(Number(system.regionID) >= 11000000);
+	},
+
 	// ---- Layout (pure) ----
 
 	/** Saved gridster entry for the widget from options.grid (array or object, old "oog" format) */
@@ -198,6 +215,18 @@ const favouritesPanel = {
 		return !!(last && last.path);
 	},
 
+	/** Set of system IDs (strings) really on the chain: not calculated route nodes or destination nodes */
+	chainSystems: function(rows) {
+		const result = {};
+		(rows || []).forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			if (!node || row.destination || favouritesPanel.isCalcRow(row)) { return; }
+			const id = favouritesPanel.toID(node.systemID);
+			if (id) { result[String(id)] = true; }
+		});
+		return result;
+	},
+
 	/** Add a class to a node's markup (makeSystemNode output) */
 	markNode: function(markup, cls) {
 		if (typeof markup !== "string" || markup.indexOf(" " + cls + " ") >= 0) { return markup; }
@@ -230,7 +259,13 @@ const favouritesPanel = {
 				result.push({ kind: "chain", exitSystemID: id, gateJumps: 0, nodeIndex: index, lineIndex: null });
 			}
 		});
-		if (result.length) { return result; }
+		// A calculated node already is the gate route from its exit. Without one (star button off, or the
+		// favourite is itself on the chain, where upstream draws none) try every exit: a gate route from a
+		// nearby exit can beat a long way round through wormholes.
+		// Gate jumps: calculated nodes come from guidance.findShortestPath(tripwire.map.shortest, favourite, exit)
+		// and gateJumps (routeDestinations.jumps) from the same function and map, exit to favourite, so both use
+		// the user's route preferences; the direction differs, which can rarely change the count by a jump.
+		if (result.some(function(c) { return c.kind === "calc"; })) { return result; }
 		(exits || []).forEach(function(exit) {
 			const jumps = gateJumps ? gateJumps(exit.systemID, id) : null;
 			if (jumps === null || jumps === undefined) { return; }
@@ -251,8 +286,8 @@ const favouritesPanel = {
 		const lines = (result && result.lines) || [];
 		const id = favouritesPanel.toID(favID);
 		const start = favouritesPanel.toID(startSystemID);
-		if (!start || !rally.systemsOnMap(rows)[String(start)]) { return { status: "no-location" }; }
-		if (start === id) { return { status: "here", holes: 0, gates: 0, lineIndexes: [] }; }
+		if (start && start === id) { return { status: "here", holes: 0, gates: 0, lineIndexes: [] }; }
+		if (!start || !favouritesPanel.chainSystems(rows)[String(start)]) { return { status: "no-location" }; }
 
 		const connections = rally.systemConnections(rows, lines);
 		let best = null;
@@ -317,6 +352,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		const fp = favouritesPanel;
 		let renderTimer = null;
 		let lastTracked = null;
+		let dragging = false;		// a row is being dragged: don't rebuild the list under it
+		let renderPending = false;
+		let tooltipTimer = null;
+		let tooltipOpen = false;	// ValidationTooltips is shared: only close what we opened
 
 		function current() { return fp.settings(options); }
 		function isOn() { return fp.enabled(options); }
@@ -331,14 +370,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const on = isOn();
 				const settings = current();
 				const favorites = options.favorites;
+				const self = this, args = arguments;
 				// Only favourites with "Show on map" get calculated route nodes
-				if (on) { options.favorites = fp.chainFavorites(favorites, settings); }
-				let result;
-				try {
-					result = originalNodes.apply(this, arguments);
-				} finally {
-					options.favorites = favorites;
-				}
+				const result = on
+					? fp.withChainFavorites(options, settings, function() { return originalNodes.apply(self, args); })
+					: originalNodes.apply(this, arguments);
 				try {
 					lastTracked = trackedSystem();
 					const routeFavs = on ? fp.routeFavorites(favorites, settings) : [];
@@ -353,6 +389,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		// ---- Widget ----
+
+		function globalMapOn() { return $("#show-favorite").hasClass("active"); }
+
+		function mapIconHtml(id, system, flags) {
+			const esc = fp.escape;
+			if (!fp.canShowOnMap(tripwire.systems[id] || appData.systems[id])) {
+				return "<i class='fav-map disabled' data-icon='eye' title='" + esc("Show on map: only k-space favourites can be drawn on the chain map") + "'></i>";
+			}
+			const title = !globalMapOn()
+				? "Show on map: favourites on the chain map are off (star button in the chain map toolbar). Click to turn them on and show " + system.name
+				: "Show on map: " + (flags.map ? "on" : "off") + ". Gate jumps to " + system.name + " from the chain's k-space exits";
+			return "<i class='fav-map" + (flags.map ? " active" : "") + (globalMapOn() ? "" : " fav-map-global-off") + "' data-icon='eye' title='" + esc(title) + "'></i>";
+		}
 
 		function rowHtml(id, settings) {
 			const esc = fp.escape;
@@ -370,8 +419,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<span class='fav-region' title='" + esc(region) + "'>" + esc(region) + "</span>"
 				+ "<span class='fav-tools'>"
 				+ "<span class='fav-route-text' title='" + esc(summary.title) + "'>" + esc(flags.route ? summary.text : "") + "</span>"
-				+ "<i class='fav-map" + (flags.map ? " active" : "") + "' data-icon='eye' title='Show on map: " + (flags.map ? "on" : "off")
-				+ " (gate jumps from the chain&#39;s exits, when the star button on the chain map is on)'></i>"
+				+ mapIconHtml(id, system, flags)
 				+ "<i class='fav-route" + (flags.route ? " active" : "") + routeState + "' data-icon='connection' title='" + esc("Route: " + (flags.route ? "on. " + summary.title : "off. Highlight the quickest way there from your location")) + "'></i>"
 				+ "<i class='fav-remove' data-icon='times' title='Remove " + esc(system.name) + " from favourites'></i>"
 				+ "</span>"
@@ -381,6 +429,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function render() {
 			const $list = $("#" + fp.WIDGET_ID + " .fav-list");
 			if (!$list.length) { return; }
+			if (dragging) { renderPending = true; return; }
+			renderPending = false;
 			const settings = current();
 			const favorites = fp.sanitize(options.favorites);
 			$list.html(favorites.length ? favorites.map(function(id) { return rowHtml(id, settings); }).join("")
@@ -422,6 +472,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return searchSource;
 		}
 
+		function closeTooltip() {
+			clearTimeout(tooltipTimer);
+			if (tooltipOpen && typeof ValidationTooltips !== "undefined") { ValidationTooltips.close(); }
+			tooltipOpen = false;
+		}
+
 		function addFromInput() {
 			const $input = $("#" + fp.WIDGET_ID + " .fav-search");
 			const value = $.trim($input.val());
@@ -430,10 +486,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (result.error) {
 				if (typeof ValidationTooltips !== "undefined") {
 					ValidationTooltips.open({ target: $input }).setContent(fp.escape(result.error));
+					tooltipOpen = true;
+					clearTimeout(tooltipTimer);
+					tooltipTimer = setTimeout(closeTooltip, 4000);
 				}
 				return;
 			}
-			if (typeof ValidationTooltips !== "undefined") { ValidationTooltips.close(); }
+			closeTooltip();
 			$input.val("");
 			save(result.list);
 		}
@@ -457,7 +516,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function availableCols(api) {
 			const o = api.options || {};
 			const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
-			return Math.floor(($("#wrapper").width() || $(window).width()) / step);
+			const zoom = parseFloat($("body").css("zoom")) || 1;	// Settings > UI Scale
+			return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
 		}
 
 		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
@@ -487,11 +547,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				items: "> li.fav-row",
 				containment: "parent",
 				tolerance: "pointer",
+				start: function() { dragging = true; },
+				stop: function() {
+					dragging = false;
+					if (renderPending) { setTimeout(render, 0); }
+				},
 				update: function() {
+					dragging = false;
 					save(fp.reorder(options.favorites, $list.sortable("toArray", { attribute: "data-systemid" })));
 				}
 			});
 			if ($.fn.inlinecomplete) {
+				$widget.find(".fav-search").on("input blur", closeTooltip);
 				$widget.find(".fav-search").inlinecomplete({ source: allSystems(), renderer: "system", maxSize: 10, delay: 0 });
 			}
 			render();
@@ -500,6 +567,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function removeWidget() {
 			const api = gridApi();
 			const $widget = $("#" + fp.WIDGET_ID);
+			closeTooltip();
 			if (!api || !$widget.length) { return; }
 			// Remember where it was, so turning it back on puts it in the same place
 			const entry = fp.gridEntry(api.serialize($widget), fp.WIDGET_ID);
@@ -573,16 +641,36 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				e.preventDefault();
 				save(fp.remove(options.favorites, $(this).closest(".fav-row").data("systemid")));
 			});
-			$doc.on("click", sel + " .fav-map, " + sel + " .fav-route", function(e) {
+			$doc.on("click", sel + " .fav-route", function(e) {
 				e.preventDefault();
-				const key = $(this).hasClass("fav-map") ? "map" : "route";
 				const id = $(this).closest(".fav-row").data("systemid");
-				save(null, fp.setFlag(current(), id, key, !fp.flags(current(), id)[key]));
+				save(null, fp.setFlag(current(), id, "route", !fp.flags(current(), id).route));
 			});
+			$doc.on("click", sel + " .fav-map", function(e) {
+				e.preventDefault();
+				if ($(this).hasClass("disabled")) { return; }
+				const id = $(this).closest(".fav-row").data("systemid");
+				if (globalMapOn()) {
+					save(null, fp.setFlag(current(), id, "map", !fp.flags(current(), id).map));
+					return;
+				}
+				// Favourites on the map are off: show this one, then switch them on through the toolbar
+				// button's own handler (it redraws and saves options, flags included)
+				const s = fp.cleanFlags(fp.setFlag(current(), id, "map", true), options.favorites);
+				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
+				$("#show-favorite").trigger("click");
+				render();
+			});
+			// The toolbar button changes how the eyes look
+			$("#show-favorite").on("click", function() { setTimeout(render, 0); });
 
 			// The info panel's star (upstream handler runs first, as it was bound first)
 			$("#system-favorite").on("click", function() {
-				save(null);
+				// Upstream already saved and redrew: just drop flags of a removed favourite and refresh the list
+				const s = fp.cleanFlags(current(), options.favorites);
+				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
+				syncStar();
+				render();
 			});
 
 			// Routes start at the tracked character: redraw when they move

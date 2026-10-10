@@ -110,6 +110,21 @@
 	color: orange;
 }
 
+/* Favourites on the chain map are switched off (toolbar star): the per-system choice is kept but dimmed */
+#favouritesWidget .fav-tools i.fav-map.fav-map-global-off {
+	opacity: 0.4;
+}
+
+/* J-space favourites are never drawn on the chain map */
+#favouritesWidget .fav-tools i.fav-map.disabled {
+	opacity: 0.15;
+	cursor: default;
+}
+
+#favouritesWidget .fav-tools i.fav-map.disabled:hover {
+	color: #555;
+}
+
 #favouritesWidget .fav-tools i.fav-route.active {
 	color: #4191ff;
 	text-shadow: 0 0 4px rgba(255, 255, 255, 0.7);

@@ -104,6 +104,28 @@ describe('Favourites panel', () => {
 		});
 	});
 
+	describe('withChainFavorites', () => {
+		const s = fp.settings({ favoritesPanel: { systems: { 30002187: { map: false } } } });
+		it('Swaps during the call', () => {
+			const opts = { favorites: [JITA, AMARR] };
+			const seen = fp.withChainFavorites(opts, s, () => { const r = []; for (const x in opts.favorites) { r.push(opts.favorites[x]); } return r; });
+			assert.deepEqual(seen, [JITA]);
+			assert.deepEqual(opts.favorites, [JITA, AMARR]);
+		});
+		it('Restores the real list when the chain build throws', () => {
+			const favorites = [JITA, AMARR];
+			const opts = { favorites: favorites };
+			assert.throws(() => fp.withChainFavorites(opts, s, () => { throw new Error('boom'); }), /boom/);
+			assert.strictEqual(opts.favorites, favorites);
+		});
+	});
+
+	describe('canShowOnMap', () => {
+		it('K-space', () => assert.ok(fp.canShowOnMap({ regionID: 10000002 })));
+		it('J-space', () => assert.ok(!fp.canShowOnMap({ regionID: 11000001, class: 3 })));
+		it('Unknown', () => assert.ok(!fp.canShowOnMap(undefined)));
+	});
+
 	describe('layout', () => {
 		const widgets = [
 			{ id: 'infoWidget', col: 1, row: 1, size_x: 7, size_y: 6 },
@@ -186,6 +208,33 @@ describe('Favourites panel', () => {
 			r.lines[0][2].push('rally-route');
 			fp.decorate(r, [UEDAMA], HOME, exits, gateJumps);
 			assert.deepEqual(r.lines[0][2], ['rally-route', 'favourite-route']);
+		});
+		it('Location on a calculated node is not on the chain', () => {
+			const r = chainMapWithCalc();
+			assert.equal(fp.route(r, AMARR, JITA, exits, gateJumps).status, 'no-location');
+		});
+		it('Location on a destination node is not on the chain', () => {
+			const r = chainMap();
+			r.map.rows.push(row(9, DODIXIE, 3, '', { destination: { systemID: DODIXIE } }));
+			assert.equal(fp.route(r, AMARR, DODIXIE, exits, gateJumps).status, 'no-location');
+		});
+		it('In the favourite but off the chain: here', () => assert.equal(fp.route(chainMap(), JITA, JITA, exits, gateJumps).status, 'here'));
+		it('chainSystems skips calculated and destination rows', () => {
+			const r = chainMapWithCalc();
+			r.map.rows.push(row(9, DODIXIE, 3, '', { destination: {} }));
+			assert.deepEqual(Object.keys(fp.chainSystems(r.map.rows)).sort(), [HOME, J135100, AMAMAKE, UEDAMA].map(String).sort());
+		});
+		it('Favourite on the chain far away: a gate route from a near exit wins', () => {
+			// Uedama is 2 holes from home through the chain; via Amamake it's 1 hole + 0 gates (contrived)
+			const g = (from, to) => from === AMAMAKE && to === UEDAMA ? 0 : null;
+			const info = fp.route(chainMap(), UEDAMA, HOME, exits, g);
+			assert.equal(info.kind, 'exit');
+			assert.equal(info.exitSystemID, AMAMAKE);
+			assert.equal(info.holes + info.gates, 1);
+		});
+		it('Favourite on the chain: stays on the chain route when exits are not quicker', () => {
+			const info = fp.route(chainMap(), UEDAMA, HOME, exits, gateJumps);
+			assert.equal(info.kind, 'chain');
 		});
 		it('markNode is idempotent', () => assert.equal(fp.markNode(fp.markNode("<div class='node x'>", 'a'), 'a'), "<div class='node a x'>"));
 	});
