@@ -392,14 +392,28 @@ describe('Intel scans', () => {
 			assert.strictEqual(intelScans.looksLikeDscan("0\tThing\tThing\t5 km"), false);
 			assert.strictEqual(intelScans.looksLikeDscan("670\tCapsule\t\t-"), false);
 		});
-		it('rejects empty, non-string and oversize text', () => {
+		it('rejects empty and non-string text', () => {
 			assert.strictEqual(intelScans.looksLikeDscan(""), false);
 			assert.strictEqual(intelScans.looksLikeDscan("\n \n"), false);
 			assert.strictEqual(intelScans.looksLikeDscan(undefined), false);
 			assert.strictEqual(intelScans.looksLikeDscan(null), false);
+		});
+		it('accepts a d-scan too big to share (decided on shape, the dialog shows the size error)', () => {
 			const row = "670\tCapsule\tCapsule\t-\n";
-			assert.strictEqual(intelScans.looksLikeDscan(row.repeat(intelScans.MAX_LINES + 1)), false);
-			assert.strictEqual(intelScans.looksLikeDscan("670\t" + "x".repeat(intelScans.MAX_BYTES) + "\tCapsule\t-"), false);
+			const tooManyLines = row.repeat(intelScans.MAX_LINES + 1);
+			assert.strictEqual(intelScans.looksLikeDscan(tooManyLines), true);
+			assert.ok(/Too many lines/.test(intelScans.parse(tooManyLines).error));
+			const tooBig = "11182\tCheetah " + "x".repeat(90) + "\tCheetah\t2.1 AU\n";
+			const tooManyBytes = tooBig.repeat(Math.ceil(intelScans.MAX_BYTES / tooBig.length) + 1);
+			assert.ok(tooManyBytes.split("\n").length - 1 < intelScans.MAX_LINES);
+			assert.strictEqual(intelScans.looksLikeDscan(tooManyBytes), true);
+			assert.ok(/Too much text/.test(intelScans.parse(tooManyBytes).error));
+		});
+		it('rejects sig or plain lines within the sampled lines', () => {
+			const rows = "670\tCapsule\tCapsule\t-\n".repeat(intelScans.DETECT_SAMPLE_LINES - 1);
+			assert.strictEqual(intelScans.looksLikeDscan(rows + SIG), false);
+			assert.strictEqual(intelScans.looksLikeDscan(SIG + "\n" + rows), false);
+			assert.strictEqual(intelScans.looksLikeDscan(rows + "Chribba"), false);
 		});
 		it('paste detection is on by default', () => {
 			assert.strictEqual(intelScans.pasteDetect(undefined), true);
@@ -407,6 +421,101 @@ describe('Intel scans', () => {
 			assert.strictEqual(intelScans.pasteDetect({ intelScans: {} }), true);
 			assert.strictEqual(intelScans.pasteDetect({ intelScans: { pasteDetect: true } }), true);
 			assert.strictEqual(intelScans.pasteDetect({ intelScans: { pasteDetect: false } }), false);
+		});
+	});
+
+	describe('page-wide paste handler', () => {
+		const SAMPLE = "670\tCapsule\tCapsule\t-\r\n11182\tCheetah\tCheetah\t2.1 AU\r\n";
+		let log, vals, htmls, saved;
+
+		// Minimal jQuery stand-in: every selector gives a chainable object; val/html/trigger calls are logged in order
+		const stub$ = function(x) {
+			const name = typeof x === "string" ? x : "<" + (x && x.id) + ">";
+			const o = {
+				length: 1,
+				find: (sel) => stub$(name + " " + sel),
+				parent: () => stub$(name + " <parent>"),
+				val: function(v) {
+					if (v === undefined) { return vals[name] || ""; }
+					vals[name] = v; log.push(["val", name, v]); return o;
+				},
+				html: function(h) { htmls[name] = h; log.push(["html", name]); return o; },
+				trigger: function(ev) { log.push(["trigger", name, ev]); return o; },
+				prop: () => o, toggleClass: () => o, addClass: () => o
+			};
+			return o;
+		};
+		const event = (text, id) => {
+			const e = { target: { id: id === undefined ? "clipboard" : id }, calls: [],
+				clipboardData: { getData: (type) => { e.calls.push("getData:" + type); return text; } } };
+			["preventDefault", "stopImmediatePropagation", "stopPropagation"].forEach((m) => { e[m] = () => e.calls.push(m); });
+			return e;
+		};
+
+		beforeEach(() => {
+			log = []; vals = {}; htmls = {};
+			saved = { $: global.$, options: global.options, viewingSystemID: global.viewingSystemID,
+				openDialog: intelScans.openDialog, renderPreview: intelScans.renderPreview };
+			global.$ = stub$;
+			global.options = {};
+			global.viewingSystemID = 30000142;
+			intelScans.openDialog = (id) => log.push(["open", id]);
+			intelScans.renderPreview = () => log.push(["preview"]);
+		});
+		afterEach(() => {
+			["$", "options", "viewingSystemID"].forEach((k) => { if (saved[k] === undefined) { delete global[k]; } else { global[k] = saved[k]; } });
+			intelScans.openDialog = saved.openDialog;
+			intelScans.renderPreview = saved.renderPreview;
+		});
+
+		it('opens the dialog for the viewed system and fills it after opening', () => {
+			const e = event(SAMPLE);
+			assert.strictEqual(intelScans.onPaste(e), true);
+			assert.ok(e.calls.indexOf("preventDefault") >= 0);
+			assert.ok(e.calls.indexOf("stopImmediatePropagation") >= 0);
+			assert.deepStrictEqual(log, [
+				["val", "<clipboard>", ""],
+				["trigger", "<clipboard>", "blur"],
+				["open", 30000142],
+				["val", "#dialog-intelScan .intel-text", SAMPLE],
+				["preview"]
+			]);
+		});
+		it('ignores pastes that are not on the hidden #clipboard box', () => {
+			const e = event(SAMPLE, "intel-text");
+			assert.strictEqual(intelScans.onPaste(e), false);
+			assert.deepStrictEqual(e.calls, []);
+			assert.deepStrictEqual(log, []);
+			assert.strictEqual(intelScans.onPaste({}), false);
+		});
+		const untouched = (setup, text) => {
+			setup();
+			const e = event(text === undefined ? SAMPLE : text);
+			assert.strictEqual(intelScans.onPaste(e), false);
+			assert.deepStrictEqual(e.calls.filter((c) => c.indexOf("getData") !== 0), []);
+			assert.deepStrictEqual(log, []);
+		};
+		it('does nothing when the Intel feature is off', () => {
+			untouched(() => { global.options = { intelScans: { enabled: false } }; });
+		});
+		it('does nothing when paste detection is off', () => {
+			untouched(() => { global.options = { intelScans: { pasteDetect: false } }; });
+		});
+		it('does nothing without a valid viewed system', () => {
+			untouched(() => { global.viewingSystemID = 0; });
+			untouched(() => { delete global.viewingSystemID; });
+		});
+		it('leaves non-d-scan pastes to upstream', () => {
+			untouched(() => {}, "ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t4.32 AU");
+			untouched(() => {}, "Chribba\nBob");
+			untouched(() => {}, "");
+		});
+		it('the dialog preview shows the size error for a d-scan too big to share', () => {
+			intelScans.renderPreview = saved.renderPreview;
+			vals["#dialog-intelScan .intel-text"] = "670\tCapsule\tCapsule\t-\n".repeat(intelScans.MAX_LINES + 1);
+			intelScans.renderPreview();
+			assert.ok(/intel-warn/.test(htmls["#dialog-intelScan .intel-preview"]));
+			assert.ok(/Too many lines/.test(htmls["#dialog-intelScan .intel-preview"]));
 		});
 	});
 });

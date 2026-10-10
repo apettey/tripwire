@@ -157,23 +157,30 @@ const intelScans = {
 		return { rows: rows, invalid: invalid };
 	},
 
+	DETECT_SAMPLE_LINES: 50,
+
 	/**
-	 * True only for a real d-scan copy (modern client format: typeID, name, type, distance on every line), so a page-wide
-	 * paste of it can open the Intel dialog. Probe-scanner sigs, local lists, legacy 3-column rows and mixed pastes: false.
+	 * True when a page-wide paste is a d-scan copy (modern client format: typeID, name, type, distance), so it can open
+	 * the Intel dialog. Decided on shape only, from the first DETECT_SAMPLE_LINES non-blank lines, each of which must be
+	 * a valid typed row: a d-scan too big to share still counts (the dialog then shows the size error instead of the
+	 * paste reaching the sig parser). Probe-scanner sigs, local lists, legacy 3-column rows and mixed pastes: false.
 	 */
 	looksLikeDscan: function(text) {
-		if (typeof text !== "string" || text.indexOf("	") < 0) { return false; }
-		const bytes = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(text).length : text.length;
-		if (bytes > intelScans.MAX_BYTES) { return false; }
-		const lines = intelScans.lines(text);
-		if (!lines.length || lines.length > intelScans.MAX_LINES) { return false; }
-		const typed = lines.every(function(line) {
-			const f = line.split("	");
+		if (typeof text !== "string" || text.indexOf("\t") < 0) { return false; }
+		const sample = [];
+		const all = text.split(/\r\n|\r|\n/);
+		for (let i = 0; i < all.length && sample.length < intelScans.DETECT_SAMPLE_LINES; i++) {
+			const line = all[i].replace(/[ \x0B\0]+$/, "");
+			if (intelScans.trim(intelScans.stripInvisible(line)) !== "") { sample.push(line); }
+		}
+		if (!sample.length) { return false; }
+		const typed = sample.every(function(line) {
+			const f = line.split("\t");
 			return f.length >= 4 && /^[0-9]{1,10}$/.test(intelScans.trim(intelScans.stripInvisible(f[0])));
 		});
 		if (!typed) { return false; }
-		const data = intelScans.parseDscan(text);
-		return data.invalid === 0 && data.rows.length === lines.length;
+		const data = intelScans.parseDscan(sample.join("\n"));
+		return data.invalid === 0 && data.rows.length === sample.length;
 	},
 
 	validCharacterName: function(name) {
@@ -852,26 +859,31 @@ const intelScans = {
 	 * inputs (including the dialog's own box) are left alone.
 	 */
 	setupPasteDetect: function() {
-		document.addEventListener("paste", function(e) {
-			if (!e.target || e.target.id !== "clipboard") { return; }
-			const opts = intelScans.opts();
-			if (!intelScans.enabled(opts) || !intelScans.pasteDetect(opts)) { return; }
-			const systemID = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
-			if (!intelScans.isSystem(systemID)) { return; }
-			let text = "";
-			try {
-				text = e.clipboardData ? e.clipboardData.getData("text/plain") : (window.clipboardData ? window.clipboardData.getData("Text") : "");
-			} catch (err) { return; }
-			if (!intelScans.looksLikeDscan(text)) { return; }
-			e.preventDefault();
-			e.stopImmediatePropagation();
-			e.stopPropagation();
-			$(e.target).val("").trigger("blur");
-			intelScans.openDialog(systemID);
-			// openDialog empties the box, so fill it afterwards
-			$("#" + intelScans.DIALOG_ID).find(".intel-text").val(text);
-			intelScans.renderPreview();
-		}, true);
+		document.addEventListener("paste", intelScans.onPaste, true);
+	},
+
+	/** The capture-phase paste handler (see above); true when it took the paste */
+	onPaste: function(e) {
+		if (!e || !e.target || e.target.id !== "clipboard") { return false; }
+		const opts = intelScans.opts();
+		if (!intelScans.enabled(opts) || !intelScans.pasteDetect(opts)) { return false; }
+		const systemID = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
+		if (!intelScans.isSystem(systemID)) { return false; }
+		let text = "";
+		try {
+			text = e.clipboardData ? e.clipboardData.getData("text/plain")
+				: (typeof window !== "undefined" && window.clipboardData ? window.clipboardData.getData("Text") : "");
+		} catch (err) { return false; }
+		if (!intelScans.looksLikeDscan(text)) { return false; }
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		e.stopPropagation();
+		$(e.target).val("").trigger("blur");
+		intelScans.openDialog(systemID);
+		// openDialog empties the box, so fill it afterwards
+		$("#" + intelScans.DIALOG_ID).find(".intel-text").val(text);
+		intelScans.renderPreview();
+		return true;
 	},
 
 	renderPreview: function() {
