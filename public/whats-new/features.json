@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 3,
+      "date": "2026-10-10",
+      "title": "Automatic wormhole names",
+      "description": "When you add a wormhole signature, the Name is filled in for you using the chain naming scheme: A, B, C... from home, then the parent's name plus one more character further out (letters for large holes, 1-5 for frigate holes, 6-9 for medium holes). Type your own name to override it.\n\nAfter you click Add or Save, the in-game bookmark text (for example =A C5 ABC EOL) is copied to your clipboard, ready to paste into a bookmark.",
+      "images": [
+        { "src": "whats-new/img/pr-3-naming.png", "caption": "Suggested name and copied bookmark" }
+      ]
+    },
+    {
       "pr": 1,
       "date": "2026-10-10",
       "title": "What's New",
