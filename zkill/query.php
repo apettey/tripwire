@@ -88,6 +88,7 @@ function zk_system_kills(PDO $db, array $systemIDs, $windowSeconds, $limit, arra
         $queue = $feed['enabled'] && ($options['queue'] ?? true);
         $coverage = zk_backfill_request($db, $systemIDs, $windowSeconds, [
             'queue' => $queue, 'source' => $options['source'] ?? 'panel', 'userID' => $options['userID'] ?? 0,
+            'feedEnabled' => $feed['enabled'],
         ]);
         $latest = (int) $db->query('SELECT COALESCE(MAX(id), 0) FROM zkill_killmails')->fetchColumn();
         $since = $options['since'] ?? null;

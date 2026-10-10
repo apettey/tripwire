@@ -6,6 +6,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 | Date | Feature | Summary |
 | --- | --- | --- |
 | 2026-10-10 | [Rally point to Discord](2026-10-10-rally-discord/README.md) | Setting, moving or clearing the rally point posts to the mask's Discord webhook (upstream's ping hook); at most one new message per mask per 30 s, later changes edit it; per-user "Also post to Discord" toggle |
+| 2026-10-10 | [Chain Kill Feed](2026-10-10-chain-killfeed/README.md) | "Chain kills" panel: one live feed of recent kills in every wormhole, low-sec and null-sec system on the chain map, last hour back-filled when a system joins; built on `system_kills.php`, no new zKillboard callers |
 | 2026-10-10 | [Infra deploy: pass the environment secret](2026-10-10-infra-deploy-secret/README.md) | Release path called `infra-deploy.yml` without secrets, so the environment's `INFRA_REPO_TOKEN` was empty and v1.9.0 opened no infra PR; now `secrets: inherit` |
 | 2026-10-10 | [System Kill Feed](2026-10-10-system-killfeed/README.md) | Kills panel with the 20 latest kills in the viewed system; all zKillboard/ESI access pooled in one server module (`zkill/`) used only by the feed worker, with back-fill and name queues |
 | 2026-10-10 | [Deploy releases to eve-infrastructure](2026-10-10-infra-deploy-trigger/README.md) | Each release opens an auto-merging PR in eve-infrastructure pinning the new image by digest; `deploy:manual` label opts out; manual "Deploy release to infra" workflow for existing releases and rollbacks |

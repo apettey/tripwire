@@ -174,6 +174,11 @@ check('limiter: ESI rate-limit group fine', zk_http_wait('esi-ok.test'), 0.0);
 zk_http_reserve('zkillboard.com');
 check('limiter: a starting request reserves the spacing', zk_http_wait('zkillboard.com') > 0 && zk_http_wait('zkillboard.com') <= zk_api_interval(), true);
 
+// --- read-only requests report queued / running back-fills as pending ---
+check('in progress: queued / running', [zk_backfill_in_progress('queued'), zk_backfill_in_progress('running')], [true, true]);
+check('in progress: done / failed / none', [zk_backfill_in_progress('done'), zk_backfill_in_progress('failed'), zk_backfill_in_progress(null)], [false, false, false]);
+check('in progress: never while the feed is off (the worker does not drain)', [zk_backfill_in_progress('queued', false), zk_backfill_in_progress('running', false)], [false, false]);
+
 // --- misc ---
 check('system id: J-space', zk_is_system_id(31000005), true);
 check('system id: k-space', zk_is_system_id(30000142), true);

@@ -154,8 +154,13 @@ const systemKillFeed = {
 		return { state: "list", rows: rows, note: note };
 	},
 
-	rowHtml: function(row, nowMs) {
+	/**
+	 * One kill row. Also used by the Chain Kill Feed (app/js/fork/chain-killfeed.js).
+	 * @param extra optional { className: added to the row, html: inserted before the time (already escaped) }
+	 */
+	rowHtml: function(row, nowMs, extra) {
 		const esc = systemKillFeed.escape;
+		const add = extra || {};
 		const tip = systemKillFeed.tooltip;
 		const img = function(cls, url, tooltip) {
 			return url ? "<img class='" + cls + "' src='" + esc(url) + "' alt='' loading='lazy' data-tooltip='" + tooltip + "' />"
@@ -167,7 +172,7 @@ const systemKillFeed = {
 			row.finalBlowShipName ? "in a " + row.finalBlowShipName : ""];
 		const pilotsText = row.npc && row.pilots === 0 ? "NPC" : String(row.pilots);
 		const pilotsTip = row.npc && row.pilots === 0 ? "Killed by NPCs" : (row.pilots === 1 ? "1 pilot involved" : row.pilots + " pilots involved") + (row.solo ? " (solo)" : "");
-		return "<a class='skf-row" + (row.npc ? " skf-npc" : "") + "' href='" + esc(row.url) + "' target='_blank' rel='noopener noreferrer' data-killid='" + row.killID + "'>"
+		return "<a class='skf-row" + (row.npc ? " skf-npc" : "") + (add.className ? " " + esc(add.className) : "") + "' href='" + esc(row.url) + "' target='_blank' rel='noopener noreferrer' data-killid='" + row.killID + "'>"
 			+ img("skf-ship", systemKillFeed.imageURL("type", row.shipTypeID, 64), tip(row.shipName || "Unknown ship"))
 			+ img("skf-corp", systemKillFeed.imageURL("corporations", row.victimCorporationID, 64), tip(victimCorp))
 			+ "<span class='skf-main'>"
@@ -175,6 +180,7 @@ const systemKillFeed = {
 			+ "<span class='skf-sub'><span class='skf-shipname'>" + esc(row.victimIsPilot ? row.shipName : (row.victimCorporationName || row.shipName)) + "</span>"
 			+ (row.value ? "<span class='skf-value'>" + esc(row.value) + "</span>" : "") + "</span>"
 			+ "</span>"
+			+ (add.html || "")
 			+ "<span class='skf-time' data-time='" + (isFinite(row.time) ? row.time : "") + "' data-tooltip='" + tip(systemKillFeed.eveTime(row.time) + " EVE") + "'>"
 			+ esc(systemKillFeed.timeAgo(row.time, nowMs)) + "</span>"
 			+ "<span class='skf-pilots' data-tooltip='" + tip(pilotsTip) + "'><i data-icon='user'></i>" + esc(pilotsText) + "</span>"
@@ -237,9 +243,10 @@ const systemKillFeed = {
 	 * Where a panel without a saved position goes: right of the top widgets when the window has room for it,
 	 * otherwise under everything in the first column.
 	 * @param widgets [{col, row, size_x, size_y}] the other widgets
+	 * @param panelSize optional {x, y} (default: this panel's SIZE)
 	 */
-	defaultPosition: function(widgets, viewportWidth) {
-		const size = systemKillFeed.SIZE;
+	defaultPosition: function(widgets, viewportWidth, panelSize) {
+		const size = panelSize || systemKillFeed.SIZE;
 		let maxCol = 0, maxRow = 0;
 		(widgets || []).forEach(function(w) {
 			maxCol = Math.max(maxCol, (w.col || 1) + (w.size_x || 1) - 1);
