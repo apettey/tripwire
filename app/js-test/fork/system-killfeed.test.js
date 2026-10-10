@@ -197,6 +197,25 @@ describe('System kill feed', () => {
 		});
 	});
 
+	describe('detachTooltips', () => {
+		it('detaches the elements from the tooltip', () => {
+			const calls = [];
+			const tooltips = { detach: (els) => calls.push(els) };
+			const els = { length: 3 };
+			skf().detachTooltips(tooltips, els);
+			assert.deepEqual(calls, [els]);
+		});
+		it('does nothing without elements or a tooltip', () => {
+			const calls = [];
+			const tooltips = { detach: (els) => calls.push(els) };
+			skf().detachTooltips(tooltips, { length: 0 });
+			skf().detachTooltips(tooltips, null);
+			skf().detachTooltips(null, { length: 2 });
+			skf().detachTooltips({}, { length: 2 });
+			assert.equal(calls.length, 0);
+		});
+	});
+
 	describe('layout', () => {
 		it('reads a saved position from the serialized grid', () => {
 			const grid = [{ id: 'infoWidget', col: 1, row: 1, size_x: 7, size_y: 6 },

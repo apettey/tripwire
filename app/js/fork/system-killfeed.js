@@ -219,6 +219,15 @@ const systemKillFeed = {
 		return classes;
 	},
 
+	/**
+	 * Release tooltips of elements that are about to be replaced or removed: the shared jBox tooltip keeps every
+	 * element it was attached to (attachedElements) until it is detached, so re-rendering without this leaks them.
+	 * @param tooltips the jBox tooltip (Tooltips); @param $elements jQuery collection of [data-tooltip] elements
+	 */
+	detachTooltips: function(tooltips, $elements) {
+		if (tooltips && typeof tooltips.detach === "function" && $elements && $elements.length) { tooltips.detach($elements); }
+	},
+
 	/** Saved layout entry for the panel in options.grid (array or object of {id, col, row, size_x, size_y}) */
 	savedPosition: function(grid, id) {
 		if (!grid || typeof grid !== "object") { return null; }
@@ -331,6 +340,7 @@ const systemKillFeed = {
 		// Drop the id first: gridster fades the widget out before removing it, and turning the setting back on
 		// meanwhile must add a new panel
 		$w.attr("id", systemKillFeed.WIDGET_ID + "-removed");
+		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $w.find("[data-tooltip]"));
 		systemKillFeed.systemID = null;
 		systemKillFeed.response = null;
 		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
@@ -419,6 +429,7 @@ const systemKillFeed = {
 		if (typeof Tooltips !== "undefined" && Tooltips.close) { Tooltips.close(); }
 		const $body = $w.find(".skf-body");
 		const scroll = $w.find(".content").scrollTop();
+		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $body.find("[data-tooltip]"));
 		$body.html(systemKillFeed.bodyHtml(model, Date.now(), systemKillFeed.error));
 		$w.find(".content").scrollTop(scroll);
 		if (typeof Tooltips !== "undefined") { Tooltips.attach($body.find("[data-tooltip]")); }
