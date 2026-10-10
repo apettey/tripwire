@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 31,
+      "date": "2026-10-10",
+      "title": "Rally point message shows the chain label",
+      "description": "The rally point message in Discord now names the system the way your chain map does, with the name of the hole leading into it, e.g. AABCA \u00b7 J152820. When the rally is cleared, the message says which system it was on.\n\nCorporation admins can use the new {label} and {labelSystem} placeholders in their own texts in Mask Admin > Discord. Masks still using the default texts get the new ones automatically.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-31-rally-chain-label.png",
+          "caption": "Mask Admin > Discord: the rally point preview with the chain label"
+        }
+      ]
+    },
+    {
       "pr": 30,
       "date": "2026-10-10",
       "title": "Rally point channel in Mask Admin > Discord",
