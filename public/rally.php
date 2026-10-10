@@ -8,8 +8,10 @@
 //				POST mode=set&systemID=<id>  -> set the rally point
 //				POST mode=clear              -> clear the rally point
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header.
-//				Add discord=1 to a change to also post it to the mask's Discord webhook (upstream's
-//				ping webhook, see rally_discord.inc.php); GET's "discord" says whether there is one.
+//				Add discord=1 to a change to also post it to Discord: the channel a corp admin chose for the
+//				rally type in Mask Admin > Discord (queued in the Discord outbox, discord/rally.php), or else
+//				upstream's server-wide DISCORD_WEB_HOOK of the mask (posted directly, rally_discord.inc.php).
+//				"discord" in every answer says whether either is there.
 //
 //	The fork_rally table is created on first use, so existing databases need no migration.
 //***********************************************************
@@ -24,7 +26,7 @@ if (!isset($_SESSION['userID']) || !isset($_SESSION['mask'])) {
 
 require_once('../config.php');
 require_once('../db.inc.php');
-require_once('../ping.inc.php');
+require_once('../discord/discord.inc.php');
 require_once('../rally_discord.inc.php');
 
 header('Content-Type: application/json');
@@ -108,20 +110,25 @@ try {
 	rally_fail(500, 'Database error');
 }
 
-$hook = discord_webhook_for_current_mask();
-$output['discord'] = !!$hook;
+$route = rally_discord_route($mysql, $mask);
+$output['discord'] = !!$route;
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
 echo json_encode($output);
 
-// Discord: after the response is sent, so a slow webhook doesn't hold up the map
-if ($discordAction && $hook && isset($_POST['discord']) && $_POST['discord'] === '1') {
+// Discord: after the response is sent, so neither the outbox nor a slow legacy webhook holds up the map
+if ($discordAction && $route && isset($_POST['discord']) && $_POST['discord'] === '1') {
 	$who = isset($_SESSION['characterName']) ? $_SESSION['characterName'] : (isset($_SESSION['username']) ? $_SESSION['username'] : null);
 	session_write_close();
 	if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 	try {
-		rally_discord_notify($mysql, $mask, $hook, $discordAction, $who);
-	} catch (Exception $e) {
-		error_log('rally discord: ' . $e->getMessage());
+		if ($route['via'] === 'settings') {
+			// Mask Admin > Discord: the sender (discord_notify.worker.php) posts or edits the message
+			discord_rally_enqueue($mysql, $mask, $route['type'], $discordAction, $who);
+		} else {
+			rally_discord_notify($mysql, $mask, $route['hook'], $discordAction, $who);
+		}
+	} catch (Throwable $e) {
+		error_log('rally discord: ' . rally_discord_redact($e->getMessage()));
 	}
 }

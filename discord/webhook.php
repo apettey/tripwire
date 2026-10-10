@@ -61,3 +61,12 @@ function discord_webhook_bucket_key($url) {
     $parsed = discord_webhook_parse($url);
     return $parsed ? 'webhook:' . $parsed['id'] : 'webhook:?';
 }
+
+/** The URL a message of this webhook is edited at (PATCH; rally messages, discord/rally.php) */
+function discord_webhook_edit_url($url, $messageID, $base = null) {
+    $parsed = discord_webhook_parse($url);
+    if (!$parsed || !preg_match('/^\d{1,32}$/', (string) $messageID)) return null;
+    $base = $base !== null ? $base : discord_api_base();
+    return $base . '/webhooks/' . $parsed['id'] . '/' . $parsed['token'] . '/messages/' . $messageID
+        . ($parsed['threadID'] ? '?thread_id=' . $parsed['threadID'] : '');
+}

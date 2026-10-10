@@ -60,6 +60,15 @@ const DISCORD_DDL = [
       PRIMARY KEY (`maskID`, `kind`, `ref`),
       KEY `createdAt` (`createdAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Rally point messages (discord/rally.php): the last one posted per mask, so changes within DISCORD_RALLY_WINDOW
+    // edit it instead of posting another. Written only by the sender (discord_dispatch).
+    "CREATE TABLE IF NOT EXISTS `discord_rally` (
+      `maskID` decimal(12,1) NOT NULL,
+      `webhookID` int unsigned NOT NULL,
+      `messageID` varchar(32) NOT NULL,
+      `postedAt` datetime NOT NULL,
+      PRIMARY KEY (`maskID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
 function discord_ensure_schema(PDO $db) {

@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Rally point in Mask Admin > Discord](2026-10-10-rally-discord-settings/README.md) | Rally point is a Discord notification type corp admins set up (channel, ping, set/cleared texts); sent through the outbox, which can now edit the last rally message (PATCH) within 30 s; masks without it keep upstream's `DISCORD_WEB_HOOK` |
 | 2026-10-10 | [System Threat](2026-10-10-system-threat/README.md) | Kill-activity heat badge on chain map nodes (7-day kills) and a Threat & residents block in the system info panel; zKillboard per-system stats fetched only by the feed worker (pooled client, lowest priority, 12 h cache), toggles in Chain Map Settings and General Preferences |
 | 2026-10-10 | [Rally point to Discord](2026-10-10-rally-discord/README.md) | Setting, moving or clearing the rally point posts to the mask's Discord webhook (upstream's ping hook); at most one new message per mask per 30 s, later changes edit it; per-user "Also post to Discord" toggle |
 | 2026-10-10 | [Set route in game: choose the characters](2026-10-10-autopilot-character-picker/README.md) | The autopilot button asks which tracked characters get the route (tracked one pre-ticked, Select all, last choice remembered) and sends it to each in turn, reporting who got it and who didn't |

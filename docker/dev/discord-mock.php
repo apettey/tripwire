@@ -9,6 +9,9 @@
 //                                     ...0430 -> every other request a global 429 (retry_after 3 s)
 //                                     ...0500 -> 500 for the first 2 requests, then OK
 //                                     anything else -> 200; X-RateLimit-* headers with a bucket of 5 per 2 s
+//   PATCH /api/webhooks/<id>/<token>/messages/<messageID>   edits a message (rally point), same behaviours;
+//                                     404 Unknown Message (10008) for a message deleted with GET /delete/<messageID>
+//   GET  /delete/<messageID>          pretend that message was deleted in Discord
 //   GET  /messages                    the last 50 requests (JSON, newest first)
 //   GET  /reset                       forget everything
 //
@@ -46,7 +49,14 @@ if ($path === '/reset') {
     echo '{"reset":true}';
     return;
 }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !preg_match('~^/api/webhooks/(\d+)/([A-Za-z0-9_-]+)$~', $path, $m)) {
+if (preg_match('~^/delete/(\d+)$~', $path, $d)) {
+    mock_state($dir, 'deleted:' . $d[1], function () { return [true, true]; });
+    echo '{"deleted":true}';
+    return;
+}
+$method = $_SERVER['REQUEST_METHOD'];
+if (!($method === 'POST' && preg_match('~^/api/webhooks/(\d+)/([A-Za-z0-9_-]+)$~', $path, $m))
+    && !($method === 'PATCH' && preg_match('~^/api/webhooks/(\d+)/([A-Za-z0-9_-]+)/messages/(\d+)$~', $path, $m))) {
     http_response_code(404);
     echo '{"message": "404: Not Found", "code": 0}';
     return;
@@ -56,7 +66,8 @@ $body = json_decode(file_get_contents('php://input'), true);
 $count = mock_state($dir, 'count:' . $id, function ($n) { $n = (int) $n + 1; return [$n, $n]; });
 
 $status = 200;
-$response = ['id' => (string) (time() * 1000 + $count), 'channel_id' => '1', 'content' => $body['content'] ?? ''];
+$messageID = isset($m[3]) ? $m[3] : (string) (time() * 1000 + $count);
+$response = ['id' => $messageID, 'channel_id' => '1', 'content' => $body['content'] ?? ''];
 $headers = [];
 $suffix = substr($id, -4);
 if ($suffix === '0404') { $status = 404; $response = ['message' => 'Unknown Webhook', 'code' => 10015]; }
@@ -64,6 +75,7 @@ elseif ($suffix === '0401') { $status = 401; $response = ['message' => 'Invalid 
 elseif ($suffix === '0429' && $count % 2 === 1) { $status = 429; $response = ['message' => 'You are being rate limited.', 'retry_after' => 2.0, 'global' => false]; $headers['Retry-After'] = '2'; $headers['X-RateLimit-Scope'] = 'user'; }
 elseif ($suffix === '0430' && $count % 2 === 1) { $status = 429; $response = ['message' => 'You are being rate limited.', 'retry_after' => 3.0, 'global' => true]; $headers['X-RateLimit-Global'] = 'true'; $headers['X-RateLimit-Scope'] = 'global'; }
 elseif ($suffix === '0500' && $count <= 2) { $status = 500; $response = ['message' => 'Internal Server Error', 'code' => 0]; }
+elseif (isset($m[3]) && mock_state($dir, 'deleted:' . $m[3], function ($v) { return [$v, (bool) $v]; })) { $status = 404; $response = ['message' => 'Unknown Message', 'code' => 10008]; }
 elseif (!is_array($body) || (($body['content'] ?? '') === '' && empty($body['embeds']))) { $status = 400; $response = ['message' => 'Cannot send an empty message', 'code' => 50006]; }
 
 // Bucket of 5 requests per 2 s per webhook
@@ -76,7 +88,7 @@ $remaining = mock_state($dir, 'bucket:' . $id, function ($b) {
 $headers += ['X-RateLimit-Limit' => '5', 'X-RateLimit-Remaining' => (string) $remaining[0],
     'X-RateLimit-Reset-After' => number_format($remaining[1], 3, '.', ''), 'X-RateLimit-Bucket' => 'mock-' . $id];
 
-file_put_contents($log, json_encode(['at' => gmdate('Y-m-d H:i:s'), 'webhook' => $id, 'status' => $status, 'query' => $_SERVER['QUERY_STRING'] ?? '',
+file_put_contents($log, json_encode(['at' => gmdate('Y-m-d H:i:s'), 'method' => $method, 'message' => isset($m[3]) ? $m[3] : null, 'webhook' => $id, 'status' => $status, 'query' => $_SERVER['QUERY_STRING'] ?? '',
     'userAgent' => $_SERVER['HTTP_USER_AGENT'] ?? '', 'body' => $body], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
 http_response_code($status);
 foreach ($headers as $name => $value) header("$name: $value");

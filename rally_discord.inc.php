@@ -16,9 +16,29 @@
 //
 //	The pure functions (rally_discord_clean, _system_label, _payload, _decision, _message_url, _url_base,
 //	_redact) have no side effects; tests/rally_discord_test.php exercises them.
+//
+//	Since the rally point is a notification type in Mask Admin > Discord (discord/rally.php), this direct path is
+//	only the fallback for masks that don't have that type turned on: see rally_discord_route().
 //***********************************************************
 
 if (!defined('RALLY_DISCORD_WINDOW')) define('RALLY_DISCORD_WINDOW', 30);
+
+/** Where a rally change of $mask goes (needs discord/discord.inc.php):
+	array('via' => 'settings', 'type' => <rally type>) when a corp admin turned the type on in Mask Admin > Discord
+	(queued in the Discord outbox), else array('via' => 'legacy', 'hook' => <url>) when upstream's server-wide
+	DISCORD_WEB_HOOK ($legacyMap, null = the constant) has a webhook for the mask (posted directly, as before),
+	else null. The Mask Admin setting wins; an error reading it (e.g. no discord_* tables yet) counts as not set. */
+function rally_discord_route($mysql, $mask, $legacyMap = null) {
+	try {
+		$type = discord_rally_target($mysql, $mask);
+		if ($type) return array('via' => 'settings', 'type' => $type);
+	} catch (Throwable $e) {
+		// No discord_* tables yet (the Discord worker creates them) is normal and asked on every poll: not logged
+		if (!($e instanceof PDOException && $e->getCode() === '42S02')) error_log('rally discord: reading the Discord settings failed: ' . rally_discord_redact($e->getMessage()));
+	}
+	$hook = discord_rally_legacy_hook($mask, $legacyMap);
+	return $hook ? array('via' => 'legacy', 'hook' => $hook) : null;
+}
 
 /** Neutralise user-controlled text for a Discord message: no mentions (@everyone, @here, <@id>), no
 	markdown, no links, one line, at most $max characters. */
@@ -162,7 +182,7 @@ function rally_discord_current_rally($mysql, $mask) {
 /** Bring the mask's Discord message up to date with its rally, after a change.
 	Runs under a per-mask lock and posts the rally as stored when the lock is held (see the header), so
 	the last change to finish always leaves Discord showing the final rally.
-	@param $hook the mask's webhook (discord_webhook_for_current_mask())
+	@param $hook the mask's legacy webhook (rally_discord_route()'s 'hook')
 	@param $action the change that triggered this, 'set' or 'clear' (only used to name who cleared)
 	@param $who the character that made the change
 	@return 'post' | 'edit' | 'failed' */

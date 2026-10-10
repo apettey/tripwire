@@ -5,7 +5,8 @@
 //   types: {
 //     kspace:    {enabled, webhookID, template, ping, pingSystems: [systemID...], maxJumps, cooldownHours},
 //     chainKill: {enabled, webhookID, template, ping, minIsk, includeNpc, excludePods},
-//     corpKill:  {...same as chainKill}, corpLoss: {...same as chainKill}
+//     corpKill:  {...same as chainKill}, corpLoss: {...same as chainKill},
+//     rally:     {enabled, webhookID, template (set / moved), templateClear (cleared), ping}   (discord/rally.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
 // }
@@ -30,6 +31,8 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
             'chainKill' => $kill('chainKill') + ['includeHighsec' => false],
             'corpKill' => $kill('corpKill'),
             'corpLoss' => $kill('corpLoss'),
+            'rally' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['rally'], 'templateClear' => $templates['rallyClear'],
+                'ping' => '', 'enabledAt' => 0],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
@@ -102,11 +105,12 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if ($id > 0 && $webhookIDs !== null && !in_array($id, $webhookIDs, true)) { $errors[] = "$kind: unknown webhook"; $id = 0; }
             $type['webhookID'] = max(0, $id);
         }
-        if (array_key_exists('template', $in)) {
-            $template = trim(str_replace("\r", '', (string) $in['template']));
-            if ($template === '') $template = $defaults['types'][$kind]['template'];
-            if (mb_strlen($template) > DISCORD_TEMPLATE_MAX) { $errors[] = "$kind: template longer than " . DISCORD_TEMPLATE_MAX . ' characters'; $template = mb_substr($template, 0, DISCORD_TEMPLATE_MAX); }
-            $type['template'] = $template;
+        foreach (['template', 'templateClear'] as $field) {
+            if (!array_key_exists($field, $in) || !array_key_exists($field, $type)) continue;
+            $template = trim(str_replace("\r", '', (string) $in[$field]));
+            if ($template === '') $template = $defaults['types'][$kind][$field];
+            if (mb_strlen($template) > DISCORD_TEMPLATE_MAX) { $errors[] = "$kind: " . ($field === 'templateClear' ? '"cleared" text' : 'template') . ' longer than ' . DISCORD_TEMPLATE_MAX . ' characters'; $template = mb_substr($template, 0, DISCORD_TEMPLATE_MAX); }
+            $type[$field] = $template;
         }
         if (array_key_exists('ping', $in)) {
             $ping = discord_ping_normalise($in['ping']);
@@ -126,6 +130,8 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if (array_key_exists('maxJumps', $in)) $type['maxJumps'] = max(1, min(50, (int) $in['maxJumps']));
             if (array_key_exists('cooldownHours', $in)) $type['cooldownHours'] = max(1, min(48, (int) $in['cooldownHours']));
             if ($type['enabled'] && !$type['pingSystems']) { $errors[] = 'kspace: add at least one ping system'; $type['enabled'] = false; }
+        } elseif ($kind === 'rally') {
+            // Nothing else: on/off, webhook, ping and the two templates
         } else {
             if (array_key_exists('minIsk', $in)) $type['minIsk'] = max(0, min(1e15, (float) (is_numeric($in['minIsk']) ? $in['minIsk'] : 0)));
             foreach (['includeNpc', 'excludePods', 'includeHighsec'] as $flag) {

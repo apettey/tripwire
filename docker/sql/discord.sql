@@ -56,3 +56,10 @@ CREATE TABLE IF NOT EXISTS `discord_sent` (
   KEY `createdAt` (`createdAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS `discord_rally` (
+  `maskID` decimal(12,1) NOT NULL,
+  `webhookID` int unsigned NOT NULL,
+  `messageID` varchar(32) NOT NULL,
+  `postedAt` datetime NOT NULL,
+  PRIMARY KEY (`maskID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
