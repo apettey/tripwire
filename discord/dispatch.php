@@ -10,8 +10,9 @@
 //     DISCORD_MAX_ATTEMPTS;
 //   - 401 / 403 / 404 (unknown webhook, invalid token): the webhook is marked broken (shown in the settings) and its
 //     queued messages fail; nothing more is sent to it until an admin replaces the URL. Other 4xx: that message fails.
-// Circuit breakers (refusals per 10 min): 50 pause that webhook, 150 that mask (shown on the mask's settings page),
-// 2000 everything; all logged as CIRCUIT BREAKER.
+// Circuit breakers (refusals per 10 min): 50 pause that webhook, 150 that mask, 400 that corporation (all its masks;
+// shown on the mask's settings page), 2000 everything; all logged as CIRCUIT BREAKER. Messages of masks that no
+// longer qualify (discord_mask_sending_corporation) fail instead of being sent.
 // A pass sends at most $limit messages and stops after $budget seconds, so the worker loop stays responsive.
 
 const DISCORD_HTTP_TIMEOUT   = 10;
@@ -20,9 +21,9 @@ const DISCORD_NAMES_WAIT     = 90;     // seconds a kill message waits for names
 
 const DISCORD_BREAKER_WINDOW = 600;   // seconds
 // Circuit breakers: requests Discord refused (any 4xx, 429 included) per rolling window before sending pauses. One
-// webhook or one mask trips its own breaker long before the instance-wide one (last resort; Cloudflare bans an IP
+// webhook, one mask or one corporation (all its custom masks together) trips its own breaker long before the instance-wide one (last resort; Cloudflare bans an IP
 // from Discord's API at 10,000 refusals per 10 minutes).
-const DISCORD_BREAKER_LIMITS = ['webhook' => 50, 'mask' => 150, 'global' => 2000];
+const DISCORD_BREAKER_LIMITS = ['webhook' => 50, 'mask' => 150, 'corp' => 400, 'global' => 2000];
 
 /**
  * In-process limiter state: ['global' => unix, 'buckets' => key => unix, 'last' => unix,
@@ -211,9 +212,18 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
     $stmt->execute($ids);
     $webhooks = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $w) $webhooks[(int) $w['id']] = $w;
+    $corporations = [];   // maskID => corporation it belongs to, or 0 when it can't have notifications (this pass)
 
     foreach ($rows as $row) {
         if (microtime(true) - $started >= $budget) break;
+        // Same rule as discord_active_settings: a mask that no longer qualifies doesn't get its backlog sent
+        $maskKey = (string) $row['maskID'];
+        if (!isset($corporations[$maskKey])) $corporations[$maskKey] = discord_mask_sending_corporation($db, $maskKey);
+        if (!$corporations[$maskKey]) {
+            discord_outbox_mark($db, $row['id'], 'failed', 'this mask can no longer have Discord notifications (not a corporation mask, or no Tripwire admin left)');
+            $counts['failed']++;
+            continue;
+        }
         $webhook = $webhooks[(int) $row['webhookID']] ?? null;
         if (!$webhook || (string) $webhook['maskID'] !== (string) $row['maskID']) {
             discord_outbox_mark($db, $row['id'], 'failed', 'webhook was deleted');
@@ -235,11 +245,12 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             continue;
         }
         $bucket = discord_webhook_bucket_key($url);
-        $scopes = ['mask:' . $row['maskID'], 'webhook:' . (int) $webhook['id']];
-        $wait = max(discord_wait($bucket), discord_scope_wait($scopes[0]), discord_scope_wait($scopes[1]));
+        $scopes = ['mask:' . $row['maskID'], 'webhook:' . (int) $webhook['id'], 'corp:' . $corporations[$maskKey]];
+        $scopeWait = max(discord_scope_wait($scopes[0]), discord_scope_wait($scopes[1]), discord_scope_wait($scopes[2]));
+        $wait = max(discord_wait($bucket), $scopeWait);
         if ($limits['global'] > microtime(true)) break;
         if ($wait > 0) {   // this webhook (or mask) is paused; try again when its bucket resets / its breaker closes
-            $why = discord_scope_wait($scopes[0]) > 0 || discord_scope_wait($scopes[1]) > 0 ? 'paused: Discord refused too many requests' : 'waiting for the rate limit';
+            $why = $scopeWait > 0 ? 'paused: Discord refused too many requests' : 'waiting for the rate limit';
             discord_outbox_mark($db, $row['id'], 'queued', $why, $wait, false);
             $counts['deferred']++;
             continue;

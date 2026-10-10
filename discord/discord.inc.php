@@ -63,6 +63,11 @@ function discord_leader_lock(PDO $db, $name) {
     return (int) $stmt->fetchColumn() === 1;
 }
 
+/** 'Y-m-d H:i:s' (UTC) -> ISO 8601; null stays null */
+function discord_iso($datetime) {
+    return $datetime === null ? null : str_replace(' ', 'T', (string) $datetime) . 'Z';
+}
+
 /** Public base URL of this Tripwire (for links in messages), from TRIPWIRE_DOMAIN / TRIPWIRE_HTTPS */
 function discord_app_url() {
     $domain = discord_config('TRIPWIRE_DOMAIN');

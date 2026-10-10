@@ -74,6 +74,39 @@ function discord_enqueue_once(PDO $db, $maskID, $webhookID, $kind, array $data, 
     }
 }
 
+/**
+ * Delivery status of a mask for its settings page: queued now, sent / failed in the last 24 h, the last 5 failures
+ * and the circuit breakers open now (discord_breaker_note). Each query has its own statement. Times are passed in
+ * (UTC) so the SQL stays portable (tested on SQLite).
+ */
+function discord_outbox_status(PDO $db, $maskID, $now = null) {
+    $now = $now ?? time();
+    $nowText = gmdate('Y-m-d H:i:s', $now);
+    $dayAgo = gmdate('Y-m-d H:i:s', $now - 86400);
+    $countStmt = $db->prepare("SELECT
+            SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+            SUM(CASE WHEN status = 'sent' AND sentAt >= ? THEN 1 ELSE 0 END) AS sent24h,
+            SUM(CASE WHEN status = 'failed' AND createdAt >= ? THEN 1 ELSE 0 END) AS failed24h
+        FROM discord_outbox WHERE maskID = ?");
+    $countStmt->execute([$dayAgo, $dayAgo, $maskID]);
+    $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $failureStmt = $db->prepare("SELECT o.id, o.kind, o.lastError, o.createdAt, w.name AS webhook FROM discord_outbox o
+        LEFT JOIN discord_webhooks w ON w.id = o.webhookID
+        WHERE o.maskID = ? AND o.status = 'failed' ORDER BY o.id DESC LIMIT 5");
+    $failureStmt->execute([$maskID]);
+    $failures = array_map(function ($r) {
+        return ['id' => (int) $r['id'], 'kind' => $r['kind'], 'error' => $r['lastError'], 'createdAt' => discord_iso($r['createdAt']), 'webhook' => $r['webhook']];
+    }, $failureStmt->fetchAll(PDO::FETCH_ASSOC));
+    $pausedStmt = $db->prepare("SELECT ref, createdAt FROM discord_sent WHERE maskID = ? AND kind = 'breaker' AND createdAt > ?");
+    $pausedStmt->execute([$maskID, $nowText]);
+    $paused = array_map(function ($r) {
+        $scope = explode(':', $r['ref'], 2);
+        return ['scope' => $scope[0], 'webhookID' => $scope[0] === 'webhook' ? (int) $scope[1] : null, 'until' => discord_iso($r['createdAt'])];
+    }, $pausedStmt->fetchAll(PDO::FETCH_ASSOC));
+    return ['queued' => (int) ($counts['queued'] ?? 0), 'sent24h' => (int) ($counts['sent24h'] ?? 0),
+        'failed24h' => (int) ($counts['failed24h'] ?? 0), 'failures' => $failures, 'paused' => $paused];
+}
+
 /** Due messages, highest priority first, at most $limit */
 function discord_outbox_due(PDO $db, $limit) {
     $stmt = $db->query("SELECT o.id, o.maskID, o.webhookID, o.kind, o.data, o.attempts,

@@ -248,8 +248,11 @@ Corporation admins can have Tripwire post to their Discord (Mask Admin > Discord
 (`<corp>.2`) and custom masks owned by the corporation (`<id>.0`, owner type corporation) have it, and only the
 corporation's Tripwire admins (the admin flag, `checkAdmin`) see and change it. Not the Public or Private masks,
 alliance masks, or custom masks owned by a character (anyone can create those). If a mask stops qualifying, or its
-corporation has no Tripwire admin left, the worker ignores its settings (they stay stored). A member who loses the admin
-flag can't change anything any more, but what the corporation set up keeps running until another admin turns it off.
+corporation has no Tripwire admin left, the worker ignores its settings (they stay stored) and its queued messages fail
+instead of being sent. A member who loses the admin flag can't change anything any more, but what the corporation set
+up keeps running until another admin turns it off. The admin flag is upstream's `characters.admin`: set when a
+character registers as admin (ESI Director role or a "Tripwire Admin" title) and reset when the character changes
+corporation; losing the Director role within the same corporation is not detected.
 Nothing is sent until an admin adds a
 webhook, picks it for a notification type and turns the type on; nothing that happened before a type was turned on is
 announced (each type stores `enabledAt`, set by the server).
@@ -302,7 +305,8 @@ timeout per request, 50 ms between requests):
   message), its queued messages fail and nothing more is sent to it until an admin replaces the URL; other 4xx fail
   that message only. A new or replaced URL is "not verified" (`pending`) until Discord accepts a message for it;
 - circuit breakers on refused requests (any 4xx, 429 included) within 10 minutes: 50 for one webhook pause that
-  webhook, 150 for one mask pause that mask, 2000 overall pause **all** sending (last resort; Cloudflare bans an IP
+  webhook, 150 for one mask pause that mask, 400 for one corporation (all its masks together) pause that corporation,
+  2000 overall pause **all** sending (last resort; Cloudflare bans an IP
   from Discord's API at 10,000 per 10 minutes), each until its oldest refusal leaves the window. Logged as
   `CIRCUIT BREAKER (<scope>)`; a paused mask or webhook is shown on the mask's settings page. Per mask, at most 5 test
   messages per minute and 10 webhook URLs added or replaced per hour (recorded first, then counted, so concurrent

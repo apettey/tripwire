@@ -331,5 +331,47 @@ check('rate limit: per mask', discord_rate_take($rl, '98000002.2', 'rl:test', 5,
 $rl->exec("UPDATE discord_sent SET createdAt = '2000-01-01 00:00:00'");
 check('rate limit: window passes', discord_rate_take($rl, '98000001.2', 'rl:test', 5, 60), true);
 
+// --- review round 3 ---
+// Settings page status: counts, last failures (with webhook name) and open breakers, each from its own query
+$st = new PDO('sqlite::memory:');
+$st->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$st->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY, maskID TEXT, webhookID INTEGER, kind TEXT, status TEXT, lastError TEXT, createdAt TEXT, sentAt TEXT)");
+$st->exec("CREATE TABLE discord_webhooks (id INTEGER PRIMARY KEY, name TEXT)");
+$st->exec("CREATE TABLE discord_sent (maskID TEXT, kind TEXT, ref TEXT, createdAt TEXT)");
+$nowTs = 1791633600;   // 2026-10-10 12:00:00 UTC
+$st->exec("INSERT INTO discord_webhooks VALUES (3, '#gone')");
+$st->exec("INSERT INTO discord_outbox VALUES
+    (1, 'M.2', 1, 'kspace', 'queued', '', '2026-10-10 11:59:00', NULL),
+    (2, 'M.2', 1, 'chainKill', 'sent', '', '2026-10-10 11:00:00', '2026-10-10 11:00:05'),
+    (3, 'M.2', 1, 'chainKill', 'sent', '', '2026-10-08 11:00:00', '2026-10-08 11:00:05'),
+    (4, 'M.2', 3, 'corpLoss', 'failed', 'HTTP 404: Unknown Webhook (10015)', '2026-10-10 11:30:00', NULL),
+    (5, 'X.2', 3, 'corpLoss', 'failed', 'other mask', '2026-10-10 11:30:00', NULL)");
+$st->exec("INSERT INTO discord_sent VALUES ('M.2', 'breaker', 'webhook:3', '2026-10-10 12:05:00'), ('M.2', 'breaker', 'mask:M.2', '2026-10-10 11:55:00'),
+    ('M.2', 'kill:chainKill', '123', '2026-10-10 11:00:00')");
+check('status: shape and values', discord_outbox_status($st, 'M.2', $nowTs), [
+    'queued' => 1, 'sent24h' => 1, 'failed24h' => 1,
+    'failures' => [['id' => 4, 'kind' => 'corpLoss', 'error' => 'HTTP 404: Unknown Webhook (10015)', 'createdAt' => '2026-10-10T11:30:00Z', 'webhook' => '#gone']],
+    'paused' => [['scope' => 'webhook', 'webhookID' => 3, 'until' => '2026-10-10T12:05:00Z']],
+]);
+check('status: empty mask', discord_outbox_status($st, 'none.2', $nowTs), ['queued' => 0, 'sent24h' => 0, 'failed24h' => 0, 'failures' => [], 'paused' => []]);
+
+// Which masks may still send (worker settings and dispatcher backlog use the same rule)
+$st->exec("CREATE TABLE masks (maskID TEXT PRIMARY KEY, ownerID INTEGER, ownerType INTEGER)");
+$st->exec("CREATE TABLE characters (characterID INTEGER, corporationID INTEGER, admin INTEGER)");
+$st->exec("INSERT INTO masks VALUES ('5.0', 98000001, 2), ('6.0', 90000001, 1373), ('7.0', 98000002, 2)");
+$st->exec("INSERT INTO characters VALUES (1, 98000001, 1), (2, 98000002, 0)");
+check('sending corporation', array_map(function ($m) use ($st) { return discord_mask_sending_corporation($st, $m); },
+    ['98000001.2', '5.0', '6.0', '98000002.2', '7.0', '8.0', '196379789.1']), [98000001, 98000001, 0, 0, 0, 0, 0]);
+
+// Corporation breaker: many masks of one corporation together, each below its own limits
+discord_limits_reset();
+$logged = [];
+$tc = 90000.0;
+for ($i = 0; $i < 399; $i++) discord_breaker_record(404, $tc + $i * 0.01, ['mask:' . ($i % 4) . '.0', 'webhook:' . $i, 'corp:98000001']);
+check('breaker: corporation below 400', discord_scope_wait('corp:98000001', $tc + 10), 0.0);
+check('breaker: corporation trips at 400', discord_breaker_record(404, $tc + 10, ['mask:9.0', 'webhook:x', 'corp:98000001']), ['corp:98000001']);
+check('breaker: other corporations and everyone else go on', [discord_scope_wait('corp:98000002', $tc + 10), discord_wait('webhook:any', $tc + 10)], [0.0, 0.0]);
+discord_limits_reset();
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

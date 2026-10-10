@@ -122,7 +122,9 @@ const discordNotifications = {
 		return (paused || []).map(function(p) {
 			const minutes = Math.max(1, Math.round((Date.parse(p.until) - (now || Date.now())) / 60000));
 			const w = (webhooks || []).filter(function(x) { return x.id === p.webhookID; })[0];
-			const what = p.scope === "mask" ? "All Discord messages of this mask are" : "Messages to " + (w ? w.name : "a webhook") + " are";
+			const what = p.scope === "mask" ? "All Discord messages of this mask are"
+				: p.scope === "corp" ? "All Discord messages of your corporation's masks are"
+				: "Messages to " + (w ? w.name : "a webhook") + " are";
 			return what + " paused for about " + minutes + " min: Discord refused too many requests. Check the webhooks below.";
 		});
 	},

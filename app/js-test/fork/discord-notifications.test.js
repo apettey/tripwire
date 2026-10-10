@@ -116,6 +116,8 @@ describe('Discord notifications', function() {
 				'Messages to #kills are paused for about 3 min: Discord refused too many requests. Check the webhooks below.'
 			]);
 			assert.deepStrictEqual(dn.pausedText(undefined, [], now), []);
+			assert.deepStrictEqual(dn.pausedText([{ scope: 'corp', until: '2026-10-10T12:10:00Z' }], [], now),
+				['All Discord messages of your corporation\'s masks are paused for about 10 min: Discord refused too many requests. Check the webhooks below.']);
 		});
 	});
 

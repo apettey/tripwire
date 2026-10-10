@@ -235,27 +235,6 @@ try {
 	$settings = discord_settings_load($mysql, $mask, $defaults);
 	$entityIDs = array_merge($settings['corporations'], $settings['alliances']);
 	list($names) = zk_names_lookup($mysql, $entityIDs);
-	$stmt = $mysql->prepare("SELECT
-			SUM(status = 'queued') AS queued,
-			SUM(status = 'sent' AND sentAt >= UTC_TIMESTAMP() - INTERVAL 1 DAY) AS sent24h,
-			SUM(status = 'failed' AND createdAt >= UTC_TIMESTAMP() - INTERVAL 1 DAY) AS failed24h
-		FROM discord_outbox WHERE maskID = ?");
-	$stmt->execute(array($mask));
-	$counts = $stmt->fetch(PDO::FETCH_ASSOC);
-	$stmt = $mysql->prepare("SELECT o.id, o.kind, o.lastError, o.createdAt, w.name AS webhook FROM discord_outbox o
-		LEFT JOIN discord_webhooks w ON w.id = o.webhookID
-		WHERE o.maskID = ? AND o.status = 'failed' ORDER BY o.id DESC LIMIT 5");
-	$stmt->execute(array($mask));
-	// Circuit breakers of this mask or its webhooks that are open now (discord_breaker_note)
-	$stmt = $mysql->prepare("SELECT ref, createdAt FROM discord_sent WHERE maskID = ? AND kind = 'breaker' AND createdAt > UTC_TIMESTAMP()");
-	$stmt->execute(array($mask));
-	$paused = array_map(function ($r) {
-		$scope = explode(':', $r['ref'], 2);
-		return array('scope' => $scope[0], 'webhookID' => $scope[0] === 'webhook' ? (int) $scope[1] : null, 'until' => zk_iso($r['createdAt']));
-	}, $stmt->fetchAll(PDO::FETCH_ASSOC));
-	$failures = array_map(function ($r) {
-		return array('id' => (int) $r['id'], 'kind' => $r['kind'], 'error' => $r['lastError'], 'createdAt' => zk_iso($r['createdAt']), 'webhook' => $r['webhook']);
-	}, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
 	$output += array(
 		'csrf' => $csrf,
@@ -267,8 +246,7 @@ try {
 			'corporations' => $defaults['corporations'], 'alliances' => $defaults['alliances']),
 		'placeholders' => discord_placeholders(),
 		'names' => (object) $names,
-		'outbox' => array('queued' => (int) $counts['queued'], 'sent24h' => (int) $counts['sent24h'], 'failed24h' => (int) $counts['failed24h'], 'failures' => $failures,
-			'paused' => $paused),
+		'outbox' => discord_outbox_status($mysql, $mask),
 	);
 	echo json_encode($output);
 } catch (PDOException $e) {

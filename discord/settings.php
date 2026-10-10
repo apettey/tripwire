@@ -180,6 +180,15 @@ function discord_corporation_has_admin(PDO $db, $corporationID) {
 }
 
 /**
+ * The corporation a mask sends Discord notifications for, or 0 when it can't (any more): not a corporation or
+ * corporation-owned custom mask, or the corporation has no Tripwire admin left. Used by the worker and the dispatcher.
+ */
+function discord_mask_sending_corporation(PDO $db, $maskID) {
+    $corporationID = discord_mask_corporation_db($db, $maskID);
+    return $corporationID !== null && discord_corporation_has_admin($db, $corporationID) ? $corporationID : 0;
+}
+
+/**
  * Worker: every mask with at least one enabled type: maskID => settings (defaults without "our" side). Masks that can
  * no longer have notifications are skipped: not a corporation or corporation-owned custom mask (any more), or their
  * corporation has no Tripwire admin left. Settings stay stored; an admin of the corporation can change them again.
@@ -187,8 +196,7 @@ function discord_corporation_has_admin(PDO $db, $corporationID) {
 function discord_active_settings(PDO $db) {
     $out = [];
     foreach ($db->query('SELECT maskID, settings FROM discord_settings')->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $corporationID = discord_mask_corporation_db($db, $row['maskID']);
-        if ($corporationID === null || !discord_corporation_has_admin($db, $corporationID)) continue;
+        if (!discord_mask_sending_corporation($db, $row['maskID'])) continue;
         $settings = discord_settings_normalise(json_decode($row['settings'], true), discord_settings_defaults())[0];
         foreach (DISCORD_KINDS as $kind) {
             if ($settings['types'][$kind]['enabled'] && $settings['types'][$kind]['webhookID'] > 0) { $out[(string) $row['maskID']] = $settings; break; }
