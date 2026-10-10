@@ -1,10 +1,22 @@
 {
   "features": [
     {
+      "pr": 32,
+      "date": "2026-10-10",
+      "title": "Hole size on the connection",
+      "description": "The hole size tag (S, M, L, VL or XL: the largest ship that fits through) now sits on the line between two systems on the chain map, because it describes the wormhole, not the system. It works in every chain renderer and keeps its tooltip; a dimmed tag with a ? is still a guess from the system classes.\n\nTurn the tags off in Settings > Chain Map Settings > Hole size tags.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-32-size-tags-connector.png",
+          "caption": "Size tags on the connections of the radial chain map"
+        }
+      ]
+    },
+    {
       "pr": 31,
       "date": "2026-10-10",
       "title": "Rally point message shows the chain label",
-      "description": "The rally point message in Discord now names the system the way your chain map does, with the name of the hole leading into it, e.g. AABCA \u00b7 J152820. When the rally is cleared, the message says which system it was on.\n\nCorporation admins can use the new {label} and {labelSystem} placeholders in their own texts in Mask Admin > Discord. Masks still using the default texts get the new ones automatically.",
+      "description": "The rally point message in Discord now names the system the way your chain map does, with the name of the hole leading into it, e.g. AABCA · J152820. When the rally is cleared, the message says which system it was on.\n\nCorporation admins can use the new {label} and {labelSystem} placeholders in their own texts in Mask Admin > Discord. Masks still using the default texts get the new ones automatically.",
       "images": [
         {
           "src": "whats-new/img/pr-31-rally-chain-label.png",
