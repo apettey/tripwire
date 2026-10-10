@@ -6,3 +6,8 @@ tweetie/config.php
 .env
 backup.sql
 traefik-data/acme.json
+# Front-end bundles: built from app/ by the dev assets service, CI and the Docker image, not committed
+public/js/app.min.js
+public/js/app.min.js.map
+public/css/app.min.css
+public/css/app.min.css.map
