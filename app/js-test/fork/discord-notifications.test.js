@@ -203,6 +203,27 @@ describe('Discord notifications', function() {
 			const html = dn.previewHtml({ content: '**Jita** hole ABC\\-123 by \\*Bob\\*', embeds: [], allowed_mentions: { parse: [] } });
 			assert.ok(html.indexOf('<b>Jita</b> hole ABC-123 by *Bob*') > 0);
 		});
+		it('renders strike-through and Discord timestamps (in the browser\'s own time zone), escaped markers stay text', function() {
+			const unix = 1760123280;
+			const d = new Date(unix * 1000);
+			const hhmm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+			assert.strictEqual(dn.timeText(unix), hhmm);
+			const html = dn.previewHtml({ content: '~~Rally **AB · J1** (C5, E\\-R1)~~\nCleared by *A* at <t:' + unix + ':t> \\~\\~x\\~\\~', allowed_mentions: { parse: [] } });
+			assert.ok(html.indexOf('<s>Rally <b>AB · J1</b> (C5, E-R1)</s><br/>Cleared by *A* at ' + hhmm + ' ~~x~~') > 0, html);
+			assert.ok(html.indexOf('Pings: nobody') > 0);
+			assert.ok(dn.previewHtml({ content: '<t:1<script>:t>', allowed_mentions: { parse: [] } }).indexOf('<script>') < 0);
+		});
+	});
+
+	describe('previewsHtml', function() {
+		it('shows the rally point\'s cleared and moved edits under the message, each titled', function() {
+			const p = function(c) { return { content: c, allowed_mentions: { parse: [] } }; };
+			const html = dn.previewsHtml({ preview: p('live'), previewClear: p('~~live~~ cleared'), previewMoved: p('~~live~~ moved') });
+			assert.ok(html.indexOf('live') < html.indexOf('When it is cleared, the message becomes:'));
+			assert.ok(html.indexOf('When it is cleared, the message becomes:') < html.indexOf('<s>live</s> cleared'));
+			assert.ok(html.indexOf('When it moves after 30 seconds, a new message is posted and the old one becomes:') < html.indexOf('<s>live</s> moved'));
+			assert.strictEqual(dn.previewsHtml({ preview: p('x') }), dn.previewHtml(p('x')));
+		});
 	});
 
 	describe('pageHtml', function() {
@@ -234,7 +255,9 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf("data-kind='rally'") > 0);
 			assert.ok(html.indexOf('Set or moved:') > 0);
 			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>Cleared by {who} &lt;script&gt;</textarea>") > 0);
-			assert.ok(html.indexOf('otherwise only <code>{pings}</code> <code>{mask}</code> <code>{who}</code> are filled') > 0);
+			assert.ok(html.indexOf('Replaces the rally message (an edit: no new message, nobody pinged') > 0);
+			assert.ok(html.indexOf('<code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text') > 0);
+			assert.ok(html.indexOf('Nothing is sent when there is no rally message to edit') > 0);
 			assert.ok(html.indexOf('<code>{labelSystem}</code>, <code>{was}</code>') > 0);
 			assert.ok(html.indexOf('DISCORD_WEB_HOOK') < 0);
 		});
@@ -252,6 +275,10 @@ describe('Discord notifications', function() {
 			assert.ok(dn.pageHtml(Object.assign({}, state, { legacyRally: true }), s).indexOf(dn.escape(dn.LEGACY_RALLY)) > 0);
 			s.types.rally.enabled = true;
 			assert.ok(dn.pageHtml(Object.assign({}, state, { legacyRally: true }), s).indexOf(dn.escape(dn.LEGACY_RALLY)) < 0);
+		});
+		it('names a failed edit of an old rally message', function() {
+			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'rallyEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] }) });
+			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Rally point (old message) to #ops') > 0);
 		});
 	});
 });
