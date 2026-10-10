@@ -59,6 +59,11 @@ function zk_backfill_decision($backfill, $streamSince, $windowSeconds, $now, $pr
     return $recent ? ['queue' => false, 'pending' => false] : ['queue' => true, 'pending' => true];
 }
 
+/** Whether a queue row with this status is being worked on (queued or running) */
+function zk_backfill_in_progress($status) {
+    return $status === 'queued' || $status === 'running';
+}
+
 /**
  * Where a back-fill's coverage starts (unix time).
  * @param int $started when the job asked zKillboard
@@ -153,6 +158,9 @@ function zk_backfill_request(PDO $db, array $systemIDs, $windowSeconds, array $o
                 if ($status !== 'running') $status = 'queued';
             }
             $pending = $decision['pending'];
+        } elseif (!$historyCovered) {
+            // Read-only request (queue=0): still report a back-fill someone else queued as pending
+            $pending = zk_backfill_in_progress($status);
         }
         $result[$systemID] = [
             'complete' => $complete,

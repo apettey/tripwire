@@ -213,7 +213,7 @@ Data flow:
 | `limit` | Kills returned over all systems, 1-50 (default 20) |
 | `since=<cursor>` | Incremental mode like `kills.php`: only kills stored after the cursor (in the window), oldest stored first; `cursor` in the answer is where to continue (the last kill of a full page, else the latest id; a cursor beyond the latest resets to it) |
 | `source=panel\|chain` | Back-fill priority (default `panel`) |
-| `queue=0\|1` | `0` = read only, queue nothing (default `1`) |
+| `queue=0\|1` | `0` = read only, queue nothing (default `1`); a back-fill that is already queued or running still shows as `pending` |
 
 The answer has `kills` (newest first without `since`), `names` (ID => name), `cursor`, `feed` (`enabled`, `live`,
 `caughtUp`, `lagSeconds`, `coveredSince`, `highWater`), per-system `systems[]` (`complete`, `coveredFrom`,
@@ -221,6 +221,11 @@ The answer has `kills` (newest first without `since`), `names` (ID => name), `cu
 flags. Poll again while `pending` or `namesPending` is true. With `ZKILL_FEED_ENABLED=false` it returns what is
 stored and queues nothing. The GET's only side effect is a deduplicated, capped queue row, so a cross-site request
 can at most queue real systems up to the caps.
+
+Browser consumers: the System Kill Feed panel (`app/js/fork/system-killfeed.js`, one system, 24 h) and the Chain
+Kill Feed panel (`app/js/fork/chain-killfeed.js`): a window request (`systems=<joining ids>&pastSeconds=3600&source=chain`)
+when systems join the chain, then one shared `since` cursor polled every 20 s (4 s while back-fills or names are
+pending, `queue=0`), at most 200 systems per request.
 
 ### Versions
 

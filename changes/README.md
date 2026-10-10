@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Chain Kill Feed](2026-10-10-chain-killfeed/README.md) | "Chain kills" panel: one live feed of recent kills in every wormhole, low-sec and null-sec system on the chain map, last hour back-filled when a system joins; built on `system_kills.php`, no new zKillboard callers |
 | 2026-10-10 | [System Kill Feed](2026-10-10-system-killfeed/README.md) | Kills panel with the 20 latest kills in the viewed system; all zKillboard/ESI access pooled in one server module (`zkill/`) used only by the feed worker, with back-fill and name queues |
 | 2026-10-10 | [Kill Reporting](2026-10-10-kill-reporting/README.md) | Sounds and pop-ups for kills in the chain (small gank, gank, friendly kill, friendly loss) from a single server-side zKillboard feed; selectable sound pack with per-event volume |
 | 2026-10-10 | [Docker image: amd64 only](2026-10-10-amd64-only/README.md) | Release images are `linux/amd64` only; arm64 under QEMU made releases very slow and has no users yet |
