@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 45,
+      "date": "2026-10-10",
+      "title": "Discord chain kills: set your home system",
+      "description": "Discord \"Any kill in our chain\" notifications now only post kills in systems connected to your home system through live wormholes, re-checked every minute, so an old chain no longer pings after its connecting hole collapses or expires.\n\nAdmins: set the home system in Mask Admin > Discord. Until a home is set, no chain kills are posted and the page shows a warning. Chain kills can still be turned off on the same page.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-45-chain-kills-connected.png",
+          "caption": "Mask Admin > Discord: the new Home system setting"
+        }
+      ]
+    },
+    {
       "pr": 37,
       "date": "2026-10-10",
       "title": "Routes through Thera and Turnur",
