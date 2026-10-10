@@ -68,7 +68,7 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` / `fork_rally_discord_message` (chain map rally point per mask and its live legacy Discord message, created by `public/rally.php`; `fork_rally_discord` of 1.15-1.17 is no longer read), `zkill_kills` /
+`fork_rally` / `fork_rally_discord_message` (chain map rally point per mask and its live legacy Discord message, created by `public/rally.php`; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
 `zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
