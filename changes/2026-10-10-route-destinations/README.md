@@ -12,7 +12,8 @@ destination on the chain map as an extra node attached to the exit(s).
 
 | Before | After |
 | --- | --- |
-| ![before](before.png) | ![after](after.png) |
+| ![before](before.jpg) Chain map without destinations | ![after](after.jpg) Jita and Amarr drawn off the Perimeter (D) and Rens (CB) exits |
+| | ![window](after-window.png) The Destinations window |
 
 ## Change
 

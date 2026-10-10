@@ -1,13 +1,13 @@
 {
   "features": [
     {
-      "pr": 5,
+      "pr": 7,
       "date": "2026-10-10",
       "title": "Saved destinations",
       "description": "Keep a list of k-space systems you often travel to, like Jita or your staging system, and see how many jumps each is from the nearest exit on your chain. Open it with the pin icon in the chain map toolbar or from Settings > Chain Map Settings > Destinations.\n\nTick Show (or Show all on map) to draw a destination on the chain map, attached to the exit it is closest to.",
       "images": [
-        { "src": "whats-new/img/pr-5-destinations-window.png", "caption": "The Destinations window" },
-        { "src": "whats-new/img/pr-5-destinations-map.png", "caption": "Destinations on the chain map" }
+        { "src": "whats-new/img/pr-7-destinations-window.png", "caption": "The Destinations window" },
+        { "src": "whats-new/img/pr-7-destinations-map.jpg", "caption": "Destinations on the chain map" }
       ]
     },
     {
