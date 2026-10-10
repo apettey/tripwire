@@ -1,5 +1,5 @@
-/* Hole size tag on chain map nodes (fork feature: size-tags).
-   Not scoped to #chainMap: the renderers measure node markup outside the map, and the legend tooltip uses it too. */
+/* Hole size tag on chain map connections (fork feature: size-tags).
+   Base style not scoped to #chainMap: the chain legend tooltip uses it too. */
 .size-tag {
 	display: inline-block;
 	margin-left: 3px;
@@ -39,3 +39,24 @@
 }
 
 #guide .size-tag { margin-left: 0; }
+
+/* On the chain map the tag sits on the connection line, centred on a point worked out in size-tags.js.
+   Absolutely positioned, so it never changes the layout. The dark fill keeps the line from running through the text. */
+#chainMap .size-tag.size-tag-connector {
+	position: absolute;
+	z-index: 1;
+	margin: 0;
+	padding: 0 2px;
+	transform: translate(-50%, -50%);
+	background: rgba(8, 12, 16, 0.92);
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+	vertical-align: baseline;
+}
+#chainMap .size-tag.size-xl.size-tag-connector { background: #d06a10; }
+#chainMap .size-tag.size-uncertain.size-tag-connector { opacity: 0.75; }
+
+/* Old org chart: on the vertical connector cell above the child node (border on the cell's left or right edge) */
+#chainMap td.size-tag-cell { position: relative; }
+#chainMap .size-tag-connector.size-tag-orgchart { top: 50%; }
+#chainMap .size-tag-connector.size-tag-orgchart.size-tag-on-left { left: 0; }
+#chainMap .size-tag-connector.size-tag-orgchart.size-tag-on-right { left: 100%; }
