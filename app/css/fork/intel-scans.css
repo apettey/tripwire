@@ -1,0 +1,115 @@
+/* D-scan & local intel (fork feature): chain map marker, the Intel panel and the paste dialog.
+   The marker is not scoped to #chainMap: the renderers measure node markup outside the map. */
+.intel-marker {
+	position: absolute;	/* bottom-right corner of the node ([data-nodeid] is position: relative); corners: top-left threat
+				   badge, top-right upstream's pilots marker, bottom-left watchlist */
+	z-index: 1;
+	/* A small dot inside the node's corner: below the node are the statics row (H L N), connectors and the size tags
+	   of the connections, beside it the neighbouring nodes, and a three-line node has no room for text there */
+	bottom: 3px;
+	right: 3px;
+	box-sizing: border-box;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	/* Dark outline so the dot stands out on any border colour (the rally point's bright green, the current system's blue) */
+	border: 1px solid #000;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 3px 1px rgba(0, 0, 0, 0.8);
+	cursor: default;
+}
+.intel-marker-d { background: #4fd0ff; }
+.intel-marker-l { background: #a8e070; }
+.intel-marker-dl { background: linear-gradient(90deg, #4fd0ff 50%, #a8e070 50%); }
+/* Keep the last line's text clear of the dot: pad it on both sides so it stays centred (the node may widen; adding or
+   removing a marker redraws the chain, see patchChain) */
+.intel-marker ~ .nodeType, #chainMap .intel-marker ~ .nodeType { padding: 0 12px; }	/* #chainMap: beats the old org chart's padding reset */
+/* Root nodes of the radial / org chart top / org chart side renderers are rounded: inside the border ring */
+.radial-map .top-level > .intel-marker { bottom: 7px; right: 12px; }
+
+/* Intel panel (layout widget #intelScansWidget, styled like the Kills panel) */
+#intelScansWidget .controls { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#intelScansWidget .intel-title { color: #888; }
+#intelScansWidget .intel-system { color: #CCC; font-weight: bold; }
+#intelScansWidget .intel-status { color: #777; font-size: 0.9em; }
+#intelScansWidget .content { overflow-x: hidden; overflow-y: auto; }
+.intel-body {
+	padding: 4px 6px;
+	text-align: left;
+	font-size: 11px;
+	line-height: 15px;
+	min-width: 0;
+}
+.intel-body a { color: #8fc9e0; text-decoration: none; }
+.intel-body a:hover { text-decoration: underline; }
+.intel-body .intel-older { display: inline-block; margin-top: 4px; color: #8f9ba3; }
+.intel-actions { margin-bottom: 4px; }
+.intel-paste {
+	font: inherit;
+	padding: 2px 8px;
+	color: #d6e6ee;
+	background: rgba(79, 179, 217, 0.18);
+	border: 1px solid rgba(79, 179, 217, 0.55);
+	border-radius: 3px;
+	cursor: pointer;
+}
+.intel-paste:hover { background: rgba(79, 179, 217, 0.32); }
+.intel-empty { padding: 4px 0; }
+.intel-muted { color: #8f9ba3; }
+.intel-warn { color: #ffc040; }
+.intel-chips { margin-top: 2px; }
+.intel-chip {
+	display: block;
+	width: 100%;
+	margin: 2px 0 0;
+	padding: 1px 6px;
+	text-align: left;
+	font: inherit;
+	color: #d6e6ee;
+	background: rgba(79, 179, 217, 0.12);
+	border: 1px solid rgba(79, 179, 217, 0.45);
+	border-radius: 8px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+}
+.intel-chip:hover, .intel-chip.intel-open { background: rgba(79, 179, 217, 0.25); }
+.intel-chip.intel-local { border-color: rgba(160, 200, 120, 0.5); background: rgba(160, 200, 120, 0.12); }
+.intel-chip.intel-local:hover, .intel-chip.intel-local.intel-open { background: rgba(160, 200, 120, 0.25); }
+.intel-chip.intel-stale { opacity: 0.6; border-style: dashed; }
+.intel-detail {
+	margin: 0 0 4px;
+	padding: 3px 6px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-top: none;
+	border-radius: 0 0 6px 6px;
+	background: rgba(0, 0, 0, 0.25);
+}
+.intel-detail-head { color: #aaa; }
+.intel-detail .intel-delete { color: #e08080; margin-left: 4px; }
+.intel-table { border-collapse: collapse; margin-top: 2px; max-width: 100%; }
+.intel-table th, .intel-table td { padding: 0 8px 0 0; vertical-align: top; text-align: left; font-weight: normal; }
+.intel-table th { color: #ccc; white-space: nowrap; }
+.intel-table .intel-count { text-align: right; font-weight: bold; }
+.intel-table .intel-grid { color: #8fc9e0; white-space: nowrap; }
+.intel-table .intel-types { color: #8f9ba3; overflow-wrap: anywhere; }
+.intel-table tr.intel-notable th, .intel-table tr.intel-notable .intel-count { color: #ffc040; }
+.intel-sub { margin-top: 3px; color: #aaa; }
+.intel-list { list-style: none; margin: 0; padding: 0; }
+.intel-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.intel-list .intel-type { color: #ccc; }
+.intel-names { color: #ccc; overflow-wrap: anywhere; }
+
+/* Paste dialog */
+.intel-dialog .intel-help { margin: 0 0 6px; color: #aaa; font-size: 11px; }
+.intel-dialog .intel-text {
+	box-sizing: border-box;
+	width: 100%;
+	resize: vertical;
+	font-family: monospace;
+	font-size: 11px;
+	white-space: pre;
+}
+.intel-dialog .intel-preview { margin-top: 6px; min-height: 30px; max-height: 220px; overflow-y: auto; font-size: 11px; line-height: 15px; }
+.intel-dialog .intel-detail-preview { border: none; background: none; padding: 0; margin: 2px 0 0; }
+.intel-dialog .intel-error { color: #ff8080; font-size: 11px; }
