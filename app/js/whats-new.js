@@ -4,7 +4,9 @@ const whatsNew = {
 	// Keep `const whatsNew` on the first line: the test helper strips it to define a global.
 	repoURL: "https://github.com/apettey/tripwire/pull/",
 	dataURL: "whats-new/features.json",
+	versionURL: "version.json",
 	features: [],
+	version: null,
 
 	escape: function(text) {
 		return String(text === undefined || text === null ? "" : text)
@@ -13,6 +15,19 @@ const whatsNew = {
 			.replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;")
 			.replace(/'/g, "&#39;");
+	},
+
+	// "v1.2.0" for a release, otherwise the raw value ("dev" when unknown). info: public/version.json
+	shortVersion: function(info) {
+		const v = String((info && info.version) || "").trim();
+		if (!v) return "dev";
+		return /^\d+\.\d+\.\d+/.test(v) ? "v" + v : v;
+	},
+
+	// "Tripwire fork v1.2.0 (upstream 1.30b)"
+	formatVersion: function(info) {
+		const upstream = String((info && info.upstream) || "").trim();
+		return "Tripwire fork " + whatsNew.shortVersion(info) + (upstream ? " (upstream " + upstream + ")" : "");
 	},
 
 	// Highest PR number in the list, or 0
@@ -75,7 +90,8 @@ const whatsNew = {
 	// Open the dialog showing all features; unseen ones (relative to the stored state) are badged NEW
 	open: function() {
 		const $dialog = $("#dialog-whatsNew");
-		$dialog.html(whatsNew.render(whatsNew.features, whatsNew.lastSeenPR()));
+		$dialog.html(whatsNew.render(whatsNew.features, whatsNew.lastSeenPR())
+			+ "<div class='whats-new-version'>" + whatsNew.escape(whatsNew.formatVersion(whatsNew.version)) + "</div>");
 		$dialog.find(".whats-new-image img").on("error", function() {
 			$(this).closest(".whats-new-image").hide();
 		});
@@ -130,7 +146,7 @@ const whatsNew = {
 		});
 
 		// Settings > General Preferences row
-		const $row = $("<tr><th>What's new:</th><td><input type='button' id='whatsNewShow' value='Show' /></td></tr>");
+		const $row = $("<tr><th>What's new:</th><td><input type='button' id='whatsNewShow' value='Show' /> <span id='whatsNewVersion' class='whats-new-version-inline'></span></td></tr>");
 		$("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first().append($row);
 		if ($("#optionsAccordion").hasClass("ui-accordion")) {
 			$("#optionsAccordion").accordion("refresh");
@@ -153,6 +169,22 @@ const whatsNew = {
 		}).fail(function(xhr, status, error) {
 			console.warn("What's New: could not load " + whatsNew.dataURL, status, error);
 		});
+
+		// Fork version, written into the image at build time; missing in the dev stack ("dev")
+		whatsNew.showVersion();
+		$.ajax({
+			url: whatsNew.versionURL,
+			dataType: "json",
+			cache: false
+		}).done(function(data) {
+			whatsNew.version = data;
+			whatsNew.showVersion();
+		});
+	},
+
+	showVersion: function() {
+		$("#whatsNewVersion").text("· " + whatsNew.shortVersion(whatsNew.version));
+		$("#whatsNewShow, #whatsNewVersion").attr("title", whatsNew.formatVersion(whatsNew.version));
 	}
 };
 
