@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 48,
+      "date": "2026-10-11",
+      "title": "Paste a d-scan anywhere",
+      "description": "Copy your d-scan results in EVE (click a result, Ctrl+A, Ctrl+C) and press Ctrl+V anywhere in Tripwire: the d-scan box opens for the system you are viewing with the scan already filled in and summarised. Nothing is shared until you click Share.\n\nSignature pastes work as before. Turn it off in Settings > General Preferences > D-scan & local intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-48-dscan-paste.png",
+          "caption": "Ctrl+V of a d-scan opens the d-scan box with the scan filled in"
+        }
+      ]
+    },
+    {
       "pr": 46,
       "date": "2026-10-10",
       "title": "Kill messages show the chain label",
