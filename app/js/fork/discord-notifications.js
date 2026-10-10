@@ -15,12 +15,14 @@ const discordNotifications = {
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
-		chainKill: "A kill in a wormhole, low-sec or null-sec system on this mask's chain map (high-sec systems only if you tick them below).",
+		chainKill: "A kill in a system connected to your home system (above) through live wormholes, re-checked every minute: wormhole, low-sec and null-sec systems (high-sec only if you tick it below). Holes that collapsed or expired no longer count, so an old chain stops pinging.",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
 		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). A move within 30 seconds edits the message; a later move posts a new one (with the ping) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
 		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
 	},
+	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
+	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
 	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
@@ -80,6 +82,21 @@ const discordNotifications = {
 		if (list.length >= discordNotifications.MAX_PING_SYSTEMS) { return { list: list, error: "At most " + discordNotifications.MAX_PING_SYSTEMS + " ping systems" }; }
 		list.push(id);
 		return { list: list, error: null };
+	},
+
+	/** The home system by ID or name (any known system, k-space or wormhole). @return {id, error} */
+	pickHomeSystem: function(value, systems, findByName) {
+		const text = String(value === undefined || value === null ? "" : value).trim();
+		if (!text) { return { id: 0, error: "Type a system name" }; }
+		const id = /^\d+$/.test(text) ? Number(text) : (findByName ? findByName(text) : null);
+		if (!id || !(systems || {})[id]) { return { id: 0, error: "Unknown system \"" + text + "\"" }; }
+		return { id: Number(id), error: null };
+	},
+
+	/** Warning for settings with chain kills on and no home system ("" when fine) */
+	homeWarning: function(settings) {
+		const chain = settings && settings.types && settings.types.chainKill;
+		return chain && chain.enabled && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
 	},
 
 	removePingSystem: function(list, id) {
@@ -184,6 +201,7 @@ const discordNotifications = {
 		if (corps.invalid.length || alliances.invalid.length) { errors.push("Corporation/alliance IDs must be numbers: " + corps.invalid.concat(alliances.invalid).join(", ")); }
 		settings.corporations = corps.ids;
 		settings.alliances = alliances.ids;
+		settings.homeSystemID = Math.max(0, parseInt(values.homeSystemID, 10) || 0);
 		if ((settings.types.corpKill.enabled || settings.types.corpLoss.enabled) && !corps.ids.length && !alliances.ids.length) {
 			errors.push("Corporation kills/losses need at least one corporation or alliance ID");
 		}
@@ -267,6 +285,22 @@ const discordNotifications = {
 		return systems[id] ? systems[id].name : String(id);
 	},
 
+	/** The home system row (a chip with the system, or "not set", and a search field) */
+	homeHtml: function(settings) {
+		const dn = discordNotifications;
+		const esc = dn.escape;
+		const home = Number(settings.homeSystemID) || 0;
+		const chip = home ? "<span class='dn-chip dn-home' data-system='" + home + "'>" + esc(dn.systemName(home))
+			+ " <a href='#' class='dn-home-remove' title='Remove'>&times;</a></span>"
+			: "<span class='dn-home dn-small dn-bad' data-system='0'>Not set</span>";
+		return "<fieldset class='dn-home-row'><legend>Home system</legend>"
+			+ "<div class='dn-small'>" + esc(dn.HOME_HELP) + "</div>"
+			+ "<table class='dn-form'><tr><th>Home:</th><td><div class='dn-chips'>" + chip + "</div>"
+			+ "<form class='dn-home-form' autocomplete='off'><input type='text' class='dn-home-search' placeholder='e.g. J115405' /> <input type='submit' value='" + (home ? "Change" : "Set") + "' /></form>"
+			+ (dn.homeWarning(settings) ? "<div class='dn-small dn-bad'>" + esc(dn.homeWarning(settings)) + "</div>" : "")
+			+ "</td></tr></table></fieldset>";
+	},
+
 	pageHtml: function(state, settings) {
 		const dn = discordNotifications;
 		const esc = dn.escape;
@@ -347,6 +381,7 @@ const discordNotifications = {
 			+ "<h2>Discord notifications for the " + esc(state.mask ? state.mask.name : "") + " mask</h2>"
 			+ "<p class='dn-small'>Only your corporation's Tripwire admins see this page. Nothing is posted until you add a webhook, pick it for a notification and turn the notification on.</p>"
 			+ dn.pausedText(outbox.paused, webhooks, now).map(function(t) { return "<p class='dn-bad'>" + esc(t) + "</p>"; }).join("")
+			+ (dn.homeWarning(settings) ? "<p class='dn-bad dn-home-warning'>" + esc(dn.homeWarning(settings)) + "</p>" : "")
 			+ (state.encrypted ? "" : "<p class='dn-small dn-bad'>Webhook URLs are stored unencrypted on this server (DISCORD_SECRET_KEY is not set). They are still never shown again.</p>")
 			+ "<h3>Webhooks (one per channel)</h3>"
 			+ "<table class='dn-webhooks'><thead><tr><th>Name</th><th>URL</th><th>Status</th><th></th></tr></thead><tbody>" + webhookRows + "</tbody></table>"
@@ -356,6 +391,7 @@ const discordNotifications = {
 			+ "<input type='submit' class='dn-webhook-save' value='Add webhook' /> <a href='#' class='dn-webhook-cancel' style='display:none'>cancel</a>"
 			+ "<div class='dn-small dn-webhook-message'></div></form>"
 			+ "<h3>Notifications</h3>"
+			+ dn.homeHtml(settings)
 			+ typeHtml
 			+ "<fieldset class='dn-entities'><legend>Our side (for corporation kills and losses)</legend>"
 			+ "<table class='dn-form'><tr><th>Corporation IDs:</th><td><input type='text' class='dn-corporations' size='40' value='" + esc((settings.corporations || []).join(", ")) + "' />"
@@ -373,7 +409,8 @@ const discordNotifications = {
 	/** Everything the notification part of the form holds */
 	readForm: function() {
 		const $page = $("#dialog-admin .dn-page");
-		const values = { types: {}, corporations: $page.find(".dn-corporations").val(), alliances: $page.find(".dn-alliances").val() };
+		const values = { types: {}, corporations: $page.find(".dn-corporations").val(), alliances: $page.find(".dn-alliances").val(),
+			homeSystemID: Number($page.find(".dn-home").attr("data-system")) || 0 };
 		$page.find(".dn-type").each(function() {
 			const $t = $(this);
 			const kind = $t.attr("data-kind");
@@ -411,6 +448,7 @@ const discordNotifications = {
 			const systems = (typeof appData !== "undefined" && appData.systems) || {};
 			for (const id in systems) { if (dn.isKSpace(systems[id])) { source[id] = systems[id]; } }
 			$window.find(".dn-system-search").inlinecomplete({ source: source, renderer: "system", maxSize: 10, delay: 0 });
+			$window.find(".dn-home-search").inlinecomplete({ source: systems, renderer: "system", maxSize: 10, delay: 0 });
 		}
 	},
 
@@ -526,6 +564,27 @@ const discordNotifications = {
 			const id = Number($(this).closest(".dn-chip").attr("data-system"));
 			dn.keepDraft();
 			dn.draft.types.kspace.pingSystems = dn.removePingSystem(dn.draft.types.kspace.pingSystems, id);
+			dn.render();
+		});
+		$doc.on("submit", sel + " .dn-home-form", function(e) {
+			e.preventDefault();
+			const $form = $(this);
+			const find = typeof routeDestinations !== "undefined" ? routeDestinations.findByName : null;
+			const result = dn.pickHomeSystem($form.find(".dn-home-search").val(), (typeof appData !== "undefined" && appData.systems) || {}, find);
+			$form.find(".dn-add-error").remove();
+			if (result.error) {
+				$form.append("<span class='dn-add-error dn-small dn-bad'> " + dn.escape(result.error) + "</span>");
+				return;
+			}
+			dn.keepDraft();
+			dn.draft.homeSystemID = result.id;
+			dn.render();
+			$(sel + " .dn-save-message").removeClass("dn-bad dn-good").text("Home system changed: save to apply it.");
+		});
+		$doc.on("click", sel + " .dn-home-remove", function(e) {
+			e.preventDefault();
+			dn.keepDraft();
+			dn.draft.homeSystemID = 0;
 			dn.render();
 		});
 		$doc.on("click", sel + " .dn-reset-template", function(e) {

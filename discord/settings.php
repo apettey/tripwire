@@ -10,6 +10,7 @@
 //     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
+//   homeSystemID: systemID or 0   (where the chain starts: chainKill counts only systems connected to it, discord/chain.php)
 // }
 // Everything is off until an admin enables a type and picks a webhook.
 
@@ -38,6 +39,7 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
+        'homeSystemID' => 0,
     ];
 }
 
@@ -146,6 +148,13 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
     }
     if (array_key_exists('corporations', $input)) $out['corporations'] = discord_int_list($input['corporations'], DISCORD_MAX_ENTITIES, function ($id) { return $id >= 1000000 && $id < 2147483647; });
     if (array_key_exists('alliances', $input)) $out['alliances'] = discord_int_list($input['alliances'], DISCORD_MAX_ENTITIES, function ($id) { return $id >= 1000000 && $id < 2147483647; });
+    if (array_key_exists('homeSystemID', $input)) {
+        $home = $input['homeSystemID'];
+        $home = is_int($home) || (is_string($home) && ctype_digit($home)) ? (int) $home : -1;
+        if ($home !== 0 && discord_system($home) === null) { $errors[] = 'home system: unknown system'; $home = 0; }
+        $out['homeSystemID'] = $home;
+    }
+    // Chain kills without a home are allowed (saved, nothing posted; the page warns): discord/chain.php
     if (($out['types']['corpKill']['enabled'] || $out['types']['corpLoss']['enabled']) && !$out['corporations'] && !$out['alliances']) {
         $errors[] = 'corporation kills/losses need at least one corporation or alliance';
         $out['types']['corpKill']['enabled'] = $out['types']['corpLoss']['enabled'] = false;

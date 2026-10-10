@@ -295,7 +295,7 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Type | When |
 | --- | --- |
 | New k-space near a ping system | A wormhole on the mask's chain leads to a k-space system (high/low/null, Pochven counts) that had no other wormhole signature in the mask, fewer than `maxJumps` (default 10) *safe* gate jumps from a ping system (default Jita, Amarr). Safe = every system in between is high-sec (security >= 0.45, not Pochven) and never Zarzakh; both ends may be any security (the Favourites panel's safe-route rule). Each connection is looked at once; at most one message per (mask, system) per `cooldownHours` (default 6) |
-| Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
+| Any kill in our chain | A kill in a wormhole, low-sec or null-sec system connected to the mask's **home system** through live wormholes right now (see "Home system" below; no home set = no chain kills); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
 | Watchlist match | A system on the mask's chain (every wormhole of the mask) matches one of the mask's [watchlist](#watchlist) filters, evaluated by the worker every 15 s (`discord/watchlist.php`), so it is posted even when nobody has Tripwire open. What is new comes from what the worker has seen, not from edit times: on the first poll after the type is turned on, or after a filter is saved or turned on, the chain's current matches are recorded without posting anything (`fork_watchlist_baseline`); afterwards a (filter, system) match is posted once, when none of its holes (any of the system's connections for filters on the system only, those fitting the hole conditions otherwise) was seen before; the message names the oldest of them. Every hole seen matching is kept in `fork_watchlist_seen` for as long as it exists (no expiry, so an old hole or a gate link is never posted again however long it stays on the chain), and forgotten when it is gone from the chain: a second way into a system already posted isn't posted, the system reached through a new wormhole after all its holes collapsed is. Editing a hole (name, EOL, mass) never posts it; a hole that only starts matching through an edit (e.g. its type is filled in) is new. A paused or deleted filter's records are dropped. Filters with "jumps from you / from home" are skipped (they depend on who is looking). Placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}` (class and effect), `{region}`, `{sig}` (the hole's signature in the system it is off), `{hole}` (its type there, K162 for the exit side), `{from}`, `{map}`; default ``{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}`` + `{map}` on a new line, e.g. "@here Watchlist **C5 with a Wolf-Rayet**: **J170540** (C5, Wolf-Rayet, E-R00024), through WRC-555 H296 in J115405". Filter names (admin text) and game data are escaped; at most 20 messages per mask per poll |
@@ -303,6 +303,20 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
+
+**Home system** (per mask, Mask Admin > Discord, stored as `homeSystemID` in the mask's settings; any known system,
+validated against the static data). "The chain" for chain kills is every system connected to home through the mask's
+live wormholes, walked outward from home (`discord_chain_systems` in `discord/chain.php`, through k-space exits too,
+like the chain map). A wormhole is live while its `wormholes` row and both signatures exist in the mask and neither
+signature is past its `lifeLeft` (signatures with `lifeLength` 0 never expire; EOL holes count until they expire; a
+hole that collapsed early counts until it is deleted from the map). Signatures with an unknown far side are never
+walked through, and neither are EVE-Scout's Thera/Turnur connections the chain map draws (they aren't in the mask's
+tables): a kill behind a Thera hole that only EVE-Scout knows doesn't count until the hole is added to the mask. The
+chain is reloaded with the kill settings every `DISCORD_KILL_REFRESH` (60 s). Without a home set, chain kills post
+nothing and the page warns; corp kills/losses don't use it. Before 2026-10-10 any system with one of the mask's
+wormhole signatures counted, so fragments of an old chain (holes collapsed or rolled but not deleted; upstream's
+`wormholeClean` only deletes them at `lifeLeft` + 10 % of their life) kept posting
+(`changes/2026-10-10-chain-kills-connected/`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
