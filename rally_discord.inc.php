@@ -15,8 +15,9 @@
 //	    at <time>". Nothing is posted for a clear, also when there is no message to edit (or it is gone).
 //	Every send runs under a per-mask MySQL lock (GET_LOCK) and shows the rally as it is in fork_rally *at
 //	that moment*, not the change that triggered it, so concurrent changes are serialised and the last send
-//	always shows the final rally. A failed post releases the window; a failed edit of a live message (e.g.
-//	deleted) falls back to a new post. The live message (id and text) is in fork_rally_discord_message;
+//	always shows the final rally. A failed post keeps the old message tracked (a later change ends it); a
+//	failed edit of a live message (deleted, unreachable) falls back to a new post, and the old one is still
+//	sent its "Moved to" edit (harmless when it is gone). A failed clear edit is not retried. The live message (id and text) is in fork_rally_discord_message;
 //	fork_rally_discord (1.15-1.17, no text) is no longer read.
 //
 //	The pure functions (rally_discord_clean, _system_label, _payload, _end_payload, _decision, _message_url,
@@ -272,9 +273,9 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		$chainLabel = rally_discord_chain_label($mysql, $mask, $systemID);
 		$urlBase = rally_discord_url_base(defined('EVE_SSO_REDIRECT') ? EVE_SSO_REDIRECT : null, isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '');
 		$payload = rally_discord_payload('set', $rally['setBy'], $systemLabel, $system ? $system['name'] : null, $urlBase, $chainLabel);
-		if ($live && $payload['content'] === $live['content']) return 'none';
 
 		if ($live && rally_discord_decision($live) === 'edit') {
+			if ($payload['content'] === $live['content']) return 'none';	// already shows it
 			if (rally_discord_send(rally_discord_message_url($hook, $live['messageID']), $payload, 'PATCH') !== false) {
 				$save = $mysql->prepare('UPDATE fork_rally_discord_message SET content = :content WHERE maskID = :mask');
 				$save->bindValue(':content', $payload['content']);
@@ -282,29 +283,24 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 				$save->execute();
 				return 'edit';
 			}
-			// Message gone (deleted, 404) or Discord unreachable: post a new one instead
-			$live = null;
+			// Message gone (deleted, 404) or Discord unreachable: post a new one instead, and still try to end the
+			// old one below (harmless when it is gone)
 		}
 
-		$claim = $mysql->prepare('INSERT INTO fork_rally_discord_message (maskID, messageID, content, postedAt) VALUES (:mask, NULL, NULL, NOW())
-			ON DUPLICATE KEY UPDATE messageID = NULL, content = NULL, postedAt = NOW()');
-		$claim->bindValue(':mask', $mask);
-		$claim->execute();
-
+		// The live row stays as it is until the new message is out: a failed post keeps the old message tracked
 		$response = rally_discord_send(rally_discord_message_url($hook), $payload, 'POST');
-		if ($response === false) {
-			// Release the window so the next change posts
-			$forget();
-			return 'failed';
-		}
+		if ($response === false) return 'failed';
 		if (isset($response['id']) && preg_match('/^\d{1,32}$/', (string)$response['id'])) {
-			$save = $mysql->prepare('UPDATE fork_rally_discord_message SET messageID = :messageID, content = :content WHERE maskID = :mask');
+			$save = $mysql->prepare('INSERT INTO fork_rally_discord_message (maskID, messageID, content, postedAt) VALUES (:mask, :messageID, :content, NOW())
+				ON DUPLICATE KEY UPDATE messageID = VALUES(messageID), content = VALUES(content), postedAt = VALUES(postedAt)');
+			$save->bindValue(':mask', $mask);
 			$save->bindValue(':messageID', (string)$response['id']);
 			$save->bindValue(':content', $payload['content']);
-			$save->bindValue(':mask', $mask);
 			$save->execute();
+		} else {
+			$forget();	// posted without an id: can't be edited
 		}
-		// Moved after the window: end the old message (after the new one is out, so people see the new place first)
+		// Moved: end the old message (after the new one is out, so people see the new place first)
 		if ($live) {
 			rally_discord_send(rally_discord_message_url($hook, $live['messageID']),
 				rally_discord_end_payload($live['content'], 'moved', $rally['setBy'], time(), $systemName, $chainLabel), 'PATCH');

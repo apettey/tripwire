@@ -13,7 +13,9 @@
 //       * cleared, at any time: edits it into its text struck through + the cleared text. No new message, no ping.
 //         Without a live message (never posted, deleted in Discord, another webhook, the type turned off and on since)
 //         a clear sends nothing;
-//     every edit has empty allowed_mentions and no pings in its text (discord_payload). A live message deleted in
+//     every edit has empty allowed_mentions, and an edit that ends a message (cleared / moved) has no pings in its
+//     text either (discord_payload; a live edit within the window keeps the post's text, pings included, which
+//     Discord doesn't notify again). A live message deleted in
 //     Discord (404 Unknown Message) is forgotten: a set / move is then posted as a new message, a clear sends nothing.
 // Everything else (rate limits, retries, broken webhooks, circuit breakers, delivery status) is the outbox's.
 //
@@ -222,9 +224,9 @@ function discord_rally_plan(array $ctx, $live, $now = null, $window = DISCORD_RA
         return ['op' => 'edit', 'payload' => discord_payload(['previous' => $live['content']] + $ctx), 'live' => false];
     }
     $payload = discord_payload($ctx);
-    if ($live && $payload['content'] === $live['content']) return ['op' => 'skip', 'why' => 'the message already shows this rally'];
     $age = $live ? $now - (int) $live['postedAt'] : null;
     if ($live && $age >= 0 && $age < $window) {
+        if ($payload['content'] === $live['content']) return ['op' => 'skip', 'why' => 'the message already shows this rally'];
         unset($payload['username']);
         $payload['allowed_mentions'] = ['parse' => []];
         return ['op' => 'edit', 'payload' => $payload, 'live' => true];

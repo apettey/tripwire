@@ -246,14 +246,16 @@ function discord_payload(array $ctx) {
         $values['was'] = $cleared && $values['labelSystem'] !== '' ? ' (was on ' . discord_escape($values['labelSystem']) . ')' : '';
         $values['time'] = discord_timestamp($ctx['time'] ?? time());
         $struck = $ending ? discord_rally_strike($ctx['previous'] ?? '') : '';
-        $values['rally'] = $cleared ? $struck : '';
+        // {rally} goes in last (a marker until then), so a long rally text is what gets cut, never the who / when
+        $marker = $ending ? '{rally' . bin2hex(random_bytes(6)) . '}' : '';
+        $values['rally'] = $cleared ? $marker : '';
         if ($ending) $values['pings'] = '';
         array_push($raw, 'was', 'time', 'rally');
         if (!empty($ctx['moved']) && !$cleared) {
             $content = discord_render("Moved to **{labelSystem}** by *{who}* at {time}", $values, $raw);
         } else {
             $content = discord_render($template, $values, $raw);
-            if ($content === '') {
+            if ($content === '' || $content === $marker) {
                 $template = discord_default_templates()[$cleared ? 'rallyClear' : 'rally'];
                 $content = discord_render($template, $values, $raw);
             }
@@ -261,10 +263,13 @@ function discord_payload(array $ctx) {
         if (!$ending) {
             return ['username' => 'Tripwire', 'content' => $content, 'allowed_mentions' => discord_allowed_mentions($template, $ctx['ping'] ?? '')];
         }
-        // A cleared text without {rally} still ends the rally message: the struck message comes first
-        $content = discord_strip_mentions($content);
-        if ($struck !== '' && ($cleared ? strpos($template, '{rally}') === false : true)) $content = $struck . "\n" . $content;
-        return ['content' => discord_truncate(trim($content), DISCORD_CONTENT_MAX), 'allowed_mentions' => ['parse' => []]];
+        // A cleared text without {rally} (and the moved line) still ends the rally message: the struck message comes first
+        $content = trim(discord_strip_mentions($content));
+        if (strpos($content, $marker) === false) $content = $marker . "\n" . $content;
+        $room = DISCORD_CONTENT_MAX - (mb_strlen($content) - mb_strlen($marker));
+        if (mb_strlen($struck) > $room) $struck = $room > 6 ? discord_truncate($struck, $room - 2) . '~~' : '';
+        $content = trim(str_replace($marker, $struck, $content));
+        return ['content' => discord_truncate($content, DISCORD_CONTENT_MAX), 'allowed_mentions' => ['parse' => []]];
     } elseif ($kind === 'test') {
         $embed += ['title' => 'Tripwire test message', 'description' => discord_escape('Webhook "' . ($ctx['webhook'] ?? '') . '" works.')];
     } else {

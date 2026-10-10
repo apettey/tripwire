@@ -49,9 +49,15 @@
 - ~~Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**~~
   Moved to **J152820** by *Aashai Modor* at <t:…:t>  (edited)
 - Tripwire rally point from *Aashai Modor*: **J152820 (C5, E-R00024)**
+rally discord: POST failed: file_get_contents(<webhook> Failed to open stream: HTTP request failed! HTTP/1.1 500 Internal Server Error
+
+
+### legacy: move whose post failed, then clear
+- ~~Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**~~
+  Cleared by *Aashai Modor* at <t:…:t>  (edited)
 
 ### legacy: clear with no rally message
 rally discord: PATCH failed: file_get_contents(<webhook> Failed to open stream: HTTP request failed! HTTP/1.1 404 Not Found
 
 
-26 checks passed
+29 checks passed

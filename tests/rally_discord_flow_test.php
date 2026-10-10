@@ -223,6 +223,19 @@ flow_change(true, 'set', 'Aashai Modor', $sysB);
 check('legacy: set, move after 30 s', flow_channel('legacy: set, move after 30 s'),
     [[$plain($struckA) . "\nMoved to **J152820** by *Aashai Modor* at <t:…:t>", false, true], [$plain($liveB), false, false]]);
 
+// A move whose new post fails (Discord down: the mock's ...0500 webhook answers 500 twice) keeps the old message
+// tracked, so the clear still ends it
+flow_reset();
+flow_change(true, 'set', 'Kytus Bos', $sysA);
+flow_age(60);
+$goodHook = $legacyHook;
+$legacyHook = "$mock/api/webhooks/1200000000000070500/$token";
+check('legacy: a failed post is reported', flow_change(true, 'set', 'Aashai Modor', $sysB), 'failed');
+$legacyHook = $goodHook;
+flow_change(true, 'clear', 'Aashai Modor');
+check('legacy: after a failed post the old message is still ended', flow_channel('legacy: move whose post failed, then clear'),
+    [[$plain($struckA) . "\nCleared by *Aashai Modor* at <t:…:t>", false, true]]);
+
 flow_reset();
 flow_change(true, 'clear', 'Aashai Modor');
 check('legacy: clear with no message posts nothing', flow_channel('legacy: clear with no rally message'), []);

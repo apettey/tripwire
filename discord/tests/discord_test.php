@@ -475,7 +475,16 @@ $plan = discord_rally_plan($setCtx, $live, 1030);
 check('plan: moved after 30 s posts with the pings and ends the old message', [$plan['op'], $plan['payload']['allowed_mentions'], $plan['strike']['messageID'], $plan['strike']['payload']],
     ['post', ['parse' => ['everyone']], '123', ['content' => "~~old rally~~\nMoved to **J152820** by *A* at <t:1100:t>", 'allowed_mentions' => ['parse' => []]]]);
 check('plan: clock skew posts', discord_rally_plan($setCtx, ['postedAt' => 1200] + $live, 1100)['op'], 'post');
-check('plan: the message already shows it', discord_rally_plan($setCtx, ['content' => $setText] + $live, 1100), ['op' => 'skip', 'why' => 'the message already shows this rally']);
+check('plan: the message already shows it', discord_rally_plan($setCtx, ['content' => $setText] + $live, 1010), ['op' => 'skip', 'why' => 'the message already shows this rally']);
+check('plan: the same rally set again after the window is posted again', discord_rally_plan($setCtx, ['content' => $setText] + $live, 1100)['op'], 'post');
+// A rally text too long for Discord with the cleared line: the struck text is cut, the who / when line always stays
+$long = discord_payload(['previous' => str_repeat('x', 1990) . "\nsecond line"] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'time' => 7] + $rbase, null));
+check('rally cleared: a long text is cut, the cleared line stays', [mb_strlen($long['content']) <= DISCORD_CONTENT_MAX, substr($long['content'], -26), substr($long['content'], 0, 3)],
+    [true, "\nCleared by *C* at <t:7:t>", '~~x']);
+$long = discord_payload(['previous' => str_repeat('x', 1990)] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'time' => 7, 'templateClear' => 'Gone ({who})'] + $rbase, null));
+check('rally cleared: ... also with a custom text', [mb_strlen($long['content']) <= DISCORD_CONTENT_MAX, str_ends_with($long['content'], "…~~\nGone (C)")], [true, true]);
+check('rally cleared: a text of only {rally} is the default', discord_payload(['previous' => 'R'] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'time' => 7, 'templateClear' => '{rally}'] + $rbase, null))['content'],
+    "~~R~~\nCleared by *C* at <t:7:t>");
 $clearCtx = discord_rally_context(['action' => 'clear', 'who' => 'B', 'time' => 5000] + $rbase, null);
 check('plan: a clear without a message sends nothing', discord_rally_plan($clearCtx, null, 5000), ['op' => 'skip', 'why' => 'no rally message to edit']);
 check('plan: a clear at any time edits the message', discord_rally_plan($clearCtx, $live, 99999),

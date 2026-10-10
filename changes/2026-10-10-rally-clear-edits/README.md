@@ -42,9 +42,13 @@ Moved after 30 s, then cleared, after:
 ```
 
 Discord renders `<t:…:t>` as the time in each reader's own time zone (e.g. 19:08). Mask Admin > Discord preview
-(the struck text and the time as the browser shows them):
+after (the struck text and the time as the browser shows them):
 
 ![preview](preview.png)
+
+No `before.png`: what changed is what reaches Discord, which the text captures above show for every sequence. The
+Mask Admin page only differs in its help texts and in the preview, which before showed the set message and, under it,
+`@here Tripwire rally point cleared by *Example Pilot* (was on AABCA · J152820)` with "Pings: @here/@everyone".
 
 ## Settings
 
@@ -71,8 +75,15 @@ to Discord".
   cleared text without `{rally}` still strikes the message: the struck text is put above it (said in the UI help).
   The "Moved to" line is fixed text.
 - **Legacy `DISCORD_WEB_HOOK`** (`rally_discord.inc.php`): same rules with fixed texts and no pings; the live message
-  and its text are in `fork_rally_discord_message`. Differences: the moved edit is sent right after the new post in
-  the same request (no queue/retry), and a failed clear edit is not retried; the time is when the request ran.
+  and its text are in `fork_rally_discord_message`. A failed post keeps the old message tracked (a later change still
+  ends it). Differences: the moved edit is sent right after the new post in the same request (no queue/retry); a
+  failed edit can't be told apart from a deleted message (`file_get_contents`), so a failed in-window edit posts a new
+  message and still sends the old one its "Moved to" edit, and a failed clear edit is not retried; the time is when
+  the request ran.
+- Re-setting the rally to exactly what the live message shows sends nothing within 30 s; later it is posted again
+  (pinged) like a move.
+- An ending edit keeps the cleared / moved line whole: a struck rally text that doesn't fit Discord's 2000 characters
+  is cut instead.
 - UI (`app/js/fork/discord-notifications.js`): help texts, preview renders `~~strike~~` and `<t:…>` and shows the
   cleared and moved edits (`public/discord.php` returns `previewMoved`). Bundles rebuilt. Docs in `docker/README.md`.
 - Dev mock: logs message ids and has `GET /channel` (the channel as a reader sees it).
