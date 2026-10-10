@@ -163,9 +163,27 @@ returns the stored kills for the systems on the user's chain map and marks frien
 (the user's corporation plus `KILL_REPORT_FRIENDLY_CORPORATIONS`). Set `ZKILL_FEED_ENABLED=false` to turn
 the feed off for the instance; the endpoint then simply returns no kills.
 
+### ESI compatibility date and rate limits
+
+ESI versions its routes by date: every ESI request the instance makes carries the compatibility date
+`2025-12-16` (`X-Compatibility-Date` header from PHP, `compatibility_date` query parameter from the browser, so
+upstream's simple GETs don't need a CORS preflight). Without a date ESI serves its oldest one (2020-01-01); the
+responses of every route Tripwire calls are the same at both dates. There is no setting: a new date can change
+response shapes, so it is a code change. It lives in `esi/esi.inc.php` (`ESI_COMPATIBILITY_DATE`, also used by
+`zkill/`) and `app/js/fork/esi-limits.js` (`esiLimits.COMPATIBILITY_DATE`); a mocha test keeps the two equal.
+
+| Where | What happens on ESI limits |
+| --- | --- |
+| PHP (`esi.class.php` via `esi/esi.inc.php`: login, registration, crons; `public/cached_third_party.php` for faction warfare) | 429 pauses that rate-limit group (per character for authenticated routes) or route until `Retry-After`; 420 or fewer than 10 errors left pauses all ESI calls until `X-ESI-Error-Limit-Reset`; a group with less than 5% of its tokens left pauses for 60 s. Pauses are shared by all PHP processes through `cache/esi-limits.json`, capped at 15 minutes and logged once as `[tripwire] ESI: ... pausing ...`. A paused call is not sent and fails like a network error (faction warfare keeps serving its stale cache). |
+| Browser (`app/js/fork/esi-limits.js`, a jQuery prefilter on `esi.evetech.net` URLs) | A 429 on a character's route stops that character's location/ship/online polling until `Retry-After` (other characters keep polling); a 420 or fewer than 10 errors left stops all polling, the TQ status poll and the chain map's system activity fetch (jumps/kills) until the error window resets. Logged once to the browser console. User actions (set destination, show info, searches) are never held back. |
+| `zkill/` (worker) | Its own client, unchanged: see below. |
+
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php esi/tests/esi_test.php` (fake transport, no
+network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test.js`.
+
 ### zKillboard integration
 
-All zKillboard and ESI access of the fork goes through one module, `zkill/` (fork-owned), and only one process
+All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
 tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
@@ -478,7 +496,8 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `intel/tests/`, `intel/tools/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`) from the build context
+>>>>>>> origin/main
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
