@@ -1,6 +1,22 @@
 {
   "features": [
     {
+      "pr": 16,
+      "date": "2026-10-10",
+      "title": "Kill Reporting",
+      "description": "Tripwire now plays a sound and shows a pop-up when someone dies in a system on your chain map, with a link to the kill on zKillboard. There are four events, each with its own sound: a small gank, a large gank (more than 5 pilots), a kill by your corporation and a loss of your corporation.\n\nPick a sound for each event from the sound pack (robot voices, radio, alarms, tones or your browser's voice), set its volume and preview it with the play button in Settings > Kill Reporting. You can also turn the sounds or the pop-ups off there. Kills come from zKillboard and can arrive a minute or more after they happen.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-16-kill-popups.jpg",
+          "caption": "Pop-ups for kills in the chain"
+        },
+        {
+          "src": "whats-new/img/pr-16-kill-settings.jpg",
+          "caption": "Settings > Kill Reporting: a sound and volume per event"
+        }
+      ]
+    },
+    {
       "pr": 10,
       "date": "2026-10-10",
       "title": "Hole size tags on the chain map",
