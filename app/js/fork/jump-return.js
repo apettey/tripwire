@@ -56,36 +56,59 @@ const jumpReturn = {
 	},
 
 	/** Return string and hole token for a jump, or null if no named outbound hole connects the systems.
-		toSig is the far-side (return) signature, used by firstThrough. */
+		toSig / fromSig are the far-side (return) and near-side signatures, used by alreadyHandled. */
 	forJump: function(from, to, wormholes, signatures) {
 		const hole = jumpReturn.findJumpHole(from, to, wormholes, signatures);
 		if (!hole) { return null; }
 		const text = jumpReturn.returnString(hole.fromSig.name, hole.toSig.name);
 		if (!text) { return null; }
-		return { text: text, token: holeNaming.leadingToken(hole.fromSig.name), wormholeId: hole.wormholeId, toSig: hole.toSig };
+		return { text: text, token: holeNaming.leadingToken(hole.fromSig.name), wormholeId: hole.wormholeId, toSig: hole.toSig, fromSig: hole.fromSig };
+	},
+
+	/** Character name without upstream's tracking visibility suffix ("Name|P", "Name|p", "Name|x" -> "Name") */
+	baseName: function(name) {
+		return name === undefined || name === null ? "" : String(name).split("|")[0].trim();
+	},
+
+	/** "YYYY-MM-DD HH:MM:SS" (MySQL, both columns in the same server time zone) as a comparable string, or null */
+	dbTime: function(value) {
+		const m = String(value === undefined || value === null ? "" : value).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+		return m ? m[1] + " " + m[2] : null;
 	},
 
 	/** Has someone already started on the far side of this hole? Returns the reason (string), or null when
 		this pilot is first through. In order:
 		- the far-side (return) signature has a signature ID (at least its 3 letters): it was scanned from inside;
 		- the far-side signature has a name (e.g. "<AB"): someone recorded the return;
+		  (these two are skipped when one of our own characters made its last edit: the first pilot may already
+		  have pasted sigs / set the return sig before the hole was found in the client data)
 		- this browser already copied the return bookmark for this hole (copiedBefore);
 		- the hole's jump log (upstream's mass log, mass.php) has a jump, either way, by a character that is not
-		  one of ours (myNames: this browser's tracked characters, compared case-insensitively).
-		jumps: [{characterName, ...}] or null/undefined when unknown (counts as no jumps). */
-	alreadyHandled: function(toSig, jumps, myNames, copiedBefore) {
-		const sigID = toSig && toSig.signatureID ? String(toSig.signatureID) : "";
-		if (/^[a-z]{3}/i.test(sigID)) { return "far side already has a signature ID"; }
-		const name = toSig && toSig.name !== undefined && toSig.name !== null ? String(toSig.name).trim() : "";
-		if (name !== "") { return "far side already named"; }
+		  one of ours, made at or after the from-side sig's last change (fromSig.modifiedTime, i.e. since the hole
+		  got its name: jumps through a hole before anyone named it don't count).
+		me: {names: [...], ids: [...]} (this browser's characters; names compared without the "|P" suffix, any
+		case), or just an array of names. jumps: [{characterName, time, ...}] or null/undefined when unknown (= none). */
+	alreadyHandled: function(toSig, jumps, me, copiedBefore, fromSig) {
+		const names = Array.isArray(me) ? me : (me && me.names) || [];
+		const ids = (!Array.isArray(me) && me && me.ids) || [];
+		const editedByMe = !!(toSig && toSig.modifiedByID && ids.some(function(id) { return id && id == toSig.modifiedByID; }));
+		if (!editedByMe) {
+			const sigID = toSig && toSig.signatureID ? String(toSig.signatureID) : "";
+			if (/^[a-z]{3}/i.test(sigID)) { return "far side already has a signature ID"; }
+			const name = toSig && toSig.name !== undefined && toSig.name !== null ? String(toSig.name).trim() : "";
+			if (name !== "") { return "far side already named"; }
+		}
 		if (copiedBefore) { return "already copied"; }
 		const mine = {};
-		(myNames || []).forEach(function(n) { if (n) { mine[String(n).trim().toLowerCase()] = true; } });
+		names.forEach(function(n) { const b = jumpReturn.baseName(n).toLowerCase(); if (b) { mine[b] = true; } });
+		const since = jumpReturn.dbTime(fromSig && fromSig.modifiedTime);
 		const other = (Array.isArray(jumps) ? jumps : []).find(function(j) {
-			const n = j && j.characterName ? String(j.characterName).trim().toLowerCase() : "";
-			return n !== "" && !mine[n];
+			const n = jumpReturn.baseName(j && j.characterName).toLowerCase();
+			if (n === "" || mine[n]) { return false; }
+			const at = jumpReturn.dbTime(j.time);
+			return !(since && at && at < since);
 		});
-		if (other) { return "already jumped by " + other.characterName; }
+		if (other) { return "already jumped by " + jumpReturn.baseName(other.characterName); }
 		return null;
 	},
 
@@ -137,15 +160,19 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			} catch (e) { /* storage unavailable: only affects repeat pop-ups */ }
 		}
 
-		// Our own characters: the active one and every character tracked in this browser
-		function myNames() {
-			const names = [];
-			if (tripwire.client && tripwire.client.EVE && tripwire.client.EVE.characterName) { names.push(tripwire.client.EVE.characterName); }
+		// Our own characters: the active one, every character tracked in this browser, and the logged-in character
+		// (signature edits are recorded under the logged-in character's ID)
+		function myCharacters() {
+			const me = { names: [], ids: [] };
+			function add(id, name) { if (id) { me.ids.push(id); } if (name) { me.names.push(name); } }
+			if (tripwire.client && tripwire.client.EVE) { add(tripwire.client.EVE.characterID, tripwire.client.EVE.characterName); }
 			const characters = (tripwire.esi && tripwire.esi.characters) || {};
 			Object.keys(characters).forEach(function(id) {
-				if (characters[id] && characters[id].characterName) { names.push(characters[id].characterName); }
+				if (characters[id]) { add(characters[id].characterID || id, characters[id].characterName); }
 			});
-			return names;
+			const o = opts();
+			if (o && o.character) { add(o.character.id, o.character.name); }
+			return me;
 		}
 
 		function clearRetries() {
@@ -229,13 +256,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function decide(seq, from, to, result) {
 			if (!jumpReturn.firstOnly(opts())) { showPanel(from, to, result); return; }
 			const copied = copiedList().some(function(id) { return id == result.wormholeId; });
-			let reason = jumpReturn.alreadyHandled(result.toSig, null, myNames(), copied);
+			let reason = jumpReturn.alreadyHandled(result.toSig, null, myCharacters(), copied, result.fromSig);
 			if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 			jumpLog(result.wormholeId).then(function(jumps) {
 				if (seq !== jumpSeq) { return; }	// superseded by a newer jump
 				const sigs = tripwire.client && tripwire.client.signatures;
 				const toSig = (sigs && result.toSig && sigs[result.toSig.id]) || result.toSig;	// may have synced meanwhile
-				reason = jumpReturn.alreadyHandled(toSig, jumps, myNames(), false);
+				const fromSig = (sigs && result.fromSig && sigs[result.fromSig.id]) || result.fromSig;
+				reason = jumpReturn.alreadyHandled(toSig, jumps, myCharacters(), false, fromSig);
 				if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 				showPanel(from, to, result);
 			});

@@ -91,6 +91,7 @@ describe('Jump return', () => {
 			const r = jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures);
 			assert.deepEqual({ text: r.text, token: r.token, wormholeId: r.wormholeId }, { text: '<C', token: 'C', wormholeId: 1 });
 			assert.equal(r.toSig.id, 102);
+			assert.equal(r.fromSig.id, 101);
 		});
 		it('Child -> grandchild via "CA" gives <CA', () => {
 			const f = fixtures();
@@ -149,6 +150,45 @@ describe('Jump return', () => {
 		it('Jump without a name is ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: null }, {}], ME, false), null));
 		it('No names of mine known', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Test Pilot' }], undefined, false)));
 		it('No far-side signature', () => assert.equal(jumpReturn.alreadyHandled(undefined, [], ME, false), null));
+		// Upstream stores tracked names with a visibility suffix (refresh.php): "Name|P", "Name|p", "Name|x"
+		it('My own jump with the |P suffix is mine', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Test Pilot|P' }], ME, false), null));
+		it('|p and |x suffixes too', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'test pilot|p' }, { characterName: 'My Alt|x' }], ME, false), null));
+		it('Another pilot with a suffix', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Other|x' }], ME, false), 'already jumped by Other'));
+		it('A lone suffix is ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: '|P' }], ME, false), null));
+		it('My names given with a suffix', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Test Pilot|P' }], ['Test Pilot|p'], false), null));
+
+		describe('jumps before the hole was named', () => {
+			const named = { id: 101, systemID: HOME, name: 'C', modifiedTime: '2026-10-10 12:00:00' };
+			const me = { names: ME, ids: [1] };
+			it('Scout jumped it before it was named: ignored', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: '2026-10-10 11:59:59' }], me, false, named), null));
+			it('Jump at the naming time counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: '2026-10-10 12:00:00' }], me, false, named)));
+			it('Jump after the naming counts', () => assert.equal(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: '2026-10-10 11:00:00' }, { characterName: 'Other|P', time: '2026-10-10 12:05:00' }], me, false, named),
+				'already jumped by Other'));
+			it('No time on the jump: counts', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Scout|P' }], me, false, named)));
+			it('No modifiedTime on the sig: counts', () => assert.ok(jumpReturn.alreadyHandled(fresh,
+				[{ characterName: 'Scout|P', time: '2026-10-10 11:00:00' }], me, false, { name: 'C' })));
+			it('ISO-style time', () => assert.equal(jumpReturn.dbTime('2026-10-10T12:00:00Z'), '2026-10-10 12:00:00'));
+			it('Bad time', () => assert.equal(jumpReturn.dbTime('soon'), null));
+		});
+
+		describe('far side edited by one of my characters', () => {
+			const me = { names: ME, ids: [1, 196379789] };
+			it('My own sig ID on the return sig does not suppress', () => assert.equal(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', name: '<C', modifiedByID: 196379789 }, [], me, false), null));
+			it('ID as a string', () => assert.equal(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', modifiedByID: '196379789' }, [], me, false), null));
+			it('Someone else\'s edit still suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', modifiedByID: 555 }, [], me, false)));
+			it('Copied before still suppresses', () => assert.equal(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', modifiedByID: 1 }, [], me, true), 'already copied'));
+			it('Other pilots in the log still suppress', () => assert.ok(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', modifiedByID: 1 }, [{ characterName: 'Other|P' }], me, false)));
+			it('No IDs known (array of names): suppresses', () => assert.ok(jumpReturn.alreadyHandled(
+				{ signatureID: 'xyz987', modifiedByID: 1 }, [], ME, false)));
+		});
 	});
 
 	describe('settings', () => {
