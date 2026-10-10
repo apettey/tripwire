@@ -59,16 +59,21 @@ before, and the pauses only kick in when ESI is already refusing requests.
   when there is no group header), for `Retry-After`. A 420, or fewer than 10 errors left, pauses all ESI calls until
   the reset. A group with less than 5% of its tokens left pauses for 60 s. Pauses are capped at 15 min, shared
   across PHP processes in `cache/esi-limits.json` (with `flock`), and logged once. A paused call is not sent.
-  SSO (`login.eveonline.com`) is never paused. Tests: `esi/tests/esi_test.php` (fake transport, 51 checks).
+  A damaged state file is read as empty. If the file can't be written, pauses aren't remembered and this is logged
+  once instead of every pause. SSO (`login.eveonline.com`) is never paused. Tests: `esi/tests/esi_test.php`
+  (fake transport, 65 checks).
 - `app/js/fork/esi-limits.js` (new) is a jQuery `ajaxPrefilter` scoped to `https://esi.evetech.net/`. It appends
   `compatibility_date` and records every response. Upstream's `tripwire.esi.location/ship/online` are wrapped to
-  leave out characters paused by a 429 on their own route. A 420 or a low error budget pauses all polling and the
-  TQ status poll. Timers keep running and a character rejoins when its pause ends. User actions are not held
+  leave out characters paused by a 429 on their own route. A 420 or a low error budget pauses all polling, the
+  TQ status poll and the chain map's system activity fetch (`universeJumps` / `universeKills` then return an
+  already-rejected promise, and chain-map simply retries on a redraw after the pause). Timers keep running and a character rejoins when its pause ends. User actions are not held
   back. The upstream "ESI Connection Failed / Resumed" notices still show. Tests:
   `app/js-test/fork/esi-limits.test.js`, which also checks that the JS and PHP dates match. Checked in the dev
   stack in headless Chrome with all ESI traffic intercepted and two fake characters. After a 429 for one
   character, that character made 0 requests during the 20 s pause while the other kept polling, then it resumed.
-  52 of 53 ESI requests had the date, and there were no preflights.
+  52 of 53 ESI requests had the date, and there were no preflights. After a 420 from system jumps (which had
+  been refetched on every redraw while failing), there were no ESI requests at all during the 21 s pause and no
+  console errors, then polling resumed.
 - Known gap: the first TQ status request at page load is sent by upstream's `serverStatus.js` before the fork
   bundle code runs, so it has no date. `/status` is identical at both dates, and later polls carry the date.
 - `zkill/`: already sent `X-Compatibility-Date` and handled 429/420/limit headers in its own client (unchanged).

@@ -123,6 +123,18 @@ describe('esiLimits', () => {
 
 	describe('install (browser wiring)', () => {
 		let prefilter, tripwire, seen, requested;
+		// Minimal jQuery Deferred: enough for reject().promise() and done/fail/then chains
+		function fakeDeferred() {
+			let state = 'pending', args = [];
+			const promise = {
+				state: () => state,
+				done(fn) { if (state === 'resolved') fn(...args); return promise; },
+				fail(fn) { if (state === 'rejected') fn(...args); return promise; },
+				then(ok, bad) { if (state === 'resolved' && ok) ok(...args); if (state === 'rejected' && bad) bad(...args); return promise; },
+				promise: () => promise
+			};
+			return { reject(...a) { state = 'rejected'; args = a; return this; }, promise: () => promise };
+		}
 		function fakeXHR(status, responseHeaders) {
 			const callbacks = [];
 			return {
@@ -149,11 +161,13 @@ describe('esiLimits', () => {
 					characters,
 					location() { seen.push(Object.keys(tripwire.esi.characters)); },
 					ship() { seen.push(Object.keys(tripwire.esi.characters)); },
-					online() { seen.push(Object.keys(tripwire.esi.characters)); }
+					online() { seen.push(Object.keys(tripwire.esi.characters)); },
+					universeJumps() { seen.push('jumps'); return { real: true }; },
+					universeKills() { seen.push('kills'); return { real: true }; }
 				},
 				serverStatus() { seen.push('status'); }
 			};
-			const $ = { ajaxPrefilter(fn) { prefilter = fn; } };
+			const $ = { ajaxPrefilter(fn) { prefilter = fn; }, Deferred: fakeDeferred };
 			esiLimits.install($, tripwire);
 		});
 		afterEach(() => { esiLimits.pauses = {}; });
@@ -192,6 +206,30 @@ describe('esiLimits', () => {
 			}
 			assert.deepStrictEqual(seen, [[]]);
 			assert.deepStrictEqual(timers, [15000], 'the status poll keeps its timer');
+		});
+		it('answers chain map activity lookups without a request during a 420 pause', () => {
+			assert.deepStrictEqual(tripwire.esi.universeJumps(), { real: true }, 'normal: the real lookup');
+			ajax({ url: 'https://esi.evetech.net/v1/status/?user_agent=x' }, 420, { 'X-ESI-Error-Limit-Reset': '30' });
+			seen = [];
+			// The way chain-map.js chains them: done -> then(kills) -> then(store); nothing may run or throw
+			let ran = false, failed = null;
+			const jumps = tripwire.esi.universeJumps();
+			assert.strictEqual(jumps.state(), 'rejected');
+			jumps.done(() => { ran = true; })
+				.then(() => tripwire.esi.universeKills().done(() => { ran = true; }))
+				.then(() => { ran = true; });
+			jumps.fail(xhr => { failed = xhr.status; });
+			assert.strictEqual(tripwire.esi.universeKills().state(), 'rejected');
+			assert.deepStrictEqual(seen, [], 'no request made');
+			assert.strictEqual(ran, false);
+			assert.strictEqual(failed, 0);
+		});
+		it('does not hold back chain map activity for a single character pause', () => {
+			ajax({ url: LOCATION }, 429, { 'Retry-After': '60' });
+			seen = [];
+			tripwire.esi.universeJumps();
+			tripwire.esi.universeKills();
+			assert.deepStrictEqual(seen, ['jumps', 'kills']);
 		});
 		it('restores the characters map even if a poll throws', () => {
 			ajax({ url: LOCATION }, 429, { 'Retry-After': '60' });

@@ -148,6 +148,38 @@ $stream = esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tr
 check('open: paused => stale cache, not sent', [stream_get_contents($stream), count($sent)], ['[{"old":true}]', $before]);
 check('open: paused, no cache => false', esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', null), false);
 
+// A damaged or foreign state file never breaks ESI calls
+foreach (['{"routes":5,"pauses":"x"}', '[1,2]', '"text"', '{"pauses":{"*":"soon"},"routes":{"status":7}}', 'not json'] as $junk) {
+    file_put_contents($stateFile, $junk);
+    $before = count($sent);
+    [$status] = esi_request('GET', 'https://esi.evetech.net/v1/status/');
+    check("junk state $junk: request goes", [$status, count($sent)], [200, $before + 1]);
+    check("junk state $junk: read is normalised", esi_limit_state_read(), ['pauses' => [], 'routes' => []]);
+}
+file_put_contents($stateFile, '{"routes":5}');
+$replies[] = [429, '', ['x-ratelimit-group' => 'status', 'retry-after' => '60']];
+esi_request('GET', 'https://esi.evetech.net/status');
+$shared = json_decode(file_get_contents($stateFile), true);
+check('junk state: rewritten in shape after a pause', [array_keys($shared), $shared['routes']], [['pauses', 'routes'], ['status' => 'status']]);
+
+// State file can't be written: the request still works, the problem is logged once (not every pause)
+$log = tempnam(sys_get_temp_dir(), 'esi-log-');
+$previousLog = ini_set('error_log', $log);
+esi_limit_state_file(sys_get_temp_dir() . '/no-such-dir-' . getmypid() . '/esi-limits.json');
+$replies[] = [429, '', ['retry-after' => '60']];
+$replies[] = [429, '', ['retry-after' => '60']];
+$replies[] = [420, '', []];
+[$s1] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
+[$s2] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
+[$s3] = esi_request('GET', 'https://esi.evetech.net/v4/corporations/1/');
+check('unwritable state: requests still sent', [$s1, $s2, $s3], [429, 429, 420]);
+$lines = array_values(array_filter(explode("\n", (string) file_get_contents($log)), function ($l) { return strpos($l, 'ESI:') !== false; }));
+check('unwritable state: one log line', count($lines), 1);
+check('unwritable state: says why', strpos($lines[0] ?? '', 'cannot write') !== false, true);
+ini_set('error_log', $previousLog === false ? '' : $previousLog);
+@unlink($log);
+esi_limit_state_file($stateFile);
+
 esi_transport(null, true);
 @unlink($stale);
 @unlink($stateFile);

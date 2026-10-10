@@ -149,7 +149,7 @@ const esiLimits = {
 	/** Browser wiring: jQuery prefilter for every ESI request, and wrappers around upstream's pollers */
 	install: function($, tripwire) {
 		esiLimits.installPrefilter($);
-		esiLimits.wrapPollers(tripwire);
+		esiLimits.wrapPollers(tripwire, $);
 	},
 
 	installPrefilter: function($) {
@@ -168,7 +168,7 @@ const esiLimits = {
 		});
 	},
 
-	wrapPollers: function(tripwire) {
+	wrapPollers: function(tripwire, $) {
 		const esi = tripwire.esi;
 		["location", "ship", "online"].forEach(function(name) {
 			const poll = esi[name];
@@ -196,6 +196,22 @@ const esiLimits = {
 			wrappedStatus.timer = serverStatus.timer;
 			tripwire.serverStatus = wrappedStatus;
 		}
+
+		// Chain map system activity (chain-map.js refetches on every redraw until it has data): while all ESI is
+		// paused, answer with an already-rejected promise instead of a request. chain-map only attaches
+		// done/then handlers, so a rejection just leaves the activity empty until the next redraw after the pause.
+		["universeJumps", "universeKills"].forEach(function(name) {
+			const lookup = esi[name];
+			if (typeof lookup !== "function" || lookup.esiLimitsWrapped || !$ || !$.Deferred) return;
+			const wrapped = function() {
+				if (esiLimits.pausedFor(null) > 0) {
+					return $.Deferred().reject({ status: 0, statusText: "paused", getResponseHeader: function() { return null; } }, "paused").promise();
+				}
+				return lookup.apply(this, arguments);
+			};
+			wrapped.esiLimitsWrapped = true;
+			esi[name] = wrapped;
+		});
 	}
 };
 
@@ -204,8 +220,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.aja
 	// this file in the bundle; if the bundle order differs, wrap them once the page is ready).
 	esiLimits.installPrefilter(jQuery);
 	if (typeof tripwire !== "undefined" && tripwire.esi && tripwire.esi.location) {
-		esiLimits.wrapPollers(tripwire);
+		esiLimits.wrapPollers(tripwire, jQuery);
 	} else {
-		jQuery(function() { if (typeof tripwire !== "undefined" && tripwire.esi) esiLimits.wrapPollers(tripwire); });
+		jQuery(function() { if (typeof tripwire !== "undefined" && tripwire.esi) esiLimits.wrapPollers(tripwire, jQuery); });
 	}
 }

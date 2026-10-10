@@ -154,26 +154,39 @@ function esi_limit_state_file(?string $set = null) {
     return $file;
 }
 
-function esi_limit_state_read() {
-    $raw = @file_get_contents(esi_limit_state_file());
-    $state = $raw ? json_decode($raw, true) : null;
-    return is_array($state) ? $state : [];
+/** Decoded state in the expected shape (a damaged or foreign file must never break ESI calls) */
+function esi_limit_state_normalise($state) {
+    $state = is_array($state) ? $state : [];
+    $pauses = is_array($state['pauses'] ?? null) ? $state['pauses'] : [];
+    $routes = is_array($state['routes'] ?? null) ? $state['routes'] : [];
+    return [
+        'pauses' => array_filter($pauses, function ($until) { return is_int($until) || is_float($until); }),
+        'routes' => array_filter($routes, function ($group) { return is_string($group) && $group !== ''; }),
+    ];
 }
 
-/** Read-modify-write the shared state under an exclusive lock; $fn(array &$state) returns the result */
-function esi_limit_state_update(callable $fn) {
+function esi_limit_state_read() {
+    $raw = @file_get_contents(esi_limit_state_file());
+    return esi_limit_state_normalise($raw ? json_decode($raw, true) : null);
+}
+
+/**
+ * Read-modify-write the shared state under an exclusive lock; $fn(array &$state) returns the result.
+ * $persisted is false when the state file can't be opened (the decision then only applies to this request).
+ */
+function esi_limit_state_update(callable $fn, &$persisted = null) {
     $file = esi_limit_state_file();
     $created = !file_exists($file);
     $handle = @fopen($file, 'c+');
     if ($handle && $created) @chmod($file, 0666);   // cron, php-fpm and admin shells may run as different users
+    $persisted = (bool) $handle;
     if (!$handle) {
-        $state = [];   // can't share state: still decide for this request
+        $state = esi_limit_state_normalise(null);   // can't share state: still decide for this request
         return $fn($state);
     }
     flock($handle, LOCK_EX);
     $raw = stream_get_contents($handle);
-    $state = $raw ? json_decode($raw, true) : null;
-    if (!is_array($state)) $state = [];
+    $state = esi_limit_state_normalise($raw ? json_decode($raw, true) : null);
     $result = $fn($state);
     ftruncate($handle, 0);
     rewind($handle);
@@ -226,7 +239,16 @@ function esi_after_response($url, $status, array $responseHeaders, array $reques
     }
     $started = esi_limit_state_update(function (array &$state) use ($url, $decision) {
         return esi_limit_apply($state, $url, $decision);
-    });
+    }, $persisted);
+    if (!$persisted) {
+        // Nothing is remembered, so every limited response would look like a new pause: say so once instead
+        static $warned = false;
+        if (!$warned && $decision['pauses']) {
+            $warned = true;
+            esi_log('cannot write ' . esi_limit_state_file() . ': ESI limits are not remembered between requests');
+        }
+        return;
+    }
     foreach ($started as $key => $seconds) {
         esi_log("HTTP $status from " . esi_route_key($url) . ": pausing " . ($key === '*' ? 'all ESI requests' : $key)
             . " for $seconds s");
