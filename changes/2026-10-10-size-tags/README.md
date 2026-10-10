@@ -15,6 +15,7 @@ The tags can be turned off with the "Hole size tags" checkbox in Settings > Chai
 | Before | After |
 | --- | --- |
 | ![before](before.jpg) | ![after](after.jpg) |
+| | ![setting](after-setting.jpg) Turn them off in Settings > Chain Map Settings |
 
 ## Change
 
