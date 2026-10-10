@@ -3,7 +3,7 @@
 
 try {
     $mysql = new PDO(
-        sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8',
+        sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
             getenv('DB_HOST') ?: 'mysql',
             getenv('DB_PORT') ?: '3306',
             getenv('DB_NAME') ?: 'tripwire_database'),

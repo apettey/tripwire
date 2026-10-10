@@ -10,6 +10,7 @@ DB_INIT_USER="${DB_INIT_USER:-$DB_USER}"
 DB_INIT_PASSWORD="${DB_INIT_PASSWORD:-$DB_PASSWORD}"
 DB_AUTO_INIT="${DB_AUTO_INIT:-true}"
 DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-60}"
+DB_SSL="${DB_SSL:-true}"
 
 # Cache dir must be writable by php-fpm (may be a bind mount in dev)
 mkdir -p /opt/app/cache
@@ -31,8 +32,18 @@ if ! nginx -t -q; then
 fi
 
 if [ "$DB_AUTO_INIT" = "true" ]; then
+  # TLS for the schema-import client: on by default (MySQL 8 has it on), without verifying the
+  # server certificate; DB_SSL=false for servers without TLS
+  case "${DB_SSL,,}" in
+    true|1|yes|on) ssl_opts=(--ssl --skip-ssl-verify-server-cert) ;;
+    false|0|no|off) ssl_opts=(--skip-ssl) ;;
+    *)
+      echo "[tripwire] ERROR: DB_SSL must be true or false (got '$DB_SSL')" >&2
+      exit 1
+      ;;
+  esac
   export MYSQL_PWD="$DB_INIT_PASSWORD"
-  mysql_cmd=(mariadb --ssl --skip-ssl-verify-server-cert -h"$DB_HOST" -P"$DB_PORT" -u"$DB_INIT_USER")
+  mysql_cmd=(mariadb "${ssl_opts[@]}" -h"$DB_HOST" -P"$DB_PORT" -u"$DB_INIT_USER")
 
   echo "[tripwire] Waiting up to ${DB_WAIT_SECONDS}s for MySQL at $DB_HOST:$DB_PORT..."
   for i in $(seq 1 "$DB_WAIT_SECONDS"); do

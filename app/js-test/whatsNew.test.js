@@ -36,6 +36,12 @@ describe('What\'s New', () => {
 		});
 		it('Full line', () => assert.equal(whatsNew.formatVersion({ version: '1.2.0', upstream: '1.30b' }), 'Tripwire fork v1.2.0 (upstream 1.30b)'));
 		it('Full line without upstream', () => assert.equal(whatsNew.formatVersion(undefined), 'Tripwire fork dev'));
+		it('Tooltip', () => assert.equal(whatsNew.versionTooltip({ version: '1.6.0', upstream: '1.30b' }), 'Tripwire fork v1.6.0 · based on upstream Tripwire 1.30b'));
+		it('Tooltip in dev', () => assert.equal(whatsNew.versionTooltip({ version: 'dev', upstream: '1.30b' }), 'Tripwire fork dev · based on upstream Tripwire 1.30b'));
+		it('Tooltip without version.json', () => {
+			assert.equal(whatsNew.versionTooltip({ version: ' dev ' }), 'Tripwire fork dev');
+			assert.equal(whatsNew.versionTooltip(null), 'Tripwire fork dev');
+		});
 	});
 
 	describe('render', () => {

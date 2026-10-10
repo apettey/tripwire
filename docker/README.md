@@ -55,7 +55,8 @@ Cron runs `/etc/crontabs/www-data` as `www-data` (`system_activity` hourly, `acc
 3 minutes); jobs inherit the container environment and their output goes to the container log,
 as do nginx access/error logs.
 
-On start the entrypoint waits up to `DB_WAIT_SECONDS` for MySQL, then:
+On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECONDS` for MySQL
+(over TLS unless `DB_SSL=false`), then:
 
 - database has no tables: imports `.docker/mysql/tripwire.sql`;
 - `accounts`, `signatures` and `wormholes` exist: does nothing;
@@ -81,24 +82,87 @@ the "remember me" cookie is, so over plain HTTP (dev) logins aren't remembered a
 
 ### Environment variables
 
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` | `mysql` / `3306` / `tripwire_database` | |
-| `DB_USER` / `DB_PASSWORD` | `tripwire` / empty | App connection, also used for the schema import |
-| `DB_INIT_USER` / `DB_INIT_PASSWORD` | the app user | Optional separate account for the schema import |
-| `DB_AUTO_INIT` | `true` | Set `false` to skip waiting for / importing the schema |
-| `DB_WAIT_SECONDS` | `60` | How long to wait for MySQL on start |
-| `TRIPWIRE_DOMAIN` | `localhost` | Public host (and port, if not 80/443) |
-| `TRIPWIRE_HTTPS` | `true` | Used to build the default SSO redirect |
-| `TRUSTED_PROXIES` | empty | Comma/space separated proxy CIDRs; when set, the client IP is taken from `X-Forwarded-For` (nginx realip) |
-| `EVE_SSO_CLIENT` / `EVE_SSO_SECRET` | empty | From developers.eveonline.com |
-| `EVE_SSO_REDIRECT` | `https://$TRIPWIRE_DOMAIN/index.php?mode=sso` | |
-| `ADMIN_EMAIL` / `USER_AGENT` | | ESI user agent |
-| `CDN_DOMAIN`, `APP_NAME`, `TRIPWIRE_API`, `ENABLE_SEARCH_SCOPE`, `EVE_DUMP`, `TZ` | as `config.example.php` | |
-| `DISCORD_WEB_HOOK` | unset | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}` |
+Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php` are
+`docker/config.php` / `docker/db.inc.php` (copied over `/opt/app/`), the entrypoint is
+`docker/entrypoint.sh` (runs once on container start).
 
-Empty values fall back to the default; unparseable booleans do too. The compose files pass each
-variable explicitly (no `env_file`), so `MYSQL_ROOT_PASSWORD` never reaches the app container.
+| Variable | Default | Read by | Controls |
+| --- | --- | --- | --- |
+| `DB_HOST` | `mysql` | `db.inc.php`, entrypoint | MySQL host for the app and the schema import |
+| `DB_PORT` | `3306` | `db.inc.php`, entrypoint | MySQL port |
+| `DB_NAME` | `tripwire_database` | `db.inc.php`, entrypoint | Database name; the entrypoint creates it if missing |
+| `DB_USER` / `DB_PASSWORD` | `tripwire` / empty | `db.inc.php`, entrypoint | App connection (PDO, `charset=utf8mb4`); also the schema import account unless `DB_INIT_*` is set |
+| `DB_INIT_USER` / `DB_INIT_PASSWORD` | `DB_USER` / `DB_PASSWORD` | entrypoint | Separate account for the wait/create/import step |
+| `DB_AUTO_INIT` | `true` | entrypoint | `false` skips waiting for MySQL and the schema import entirely |
+| `DB_WAIT_SECONDS` | `60` | entrypoint | How long to wait for MySQL on start before exiting |
+| `DB_SSL` | `true` | entrypoint | TLS for the schema-import client: `true` = `--ssl --skip-ssl-verify-server-cert` (MySQL 8 default), `false` = `--skip-ssl` for servers without TLS. Does not affect the PHP connection |
+| `TRIPWIRE_DOMAIN` | `localhost` | `config.php` | Public host (and port, if not 80/443); default for `CDN_DOMAIN` and `EVE_SSO_REDIRECT` |
+| `TRIPWIRE_HTTPS` | `true` | `config.php` | Scheme (`https`/`http`) of the default `EVE_SSO_REDIRECT`; nothing else |
+| `TRUSTED_PROXIES` | empty | entrypoint (nginx) | Comma/space separated proxy CIDRs written to nginx `set_real_ip_from`; when set, the client IP is taken from `X-Forwarded-For`. Invalid values stop the container |
+| `EVE_SSO_CLIENT` / `EVE_SSO_SECRET` | empty | `config.php` (`EVE_SSO_CLIENT` / `EVE_SSO_SECRET`) | EVE SSO app from developers.eveonline.com |
+| `EVE_SSO_REDIRECT` | `https://$TRIPWIRE_DOMAIN/index.php?mode=sso` | `config.php` (`EVE_SSO_REDIRECT`) | SSO callback URL |
+| `ADMIN_EMAIL` | `admin@example.com` | `config.php` | Only used to build the default `USER_AGENT` |
+| `USER_AGENT` | `Tripwire Server - $ADMIN_EMAIL` | `config.php` (`USER_AGENT`) | User agent for ESI requests |
+| `CDN_DOMAIN` | `$TRIPWIRE_DOMAIN` | `config.php` (`CDN_DOMAIN`) | Host serving images/css/js |
+| `APP_NAME` | `Tripwire` | `config.php` (`APP_NAME`) | Name shown in the UI |
+| `TRIPWIRE_API` | `true` | `config.php` (`TRIPWIRE_API`) | Enables the `/api` endpoints |
+| `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
+| `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
+| `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`) | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}` |
+| `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
+| `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
+| `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
+| `TRIPWIRE_FORK_VERSION` | build arg (`dev` for local builds) | `settings.php` (`VERSION`), `public/version.json` (generated at build time) | Fork release version, the app's version everywhere (see [Versions](#versions)); set by CI, don't override at runtime. Anything but letters, digits and `.+_-` becomes `dev` |
+| `TRIPWIRE_UPSTREAM_SETTINGS` | `/opt/app/settings.upstream.php` | `settings.php` (`UPSTREAM_VERSION`) | Upstream's `settings.php`, read for upstream's version; only the dev stack sets it |
+
+Empty values fall back to the default; unparseable booleans in `config.php` do too (`DB_AUTO_INIT`
+must be exactly `true` to run, `DB_SSL` must be `true`/`false`). The compose files pass each variable
+explicitly (no `env_file`), so `MYSQL_ROOT_PASSWORD` never reaches the app container. Compose-only
+variables: `MYSQL_ROOT_PASSWORD` / `MYSQL_USER` / `MYSQL_PASSWORD` (mysql container, mapped to
+`DB_USER` / `DB_PASSWORD`), `TRIPWIRE_IMAGE`, `HTTP_PORT` (prod) and `DEV_*_PORT` (dev).
+
+### No upstream analytics or donation panel
+
+Upstream ships `analytics.inc.php` (its own Google Analytics property) and `donation_panel.inc` (a
+PayPal donate form with a tracking pixel), both included by `tripwire.php` and `landing.php`. The image
+replaces them with `docker/analytics.inc.php` and `docker/donation_panel.inc` (the dev stack mounts
+them over the repo copies), which send nothing to third parties unless `GA_MEASUREMENT_ID` /
+`DONATION_PANEL_HTML_FILE` are set. `docker/analytics.inc.php` always defines a no-op `ga()` because
+`tripwire.php` calls it every 4 minutes.
+
+### Versions
+
+The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
+`docker/settings.php` replaces upstream's `settings.php` (copied over it in the image, mounted over it in
+the dev stack): `VERSION` is the fork version (`dev` when unset), and `UPSTREAM_VERSION` is upstream's
+`define('VERSION', ...)`, read from upstream's file (kept as `/opt/app/settings.upstream.php`). The
+build fails if upstream's `settings.php` ever defines anything besides `VERSION`; extend
+`docker/settings.php` then. The version shows up in:
+
+- the top-left of the app (its tooltip adds the upstream version from `version.json`) and the landing
+  page panel;
+- the "Tripwire update available ... Reload" prompt, which open tabs show after each release (the page's
+  version no longer matches the server's);
+- `?v=` on the css/js that `tripwire.php` loads (`app.min.css`, `jquery-ui-custom.css`, `combine.js`,
+  `app.min.js`): the URLs change with every release, and nginx serves js/css requested with a release
+  `?v=X.Y.Z` as `Cache-Control: public, max-age=31536000, immutable`. Everything else (`?v=dev`,
+  unversioned files such as the landing page's, `whats-new/features.json`, `version.json`) stays
+  `no-cache`. So a CDN that rewrites `no-cache` into a max-age (Cloudflare's Browser Cache TTL) can't
+  serve stale bundles after an upgrade (#14);
+- `public/version.json` (`{"version":"1.2.0","upstream":"1.30b"}`), shown in What's New and its Settings row;
+- the image's `org.opencontainers.image.version` label and its `X.Y.Z` / `X.Y` / `X` tags
+  (plus `upstream-<upstream version>`).
+
+The dev stack (and local builds without `--build-arg TRIPWIRE_FORK_VERSION=...`) shows `dev`. The dev
+stack has no `version.json` (the repo is mounted over it), so its tooltip shows no upstream version.
+
+### What is in `/opt/app`
+
+Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
+`assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
+and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`) from the build context
+before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
 files) too.
@@ -136,12 +200,15 @@ A run on a commit that is already tagged reuses that version (safe to re-run).
 | --- | --- |
 | Release (merge to `main` or manual run) | `X.Y.Z`, `X.Y`, `X`, `latest`, `upstream-<Tripwire version from settings.php>` (e.g. `upstream-1.30b`), `sha-<commit>` |
 | Docs-only merge / `semver:skip` | nothing (the image is still built as a check) |
-| Pull request | nothing (built, not pushed) |
+| Pull request | nothing (not built) |
+
+Every tag is a multi-arch image for `linux/amd64` and `linux/arm64` (built with QEMU on the CI runner;
+the `assets` and `src` stages run natively). `org.opencontainers.image.version` is set to `X.Y.Z`.
 
 The fork version is baked into the image as `TRIPWIRE_FORK_VERSION` and `public/version.json`
-(`{"version":"1.2.0","upstream":"1.30b"}`); the What's New dialog and its Settings row show it. Local
-builds without `--build-arg TRIPWIRE_FORK_VERSION=...` and the dev stack show `dev`.
-The build fails if the version can't be read from `settings.php`.
+(`{"version":"1.2.0","upstream":"1.30b"}`) and is the app's version everywhere (see [Versions](#versions)).
+Local builds without `--build-arg TRIPWIRE_FORK_VERSION=...` and the dev stack show `dev`.
+The build fails if the upstream version can't be read from `settings.php`.
 
 ### Manual release
 

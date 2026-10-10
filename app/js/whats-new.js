@@ -30,6 +30,13 @@ const whatsNew = {
 		return "Tripwire fork " + whatsNew.shortVersion(info) + (upstream ? " (upstream " + upstream + ")" : "");
 	},
 
+	// Tooltip for the version top-left of the app (#version, rendered by PHP from the same fork version):
+	// "Tripwire fork v1.2.0 · based on upstream Tripwire 1.30b"
+	versionTooltip: function(info) {
+		const upstream = String((info && info.upstream) || "").trim();
+		return "Tripwire fork " + whatsNew.shortVersion(info) + (upstream ? " · based on upstream Tripwire " + upstream : "");
+	},
+
 	// Highest PR number in the list, or 0
 	latestPR: function(features) {
 		return (features || []).reduce(function(max, f) {
@@ -185,6 +192,9 @@ const whatsNew = {
 	showVersion: function() {
 		$("#whatsNewVersion").text("· " + whatsNew.shortVersion(whatsNew.version));
 		$("#whatsNewShow, #whatsNewVersion").attr("title", whatsNew.formatVersion(whatsNew.version));
+		// Without version.json (dev stack) fall back to the version PHP rendered
+		const $top = $("#version");
+		$top.attr("title", whatsNew.versionTooltip(whatsNew.version || {version: $top.text()}));
 	}
 };
 
