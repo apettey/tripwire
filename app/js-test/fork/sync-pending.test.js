@@ -168,6 +168,20 @@ describe('syncPending (pending tracking survives an in-flight refresh)', () => {
 		assert.strictEqual(sent().data.tracking[1].systemID, 31000003);
 	});
 
+	it('keeps a mid-flight jump when a success callback syncs again before the request is finished', () => {
+		track(1, 31000001);
+		const log = console.log; console.log = () => {};	// upstream logs "Awaiting existing XHR"
+		try {
+			tripwire.sync('refresh', {}, () => assert.strictEqual(tripwire.sync('refresh'), false));	// after the reset, xhr still set
+			const first = sent();
+			track(1, 31000002);
+			respond(first);
+		} finally { console.log = log; }
+		timers.filter(t => typeof t === 'function').forEach(t => t());	// the 50 ms retry
+		assert.strictEqual(requests.length, 2);
+		assert.strictEqual(sent().data.tracking[1].systemID, 31000002);
+	});
+
 	it('wraps only once', () => {
 		const once = tripwire.sync;
 		syncPending.wrap(tripwire);

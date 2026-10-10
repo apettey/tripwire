@@ -31,6 +31,9 @@ No toggle: it's a bug fix with no visible change; nobody would want jumps to be 
   harmless (the trigger only logs when `systemID` changes). A lost update can't be recovered there: the next
   update just moves the row, and the trigger only logs a jump if one wormhole joins the old and new system
   directly, so a pilot two jumps further on gets no `jumps` row at all.
+- **Not fixed here** (separate upstream bug): `app/js/tracking.js` (~line 78, removing an ESI character)
+  checks `tripwire.data.esi.delete` but writes `tripwire.data.esiDelete`, so removing two characters before a
+  refresh only sends the last one.
 - **Tests.** `app/js-test/fork/sync-pending.test.js` runs upstream's real `sync.js` against a fake `$.ajax`
   with held responses: reproduces the bug, then covers the fix, failures, the waiting/retry path and ESI
   flags. End to end (dev stack, refresh.php responses held 2 s, two fake tracked characters jumping

@@ -69,11 +69,13 @@ var syncPending = {
 			if (!sent) {
 				// Upstream is waiting for the in-flight request: it copied tripwire.data (including anything written
 				// mid-flight) into the retry it sends next, so there is nothing left to restore for that request.
-				if (inflight) inflight.superseded = true;
+				// Only if tripwire.data was still that request's pending object: a sync made after upstream's reset
+				// (e.g. from a success callback) built its retry from the fresh, empty data, so restore as usual.
+				if (inflight && pending === inflight.pending) inflight.superseded = true;
 				return sent;
 			}
 			if (xhr && typeof xhr.done === "function" && pending) {
-				const request = inflight = { superseded: false };
+				const request = inflight = { pending: pending, superseded: false };
 				// Registered after upstream's own done handler, so this runs right after its reset.
 				xhr.done(function() {
 					if (inflight === request) inflight = null;
