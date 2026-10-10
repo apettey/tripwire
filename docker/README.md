@@ -100,6 +100,11 @@ files) too.
 
 ## Publishing
 
+Every PR runs `.github/workflows/ci.yml`: JS unit tests (mocha), a check that the committed
+`app.min.js` / `app.min.css` bundles are up to date, PHP syntax, What's New JSON, actionlint, shellcheck
+and the version-calculation tests. PRs do not build the Docker image; it is built and pushed only from
+`main`, after the checks above.
+
 Every merge to `main` is a release: `.github/workflows/docker-publish.yml` computes the next
 [SemVer](https://semver.org) version, pushes the image to Docker Hub, tags the commit `vX.Y.Z` and creates
 a GitHub Release with notes generated from the merged PRs. The first release is `v1.0.0`.

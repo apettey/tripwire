@@ -9,6 +9,9 @@ image), so deployments can pin a version and users can see which one they run.
 
 ## Change
 
+- New `.github/workflows/ci.yml` for PRs and main (tests, bundle freshness, PHP lint, JSON, actionlint,
+  shellcheck). PRs no longer build the Docker image; only `main` builds and pushes it.
+
 - `.github/workflows/docker-publish.yml` restructured into three jobs: `version` (computes the next
   version; on PRs writes the would-be version to the job summary), `build` (builds; pushes only on a
   release) and `release` (annotated tag + `gh release create --generate-notes`, after the image is pushed).

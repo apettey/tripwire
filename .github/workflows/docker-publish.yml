@@ -1,7 +1,6 @@
 # Versioning, releases and the Docker image (see docker/README.md#publishing).
 #
-# pull_request:       computes the version the PR would release (job summary) and builds the image
-#                     without pushing.
+# pull_request:       computes the version the PR would release (job summary). No image is built.
 # push to main:       computes the next version (.github/scripts/next-version.sh); if it is a release,
 #                     builds and pushes petdog/tripwire, then tags vX.Y.Z and creates the GitHub Release.
 #                     Docs-only changes (or the semver:skip label) release nothing.
@@ -157,6 +156,8 @@ jobs:
 
   build:
     needs: version
+    # Images are only built (and pushed) from main; PRs just get the version summary
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -184,7 +185,6 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.push }}
             type=raw,value=upstream-${{ needs.version.outputs.upstream }},enable=${{ needs.version.outputs.push }}
             type=sha,prefix=sha-
-            type=ref,event=pr
 
       - name: Build (and push on release)
         uses: docker/build-push-action@v7

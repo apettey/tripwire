@@ -1,0 +1,84 @@
+# Checks for every PR (and main). The Docker image is only built on main (docker-publish.yml).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  js:
+    name: JS tests and bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      # mocha directly: upstream's 'gulp test' task doesn't wait for mocha, so failures could pass
+      - name: Unit tests
+        run: npx mocha --recursive app/js-test
+
+      - name: Committed bundles are up to date
+        env:
+          DISABLE_NOTIFIER: "true"
+        run: |
+          npx gulp js css
+          # Source maps embed the sources (line endings differ per OS), so only the bundles are compared
+          if ! git diff --quiet -- public/js/app.min.js public/css/app.min.css; then
+            echo "::error::public/js/app.min.js or public/css/app.min.css is out of date. Rebuild (the dev 'assets' service, or 'npx gulp js css') and commit them."
+            git diff --stat -- public/js/app.min.js public/css/app.min.css
+            exit 1
+          fi
+
+      - name: What's New data is valid
+        run: |
+          node -e '
+            const f = require("./public/whats-new/features.json").features;
+            const prs = f.map(x => x.pr);
+            if (!Array.isArray(f) || f.some(x => !Number.isInteger(x.pr) || !x.title || !x.description)) throw new Error("every entry needs pr (integer), title and description");
+            if (new Set(prs).size !== prs.length) throw new Error("duplicate pr numbers: " + prs);
+            console.log("features.json ok:", prs.join(", "));'
+
+  php:
+    name: PHP syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: php -l
+        run: |
+          failed=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" > /dev/null || failed=1
+          done < <(find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0)
+          exit $failed
+
+  scripts:
+    name: Workflows and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+      - name: shellcheck
+        run: shellcheck --severity=warning .github/scripts/*.sh docker/*.sh
+
+      - name: Version calculation tests
+        run: bash .github/scripts/test-next-version.sh
