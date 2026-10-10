@@ -68,5 +68,9 @@ turns it back on.
   browser queue work. That is bounded: only real solar systems, one deduplicated row per system, at most 800 queued
   back-fills from the panel and 1000 including chain requests, 250 / 500 per user, and the worker drains them at its fixed, rate-limited pace, so the worst case
   is a delayed queue, not more zKillboard traffic than the limits allow.
+- **Deterministic bundles**: `docker/gulpfile.dev.js` (used by the dev `assets` watcher) now expands each `gulp.src`
+  glob into a sorted file list, so bundles keep main's script order instead of depending on file-system order;
+  the `tripwire-feature` skill now rebuilds with
+  `npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css` and says bundles must keep main's line order.
 - **Upstream files touched**: none. The panel is added from fork JS; `tripwire.php`, `layout.js`, `options.js` and
   `systemChange.js` are unchanged (wrapped from outside). Rebuilt bundles: `public/js/app.min.js`, `public/css/app.min.css`.
