@@ -39,16 +39,14 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
       (`MSYS_NO_PATHCONV` stops Git Bash on Windows mangling paths). All tests must pass.
 
 ## 4. Bundles
-- [ ] The `assets` service rebuilds `public/js/app.min.js` and `public/css/app.min.css` on save.
-      Commit them with the source change. To rebuild by hand, use the dev gulpfile (it orders the
-      files deterministically: globs in order, files sorted within each glob):
+- [ ] The `assets` service builds `public/js/app.min.js` and `public/css/app.min.css` on start and
+      rebuilds them on save. They are git-ignored build output: **don't commit them** (CI and the
+      Docker image build their own). To rebuild by hand, use the dev gulpfile (it orders the files
+      deterministically: globs in order, files sorted within each glob):
       `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css`.
       Not plain `npx gulp js css`: upstream's gulpfile concatenates in file-system order.
-- [ ] Bundles must keep main's line order (script order matters; fork files depend on each other):
-      `git diff origin/main -- public/js/app.min.js` should show only your files' lines **added**,
-      nothing removed or moved. If the watcher touched them without a real change, `git checkout --`
-      them. A rewrite with the same size can slip past git's stat cache: if `git status` is clean but
-      the diff looks wrong, `git rm --cached` the bundle and `git add` it again.
+- [ ] Script order matters (fork files depend on each other): files load in gulpfile glob order, sorted
+      by path within a glob, so a fork file loads after the fork files it uses only if it sorts after them.
 
 ## 5. Try it in the browser
 - [ ] Dev login: `docker compose -f docker-compose.dev.yml exec app bash /opt/app/docker/dev-seed.sh`,
@@ -85,7 +83,7 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
     characters, other users' changes arriving via sync);
   - AGENTS.md rules: change-log entry and row, Settings toggle decision (on by default, applied on
     Save, survives Reset), fork-owned files, small upstream edits listed in the entry, no reformatting
-    or line-ending changes, bundles additive only;
+    or line-ending changes, no committed bundles;
   - security: pasted/user text escaped when rendered, no new CSRF/XSS, no secrets, no new third-party
     hosts unless logged; all zKillboard access only through the pooled worker;
   - tests: pure logic covered by mocha, tests pass
@@ -107,8 +105,3 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
 
 ## 9. Merge
 - [ ] Merge with a **merge commit** (not squash/rebase).
-- [ ] When later branches conflict on `public/js/app.min.js` / `app.min.css`, don't hand-merge:
-      merge main, take either side of the bundle, then rebuild from the merged sources with
-      `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx gulp --gulpfile docker/gulpfile.dev.js --cwd /src js css`
-      (the watcher only rebuilds on `app/` changes), check the result keeps main's line order (only your
-      lines added, see section 4) and commit it.

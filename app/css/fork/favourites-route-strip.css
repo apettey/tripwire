@@ -1,0 +1,77 @@
+/* Favourites panel: route as jump markers (fork-owned, see app/js/fork/favourites-route-strip.js) */
+
+#favouritesWidget .fav-row.fav-has-strip {
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
+/* Second line of the row, under the name */
+#favouritesWidget .fav-strip {
+	flex: 1 0 100%;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding-left: 18px;
+	box-sizing: border-box;
+	cursor: default;
+}
+
+#favouritesWidget .fav-strip-count {
+	flex: 0 0 auto;
+	color: #8fbfff;
+	font-size: 0.9em;
+}
+
+#favouritesWidget .fav-strip-markers {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;	/* only wraps in a very narrow panel (see favouritesRouteStrip.compress) */
+	gap: 2px;	/* marker 9px + gap 2px = favouritesRouteStrip.MARKER_STEP */
+	min-height: 12px;
+}
+
+.fav-mk {
+	flex: 0 0 9px;
+	width: 9px;
+	height: 9px;
+	box-sizing: border-box;
+	background: var(--fav-mk, #777);
+	font-style: normal;
+}
+
+/* Stargate jump: square */
+.fav-mk-gate {
+	border-radius: 1px;
+}
+
+/* Wormhole jump: circle */
+.fav-mk-wormhole {
+	border-radius: 50%;
+}
+
+/* A hop into or out of Thera / Turnur (EVE-Scout hole or a mapped wormhole): a circle in the hub's colour, ringed */
+.fav-mk-hub {
+	border-radius: 50%;
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+}
+
+.fav-mk:hover {
+	outline: 1px solid #fff;
+	outline-offset: 1px;
+}
+
+.fav-mk-hub:hover {
+	filter: brightness(1.3);
+}
+
+.fav-mk-gap {
+	flex: 0 0 auto;
+	color: #999;
+	font-size: 0.85em;
+	padding: 0 2px;
+	line-height: 12px;
+}
