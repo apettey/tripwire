@@ -4,10 +4,14 @@
 
 ## Description
 
-A new Watchlist panel where each user keeps named filters ("C5 with a Wolf-Rayet", "J123450", "anything on an
-H296 within 3 jumps of me"). Tripwire matches them against every system and connection on the chain map whenever the
-chain changes; a new match shows a pop-up and plays a sound once, and the matching nodes get a marker naming the
-filter.
+A Watchlist for the corporation: its Tripwire admins keep named filters per mask in Mask Admin > Watchlist ("C5 with a
+Wolf-Rayet", "J123450", "anything on an H296 within 3 jumps of me"). Everyone on the mask is told when the chain map
+has a match (pop-up and sound, once per match), the system, the hole into it and that hole's signature are marked, and
+the new Discord type "Watchlist match" posts matches even when nobody has Tripwire open.
+
+The first version of this change (same PR) kept filters per user in the user's options; at the user's request they
+now belong to the mask and are set by the corporation's admins, alerts go to everyone on the mask (each member can
+turn the sound, pop-ups and marks off), matches are posted to Discord, and the hole is highlighted.
 
 ## Before / After
 
@@ -15,66 +19,88 @@ filter.
 | --- | --- |
 | ![before](before.jpg) | ![after](after.jpg) |
 
-After: four filters match; each new match got a pop-up (top right), the matching nodes are outlined with an eye
-marker (its tooltip names the matching filters).
+After: four of the mask's filters match; each new match got a pop-up (top right). Matching nodes are outlined with an
+eye in their top row, the hole that makes the match (or the hole into the matching system) is drawn in light blue with
+an eye next to its size tag, and its signature in the viewed system is tinted with an eye in the Leads To cell.
 
-The marker in the four chain renderers (radial, org chart, top-down, side-ways), with upstream's pilots marker shown on
-every node: a small eye inside the node's top row, right after the effect icon (that row holds only the centred class
-label and the pilots marker on the right; on matching nodes with an effect, the effect icon and the eye are drawn a
-little smaller so both fit before a 3-character label such as C13 or C14). It stays clear of the class label, the
-corner badges (threat top-left, pilots top-right, local bottom-right, statics bottom-left), the connectors, size tags
-and the system/signature name line in every "Show name" setting. Shown: a C5 with Wolf-Rayet, a C13 (J000895,
-Wolf-Rayet) and a Drifter C14 (Sentinel MZ, Red Giant), with Show name and Show ref:
+| The highlighted hole | The signature table |
+| --- | --- |
+| ![hole](after-hole.png) | ![signatures](after-sigtable.png) |
+
+The same in the four chain renderers (radial, org chart, top-down, side-ways):
 
 ![renderers](after-renderers.png)
 
-| Panel | Editor |
+Mask Admin > Watchlist (admins), the editor, and the panel (members without the admin flag see it read-only):
+
+| Mask Admin > Watchlist | Editor |
 | --- | --- |
-| ![panel](after-panel.png) | ![editor](after-editor.png) |
+| ![admin](after-admin.png) | ![editor](after-editor.png) |
+
+![panel](after-panel.png)
+
+Mask Admin > Discord > Watchlist match with its preview, and what the local `discord-mock` received
+([discord-payload.json](discord-payload.json)) after a hole to a Wolf-Rayet C5 was mapped:
+
+![discord](after-discord.png)
 
 ## Settings
 
-Toggle: Settings > General Preferences > "Watchlist: Show the Watchlist panel and alert when the chain has a match"
-(on by default), plus "Alert sound" (a Kill Reporting tone or no sound; default chime). Off removes the panel, the
-markers and the pop-ups and stops matching. Stored in `options.watchlist.enabled` / `.sound`; a missing key means on /
-chime. Settings > Reset restores both and keeps the filters (they are the user's data, not a preference).
+Per user: Settings > General Preferences > Watchlist: "Show the Watchlist panel", "Pop-up for a new match", "Mark
+matches on the chain map and signatures", "Sound for a new match" with the tone (Kill Reporting's tones). All on by
+default; stored in `options.watchlist` (`enabled`, `popups`, `markers`, `soundEnabled`, `sound`; a missing key means
+on / chime); Settings > Reset removes the key (all on again).
+Per mask: the filters (admins, Mask Admin > Watchlist; a filter can be paused for everyone) and the Discord type
+(off until an admin turns it on in Mask Admin > Discord, like every Discord type).
 
 ## Change
 
-- `app/js/fork/watchlist.js` (new): pure logic in the `watchlist` global (settings and filter normalisation, class
-  keys, matching, chain model, new-vs-seen diff, node marker, editor form parsing, descriptions), plus the panel,
-  the editor dialog, pop-ups, sound and the settings row.
-- Filters live in `options.watchlist.filters` (per user, max 50): `{id, name, enabled, conditions}`. Conditions, all
-  of which must match (an empty filter never matches):
-  - `systemID` (J-code or any system, typed by name with autocomplete), `regionID`, `constellationID` (picked as
-    "the constellation of system X": Tripwire has no constellation names);
-  - `classes` (any of C1-C6, C13, Thera, Shattered = C13 + Drifter systems, Drifter, Pochven, HS/LS/NS as the app
-    classifies security) and `effects` (any of the six);
-  - `staticLeadsTo` (a static leading to a class) and/or `staticType` (e.g. H296);
-  - connection: any wormhole of the system on the chain map, to its parent or to a child (so both systems a hole joins
-    count, and the result doesn't depend on which side was scanned or where the chain starts). `whType`, `whLeadsTo`
-    (the hole type's destination class, e.g. H296: C5; the Drifter types' J-code destinations count as Drifter) and
-    `minSize` (the size tags' S/M/L/VL/XL; guessed from the system classes when the type is unknown, like the size
-    tags) must all fit the same hole;
-  - `maxJumpsMe` (wormhole jumps on the chain from the tracked character; no match while the location is unknown or
-    off the chain) and `maxJumpsHome` (from the chain's root).
-- Matching wraps `chain.nodes`: every chain build (sync, redraw) matches real systems on the map (not calculated
-  gate-route nodes, destination nodes or unknown "Class-5"-style systems), marks matching nodes (outline + eye badge
-  with a tooltip, see above) and announces matches whose `filterID|systemID` key isn't remembered for the mask and
-  chain tab. A key is forgotten (and announced again when it matches again) once its system is on the map but no
-  longer matches; while its system is off the map (a collapsed hole, or the chain shrank because you viewed an
-  unconnected system with no chain tab selected) it is remembered for 30 minutes after it last matched, so viewing
-  Jita and coming back doesn't repeat the pop-ups. Kept in memory and `sessionStorage` (a reload in the same tab
-  doesn't repeat them; a new tab announces current matches once).
-  When a filter uses "jumps from you", the chain is re-matched when the tracked character moves.
-- Pop-ups (one per filter, top right, 15 s, dismissable) list the new systems; the sound is played through
-  `killReporting.play` (its tones).
-- Filter names and all user text are escaped in the panel, pop-ups, node tooltips and editor errors.
-- `app/css/fork/watchlist.css` (new), `app/js-test/fork/watchlist.test.js` (new, 77 tests), rebuilt
-  `public/js/app.min.js` and `public/css/app.min.css`.
-- Upstream files touched: none (besides the rebuilt bundles). No new data sources or third-party hosts.
+- **Filters per mask** (`watchlist/watchlist.inc.php`, new fork module; table `fork_watchlist`, one JSON row per mask,
+  created on first use, reference DDL `docker/sql/watchlist.sql`): the corp mask and corporation-owned custom masks,
+  the same masks and admins (`checkAdmin`) as the Discord notifications. `public/watchlist.php` (new): every member of
+  the session's mask reads the filters (`GET`); admins save, delete and pause them (`POST` JSON with a per-session
+  CSRF token header, `X-Requested-With`, same-origin check, like `public/discord.php`). The server normalises
+  conditions with the browser's rules, checks IDs and wormhole types against `watchlist/data.json`, and stamps
+  `updatedAt` / `updatedBy`. Other masks (Private, Public, alliance, personal custom masks) have no watchlist.
+  Per-user filters (`options.watchlist.filters`) are gone (the feature was never released) and ignored.
+- **Browser** (`app/js/fork/watchlist.js`): loads the mask's filters (and again every minute and when the tab comes
+  back), matches them on every chain draw, keeps the timestamped "already announced" keys per mask and chain tab as
+  before, and per the user's settings shows pop-ups, plays the sound and marks matches: the node (eye in its top row),
+  the hole (`watchlist-hole` line class, read by all four renderers; an eye in the connection's size tag, or an eye
+  tag alone when there is no size tag, with the filter names in its tooltip) and the hole's signature row in the
+  signature table. A filter with hole conditions marks the holes that make the match; one on the system only marks the
+  hole the chain map reaches the system through. The panel is read-only for members; admins get New filter / edit /
+  pause / delete there and in the new Mask Admin > Watchlist page (same editor; shown only where the Discord page is).
+  The chain map hook is installed again on ready when another feature wrapped `chain.nodes` after it, so the marks go
+  on last (after size tags rebuild `node.sizeTag`).
+- **Discord type "Watchlist match"** (`discord/watchlist.php`, new): `discord_notify.worker.php` matches each mask's
+  filters against every wormhole of the mask every 15 s (no new worker). One message per filter, system and hole (the
+  oldest hole of the system that makes the match), deduped through `discord_enqueue_once` / `discord_dedupe_once`
+  (`wl:<filter>:<system>:<wormhole>`); only holes changed after the type was turned on and after the filter was last
+  saved or turned on are announced; filters with jump limits are skipped (they depend on who is looking). Template
+  placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}`, `{region}`, `{sig}`, `{hole}`, `{from}`,
+  `{map}` (link from `TRIPWIRE_DOMAIN`, not request headers); filter names and game data escaped,
+  `allowed_mentions` only from the admin's ping/template. Fork files touched: `discord/discord.inc.php`,
+  `discord/settings.php`, `discord/template.php`, `discord_notify.worker.php`, `public/discord.php` (preview sample),
+  `app/js/fork/discord-notifications.js`.
+- **One matcher, two languages**: `watchlist/watchlist.inc.php` ports `normaliseConditions`, `classKeys`,
+  `leadsToKeys`, `matchEntry`, `entriesFromLinks` and `match`; both run the shared cases in
+  `watchlist/tests/cases.json` (normalisation, classes, leadsTo incl. Drifter J-codes, sizes, entries, 33 match cases)
+  from mocha and from `watchlist/tests/watchlist_test.php` (110 checks, plus validation, links from DB rows, which
+  matches are new for Discord, the message, escaping and mentions, the type's settings). Static data:
+  `watchlist/data.json`, generated from `public/js/combine.js` by `watchlist/tools/generate-watchlist-data.js`.
+- `app/js/fork/size-tags.js`: `tagHtml` draws the watchlist eye (escaped filter names in the tooltip) when the watchlist
+  set `sizeTag.watchlist`; otherwise unchanged.
+- `app/css/fork/watchlist.css`, `app/js-test/fork/watchlist.test.js` (shared cases, settings, holes, size tag eye),
+  `docker/README.md` (#watchlist, the Discord type, the new table), `docker/Dockerfile` (`watchlist/tests` and
+  `watchlist/tools` left out of the image), rebuilt `public/js/app.min.js` and `public/css/app.min.css`.
+- Upstream files touched: none (besides the rebuilt bundles). No new data sources or third-party hosts (Discord only
+  through the existing worker and outbox).
 
 ## Limitations
 
+- The server matches the mask's whole chain (every wormhole of the mask); the browser matches the chain map as drawn
+  (from the chain tab's home). Sizes on the server come from known hole types only (the browser also guesses from the
+  system classes, like the size tags).
 - Shattered C1-C6 systems aren't marked in Tripwire's data, so "Shattered" means C13 and the Drifter systems.
-- Filters are per user; sharing them with the mask and Discord alerts are follow-ups.
+- Members see filter changes within a minute (or when they come back to the tab).

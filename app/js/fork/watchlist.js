@@ -1,9 +1,12 @@
 const watchlist = {
-	// Watchlist: user-defined filters ("a C5 with a Wolf-Rayet effect", "J123450", "anything through an H296 within
+	// Watchlist: the corporation's filters ("a C5 with a Wolf-Rayet effect", "J123450", "anything on an H296 within
 	// 3 jumps of me") matched against the systems and connections on the chain map. A new match shows a pop-up
-	// (and plays a sound) once and marks the node on the map (fork-owned file).
-	// Settings per user in options.watchlist = {enabled, sound, volume, filters: [...]}; a missing key means
-	// the default (on, chime, no filters).
+	// (and plays a sound) once, and the matching node, the hole that makes the match and its signature are marked
+	// (fork-owned file). Filters belong to the mask and are set by the corporation's Tripwire admins (Mask Admin >
+	// Watchlist, public/watchlist.php, watchlist/watchlist.inc.php, which has a port of the matcher below for the
+	// Discord type; both pass watchlist/tests/cases.json).
+	// Per-user settings in options.watchlist = {enabled (panel), popups, markers, soundEnabled, sound, position};
+	// a missing key means the default (all on, chime).
 	// Keep `const watchlist` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "watchlistWidget",
 	DEFAULT_SIZE: { x: 7, y: 6 },
@@ -14,7 +17,10 @@ const watchlist = {
 	TOAST_MS: 15000,
 	DEFAULT_SOUND: "tone-chime",
 	DEFAULT_VOLUME: 70,
-	SOUNDS: ["none", "tone-chime", "tone-blip", "tone-double-beep", "tone-sonar", "tone-klaxon"],
+	SOUNDS: ["tone-chime", "tone-blip", "tone-double-beep", "tone-sonar", "tone-klaxon"],
+	URL: "watchlist.php",
+	HOLE_CLASS: "watchlist-hole",	// line modifier of a highlighted hole (the chain map renderers read its CSS)
+	POLL_MS: 60000,		// filters are read again this often (admins may change them)
 
 	/** System classes a filter can ask for, in the order the editor shows them */
 	CLASSES: [
@@ -58,31 +64,37 @@ const watchlist = {
 
 	// ---- Settings (pure) ----
 
-	/** Whether the watchlist is switched on (options.watchlist.enabled; on unless explicitly false) */
+	/** Whether the Watchlist panel is shown (options.watchlist.enabled; on unless explicitly false) */
 	enabled: function(opts) {
 		return !(opts && opts.watchlist && opts.watchlist.enabled === false);
 	},
 
-	/** Settings from user options with defaults filled in; filters normalised. Never mutates opts. */
+	/** Per-user settings with defaults filled in (a missing key means on). Never mutates opts. */
 	settings: function(opts) {
 		const raw = opts && opts.watchlist && typeof opts.watchlist === "object" ? opts.watchlist : {};
 		const sound = watchlist.SOUNDS.indexOf(raw.sound) >= 0 ? raw.sound : watchlist.DEFAULT_SOUND;
 		const volume = Number(raw.volume);
+		const result = {
+			enabled: raw.enabled !== false,
+			popups: raw.popups !== false,
+			markers: raw.markers !== false,
+			soundEnabled: raw.soundEnabled !== false && raw.sound !== "none",
+			sound: sound,
+			volume: isFinite(volume) && raw.volume !== null && raw.volume !== "" ? Math.max(0, Math.min(100, Math.round(volume))) : watchlist.DEFAULT_VOLUME
+		};
+		if (raw.position && typeof raw.position === "object") { result.position = raw.position; }
+		return result;
+	},
+
+	/** The mask's filters as the server sent them: normalised, unique IDs, at most MAX_FILTERS */
+	normaliseFilters: function(list) {
 		const seen = {};
-		const filters = (Array.isArray(raw.filters) ? raw.filters : []).map(watchlist.normaliseFilter)
+		return (Array.isArray(list) ? list : []).map(watchlist.normaliseFilter)
 			.filter(function(f) {
 				if (!f || seen[f.id]) { return false; }
 				seen[f.id] = true;
 				return true;
 			}).slice(0, watchlist.MAX_FILTERS);
-		const result = {
-			enabled: raw.enabled !== false,
-			sound: sound,
-			volume: isFinite(volume) && raw.volume !== null && raw.volume !== "" ? Math.max(0, Math.min(100, Math.round(volume))) : watchlist.DEFAULT_VOLUME,
-			filters: filters
-		};
-		if (raw.position && typeof raw.position === "object") { result.position = raw.position; }
-		return result;
 	},
 
 	/** A stored filter as {id, name, enabled, conditions}, or null when it isn't usable */
@@ -250,6 +262,13 @@ const watchlist = {
 		return true;
 	},
 
+	/** The entry's connections that make the match: those fitting the connection conditions, or all of them */
+	matchingConnections: function(c, entry, data) {
+		return (entry && entry.connections || []).filter(function(conn) {
+			return !watchlist.needsConnection(c) || watchlist.matchConnection(c, conn, data);
+		});
+	},
+
 	/** Whether a chain entry (one system, see chainModel) matches a filter's conditions (all of them) */
 	matchEntry: function(c, entry, data) {
 		if (!watchlist.hasConditions(c) || !entry) { return false; }
@@ -266,8 +285,10 @@ const watchlist = {
 	/**
 	 * Match enabled filters against the chain.
 	 * @param filters settings().filters
-	 * @param model chainModel() output
-	 * @return [{key: "<filterID>|<systemID>", filterID, filterName, systemID, nodeIDs}]
+	 * @param model chainModel() or {entries: entriesFromLinks()} output
+	 * @return [{key: "<filterID>|<systemID>", filterID, filterName, systemID, wormholeIDs (the connections that make
+	 *         the match: those fitting the hole conditions, else all of the system's), viaHole (the filter has hole
+	 *         conditions), nodeIDs, inbound (the connections the chain map reaches the system's nodes through)}]
 	 */
 	match: function(filters, model, data) {
 		const out = [];
@@ -276,11 +297,31 @@ const watchlist = {
 			if (!f || !f.enabled || !watchlist.hasConditions(f.conditions)) { return; }
 			entries.forEach(function(entry) {
 				if (watchlist.matchEntry(f.conditions, entry, data)) {
-					out.push({ key: f.id + "|" + entry.systemID, filterID: f.id, filterName: f.name, systemID: entry.systemID, nodeIDs: entry.nodeIDs.slice() });
+					const ids = watchlist.matchingConnections(f.conditions, entry, data)
+						.map(function(conn) { return conn.wormholeID; })
+						.filter(function(id) { return id !== null && id !== undefined; });
+					out.push({ key: f.id + "|" + entry.systemID, filterID: f.id, filterName: f.name, systemID: entry.systemID,
+						wormholeIDs: ids, viaHole: watchlist.needsConnection(f.conditions),
+						nodeIDs: (entry.nodeIDs || []).slice(), inbound: (entry.inbound || []).slice() });
 				}
 			});
 		});
 		return out;
+	},
+
+	/** The holes to highlight and the filters they are for: {<wormholeID>: [filter names]}. A filter with hole
+	conditions highlights the holes that make the match; one on the system only, the hole the chain map reaches the
+	system through. */
+	namesByHole: function(matches) {
+		const result = {};
+		(matches || []).forEach(function(m) {
+			((m.viaHole ? m.wormholeIDs : m.inbound) || []).forEach(function(id) {
+				if (id === null || id === undefined) { return; }
+				result[id] = result[id] || [];
+				if (result[id].indexOf(m.filterName) < 0) { result[id].push(m.filterName); }
+			});
+		});
+		return result;
 	},
 
 	/** New matches since the previous evaluation of the same chain. A remembered key isn't announced again.
@@ -351,12 +392,44 @@ const watchlist = {
 	},
 
 	/**
+	 * The systems on a chain with their connections, from the chain's links (shared with the server's
+	 * watchlist_entries_from_links): systemIDs first (in order), then each link's ends (a, then b). Every link is a
+	 * connection of both of its (real) systems: {wormholeID, type (real type, never K162, else null), size}.
+	 * @param links [{wormholeID, a, b, type, size}]
+	 * @return [{systemID, connections}]
+	 */
+	entriesFromLinks: function(systemIDs, links) {
+		const entries = [];
+		const byID = {};
+		const add = function(value) {
+			const id = watchlist.toID(value);
+			if (id && !byID[id]) { byID[id] = { systemID: id, connections: [] }; entries.push(byID[id]); }
+		};
+		(systemIDs || []).forEach(add);
+		(links || []).forEach(function(l) { add(l.a); add(l.b); });
+		(links || []).forEach(function(l) {
+			let type = watchlist.typeCode(l.type);
+			if (type === "K162") { type = null; }
+			const connection = { wormholeID: l.wormholeID === undefined ? null : l.wormholeID, type: type,
+				size: watchlist.SIZES.indexOf(l.size) >= 0 ? l.size : null };
+			[l.a, l.b].forEach(function(end) {
+				const e = byID[watchlist.toID(end)];
+				if (!e) { return; }
+				if (connection.wormholeID !== null && e.connections.some(function(c) { return c.wormholeID === connection.wormholeID; })) { return; }
+				e.connections.push(connection);
+			});
+		});
+		return entries;
+	},
+
+	/**
 	 * The systems on the chain map, from chain.nodes() output, for matching.
 	 * @param result {map: {rows}, lines} from chain.nodes()
 	 * @param opts {typeFor(wormholeID, row) -> type, sizeFor(row, type, parentSystemID) -> "S".."XL" or null,
 	 *        trackedSystemID: where the user is}
-	 * @return {entries: [{systemID, nodeIDs, connections: [{wormholeID, type, size}], jumpsHome, jumpsMe}]};
-	 *         connections are all of the system's wormholes on the map (to its parent and to its children)
+	 * @return {entries: [{systemID, nodeIDs, connections: [{wormholeID, type, size}], inbound: [wormholeID of the
+	 *         line into each node], jumpsHome, jumpsMe}]}; connections are all of the system's wormholes on the map
+	 *         (to its parent and to its children)
 	 */
 	chainModel: function(result, opts) {
 		opts = opts || {};
@@ -365,9 +438,9 @@ const watchlist = {
 		const wormholeByChild = {};
 		lines.forEach(function(l) { if (l) { wormholeByChild[l[0]] = l[3]; } });
 		const nodes = {};		// v -> {systemID, parent v}
-		const byID = {};		// systemID -> entry
-		const entries = [];
-		const links = [];		// [{child, parent: systemIDs, connection}]
+		const systemIDs = [];
+		const links = [];
+		const extra = {};		// systemID -> {nodeIDs, inbound, jumpsHome}
 		const rawSystem = {};	// v -> the node's systemID as the chain has it (also unknown "x|y" systems)
 		rows.forEach(function(row) { if (row && row.c && row.c[0]) { rawSystem[row.c[0].v] = row.c[0].systemID; } });
 		rows.forEach(function(row) {
@@ -377,37 +450,32 @@ const watchlist = {
 			const systemID = watchlist.toID(node.systemID);
 			nodes[node.v] = { systemID: systemID, parent: parentV };
 			if (!systemID) { return; }
-			let entry = byID[systemID];
-			if (!entry) {
-				entry = byID[systemID] = { systemID: systemID, nodeIDs: [], connections: [], jumpsHome: null, jumpsMe: null };
-				entries.push(entry);
-			}
-			entry.nodeIDs.push(node.v);
+			if (!extra[systemID]) { extra[systemID] = { nodeIDs: [], inbound: [], jumpsHome: null }; systemIDs.push(systemID); }
+			const x = extra[systemID];
+			x.nodeIDs.push(node.v);
 			const home = Array.isArray(row.pathHome) ? row.pathHome.length : 0;
-			if (entry.jumpsHome === null || home < entry.jumpsHome) { entry.jumpsHome = home; }
+			if (x.jumpsHome === null || home < x.jumpsHome) { x.jumpsHome = home; }
 			if (parentV !== null && parentV !== undefined) {
 				const wormholeID = wormholeByChild[node.v];
-				let type = opts.typeFor ? opts.typeFor(wormholeID, row) : null;
-				type = watchlist.typeCode(type);
+				let type = watchlist.typeCode(opts.typeFor ? opts.typeFor(wormholeID, row) : null);
 				if (type === "K162") { type = null; }
 				const size = opts.sizeFor ? opts.sizeFor(row, type, rawSystem[parentV]) : null;
-				links.push({ child: systemID, parent: watchlist.toID(rawSystem[parentV]),
-					connection: { wormholeID: wormholeID, type: type, size: watchlist.SIZES.indexOf(size) >= 0 ? size : null } });
+				if (wormholeID !== undefined && wormholeID !== null && x.inbound.indexOf(wormholeID) < 0) { x.inbound.push(wormholeID); }
+				links.push({ wormholeID: wormholeID, a: rawSystem[parentV], b: systemID, type: type, size: size });
 			}
 		});
-		// A connection belongs to both systems it joins, whichever end the chain map started from
-		links.forEach(function(l) {
-			[l.child, l.parent].forEach(function(id) {
-				const e = id ? byID[id] : null;
-				if (e && !e.connections.some(function(c) { return c.wormholeID === l.connection.wormholeID && c.wormholeID !== undefined; })) {
-					e.connections.push(l.connection);
-				}
-			});
+		const entries = watchlist.entriesFromLinks(systemIDs, links).filter(function(e) { return extra[e.systemID]; });
+		entries.forEach(function(e) {
+			const x = extra[e.systemID];
+			e.nodeIDs = x.nodeIDs;
+			e.inbound = x.inbound;
+			e.jumpsHome = x.jumpsHome;
+			e.jumpsMe = null;
 		});
 
 		// Wormhole jumps from the tracked system, over the chain's connections (systems linked by a parent/child node)
 		const start = watchlist.toID(opts.trackedSystemID);
-		if (start && byID[start]) {
+		if (start && extra[start]) {
 			const adjacent = {};
 			const link = function(a, b) {
 				if (!a || !b || a === b) { return; }
@@ -432,6 +500,32 @@ const watchlist = {
 			entries.forEach(function(e) { e.jumpsMe = dist[e.systemID] === undefined ? null : dist[e.systemID]; });
 		}
 		return { entries: entries };
+	},
+
+	/** Mark the holes of namesByHole() on chain.nodes() output (in place): the line gets HOLE_CLASS (all renderers
+	draw it from that class), and the child node's cell a sizeTag.watchlist list of filter names, which the size tag
+	on the connection shows as an eye (an eye only when there is no size tag, e.g. size tags switched off). */
+	decorateHoles: function(result, byHole) {
+		const rows = result && result.map && Array.isArray(result.map.rows) ? result.map.rows : [];
+		const lines = result && Array.isArray(result.lines) ? result.lines : [];
+		const nodeByV = {};
+		rows.forEach(function(row) { if (row && row.c && row.c[0]) { nodeByV[row.c[0].v] = row.c[0]; } });
+		lines.forEach(function(line) {
+			if (!line || !Array.isArray(line[2])) { return; }
+			const at = line[2].indexOf(watchlist.HOLE_CLASS);
+			if (at >= 0) { line[2].splice(at, 1); }
+			const node = nodeByV[line[0]];
+			if (node && node.sizeTag && node.sizeTag.watchlist) {
+				if (node.sizeTag.size) { delete node.sizeTag.watchlist; } else { delete node.sizeTag; }
+			}
+			const names = line[3] !== undefined && line[3] !== null ? (byHole || {})[line[3]] : null;
+			if (!names) { return; }
+			line[2].push(watchlist.HOLE_CLASS);
+			if (node) {
+				if (node.sizeTag) { node.sizeTag.watchlist = names.slice(); } else { node.sizeTag = { size: null, watchlist: names.slice() }; }
+			}
+		});
+		return result;
 	},
 
 	/** Add the watchlist marker to the matching nodes of chain.nodes() output (in place).
@@ -603,12 +697,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		const STORAGE_KEY = "tripwire_watchlist_seen";
 		const LOCATION_CHECK_MS = 2000;
 		let lastMatches = [];		// matches on the chain as last drawn
+		let lastHoles = {};			// {<wormholeID>: [filter names]}: the holes marked on the map (markers on)
 		let lastTracked = null;		// tracked system when the chain was last matched
 		let renderTimer = null;
-		let seen = loadSeen();		// {<context>: {<filterID|systemID>: true}}: already announced, per mask and chain tab
+		let seen = loadSeen();		// {<context>: {<filterID|systemID>: last matched}}: already announced, per mask and chain tab
+		// The mask's filters (public/watchlist.php): every member reads them, the corporation's admins change them
+		const server = { loaded: false, available: false, canEdit: false, filters: [], csrf: "", mask: null, error: "", loadedAt: 0 };
 
 		function current() { return wl.settings(options); }
-		function isOn() { return wl.enabled(options); }
 		function trackedSystem() { return tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.systemID : null; }
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
 
@@ -627,6 +723,48 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const $tab = $("#chainTabs .current .name");
 			const tab = $tab.length ? $tab.data("tab") : "";
 			return wl.contextKey(options.masks ? options.masks.active : "", tab);
+		}
+
+		// ---- The mask's filters ----
+
+		function errorText(xhr) {
+			return (xhr && xhr.responseJSON && xhr.responseJSON.error) || "Request failed" + (xhr && xhr.status ? " (HTTP " + xhr.status + ")" : "");
+		}
+
+		function absorb(data) {
+			server.loaded = true;
+			server.available = !!(data && data.available);
+			server.canEdit = !!(data && data.canEdit);
+			server.filters = wl.normaliseFilters(data && data.filters);
+			server.csrf = (data && data.csrf) || "";
+			server.mask = data && data.mask ? data.mask : null;
+			server.error = "";
+			server.loadedAt = Date.now();
+		}
+
+		function loadFilters() {
+			return $.ajax({ url: wl.URL, type: "GET", data: { mode: "get" }, dataType: "JSON", cache: false }).done(function(data) {
+				const before = JSON.stringify(server.filters) + server.canEdit;
+				absorb(data);
+				if (JSON.stringify(server.filters) + server.canEdit !== before) { redrawChain(); }
+				renderAll();
+			}).fail(function(xhr) {
+				server.error = errorText(xhr);
+				renderAll();
+			});
+		}
+
+		/** An admin's change; the answer is the new list */
+		function request(mode, payload) {
+			return $.ajax({
+				url: wl.URL, type: "POST", contentType: "application/json", dataType: "JSON",
+				data: JSON.stringify(Object.assign({ mode: mode }, payload || {})),
+				headers: { "X-CSRF-Token": server.csrf, "X-Requested-With": "XMLHttpRequest" }
+			}).done(function(data) {
+				absorb(data);
+				redrawChain();
+				renderAll();
+			});
 		}
 
 		// ---- Chain data for matching ----
@@ -663,15 +801,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			} catch (e) { return null; }
 		}
 
-		/** Match the filters against a freshly built chain (chain.nodes() output), mark the nodes, announce new matches */
+		/** Match the filters against a freshly built chain (chain.nodes() output), mark the nodes and holes, announce
+		new matches */
 		function evaluate(result) {
-			if (!isOn()) { lastMatches = []; scheduleRender(); return; }
 			const settings = current();
 			lastTracked = trackedSystem();
+			if (!server.available || !server.filters.length) {
+				lastMatches = [];
+				lastHoles = {};
+				scheduleRender();
+				return;
+			}
 			const model = wl.chainModel(result, { typeFor: typeFor, sizeFor: sizeFor, trackedSystemID: lastTracked });
-			const matches = wl.match(settings.filters, model, appData);
-			wl.decorate(result, wl.namesByNode(matches));
+			const matches = wl.match(server.filters, model, appData);
 			lastMatches = matches;
+			lastHoles = settings.markers ? wl.namesByHole(matches) : {};
+			if (settings.markers) {
+				wl.decorate(result, wl.namesByNode(matches));
+				wl.decorateHoles(result, lastHoles);
+			}
 			const key = contextKey();
 			const onChain = model.entries.map(function(e) { return e.systemID; });
 			const d = wl.diff(seen[key], matches, onChain, Date.now());
@@ -681,17 +829,57 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			scheduleRender();
 		}
 
-		// ---- Chain map hook (installed now, before the first draw) ----
-		if (typeof chain !== "undefined" && chain && typeof chain.nodes === "function" && !chain.nodes.watchlistWrapped) {
+		// ---- Chain map hook (installed now, before the first draw, and again on ready if another feature wrapped
+		// chain.nodes after us: the marks must go on last, after e.g. size tags rebuilt node.sizeTag) ----
+		let nodesDepth = 0;
+		let outerHook = null;
+		function installHook() {
+			if (typeof chain === "undefined" || !chain || typeof chain.nodes !== "function" || chain.nodes === outerHook) { return; }
 			const originalNodes = chain.nodes;
 			const wrapped = function() {
-				const result = originalNodes.apply(this, arguments);
-				try { evaluate(result); } catch (e) { console.error("Watchlist: matching failed", e); }
-				return result;
+				nodesDepth++;
+				try {
+					const result = originalNodes.apply(this, arguments);
+					if (nodesDepth === 1) {	// only the outermost of our wrappers matches
+						try { evaluate(result); } catch (e) { console.error("Watchlist: matching failed", e); }
+					}
+					return result;
+				} finally { nodesDepth--; }
 			};
 			Object.keys(originalNodes).forEach(function(k) { wrapped[k] = originalNodes[k]; });	// keep other features' "wrapped" flags
 			wrapped.watchlistWrapped = true;
-			chain.nodes = wrapped;
+			chain.nodes = outerHook = wrapped;
+		}
+		installHook();
+
+		// ---- Signature table: the signatures of marked holes ----
+
+		let sigTimer = null;
+		function scheduleSignatures() {
+			clearTimeout(sigTimer);
+			sigTimer = setTimeout(markSignatures, 0);
+		}
+
+		/** Mark the rows of the viewed system's signatures that are an end of a marked hole (tint, an eye in the Leads To
+		cell, the filters in its tooltip) */
+		function markSignatures() {
+			const holes = tripwire.client && tripwire.client.wormholes ? tripwire.client.wormholes : {};
+			const bySig = {};
+			Object.keys(lastHoles).forEach(function(id) {
+				const w = holes[id];
+				if (!w) { return; }
+				bySig[w.initialID] = lastHoles[id];
+				bySig[w.secondaryID] = lastHoles[id];
+			});
+			$("#sigTable tbody tr[data-id]").each(function() {
+				const $row = $(this);
+				const names = bySig[$row.attr("data-id")];
+				const marked = $row.hasClass("watchlist-sig");
+				if (!names && !marked) { return; }
+				$row.toggleClass("watchlist-sig", !!names);
+				const $cell = $row.children("td").eq(3);	// Leads To (where the eye is drawn)
+				if (names) { $cell.attr("title", "Watchlist: " + names.join(", ")); } else { $cell.removeAttr("title"); }
+			});
 		}
 
 		// ---- Pop-ups and sound ----
@@ -717,31 +905,39 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function notify(fresh, settings) {
-			let $box = $("#watchlist-toasts");
-			if (!$box.length) {
-				$box = $("<div id='watchlist-toasts' aria-live='polite'></div>").appendTo("body");
-				$box.on("click", ".watchlist-toast-close", function() { $(this).closest(".watchlist-toast").remove(); });
+			if (settings.popups) {
+				let $box = $("#watchlist-toasts");
+				if (!$box.length) {
+					$box = $("<div id='watchlist-toasts' aria-live='polite'></div>").appendTo("body");
+					$box.on("click", ".watchlist-toast-close", function() { $(this).closest(".watchlist-toast").remove(); });
+				}
+				wl.groupByFilter(fresh).forEach(function(group) {
+					const $toast = $(toastHtml(group));
+					$box.append($toast);
+					setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, wl.TOAST_MS);
+				});
+				while ($box.children(".watchlist-toast").length > 4) { $box.children(".watchlist-toast").first().remove(); }
 			}
-			wl.groupByFilter(fresh).forEach(function(group) {
-				const $toast = $(toastHtml(group));
-				$box.append($toast);
-				setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, wl.TOAST_MS);
-			});
-			while ($box.children(".watchlist-toast").length > 4) { $box.children(".watchlist-toast").first().remove(); }
 			// The sound comes from Kill Reporting's sound pack (its tones)
-			if (settings.sound !== "none" && typeof killReporting !== "undefined" && typeof killReporting.play === "function") {
+			if (settings.soundEnabled && typeof killReporting !== "undefined" && typeof killReporting.play === "function") {
 				killReporting.play(settings.sound, settings.volume, "neutral");
 			}
 		}
 
-		// ---- Widget ----
+		// ---- Panel and Mask Admin page ----
 
 		function scheduleRender() {
 			clearTimeout(renderTimer);
-			renderTimer = setTimeout(render, 0);
+			renderTimer = setTimeout(renderAll, 0);
 		}
 
-		function rowHtml(filter, matchesByFilter) {
+		function renderAll() {
+			render();
+			renderAdmin();
+			markSignatures();
+		}
+
+		function rowHtml(filter, matchesByFilter, editable) {
 			const esc = wl.escape;
 			const ids = matchesByFilter[filter.id] || [];
 			const desc = wl.describe(filter.conditions, appData).join(" · ");
@@ -749,38 +945,65 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const matches = filter.enabled && ids.length
 				? "<div class='wl-matches'>" + ids.map(function(id) { return systemLink(id); }).join(", ") + "</div>"
 				: "";
-			return "<li class='wl-row" + (filter.enabled ? "" : " wl-off") + (filter.enabled && ids.length ? " wl-hit" : "") + "' data-id='" + esc(filter.id) + "'>"
+			return "<li class='wl-row" + (filter.enabled ? "" : " wl-off") + (filter.enabled && ids.length ? " wl-hit" : "") + (editable ? "" : " wl-readonly") + "' data-id='" + esc(filter.id) + "'>"
 				+ "<div class='wl-head'>"
-				+ "<input type='checkbox' class='wl-enabled'" + (filter.enabled ? " checked" : "") + " title='" + esc(filter.enabled ? "Watching: click to pause this filter" : "Paused: click to watch again") + "' />"
+				+ (editable
+					? "<input type='checkbox' class='wl-enabled'" + (filter.enabled ? " checked" : "") + " title='" + esc(filter.enabled ? "Watching: click to pause this filter for everyone on the mask" : "Paused: click to watch again") + "' />"
+					: "<i class='wl-state' data-icon='eye' title='" + esc(filter.enabled ? "Watching" : "Paused by an admin") + "'></i>")
 				+ "<span class='wl-name' title='" + esc(filter.name) + "'>" + esc(filter.name) + "</span>"
 				+ "<span class='wl-hits'>" + esc(hits) + "</span>"
-				+ "<i class='wl-edit' data-icon='edit' title='Edit " + esc(filter.name) + "'></i>"
-				+ "<i class='wl-delete' data-icon='trash' title='Delete " + esc(filter.name) + "'></i>"
+				+ (editable
+					? "<i class='wl-edit' data-icon='edit' title='Edit " + esc(filter.name) + "'></i>"
+						+ "<i class='wl-delete' data-icon='trash' title='Delete " + esc(filter.name) + "'></i>"
+					: "")
 				+ "</div>"
 				+ "<div class='wl-desc' title='" + esc(desc) + "'>" + esc(desc) + "</div>"
 				+ matches
 				+ "</li>";
 		}
 
-		function render() {
-			const $list = $("#" + wl.WIDGET_ID + " .wl-list");
-			if (!$list.length) { return; }
-			const settings = current();
+		/** The list for the panel and the Mask Admin page */
+		function listHtml(editable) {
 			const byFilter = {};
 			wl.groupByFilter(lastMatches).forEach(function(g) { byFilter[g.filterID] = g.systemIDs; });
-			$list.html(settings.filters.length ? settings.filters.map(function(f) { return rowHtml(f, byFilter); }).join("")
-				: "<li class='wl-empty'>No filters yet. Add one to be told when the chain map has what you are looking for: a J-code or system, a class, an effect, a static or a hole type.</li>");
-			const hits = settings.filters.filter(function(f) { return f.enabled && byFilter[f.id]; }).length;
-			$("#" + wl.WIDGET_ID + " .wl-count").text(settings.filters.length ? "(" + hits + " of " + settings.filters.length + " matching)" : "");
+			if (!server.loaded) { return "<li class='wl-empty'>" + (server.error ? wl.escape(server.error) : "Loading...") + "</li>"; }
+			if (!server.available) {
+				return "<li class='wl-empty'>The watchlist belongs to your corporation's masks: switch to the corp mask (or a corporation custom mask) to see its filters.</li>";
+			}
+			if (!server.filters.length) {
+				return "<li class='wl-empty'>" + (editable
+					? "No filters yet. Add one to tell everyone on the mask when the chain map has what you are looking for: a J-code or system, a class, an effect, a static or a hole type."
+					: "No filters yet. Your corporation's Tripwire admins set them in Mask Admin &gt; Watchlist.") + "</li>";
+			}
+			return server.filters.map(function(f) { return rowHtml(f, byFilter, editable); }).join("");
+		}
+
+		function countText() {
+			if (!server.filters.length) { return ""; }
+			const byFilter = {};
+			wl.groupByFilter(lastMatches).forEach(function(g) { byFilter[g.filterID] = true; });
+			const hits = server.filters.filter(function(f) { return f.enabled && byFilter[f.id]; }).length;
+			return "(" + hits + " of " + server.filters.length + " matching)";
+		}
+
+		function render() {
+			const $widget = $("#" + wl.WIDGET_ID);
+			if (!$widget.length) { return; }
+			$widget.find(".wl-list").html(listHtml(server.canEdit));
+			$widget.find(".wl-count").text(countText());
+			$widget.find(".wl-toolbar").toggleClass("hidden", !server.canEdit);
+			$widget.find(".wl-note").toggleClass("hidden", server.canEdit || !server.available)
+				.text("Set by your corporation's Tripwire admins (Mask Admin > Watchlist).");
 		}
 		wl.render = render;
 
-		/** Save a new filter list, then match again */
-		function saveFilters(filters) {
-			options.watchlist = Object.assign({}, options.watchlist || {}, { filters: filters });
-			options.save();
-			redrawChain();
-			render();
+		function renderAdmin() {
+			const $page = $("#dialog-admin .window [data-window='watchlist'] .wl-admin");
+			if (!$page.length) { return; }
+			$page.find(".wl-list").html(listHtml(server.canEdit));
+			$page.find(".wl-count").text(countText());
+			$page.find(".wl-admin-title").text("Watchlist for the " + (server.mask ? server.mask.name : "") + " mask");
+			$page.find(".wl-admin-error").toggleClass("hidden", !server.error || server.canEdit).text(server.error);
 		}
 
 		function widgetHtml() {
@@ -789,10 +1012,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<span class='wl-title'><i data-icon='eye'></i> Watchlist <span class='wl-count'></span></span>"
 				+ "</div>"
 				+ "<div class='content'>"
-				+ "<div class='wl-toolbar'><input type='button' class='wl-new' value='New filter' /></div>"
+				+ "<div class='wl-toolbar hidden'><input type='button' class='wl-new' value='New filter' /></div>"
 				+ "<ul class='wl-list'></ul>"
+				+ "<div class='wl-note hidden'></div>"
 				+ "</div>"
 				+ "</li>";
+		}
+
+		function adminPageHtml() {
+			return "<div class='wl-admin'>"
+				+ "<h2 class='wl-admin-title'>Watchlist</h2>"
+				+ "<p class='wl-small'>Filters for everyone on this mask: when a system on the chain map matches one, they get a pop-up and a sound (each member can turn those off in Settings &gt; General Preferences), and the system, the hole into it and its signature are marked. To post matches to Discord, turn on <b>Watchlist match</b> in Mask Admin &gt; Discord.</p>"
+				+ "<p class='wl-admin-error dn-bad hidden'></p>"
+				+ "<div class='wl-toolbar'><input type='button' class='wl-new' value='New filter' /> <span class='wl-count wl-small'></span></div>"
+				+ "<ul class='wl-list'></ul>"
+				+ "</div>";
 		}
 
 		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
@@ -852,12 +1086,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$widget.stop(true, true);	// finish the fade-out now, which removes the element
 		}
 
-		function applyEnabled() {
-			if (isOn()) { addWidget(); } else { removeWidget(); $("#watchlist-toasts").empty(); }
+		function applySettings() {
+			const settings = current();
+			if (settings.enabled) { addWidget(); } else { removeWidget(); }
+			if (!settings.popups) { $("#watchlist-toasts").empty(); }
 			render();
 		}
 
-		// ---- Filter editor ----
+		// ---- Filter editor (admins) ----
 
 		function checkboxes(name, list) {
 			return list.map(function(x) {
@@ -877,7 +1113,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='wl-errors hidden'></div>"
 				+ "<table class='optionsTable wl-form-table'>"
 				+ "<tr><th>Name:</th><td><input type='text' name='name' maxlength='" + wl.MAX_NAME + "' placeholder='e.g. C5 with a Wolf-Rayet' /></td></tr>"
-				+ "<tr><td></td><td class='wl-hint'>A system on the chain map matches when it meets every condition you fill in; leave the rest empty.</td></tr>"
+				+ "<tr><td></td><td class='wl-hint'>For everyone on the mask. A system on the chain map matches when it meets every condition you fill in; leave the rest empty.</td></tr>"
 				+ "<tr><th>System:</th><td><input type='text' name='system' placeholder='J-code or k-space system, e.g. J123450 or Jita' /></td></tr>"
 				+ "<tr><th>Region:</th><td><input type='text' name='region' placeholder='e.g. The Forge' /></td></tr>"
 				+ "<tr><th>Constellation:</th><td><input type='text' name='constellation' placeholder='The constellation of this system, e.g. Jita' /></td></tr>"
@@ -890,7 +1126,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='wl-hint'>Any wormhole of the system on the chain map (in or out); type, leads to and size must fit the same hole. <em>Leads to</em> is the hole type's destination (H296: C5), whichever side was scanned. Sizes: S frigates, M up to battlecruisers, L battleships, VL freighters, XL capitals.</div></td></tr>"
 				+ "<tr><th>Jumps:</th><td>at most <input type='text' inputmode='numeric' name='maxJumpsMe' class='wl-num' maxlength='3' /> from you"
 				+ " &nbsp; at most <input type='text' inputmode='numeric' name='maxJumpsHome' class='wl-num' maxlength='3' /> from home"
-				+ "<div class='wl-hint'>Wormhole jumps on the chain map; home is where the chain starts.</div></td></tr>"
+				+ "<div class='wl-hint'>Wormhole jumps on each member's chain map; home is where their chain starts. Filters with a jump limit depend on who is looking, so they are not posted to Discord.</div></td></tr>"
 				+ "</table>"
 				+ "</form>"
 				+ "</div>";
@@ -901,7 +1137,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function readForm($form) {
 			const val = function(n) { return $form.find("[name='" + n + "']").val(); };
 			const checked = function(n) { return $form.find("input[name='" + n + "']:checked").map(function() { return this.value; }).get(); };
-			const existing = editingID ? current().filters.filter(function(f) { return f.id === editingID; })[0] : null;
+			const existing = editingID ? server.filters.filter(function(f) { return f.id === editingID; })[0] : null;
 			return {
 				id: editingID, name: val("name"), system: val("system"), region: val("region"), constellation: val("constellation"),
 				classes: checked("classes"), effects: checked("effects"), staticLeadsTo: val("staticLeadsTo"), staticType: val("staticType"),
@@ -927,26 +1163,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function saveEditor() {
 			const $form = $("#dialog-watchlist .wl-form");
-			const settings = current();
-			const result = wl.fromForm(readForm($form), appData, settings.filters, Date.now());
+			const result = wl.fromForm(readForm($form), appData, server.filters, Date.now());
 			$form.find(".wl-invalid").removeClass("wl-invalid");
 			if (result.errors) {
 				showErrors($form, result.errors.map(function(e) { return e.message; }));
 				result.errors.forEach(function(e) { if (e.field) { $form.find("[name='" + e.field + "']").addClass("wl-invalid"); } });
 				return;
 			}
-			const filters = settings.filters.slice();
-			const at = filters.map(function(f) { return f.id; }).indexOf(result.filter.id);
-			if (at >= 0) {
-				filters[at] = result.filter;
-			} else if (filters.length >= wl.MAX_FILTERS) {
-				showErrors($form, ["You can have up to " + wl.MAX_FILTERS + " filters"]);
+			if (!editingID && server.filters.length >= wl.MAX_FILTERS) {
+				showErrors($form, ["A mask can have up to " + wl.MAX_FILTERS + " filters"]);
 				return;
-			} else {
-				filters.push(result.filter);
 			}
-			saveFilters(filters);
-			$("#dialog-watchlist").dialog("close");
+			// A new filter gets its ID from the server
+			const filter = Object.assign({}, result.filter, { id: editingID || "" });
+			request("filter-save", { filter: filter }).done(function() {
+				$("#dialog-watchlist").dialog("close");
+			}).fail(function(xhr) {
+				showErrors($form, (xhr.responseJSON && xhr.responseJSON.errors) || [errorText(xhr)]);
+			});
 		}
 
 		let searchSources = null;
@@ -962,6 +1196,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function openEditor(filterID) {
+			if (!server.canEdit) { return; }
 			let $dialog = $("#dialog-watchlist");
 			if (!$dialog.length) {
 				$("body").append(editorHtml());
@@ -985,11 +1220,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					$dialog.find("[name='staticType'], [name='whType']").inlinecomplete({ source: s.types, maxSize: 10, delay: 0 });
 				}
 			}
-			const filter = filterID ? current().filters.filter(function(f) { return f.id === filterID; })[0] : null;
+			const filter = filterID ? server.filters.filter(function(f) { return f.id === filterID; })[0] : null;
 			editingID = filter ? filter.id : null;
 			fillForm($dialog.find(".wl-form"), wl.toForm(filter, appData));
 			$dialog.dialog("option", "title", filter ? "Edit watchlist filter" : "New watchlist filter");
 			$dialog.dialog("open");
+			$dialog.closest(".ui-dialog").css("z-index", 10001);	// above Mask Admin
 			$dialog.find("[name='name']").focus();
 		}
 		wl.openEditor = openEditor;
@@ -1001,15 +1237,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($table.length && !$("#watchlist-enabled").length) {
 				const sounds = wl.SOUNDS.map(function(id) {
 					const tone = typeof killReporting !== "undefined" ? killReporting.tones.filter(function(t) { return t.id === id; })[0] : null;
-					return "<option value='" + id + "'>" + wl.escape(id === "none" ? "No sound" : tone ? tone.label : id) + "</option>";
+					return "<option value='" + id + "'>" + wl.escape(tone ? tone.label : id) + "</option>";
 				}).join("");
-				$table.append("<tr><th>Watchlist:</th><td><label><input type='checkbox' id='watchlist-enabled' /> Show the Watchlist panel and alert when the chain has a match</label>"
-					+ "<br/>Alert sound: <select id='watchlist-sound'>" + sounds + "</select></td></tr>");
+				$table.append("<tr><th>Watchlist:</th><td>"
+					+ "<label><input type='checkbox' id='watchlist-enabled' /> Show the Watchlist panel</label><br/>"
+					+ "<label><input type='checkbox' id='watchlist-popups' /> Pop-up for a new match</label><br/>"
+					+ "<label><input type='checkbox' id='watchlist-markers' /> Mark matches on the chain map and signatures</label><br/>"
+					+ "<label><input type='checkbox' id='watchlist-sound-on' /> Sound for a new match:</label> <select id='watchlist-sound'>" + sounds + "</select>"
+					+ "</td></tr>");
 				if ($("#optionsAccordion").hasClass("ui-accordion")) { $("#optionsAccordion").accordion("refresh"); }
 			}
 			$(document).on("dialogopen", "#dialog-options", function() {
 				const s = current();
 				$("#watchlist-enabled").prop("checked", s.enabled);
+				$("#watchlist-popups").prop("checked", s.popups);
+				$("#watchlist-markers").prop("checked", s.markers);
+				$("#watchlist-sound-on").prop("checked", s.soundEnabled);
 				$("#watchlist-sound").val(s.sound);
 			});
 			// Capture phase so the values are in place before upstream's Save handler applies and saves options
@@ -1017,20 +1260,23 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
 				if (!button || $.trim($(button).text()) !== "Save") { return; }
 				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#watchlist-enabled").length) { return; }
-				options.watchlist = Object.assign({}, options.watchlist || {}, {
+				const kept = {};
+				if (options.watchlist && options.watchlist.position) { kept.position = options.watchlist.position; }
+				options.watchlist = Object.assign(kept, {
 					enabled: $("#watchlist-enabled").prop("checked"),
+					popups: $("#watchlist-popups").prop("checked"),
+					markers: $("#watchlist-markers").prop("checked"),
+					soundEnabled: $("#watchlist-sound-on").prop("checked"),
 					sound: $("#watchlist-sound").val()
 				});
 			}, true);
 
-			// Settings > Reset: switch and sound back to the defaults; the filters are kept (they are the user's data)
+			// Settings > Reset: everything back to the defaults (a missing key means on)
 			if (typeof options.reset === "function" && !options.reset.watchlistWrapped) {
 				const reset = options.reset;
 				const wrapped = function() {
-					const filters = this.watchlist && Array.isArray(this.watchlist.filters) ? this.watchlist.filters : null;
 					const result = reset.apply(this, arguments);
 					delete this.watchlist;
-					if (filters && filters.length) { this.watchlist = { filters: filters }; }
 					return result;
 				};
 				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
@@ -1038,12 +1284,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				options.reset = wrapped;
 			}
 
-			// Save and Reset both end in options.apply(): show/hide the panel and match again
+			// Save and Reset both end in options.apply(): show/hide the panel and mark again
 			if (!options.apply.watchlistWrapped) {
 				const apply = options.apply;
 				const wrapped = function() {
 					const result = apply.apply(this, arguments);
-					try { applyEnabled(); redrawChain(); } catch (err) { console.error("Watchlist: apply failed", err); }
+					try { applySettings(); redrawChain(); } catch (err) { console.error("Watchlist: apply failed", err); }
 					return result;
 				};
 				Object.keys(apply).forEach(function(k) { wrapped[k] = apply[k]; });
@@ -1052,34 +1298,69 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 		}
 
+		// ---- Mask Admin > Watchlist ----
+
+		function setupMaskAdmin() {
+			const $dialog = $("#dialog-admin");
+			// Where Mask Admin is offered, for the masks the watchlist is for (the server checks again on every change)
+			if (!$dialog.length || !$("#admin").length || $("#admin").css("display") === "none") { return; }
+			const active = typeof init !== "undefined" && init && Array.isArray(init.masks) ? init.masks.filter(function(m) { return m.active; })[0] : null;
+			const allowed = typeof discordNotifications !== "undefined" && discordNotifications.maskAllowed ? discordNotifications.maskAllowed(active) : false;
+			if (!allowed) { return; }
+			if (!$dialog.find(".menu li[data-window='watchlist']").length) {
+				$dialog.find(".menu ul").append("<li data-window='watchlist'><a href='#'>Watchlist</a></li>");
+				$dialog.find(".window").append("<div data-window='watchlist' class='hidden'>" + adminPageHtml() + "</div>");
+			}
+			$(document).on("click", "#dialog-admin .menu li", function() {
+				const mine = $(this).attr("data-window") === "watchlist";
+				const $d = $("#dialog-admin");
+				if (!$d.hasClass("ui-dialog-content")) { return; }
+				$d.closest(".ui-dialog").toggleClass("wl-admin-active", mine);	// hides the "Total: n" tray
+				if (mine) {
+					$d.dialog("option", "height", Math.min(620, Math.max(350, $(window).height() - 40)));
+					loadFilters();
+				}
+			});
+		}
+
 		$(function() {
+			installHook();
 			setupSettings();
-			applyEnabled();
+			applySettings();
+			setupMaskAdmin();
+			loadFilters();
+			setInterval(function() { if (!document.hidden) { loadFilters(); } }, wl.POLL_MS);
+			document.addEventListener("visibilitychange", function() {
+				if (!document.hidden && Date.now() - server.loadedAt > wl.POLL_MS / 2) { loadFilters(); }
+			});
 
 			const $doc = $(document);
-			const sel = "#" + wl.WIDGET_ID;
-			$doc.on("click", sel + " .wl-new", function(e) { e.preventDefault(); openEditor(null); });
-			$doc.on("click", sel + " .wl-edit", function(e) {
+			$doc.on("click", "#" + wl.WIDGET_ID + " .wl-new, #dialog-admin .wl-admin .wl-new", function(e) { e.preventDefault(); openEditor(null); });
+			$doc.on("click", "#" + wl.WIDGET_ID + " .wl-edit, #dialog-admin .wl-admin .wl-edit", function(e) {
 				e.preventDefault();
 				openEditor(String($(this).closest(".wl-row").attr("data-id")));
 			});
-			$doc.on("click", sel + " .wl-delete", function(e) {
+			$doc.on("click", "#" + wl.WIDGET_ID + " .wl-delete, #dialog-admin .wl-admin .wl-delete", function(e) {
 				e.preventDefault();
 				const id = String($(this).closest(".wl-row").attr("data-id"));
-				const filter = current().filters.filter(function(f) { return f.id === id; })[0];
-				if (!filter || !window.confirm("Delete the watchlist filter \"" + filter.name + "\"?")) { return; }
-				saveFilters(current().filters.filter(function(f) { return f.id !== id; }));
+				const filter = server.filters.filter(function(f) { return f.id === id; })[0];
+				if (!filter || !window.confirm("Delete the watchlist filter \"" + filter.name + "\" for everyone on the mask?")) { return; }
+				request("filter-delete", { id: id }).fail(function(xhr) { window.alert(errorText(xhr)); });
 			});
-			$doc.on("change", sel + " .wl-enabled", function() {
+			$doc.on("change", "#" + wl.WIDGET_ID + " .wl-enabled, #dialog-admin .wl-admin .wl-enabled", function() {
 				const id = String($(this).closest(".wl-row").attr("data-id"));
-				const on = this.checked;
-				saveFilters(current().filters.map(function(f) { return f.id === id ? Object.assign({}, f, { enabled: on }) : f; }));
+				request("filter-enable", { id: id, enabled: this.checked }).fail(function(xhr) { window.alert(errorText(xhr)); loadFilters(); });
 			});
+
+			// The signature table is rebuilt by upstream (edits, system change): mark its rows again
+			const tbody = document.querySelector("#sigTable > tbody");
+			if (tbody && typeof MutationObserver !== "undefined") {
+				new MutationObserver(scheduleSignatures).observe(tbody, { childList: true });
+			}
 
 			// "Jumps from you" depends on where the tracked character is: match again when they move
 			setInterval(function() {
-				if (!isOn()) { return; }
-				const usesLocation = current().filters.some(function(f) { return f.enabled && f.conditions.maxJumpsMe !== undefined; });
+				const usesLocation = server.filters.some(function(f) { return f.enabled && f.conditions.maxJumpsMe !== undefined; });
 				if (usesLocation && String(trackedSystem()) !== String(lastTracked)) { redrawChain(); }
 			}, LOCATION_CHECK_MS);
 		});

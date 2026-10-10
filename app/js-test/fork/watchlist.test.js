@@ -1,7 +1,9 @@
 const assert = require('assert');
 const { include } = require('../helpers/helpers');
 include('public/js/combine');
+include('app/js/fork/size-tags');
 include('app/js/fork/watchlist');
+const cases = JSON.parse(require('fs').readFileSync('watchlist/tests/cases.json', 'utf8'));
 
 const wl = watchlist;
 const sid = name => Number(Object.keys(appData.systems).find(k => appData.systems[k].name === name));
@@ -53,34 +55,49 @@ const filter = (id, conditions, extra) => Object.assign({ id: id, name: 'Filter 
 const matchedSystems = (filters, m) => wl.match(filters, m || model(), appData).map(x => x.systemID);
 
 describe('Watchlist', () => {
-	describe('settings', () => {
-		it('Missing key: on, default sound, no filters', () => assert.deepEqual(wl.settings({}),
-			{ enabled: true, sound: 'tone-chime', volume: 70, filters: [] }));
+	describe('settings (per user)', () => {
+		it('Missing key: everything on, default sound', () => assert.deepEqual(wl.settings({}),
+			{ enabled: true, popups: true, markers: true, soundEnabled: true, sound: 'tone-chime', volume: 70 }));
 		it('No options at all', () => assert.equal(wl.settings(undefined).enabled, true));
 		it('enabled(): missing means on, explicit false is off', () => {
 			assert.ok(wl.enabled({}));
 			assert.ok(wl.enabled({ watchlist: {} }));
 			assert.ok(!wl.enabled({ watchlist: { enabled: false } }));
 		});
+		it('Each switch on its own', () => assert.deepEqual(wl.settings({ watchlist: { enabled: true, popups: false, markers: false, soundEnabled: false } }),
+			{ enabled: true, popups: false, markers: false, soundEnabled: false, sound: 'tone-chime', volume: 70 }));
 		it('Unknown sound falls back, volume clamped', () => {
 			const s = wl.settings({ watchlist: { sound: 'javascript:alert(1)', volume: 400 } });
 			assert.equal(s.sound, 'tone-chime');
 			assert.equal(s.volume, 100);
 		});
-		it('No sound is kept', () => assert.equal(wl.settings({ watchlist: { sound: 'none' } }).sound, 'none'));
-		it('Filters normalised; junk, ID-less and duplicate filters dropped', () => {
-			const s = wl.settings({ watchlist: { filters: [
-				{ id: 'a', name: '  Hunt  ', conditions: { classes: ['C5', 'C99'], bogus: 1, systemID: 'x|3' } },
-				{ id: 'a', name: 'duplicate', conditions: { classes: ['C1'] } },
-				{ name: 'no id', conditions: { classes: ['C1'] } },
-				null, 'text',
-				{ id: 'b<script>', enabled: false, conditions: { whType: 'h296', minSize: 'XXL', maxJumpsMe: '3' } }
-			] } });
-			assert.deepEqual(s.filters, [
-				{ id: 'a', name: 'Hunt', enabled: true, conditions: { classes: ['C5'] } },
-				{ id: 'bscript', name: 'Unnamed filter', enabled: false, conditions: { whType: 'H296', maxJumpsMe: 3 } }
-			]);
-		});
+		it('A tone is kept', () => assert.equal(wl.settings({ watchlist: { sound: 'tone-klaxon' } }).sound, 'tone-klaxon'));
+		it('An earlier "no sound" choice means the sound is off', () => assert.equal(wl.settings({ watchlist: { sound: 'none' } }).soundEnabled, false));
+		it('Filters in the user options are ignored (they are the mask\'s now)', () => assert.equal(wl.settings({ watchlist: { filters: [{ id: 'a' }] } }).filters, undefined));
+	});
+
+	describe('shared cases (watchlist/tests/cases.json, also run by watchlist/tests/watchlist_test.php)', () => {
+		const data = cases.data;
+		cases.normaliseFilter.forEach((c, i) => it('normaliseFilter ' + i, () => assert.deepStrictEqual(wl.normaliseFilter(c.in), c.out)));
+		cases.normaliseFilters.forEach((c, i) => it('normaliseFilters ' + i, () => assert.deepStrictEqual(wl.normaliseFilters(c.in).map(f => f.id), c.out)));
+		cases.classKeys.forEach((c, i) => it('classKeys ' + i, () =>
+			assert.deepStrictEqual(wl.classKeys(c.systemID !== undefined ? data.systems[c.systemID] : c.system), c.keys)));
+		cases.leadsTo.forEach(c => it('leadsTo ' + c.leadsTo, () => assert.deepStrictEqual(wl.leadsToKeys(c.leadsTo, wl.index(data).byName), c.keys)));
+		cases.sizeOf.forEach(c => it('size of ' + c.jump, () => {
+			const cls = sizeTags.sizeOf(c.jump);
+			assert.strictEqual(cls, c.size);
+		}));
+		cases.entries.forEach((c, i) => it('entries ' + i, () => {
+			const entries = wl.entriesFromLinks(c.chain.systems, c.chain.links);
+			assert.deepStrictEqual(entries.map(e => ({ systemID: e.systemID, connections: e.connections.map(x => x.wormholeID) })), c.out);
+			const types = {};
+			entries.forEach(e => e.connections.forEach(x => { types[x.wormholeID] = x.type; }));
+			assert.deepStrictEqual(types, c.types);
+		}));
+		cases.match.forEach(c => it('match: ' + c.name, () => {
+			const matches = wl.match(wl.normaliseFilters(c.filters), { entries: wl.entriesFromLinks(c.chain.systems, c.chain.links) }, data);
+			assert.deepStrictEqual(matches.map(m => ({ key: m.key, filterID: m.filterID, systemID: m.systemID, wormholeIDs: m.wormholeIDs })), c.expected);
+		}));
 	});
 
 	describe('classes', () => {
@@ -331,6 +348,42 @@ describe('Watchlist', () => {
 			wl.describe({ regionID: appData.systems[JITA].regionID, constellationID: appData.systems[JITA].constellationID, constellationRef: JITA }, appData),
 			['in The Forge', 'in the constellation of Jita']));
 		it('Nothing', () => assert.deepEqual(wl.describe(undefined, appData), []));
+	});
+
+	describe('the hole that makes the match', () => {
+		const m = model();
+		it('Each system knows the line it is reached through', () => assert.deepEqual(m.entries.map(e => e.inbound), [[], [1], [3], [4], [2]]));
+		it('Hole conditions: the holes that make the match', () => {
+			const matches = wl.match([filter('a', { whType: 'H296' })], m, appData);
+			assert.deepEqual(matches.map(x => [x.systemID, x.viaHole, x.wormholeIDs]), [[HOME, true, [1]], [WR_C5, true, [1]]]);
+			assert.deepEqual(wl.namesByHole(matches), { 1: ['Filter a'] });
+		});
+		it('System conditions: the hole the chain map reaches the system through', () => {
+			const matches = wl.match([filter('a', { systemID: PULSAR_C3 }), filter('b', { classes: ['C5'] })], m, appData);
+			assert.deepEqual(wl.namesByHole(matches), { 2: ['Filter a'], 1: ['Filter b'] });	// the home system has no line in
+		});
+		it('Lines: marked with the class, the child node gets the names for its size tag', () => {
+			const r = sampleChain();
+			r.map.rows[1].c[0].sizeTag = { size: 'XL', certain: true, jump: 2e9 };
+			wl.decorateHoles(r, { 1: ['<b>Hunt</b>'], 4: ['Low-sec'] });
+			assert.deepEqual(r.lines.map(l => l[2].indexOf(wl.HOLE_CLASS) >= 0), [true, false, true, false]);
+			assert.deepEqual(r.map.rows[1].c[0].sizeTag, { size: 'XL', certain: true, jump: 2e9, watchlist: ['<b>Hunt</b>'] });
+			assert.deepEqual(r.map.rows[3].c[0].sizeTag, { size: null, watchlist: ['Low-sec'] });
+			// Again without the marks (e.g. a filter paused): back to how it was
+			wl.decorateHoles(r, {});
+			assert.deepEqual(r.lines.map(l => l[2].indexOf(wl.HOLE_CLASS) >= 0), [false, false, false, false]);
+			assert.deepEqual(r.map.rows[1].c[0].sizeTag, { size: 'XL', certain: true, jump: 2e9 });
+			assert.equal(r.map.rows[3].c[0].sizeTag, undefined);
+		});
+		it('The size tag shows the eye, names escaped; an eye alone without a size', () => {
+			const withSize = sizeTags.tagHtml({ size: 'L', certain: true, jump: 375e6, watchlist: ["<b>Hunt</b>", "It's"] }, 'size-tag-connector', 'left: 1px; top: 2px');
+			assert.ok(withSize.indexOf('size-tag-watchlist') >= 0 && withSize.indexOf('<i data-icon="eye"></i>L') >= 0, withSize);
+			assert.ok(withSize.indexOf('title="Watchlist: &lt;b&gt;Hunt&lt;/b&gt;, It&#39;s · Max ship 375 kt') >= 0, withSize);
+			assert.ok(withSize.indexOf('<b>') < 0);
+			const only = sizeTags.tagHtml({ size: null, watchlist: ['x'] }, 'size-tag-connector', 'left: 1px; top: 2px');
+			assert.equal(only, '<span class="size-tag size-tag-watchlist size-tag-watchlist-only size-tag-connector" style="left: 1px; top: 2px" title="Watchlist: x"><i data-icon="eye"></i></span>');
+			assert.equal(sizeTags.tagHtml({ size: 'S', certain: true, jump: 5e6 }).indexOf('eye'), -1);
+		});
 	});
 
 	describe('escape', () => {

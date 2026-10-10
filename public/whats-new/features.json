@@ -4,11 +4,15 @@
       "pr": 41,
       "date": "2026-10-10",
       "title": "Watchlist: get told when the chain has what you're looking for",
-      "description": "The new Watchlist panel lets you save filters for what you're hunting: a specific J-code or system, a region or constellation, a wormhole class, an effect such as Wolf-Rayet, a static (e.g. \"has a C5 static\"), a hole type such as H296 or a minimum hole size, and how many jumps it may be from you or from home. Click New filter, tick what you need, and Tripwire checks the chain map every time it changes.\n\nWhen something new matches, a pop-up names the filter and the systems, a sound plays, and the matching systems get an eye marker on the chain map. You can pause a filter with its checkbox. Turn the Watchlist off or change its sound in Settings > General Preferences.",
+      "description": "Your corporation's Tripwire admins can now set up a watchlist for the mask in Mask Admin > Watchlist: filters for a specific J-code or system, a region or constellation, a wormhole class, an effect such as Wolf-Rayet, a static (e.g. \"has a C5 static\"), a hole type such as H296 or a minimum hole size, and how many jumps it may be from you or from home. Everyone on the mask sees the filters in the Watchlist panel.\n\nWhen something new on the chain map matches, you get a pop-up and a sound, the system gets an eye marker, the hole into it is highlighted, and its signature is marked in the signature table so you know which one to warp to. Admins can also have matches posted to Discord (Mask Admin > Discord > Watchlist match). Turn the sound, pop-ups, markers or the panel off in Settings > General Preferences > Watchlist.",
       "images": [
         {
           "src": "whats-new/img/pr-41-watchlist.png",
-          "caption": "The Watchlist panel and matching systems on the chain map"
+          "caption": "The Watchlist panel, matching systems and their highlighted holes on the chain map"
+        },
+        {
+          "src": "whats-new/img/pr-41-watchlist-admin.png",
+          "caption": "Admins set the mask's filters in Mask Admin > Watchlist"
         },
         {
           "src": "whats-new/img/pr-41-watchlist-editor.png",

@@ -71,7 +71,9 @@ Fork features that need their own tables create them on first use with `CREATE T
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
 `zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
-([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped). The app user therefore
+([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
+and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`, DDL in
+`docker/sql/watchlist.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -294,6 +296,7 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
+| Watchlist match | A system on the mask's chain (every wormhole of the mask) matches one of the mask's [watchlist](#watchlist) filters, evaluated by the worker every 15 s (`discord/watchlist.php`), so it is posted even when nobody has Tripwire open. One message per filter, system and hole: the hole is the oldest connection of the system that makes the match (any of its connections for filters on the system only, those fitting the hole conditions otherwise), so a second way into the same system doesn't post again (dedupe `discord_sent` kind `watchlist`, ref `wl:<filter>:<system>:<wormhole>`). Only holes whose signatures changed after the type was turned on and after the filter was last saved or turned on count, so nothing already on the chain is announced. Filters with "jumps from you / from home" are skipped (they depend on who is looking). Placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}` (class and effect), `{region}`, `{sig}` (the hole's signature in the system it is off), `{hole}` (its type there, K162 for the exit side), `{from}`, `{map}`; default ``{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}`` + `{map}` on a new line, e.g. "@here Watchlist **C5 with a Wolf-Rayet**: **J170540** (C5, Wolf-Rayet, E-R00024), through WRC-555 H296 in J115405". Filter names (admin text) and game data are escaped; at most 20 messages per mask per poll |
 | Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`, `{time}`...) and cleared (`{rally}`, `{who}`, `{time}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "@here Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)", and ``{rally}`` + ``Cleared by *{who}* at {time}`` on a new line. One live message per mask (`discord_rally_message`: id and text as last posted): a set or move within 30 s of its post edits it (`PATCH .../messages/<id>`); a move after that posts a new message (with the pings) and edits the old one into its text struck through + "Moved to **AB · J170122** by *who* at <time>" (fixed text); a clear, at any time, edits it into the cleared text: `{rally}` is the message struck through line by line, without its pings and its link line (a cleared text without `{rally}` gets it put above). E.g. "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)~~" / "Cleared by *Aashai Modor* at 19:08". A clear never posts a new message or pings: when there is no live message (never posted, deleted in Discord, another webhook, the type turned off and on since) nothing is sent. Every edit has empty `allowed_mentions` (Discord doesn't notify on edits anyway); the edits that end a message (cleared, moved) also have no pings in their text (the ping field and mentions the admin wrote are left out; a struck rally text that doesn't fit Discord's 2000 characters is cut, never the cleared line). `{time}` is a Discord timestamp (`<t:unix:t>`), shown in each reader's own time zone. Texts saved with an earlier default (1.15's, or 1.17's ``{pings} Tripwire rally point cleared by *{who}*{was}``) are read as today's; edited texts are kept. The message shows the rally as stored when it is sent, and a queued rally message is dropped when a newer one of the mask is queued (a set and a clear queued together send nothing). A live message deleted in Discord (404 Unknown Message) is posted again for a set/move, never for a clear, without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
@@ -387,6 +390,33 @@ Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/d
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
 tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`, legacy texts) and, against the running dev stack (worker + mock), `php tests/rally_discord_flow_test.php` (every set / move / clear sequence on both paths, printing the channel).
+
+### Watchlist
+
+Named filters per mask ("C5 with a Wolf-Rayet", "J123450", "anything on an H296") that tell everyone on the mask when
+the chain map has what they are looking for. They belong to the same masks and admins as the
+[Discord notifications](#discord-notifications): the corporation mask and corporation-owned custom masks; the
+corporation's Tripwire admins (`checkAdmin`) create, edit, pause and delete them in Mask Admin > Watchlist (or the
+panel), every member of the mask reads them. Fork-owned: `watchlist/` (storage, validation and the server-side matcher),
+`public/watchlist.php`, `app/js/fork/watchlist.js`, table `fork_watchlist` (one row per mask with the filters as JSON;
+DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`).
+
+- `public/watchlist.php`: `GET ?mode=get` returns the session mask's filters (`available` false and no filters for
+  masks the watchlist isn't for), `canEdit`, and for admins a per-session CSRF token. Admins `POST` JSON
+  (`filter-save`, `filter-delete`, `filter-enable`) with the `X-CSRF-Token` header, `X-Requested-With: XMLHttpRequest`,
+  `Content-Type: application/json` and, when the browser sends `Origin`, this host; everyone else gets 403. The server
+  normalises the conditions with the browser's rules, checks the system, region, constellation and wormhole types
+  against `watchlist/data.json`, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask.
+- The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
+  makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
+  signature table). Each member turns these on or off in Settings > General Preferences > Watchlist.
+- The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`. Both matchers pass the
+  same cases, `watchlist/tests/cases.json` (mocha: `app/js-test/fork/watchlist.test.js`; PHP:
+  `docker compose -f docker-compose.dev.yml exec -T app php watchlist/tests/watchlist_test.php`).
+- `watchlist/data.json` (systems, wormhole types, regions) is generated from `public/js/combine.js`; regenerate it
+  after upstream updates the game data:
+  `docker compose -f docker-compose.dev.yml exec -T assets node watchlist/tools/generate-watchlist-data.js`
+  (`watchlist/tests/` and `watchlist/tools/` are not in the image).
 
 ### Versions
 

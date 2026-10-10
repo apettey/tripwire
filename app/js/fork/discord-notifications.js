@@ -4,20 +4,22 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist"],
 	LABELS: {
 		kspace: "New k-space near a ping system",
 		chainKill: "Any kill in our chain",
 		corpKill: "Kills by our corporation",
 		corpLoss: "Losses of our corporation",
-		rally: "Rally point"
+		rally: "Rally point",
+		watchlist: "Watchlist match"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
 		chainKill: "A kill in a wormhole, low-sec or null-sec system on this mask's chain map (high-sec systems only if you tick them below).",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
-		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). A move within 30 seconds edits the message; a later move posts a new one (with the ping) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings)."
+		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). A move within 30 seconds edits the message; a later move posts a new one (with the ping) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
+		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter, system and hole, also when nobody has Tripwire open. Only holes mapped after you turn this on (and after the filter was last saved) are announced. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
 	},
 	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
@@ -161,6 +163,8 @@ const discordNotifications = {
 			if (type.enabled && !type.webhookID) { errors.push(dn.LABELS[kind] + ": choose a webhook to turn it on"); }
 			if (kind === "rally") {
 				type.templateClear = String(v.templateClear || "").trim();
+			} else if (kind === "watchlist") {
+				// Only on/off, channel, ping and the text: the filters are in Mask Admin > Watchlist
 			} else if (kind === "kspace") {
 				type.pingSystems = (v.pingSystems || []).map(Number);
 				type.maxJumps = Math.max(1, Math.min(50, parseInt(v.maxJumps, 10) || 10));
@@ -297,6 +301,8 @@ const discordNotifications = {
 				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
 						+ "<div class='dn-small'>Replaces the rally message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the rally was on, when it is known. Nothing is sent when there is no rally message to edit.</div></td></tr>";
 				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
+			} else if (kind === "watchlist") {
+				extra = "";
 			} else if (kind === "kspace") {
 				const chips = (t.pingSystems || []).map(function(id) {
 					return "<span class='dn-chip' data-system='" + Number(id) + "'>" + esc(dn.systemName(id))

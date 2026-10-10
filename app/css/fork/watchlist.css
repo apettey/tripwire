@@ -18,47 +18,56 @@
 	cursor: default;
 }
 
-#watchlistWidget .wl-toolbar {
+#watchlistWidget .wl-toolbar,
+#dialog-admin .wl-admin .wl-toolbar {
 	margin: 2px 0 4px 0;
 }
 
-#watchlistWidget .wl-list {
+#watchlistWidget .wl-list,
+#dialog-admin .wl-admin .wl-list {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 }
 
-#watchlistWidget .wl-row {
+#watchlistWidget .wl-row,
+#dialog-admin .wl-admin .wl-row {
 	padding: 3px 2px 4px 2px;
 	border-bottom: 1px solid #222;
 	border-left: 3px solid transparent;
 }
 
-#watchlistWidget .wl-row:hover {
+#watchlistWidget .wl-row:hover,
+#dialog-admin .wl-admin .wl-row:hover {
 	background: rgba(255, 255, 255, 0.04);
 }
 
-#watchlistWidget .wl-row.wl-hit {
+#watchlistWidget .wl-row.wl-hit,
+#dialog-admin .wl-admin .wl-row.wl-hit {
 	border-left-color: #4fc3f7;
 	background: rgba(79, 195, 247, 0.06);
 }
 
-#watchlistWidget .wl-row.wl-off {
+#watchlistWidget .wl-row.wl-off,
+#dialog-admin .wl-admin .wl-row.wl-off {
 	opacity: 0.55;
 }
 
-#watchlistWidget .wl-head {
+#watchlistWidget .wl-head,
+#dialog-admin .wl-admin .wl-head {
 	display: flex;
 	align-items: center;
 	gap: 5px;
 	white-space: nowrap;
 }
 
-#watchlistWidget .wl-head .wl-enabled {
+#watchlistWidget .wl-head .wl-enabled,
+#dialog-admin .wl-admin .wl-head .wl-enabled {
 	margin: 0;
 }
 
-#watchlistWidget .wl-name {
+#watchlistWidget .wl-name,
+#dialog-admin .wl-admin .wl-name {
 	flex: 1 1 auto;
 	min-width: 0;
 	overflow: hidden;
@@ -67,28 +76,33 @@
 	font-weight: bold;
 }
 
-#watchlistWidget .wl-hits {
+#watchlistWidget .wl-hits,
+#dialog-admin .wl-admin .wl-hits {
 	flex: 0 0 auto;
 	color: #777;
 }
 
-#watchlistWidget .wl-row.wl-hit .wl-hits {
+#watchlistWidget .wl-row.wl-hit .wl-hits,
+#dialog-admin .wl-admin .wl-row.wl-hit .wl-hits {
 	color: #4fc3f7;
 	font-weight: bold;
 }
 
-#watchlistWidget .wl-head i {
+#watchlistWidget .wl-head i,
+#dialog-admin .wl-admin .wl-head i {
 	flex: 0 0 auto;
 	color: #555;
 	font-size: 1.1em;
 	cursor: pointer;
 }
 
-#watchlistWidget .wl-head i:hover {
+#watchlistWidget .wl-head i:hover,
+#dialog-admin .wl-admin .wl-head i:hover {
 	color: #DDD;
 }
 
-#watchlistWidget .wl-desc {
+#watchlistWidget .wl-desc,
+#dialog-admin .wl-admin .wl-desc {
 	padding-left: 19px;
 	color: #888;
 	white-space: nowrap;
@@ -96,14 +110,55 @@
 	text-overflow: ellipsis;
 }
 
-#watchlistWidget .wl-matches {
+#watchlistWidget .wl-matches,
+#dialog-admin .wl-admin .wl-matches {
 	padding-left: 19px;
 }
 
-#watchlistWidget .wl-empty {
+#watchlistWidget .wl-empty,
+#dialog-admin .wl-admin .wl-empty {
 	padding: 6px 2px;
 	color: #777;
 	white-space: normal;
+}
+
+#watchlistWidget .wl-note {
+	padding: 4px 2px;
+	color: #777;
+}
+
+#watchlistWidget .wl-head i.wl-state,
+#dialog-admin .wl-admin .wl-head i.wl-state {
+	color: #4fc3f7;
+	cursor: default;
+}
+
+#watchlistWidget .wl-row.wl-off i.wl-state,
+#dialog-admin .wl-admin .wl-row.wl-off i.wl-state {
+	color: #555;
+}
+
+/* Mask Admin > Watchlist */
+.ui-dialog.wl-admin-active .ui-dialog-traypane { display: none; }
+
+#dialog-admin .wl-admin {
+	padding: 0 8px 12px 10px;
+	font-size: 12px;
+	line-height: 1.4;
+	text-align: left;
+}
+
+#dialog-admin .wl-admin h2 {
+	margin: 4px 0 6px 0;
+	font-size: 14px;
+}
+
+#dialog-admin .wl-admin .wl-small {
+	color: #999;
+}
+
+#dialog-admin .wl-admin .wl-toolbar {
+	margin: 6px 0;
 }
 
 /* Editor */
@@ -203,6 +258,57 @@
 
 #chainMap .node.watchlist-match i.whEffect + .watchlist-badge {
 	font-size: 7px;
+}
+
+/* The hole that makes (or leads to) a match: a light-blue line with a glow. Radial / orgchart-top / orgchart-side
+   renderers draw lines on a canvas, reading colour (border), width and aura colour (color) from a temporary element
+   with the connection's classes; the old org chart's lines are table cell borders. */
+.temp.watchlist-hole {
+	border-color: #4fc3f7;
+	border-style: solid;
+	border-width: 4px;
+	color: #4fc3f7;
+}
+
+#chainMap td.watchlist-hole,
+#chainMap td.left-watchlist-hole,
+#chainMap td.right-watchlist-hole,
+#chainMap td.bottom-watchlist-hole {
+	border-color: #4fc3f7 !important;
+}
+
+/* The eye on the connection, with the size tag (app/js/fork/size-tags.js places it) */
+#chainMap .size-tag.size-tag-watchlist {
+	box-shadow: 0 0 0 1px #4fc3f7, 0 0 5px 1px rgba(79, 195, 247, 0.8);
+}
+
+.size-tag.size-tag-watchlist i {
+	margin-right: 2px;
+	font-size: 8px;
+	color: #4fc3f7;
+}
+
+.size-tag.size-tag-watchlist-only {
+	color: #4fc3f7;
+	border-color: #4fc3f7;
+}
+
+.size-tag.size-tag-watchlist-only i {
+	margin-right: 0;
+}
+
+/* Signature table: the signatures of marked holes (the one to warp to) */
+#sigTable tr.watchlist-sig > td {
+	background-color: rgba(79, 195, 247, 0.14);
+}
+
+/* The eye goes in the Leads To cell (wide, its text centred), so the narrow ID column keeps its width */
+#sigTable tr.watchlist-sig > td:nth-child(4)::before {
+	font-family: 'icon';
+	content: "\e000";
+	margin-right: 3px;
+	font-size: 0.9em;
+	color: #4fc3f7;
 }
 
 /* Pop-ups: top-right (Kill Reporting's sit bottom-right) */
