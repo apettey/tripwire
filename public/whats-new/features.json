@@ -6,7 +6,62 @@
       "title": "Hole size tags on the chain map",
       "description": "Each wormhole on the chain map now has a small tag next to its type showing the biggest ship that fits through: S (frigates), M, L, VL (freighters) or XL (capitals, in orange). A dimmed tag with a ? (like XL?) means the wormhole type isn't known yet and the size is a guess from the system classes; hover a tag for details. Don't want them? Turn them off with \"Hole size tags\" in Settings > Chain Map Settings.",
       "images": [
-        { "src": "whats-new/img/pr-10-size-tags.jpg", "caption": "Size tags on chain map nodes" }
+        {
+          "src": "whats-new/img/pr-10-size-tags.jpg",
+          "caption": "Size tags on chain map nodes"
+        }
+      ]
+    },
+    {
+      "pr": 8,
+      "date": "2026-10-10",
+      "title": "Return bookmark after a jump",
+      "description": "When your tracked character jumps out through a named wormhole (for example AB), a panel appears at the top of the window with the return bookmark text, <AB. Click it (or press Enter) to copy it, then paste it into the bookmark for the wormhole you just came through.\n\nThe panel closes by itself after a minute, or with the small x.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-8-jump-return.png",
+          "caption": "Return bookmark panel after a jump"
+        }
+      ]
+    },
+    {
+      "pr": 7,
+      "date": "2026-10-10",
+      "title": "Saved destinations",
+      "description": "Keep a list of k-space systems you often travel to, like Jita or your staging system, and see how many jumps each is from the nearest exit on your chain. Open it with the pin icon in the chain map toolbar or from Settings > Chain Map Settings > Destinations.\n\nTick Show (or Show all on map) to draw a destination on the chain map, attached to the exit it is closest to.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-7-destinations-window.png",
+          "caption": "The Destinations window"
+        },
+        {
+          "src": "whats-new/img/pr-7-destinations-map.jpg",
+          "caption": "Destinations on the chain map"
+        }
+      ]
+    },
+    {
+      "pr": 6,
+      "date": "2026-10-10",
+      "title": "Automatic wormhole names",
+      "description": "When you add a wormhole signature, the Name is filled in for you using the chain naming scheme: A, B, C... from home, then the parent's name plus one more character further out (letters for large holes, 1-5 for frigate holes, 6-9 for medium holes). Type your own name to override it.\n\nAfter you click Add or Save, the in-game bookmark text (for example =A C5 ABC EOL) is copied to your clipboard, ready to paste into a bookmark.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-6-naming.png",
+          "caption": "Suggested name and copied bookmark"
+        }
+      ]
+    },
+    {
+      "pr": 5,
+      "date": "2026-10-10",
+      "title": "Rally point",
+      "description": "Right-click a system on the chain map and choose Rally here to make it the rally point for everyone on your mask. The system pulses green and the wormholes from where you are to it are highlighted, so you can see which holes to take.\n\nThe chain map header shows the rally system and how many jumps away it is; click the cross there, or choose Clear rally, to remove it.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-5-rally.jpg",
+          "caption": "Rally point and route on the chain map"
+        }
       ]
     },
     {
@@ -15,7 +70,10 @@
       "title": "Statics in the signature Type quick picks",
       "description": "When you add or edit a wormhole signature, the buttons next to Type now show this system's statics, marked with a dot. Click one to fill in the type and its destination class in one go; once Leads To is set, the matching static is listed first.",
       "images": [
-        { "src": "whats-new/img/pr-2-quickpicks.png", "caption": "Static quick picks in the signature dialog" }
+        {
+          "src": "whats-new/img/pr-2-quickpicks.png",
+          "caption": "Static quick picks in the signature dialog"
+        }
       ]
     },
     {
@@ -24,8 +82,14 @@
       "title": "What's New",
       "description": "Tripwire now tells you about new features after they're added. This window opens once after each update; reopen it any time from Settings > General Preferences > What's new.",
       "images": [
-        { "src": "whats-new/img/pr-1-settings.png", "caption": "Reopen from Settings" },
-        { "src": "whats-new/img/pr-1-popup.png", "caption": "The What's New window" }
+        {
+          "src": "whats-new/img/pr-1-settings.png",
+          "caption": "Reopen from Settings"
+        },
+        {
+          "src": "whats-new/img/pr-1-popup.png",
+          "caption": "The What's New window"
+        }
       ]
     }
   ]
