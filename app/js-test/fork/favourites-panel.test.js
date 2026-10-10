@@ -4,7 +4,7 @@ include('app/js/fork/rally');
 include('app/js/fork/favourites-panel');
 
 const fp = favouritesPanel;
-const HOME = 31000001, J135100 = 31000002, AMAMAKE = 30002537, UEDAMA = 30002768,
+const HOME = 31000001, UEDAMA = 30002768,
 	JITA = 30000142, AMARR = 30002187, DODIXIE = 30002659;
 
 function node(id, systemID, cls) {
@@ -15,24 +15,6 @@ function calcRow(id, systemID, parent, jumps) {
 	return row(id, systemID, parent, 'calc', { pathHome: [{ systemID: 1 }, { systemID: systemID, path: [1, 2], jumps: jumps }] });
 }
 
-// HOME -> J135100 -> Uedama (HS); HOME -> Amamake (LS)
-function chainMap() {
-	return {
-		map: { rows: [
-			row(1, HOME, null, 'top-level'),
-			row(2, J135100, 1), row(3, AMAMAKE, 1), row(4, UEDAMA, 2)
-		] },
-		lines: [[4, 2, [], 104], [3, 1, [], 103], [2, 1, [], 102]]
-	};
-}
-// The same map with calculated nodes to Jita: 2 jumps from Uedama... and 20 from Amamake
-function chainMapWithCalc() {
-	const r = chainMap();
-	r.map.rows.push(calcRow(5, JITA, 4, 2), calcRow(6, JITA, 3, 20));
-	r.lines.unshift([5, 4, [], undefined], [6, 3, [], undefined]);
-	return r;
-}
-const routeLines = r => r.lines.map((l, i) => l[2].indexOf('favourite-route') >= 0 ? (l[3] === undefined ? 'calc' + l[0] : l[3]) : null).filter(x => x !== null);
 const marked = (r, cls) => r.map.rows.filter(x => x.c[0].f.indexOf(cls) >= 0).map(x => x.c[0].v);
 
 describe('Favourites panel', () => {
@@ -42,7 +24,7 @@ describe('Favourites panel', () => {
 		it('Disabled', () => assert.equal(fp.settings({ favoritesPanel: { enabled: false } }).enabled, false));
 		it('Flags normalised, junk dropped', () => assert.deepEqual(
 			fp.settings({ favoritesPanel: { systems: { '30000142': { map: false }, '30002187': { route: true }, 'x|1': { map: false }, '30002659': null } } }).systems,
-			{ 30000142: { map: false, route: false }, 30002187: { map: true, route: true } }));
+			{ 30000142: { map: false, route: false }, 30002187: { map: true, route: 'shortest' } }));
 		it('Keeps a saved position', () => assert.deepEqual(fp.settings({ favoritesPanel: { position: { col: 3 } } }).position, { col: 3 }));
 		it('enabled(): missing means on', () => assert.ok(fp.enabled({})));
 		it('enabled(): explicit false', () => assert.ok(!fp.enabled({ favoritesPanel: { enabled: false } })));
@@ -52,9 +34,9 @@ describe('Favourites panel', () => {
 	describe('flags', () => {
 		const s = fp.settings({ favoritesPanel: { systems: { 30000142: { map: false, route: true } } } });
 		it('Defaults: map on, route off', () => assert.deepEqual(fp.flags(s, AMARR), { map: true, route: false }));
-		it('Saved', () => assert.deepEqual(fp.flags(s, JITA), { map: false, route: true }));
-		it('String ID', () => assert.deepEqual(fp.flags(s, '30000142'), { map: false, route: true }));
-		it('setFlag turns route on', () => assert.deepEqual(fp.setFlag(fp.settings({}), AMARR, 'route', true).systems, { 30002187: { map: true, route: true } }));
+		it('Saved (legacy true)', () => assert.deepEqual(fp.flags(s, JITA), { map: false, route: 'shortest' }));
+		it('String ID', () => assert.deepEqual(fp.flags(s, '30000142'), { map: false, route: 'shortest' }));
+		it('setFlag turns route on', () => assert.deepEqual(fp.setFlag(fp.settings({}), AMARR, 'route', true).systems, { 30002187: { map: true, route: 'shortest' } }));
 		it('setFlag keeps a non-default entry', () => assert.deepEqual(fp.setFlag(s, JITA, 'route', false).systems[JITA], { map: false, route: false }));
 		it('setFlag all defaults removes it', () => {
 			const t = fp.setFlag(fp.setFlag(s, JITA, 'route', false), JITA, 'map', true);
@@ -120,6 +102,23 @@ describe('Favourites panel', () => {
 		});
 	});
 
+	describe('showOnly', () => {
+		const J = 31000005;
+		const systems = { [JITA]: { regionID: 10000002 }, [AMARR]: { regionID: 10000043 }, [DODIXIE]: { regionID: 10000032 }, [J]: { regionID: 11000001, class: 3 } };
+		const start = fp.settings({ favoritesPanel: { systems: { [AMARR]: { map: false, route: true } } } });
+		const result = fp.showOnly(start, [JITA, AMARR, DODIXIE, J], AMARR, systems);
+		it('Only the clicked favourite is shown', () => assert.deepEqual(fp.mapFavorites([JITA, AMARR, DODIXIE], result), [AMARR]));
+		it('Route flags kept', () => assert.equal(fp.flags(result, AMARR).route, 'shortest'));
+		it('J-space favourites untouched', () => assert.equal(result.systems[J], undefined));
+		it('Does not mutate', () => assert.equal(start.systems[AMARR].map, false));
+	});
+
+	describe('dropFlags', () => {
+		const s = fp.settings({ favoritesPanel: { systems: { [JITA]: { route: true }, [AMARR]: { map: false } } } });
+		it('Drops one system', () => assert.deepEqual(Object.keys(fp.dropFlags(s, '30000142').systems), [String(AMARR)]));
+		it('Unknown system is a no-op', () => assert.equal(Object.keys(fp.dropFlags(s, DODIXIE).systems).length, 2));
+	});
+
 	describe('canShowOnMap', () => {
 		it('K-space', () => assert.ok(fp.canShowOnMap({ regionID: 10000002 })));
 		it('J-space', () => assert.ok(!fp.canShowOnMap({ regionID: 11000001, class: 3 })));
@@ -145,106 +144,161 @@ describe('Favourites panel', () => {
 		it('savedPlacement rejects junk', () => assert.equal(fp.savedPlacement({ col: 0, row: 1 }), null));
 	});
 
-	describe('routes', () => {
-		const exits = [{ systemID: AMAMAKE, nodeID: 3 }, { systemID: UEDAMA, nodeID: 4 }];
-		const gates = { [AMAMAKE + '>' + JITA]: 20, [UEDAMA + '>' + JITA]: 2, [AMAMAKE + '>' + AMARR]: 9, [UEDAMA + '>' + AMARR]: 9 };
-		const gateJumps = (from, to) => gates[from + '>' + to] === undefined ? null : gates[from + '>' + to];
-
-		it('Via a calculated node: picks fewest total jumps', () => {
-			const r = chainMapWithCalc();
-			const info = fp.route(r, JITA, HOME, exits, gateJumps);
-			assert.equal(info.status, 'ok');
-			assert.equal(info.kind, 'calc');
-			assert.equal(info.holes, 2);
-			assert.equal(info.gates, 2);
-			assert.equal(info.exitSystemID, UEDAMA);
+	describe('route modes', () => {
+		it('Legacy true is shortest', () => assert.equal(fp.routeMode(true), 'shortest'));
+		it('Safe', () => assert.equal(fp.routeMode('safe'), 'safe'));
+		it('Junk is off', () => assert.equal(fp.routeMode('fast'), false));
+		it('Cycle: off -> shortest -> safe -> off', () => {
+			assert.equal(fp.nextRouteMode(false), 'shortest');
+			assert.equal(fp.nextRouteMode('shortest'), 'safe');
+			assert.equal(fp.nextRouteMode('safe'), false);
 		});
-		it('Via a calculated node from the location', () => {
-			const r = chainMapWithCalc();
-			const routes = fp.decorate(r, [JITA], J135100, exits, gateJumps);
-			assert.equal(routes[JITA].holes, 1);
-			assert.deepEqual(routeLines(r).sort(), [104, 'calc5'].sort());
-			assert.deepEqual(marked(r, 'favourite-route-node'), [5]);
-		});
-		it('No calculated nodes: routes to the best exit and marks it', () => {
-			const r = chainMap();
-			const routes = fp.decorate(r, [AMARR], HOME, exits, gateJumps);
-			// Amamake: 1 hole + 9 gates beats Uedama: 2 holes + 9 gates
-			assert.equal(routes[AMARR].kind, 'exit');
-			assert.equal(routes[AMARR].exitSystemID, AMAMAKE);
-			assert.deepEqual(routeLines(r), [103]);
-			assert.deepEqual(marked(r, 'favourite-route-exit'), [3]);
-		});
-		it('Ties on total prefer fewer holes', () => {
-			const g = (from) => from === AMAMAKE ? 3 : 2;	// Amamake 1+3, Uedama 2+2
-			const info = fp.route(chainMap(), JITA, HOME, exits, g);
-			assert.equal(info.exitSystemID, AMAMAKE);
-		});
-		it('Favourite on the chain itself', () => {
-			const r = chainMap();
-			const routes = fp.decorate(r, [UEDAMA], HOME, exits, gateJumps);
-			assert.equal(routes[UEDAMA].kind, 'chain');
-			assert.equal(routes[UEDAMA].holes, 2);
-			assert.deepEqual(routeLines(r).sort(), [102, 104]);
-			assert.deepEqual(marked(r, 'favourite-route-node'), [4]);
-		});
-		it('Already there', () => assert.equal(fp.route(chainMap(), UEDAMA, UEDAMA, exits, gateJumps).status, 'here'));
-		it('No location', () => assert.equal(fp.route(chainMap(), JITA, null, exits, gateJumps).status, 'no-location'));
-		it('Location not on the chain', () => assert.equal(fp.route(chainMap(), JITA, 30000144, exits, gateJumps).status, 'no-location'));
-		it('No gate route from any exit', () => assert.equal(fp.route(chainMap(), DODIXIE, HOME, exits, gateJumps).status, 'no-route'));
-		it('Several favourites at once', () => {
-			const r = chainMapWithCalc();
-			fp.decorate(r, [JITA, AMAMAKE], HOME, exits, gateJumps);
-			assert.deepEqual(routeLines(r).sort(), [102, 103, 104, 'calc5'].sort());
-		});
-		it('Strips stale route classes', () => {
-			const r = chainMap();
-			r.lines[0][2].push('favourite-route');
-			fp.decorate(r, [], HOME, exits, gateJumps);
-			assert.deepEqual(routeLines(r), []);
-		});
-		it('Leaves rally classes alone', () => {
-			const r = chainMap();
-			r.lines[0][2].push('rally-route');
-			fp.decorate(r, [UEDAMA], HOME, exits, gateJumps);
-			assert.deepEqual(r.lines[0][2], ['rally-route', 'favourite-route']);
-		});
-		it('Location on a calculated node is not on the chain', () => {
-			const r = chainMapWithCalc();
-			assert.equal(fp.route(r, AMARR, JITA, exits, gateJumps).status, 'no-location');
-		});
-		it('Location on a destination node is not on the chain', () => {
-			const r = chainMap();
-			r.map.rows.push(row(9, DODIXIE, 3, '', { destination: { systemID: DODIXIE } }));
-			assert.equal(fp.route(r, AMARR, DODIXIE, exits, gateJumps).status, 'no-location');
-		});
-		it('In the favourite but off the chain: here', () => assert.equal(fp.route(chainMap(), JITA, JITA, exits, gateJumps).status, 'here'));
-		it('chainSystems skips calculated and destination rows', () => {
-			const r = chainMapWithCalc();
-			r.map.rows.push(row(9, DODIXIE, 3, '', { destination: {} }));
-			assert.deepEqual(Object.keys(fp.chainSystems(r.map.rows)).sort(), [HOME, J135100, AMAMAKE, UEDAMA].map(String).sort());
-		});
-		it('Favourite on the chain far away: a gate route from a near exit wins', () => {
-			// Uedama is 2 holes from home through the chain; via Amamake it's 1 hole + 0 gates (contrived)
-			const g = (from, to) => from === AMAMAKE && to === UEDAMA ? 0 : null;
-			const info = fp.route(chainMap(), UEDAMA, HOME, exits, g);
-			assert.equal(info.kind, 'exit');
-			assert.equal(info.exitSystemID, AMAMAKE);
-			assert.equal(info.holes + info.gates, 1);
-		});
-		it('Favourite on the chain: stays on the chain route when exits are not quicker', () => {
-			const info = fp.route(chainMap(), UEDAMA, HOME, exits, gateJumps);
-			assert.equal(info.kind, 'chain');
-		});
-		it('markNode is idempotent', () => assert.equal(fp.markNode(fp.markNode("<div class='node x'>", 'a'), 'a'), "<div class='node a x'>"));
+		it('Saved safe mode', () => assert.equal(fp.flags(fp.settings({ favoritesPanel: { systems: { 30000142: { route: 'safe' } } } }), JITA).route, 'safe'));
+		it('routeModes', () => assert.deepEqual(
+			fp.routeModes([JITA, AMARR, DODIXIE], fp.settings({ favoritesPanel: { systems: { 30000142: { route: true }, 30002659: { route: 'safe' } } } })),
+			[{ systemID: JITA, mode: 'shortest' }, { systemID: DODIXIE, mode: 'safe' }]));
 	});
 
-	describe('routeSummary', () => {
-		it('Via exit', () => assert.deepEqual(fp.routeSummary({ status: 'ok', kind: 'calc', holes: 2, gates: 1 }, 'Jita', 'Uedama'),
-			{ text: '2+1j', title: '2 wormhole jumps to Uedama, then 1 gate jump to Jita' }));
-		it('On the chain', () => assert.deepEqual(fp.routeSummary({ status: 'ok', kind: 'chain', holes: 1, gates: 0 }, 'Uedama', 'Uedama'),
-			{ text: '1j', title: '1 wormhole jump to Uedama' }));
-		it('No location', () => assert.equal(fp.routeSummary({ status: 'no-location' }, 'Jita').text, ''));
-		it('No route mentions it', () => assert.ok(/No route/.test(fp.routeSummary({ status: 'no-route' }, 'Jita').title)));
+	describe('gateDistances', () => {
+		// a(HS) - b(LS) - c(HS); a - d(HS) - e(HS) - c; z = Zarzakh between a and c
+		const a = 30000001, b = 30000002, c = 30000003, d = 30000004, e = 30000005, z = 30000006;
+		const hs = { regionID: 10000001, security: 0.9 }, ls = { regionID: 10000001, security: 0.3 };
+		const systems = { [a]: hs, [b]: ls, [c]: hs, [d]: hs, [e]: hs, [z]: { regionID: 10000001, security: -1, name: 'Zarzakh' } };
+		const map = { 1: { 2: 0, 4: 0, 6: 0 }, 2: { 1: 0, 3: 0 }, 3: { 2: 0, 5: 0, 6: 0 }, 4: { 1: 0, 5: 0 }, 5: { 4: 0, 3: 0 }, 6: { 1: 0, 3: 0 } };
+		it('Shortest goes through low-sec', () => assert.equal(fp.gateDistances(map, systems, a, false)[c], 2));
+		it('Never through Zarzakh', () => assert.equal(fp.gateDistances(map, systems, a, false)[z], 1));
+		it('Safe stays in high-sec', () => assert.equal(fp.gateDistances(map, systems, a, true)[c], 3));
+		it('Safe: may start in low-sec', () => assert.equal(fp.gateDistances(map, systems, b, true)[a], 1));
+		it('Safe: never enters low-sec', () => assert.equal(fp.gateDistances(map, systems, a, true)[b], undefined));
+		it('Unknown start', () => assert.deepEqual(fp.gateDistances(map, systems, null, false), {}));
+	});
+
+	describe('routes', () => {
+		// Chain: HOME (C5) with holes to A (HS), B (low-sec) and U (HS).
+		// Gates: L (HS, off the chain) - A; B - F (1 jump, but B is low-sec); U - Q1 - Q2 - F (high-sec);
+		// L - D1 - D2 - D3 - D4 - D5 - D6 - F (direct, 7 jumps, high-sec); B - T (low-sec favourite).
+		const R = 10000001;
+		const L = 30000001, A = 30000002, B = 30000003, U = 30000004, F = 30000005, Q1 = 30000006, Q2 = 30000007,
+			D = [30000011, 30000012, 30000013, 30000014, 30000015, 30000016], T = 30000020, JOFF = 31000099;
+		const hs = { regionID: R, security: 0.8 }, ls = { regionID: R, security: 0.2 };
+		const systems = { [HOME]: { regionID: 11000001, class: 5 }, [JOFF]: { regionID: 11000001, class: 3 },
+			[L]: hs, [A]: hs, [B]: ls, [U]: hs, [F]: hs, [Q1]: hs, [Q2]: hs, [T]: ls };
+		D.forEach(d => { systems[d] = hs; });
+		const map = {};
+		const link = (x, y) => { (map[x - 30000000] = map[x - 30000000] || {})[y - 30000000] = 0; (map[y - 30000000] = map[y - 30000000] || {})[x - 30000000] = 0; };
+		link(L, A); link(B, F); link(U, Q1); link(Q1, Q2); link(Q2, F); link(B, T);
+		[L].concat(D, [F]).forEach((x, i, all) => { if (i) { link(all[i - 1], x); } });
+		const distances = (id, safe) => fp.gateDistances(map, systems, id, safe);
+		const exits = [{ systemID: A, nodeID: 2 }, { systemID: B, nodeID: 3 }, { systemID: U, nodeID: 4 }];
+		const world = () => ({
+			map: { rows: [row(1, HOME, null, 'top-level'), row(2, A, 1), row(3, B, 1), row(4, U, 1)] },
+			lines: [[4, 1, [], 104], [3, 1, [], 103], [2, 1, [], 102]]
+		});
+		const withCalc = () => {
+			const r = world();
+			r.map.rows.push(calcRow(5, F, 3, 1));
+			r.lines.unshift([5, 3, [], undefined]);
+			return r;
+		};
+		const ctx = (r, start) => fp.context(r, start, exits, distances, systems);
+		const lineIds = (r, cls) => r.lines.filter(l => l[2].indexOf(cls) >= 0).map(l => l[3] === undefined ? 'calc' + l[0] : l[3]).sort();
+
+		it('Off the chain in k-space: gates in, wormholes, gates out (shortest)', () => {
+			const p = fp.plan(ctx(world(), L), F, 'shortest');
+			assert.equal(p.status, 'ok');
+			assert.equal(p.kind, 'chain');
+			assert.deepEqual([p.gatesIn, p.holes, p.gatesOut], [1, 2, 1]);
+			assert.equal(p.entrySystemID, A);
+			assert.equal(p.exitSystemID, B);
+		});
+		it('Safe picks a different, high-sec exit', () => {
+			const p = fp.plan(ctx(world(), L), F, 'safe');
+			assert.deepEqual([p.gatesIn, p.holes, p.gatesOut], [1, 2, 3]);
+			assert.equal(p.exitSystemID, U);
+		});
+		it('Direct gates win when quicker', () => {
+			const p = fp.plan(ctx(world(), L), D[1], 'shortest');
+			assert.equal(p.kind, 'direct');
+			assert.equal(p.gatesIn, 2);
+			assert.equal(fp.planText(p), 'direct 2g');
+		});
+		it('On the chain: wormholes then gates', () => {
+			const p = fp.plan(ctx(world(), HOME), F, 'shortest');
+			assert.deepEqual([p.gatesIn, p.holes, p.gatesOut], [0, 1, 1]);
+			assert.equal(fp.planText(p), '1wh → 1g');
+		});
+		it('Favourite on the chain', () => {
+			const p = fp.plan(ctx(world(), HOME), U, 'safe');
+			assert.deepEqual([p.holes, p.gatesOut, p.exitSystemID], [1, 0, U]);
+		});
+		it('No safe route', () => {
+			const c = ctx(world(), HOME);
+			assert.equal(fp.plan(c, T, 'shortest').status, 'ok');
+			assert.equal(fp.plan(c, T, 'safe').status, 'no-route');
+			assert.equal(fp.planDetail(fp.plan(c, T, 'safe'), 'T', String), 'no high-sec-only route');
+		});
+		it('J-space off the chain: no route', () => {
+			const p = fp.plan(ctx(world(), JOFF), F, 'shortest');
+			assert.equal(p.status, 'no-location');
+			assert.equal(p.reason, 'off-chain');
+		});
+		it('Not tracked', () => assert.equal(fp.plan(ctx(world(), null), F, 'shortest').reason, 'untracked'));
+		it('In the favourite', () => assert.equal(fp.plan(ctx(world(), F), F, 'safe').status, 'here'));
+		it('Location on a calculated node counts as off the chain (k-space: gates)', () => {
+			const c = ctx(withCalc(), F);
+			assert.equal(c.startOnChain, false);
+			assert.equal(c.startKSpace, true);
+		});
+
+		it('decorate: shortest from off the chain marks entry, holes, calc node and its line', () => {
+			const r = withCalc();
+			const routes = fp.decorate(r, [{ systemID: F, mode: 'shortest' }], L, exits, distances, systems);
+			assert.equal(routes[F].shortest.exitSystemID, B);
+			assert.equal(routes[F].safe.exitSystemID, U);
+			assert.deepEqual(lineIds(r, 'favourite-route'), [102, 103, 'calc5'].sort());
+			assert.deepEqual(marked(r, 'favourite-route-exit'), [2]);
+			assert.deepEqual(marked(r, 'favourite-route-node'), [5]);
+			assert.deepEqual(lineIds(r, 'favourite-safe-route'), []);
+		});
+		it('decorate: safe uses its own classes and marks the exit when no calc node leads there', () => {
+			const r = withCalc();
+			fp.decorate(r, [{ systemID: F, mode: 'safe' }], L, exits, distances, systems);
+			assert.deepEqual(lineIds(r, 'favourite-safe-route'), [102, 104]);
+			assert.deepEqual(marked(r, 'favourite-safe-exit'), [2, 4]);
+			assert.deepEqual(lineIds(r, 'favourite-route'), []);
+		});
+		it('decorate: direct route highlights nothing', () => {
+			const r = world();
+			fp.decorate(r, [{ systemID: D[1], mode: 'shortest' }], L, exits, distances, systems);
+			assert.deepEqual(lineIds(r, 'favourite-route'), []);
+			assert.deepEqual(marked(r, 'favourite-route'), []);
+		});
+		it('decorate: strips stale classes, leaves rally alone', () => {
+			const r = world();
+			r.lines[0][2].push('rally-route', 'favourite-route', 'favourite-safe-route');
+			fp.decorate(r, [], L, exits, distances, systems);
+			assert.deepEqual(r.lines[0][2], ['rally-route']);
+		});
+		it('markNode is idempotent', () => assert.equal(fp.markNode(fp.markNode("<div class='node x'>", 'a'), 'a'), "<div class='node a x'>"));
+
+		it('Summary compares modes when they differ', () => {
+			const c = ctx(world(), L);
+			const info = { mode: 'shortest', shortest: fp.plan(c, F, 'shortest'), safe: fp.plan(c, F, 'safe') };
+			const names = { [A]: 'Alpha', [B]: 'Bravo', [U]: 'Uniform' };
+			const s = fp.routeSummary(info, 'Fox', id => names[id]);
+			assert.equal(s.text, '1g → 2wh → 1g');
+			assert.ok(s.ok);
+			assert.equal(s.title, 'Route (shortest): 1g → 2wh → 1g (1 gate jump to Alpha, 2 wormhole jumps to Bravo, 1 gate jump to Fox)'
+				+ ' · Safe: 1g → 2wh → 3g (1 gate jump to Alpha, 2 wormhole jumps to Uniform, 3 gate jumps to Fox)');
+		});
+		it('Summary: safe with no safe route is not ok', () => {
+			const c = ctx(world(), HOME);
+			const s = fp.routeSummary({ mode: 'safe', shortest: fp.plan(c, T, 'shortest'), safe: fp.plan(c, T, 'safe') }, 'T', String);
+			assert.equal(s.ok, false);
+			assert.ok(/no high-sec-only route/.test(s.title));
+			assert.ok(/Shortest: 1wh/.test(s.title));
+		});
+		it('Summary: direct', () => assert.equal(fp.planDetail({ status: 'ok', kind: 'direct', gatesIn: 9 }, 'X', String), 'direct: 9 gate jumps, no wormholes'));
+		it('Summary: off', () => assert.equal(fp.routeSummary(null).ok, false));
 	});
 });

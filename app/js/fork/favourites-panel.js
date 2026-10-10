@@ -8,7 +8,10 @@ const favouritesPanel = {
 	WIDGET_ID: "favouritesWidget",
 	ROUTE_CLASS: "favourite-route",         // line modifier on the route's connections
 	NODE_CLASS: "favourite-route-node",     // the favourite's node (or calculated route node) at the end of a route
-	EXIT_CLASS: "favourite-route-exit",     // exit node a route leaves the chain by (when no calculated node is drawn)
+	EXIT_CLASS: "favourite-route-exit",     // system a route enters / leaves the chain by over gates (no calculated node drawn)
+	SAFE_ROUTE_CLASS: "favourite-safe-route",   // the same three for a safe (high-sec only) route
+	SAFE_NODE_CLASS: "favourite-safe-node",
+	SAFE_EXIT_CLASS: "favourite-safe-exit",
 	DEFAULT_SIZE: { x: 5, y: 8 },
 	MIN_SIZE: { x: 4, y: 3 },
 	LOCATION_CHECK_MS: 2000,
@@ -41,7 +44,7 @@ const favouritesPanel = {
 				const id = favouritesPanel.toID(key);
 				const f = raw.systems[key];
 				if (!id || !f || typeof f !== "object") { return; }
-				systems[id] = { map: f.map !== false, route: f.route === true };
+				systems[id] = { map: f.map !== false, route: favouritesPanel.routeMode(f.route) };
 			});
 		}
 		const result = { enabled: raw.enabled !== false, systems: systems };
@@ -54,10 +57,22 @@ const favouritesPanel = {
 		return !(opts && opts.favoritesPanel && opts.favoritesPanel.enabled === false);
 	},
 
-	/** Flags for one favourite: {map (default on), route (default off)} */
+	/** A route setting as false (off), "shortest" or "safe"; legacy true means "shortest" */
+	routeMode: function(value) {
+		if (value === "safe") { return "safe"; }
+		return value === true || value === "shortest" ? "shortest" : false;
+	},
+
+	/** The next route setting when the route button is clicked: off -> shortest -> safe -> off */
+	nextRouteMode: function(value) {
+		const mode = favouritesPanel.routeMode(value);
+		return mode === false ? "shortest" : mode === "shortest" ? "safe" : false;
+	},
+
+	/** Flags for one favourite: {map (default on), route (false, "shortest" or "safe"; default off)} */
 	flags: function(settings, systemID) {
 		const f = settings && settings.systems ? settings.systems[favouritesPanel.toID(systemID)] : null;
-		return { map: !f || f.map !== false, route: !!(f && f.route === true) };
+		return { map: !f || f.map !== false, route: f ? favouritesPanel.routeMode(f.route) : false };
 	},
 
 	/** New settings with one flag changed. Entries equal to the defaults are dropped to keep options small. */
@@ -66,7 +81,7 @@ const favouritesPanel = {
 		const result = favouritesPanel.settings({ favoritesPanel: settings });
 		if (!id || (key !== "map" && key !== "route")) { return result; }
 		const f = favouritesPanel.flags(result, id);
-		f[key] = !!value;
+		f[key] = key === "route" ? favouritesPanel.routeMode(value) : !!value;
 		if (f.map && !f.route) { delete result.systems[id]; } else { result.systems[id] = f; }
 		return result;
 	},
@@ -137,6 +152,13 @@ const favouritesPanel = {
 		return favouritesPanel.sanitize(favorites).filter(function(id) { return favouritesPanel.flags(settings, id).route; });
 	},
 
+	/** Favourites with "Route" on and their mode: [{systemID, mode: "shortest" | "safe"}] */
+	routeModes: function(favorites, settings) {
+		return favouritesPanel.routeFavorites(favorites, settings).map(function(id) {
+			return { systemID: id, mode: favouritesPanel.flags(settings, id).route };
+		});
+	},
+
 	/** The array to stand in for options.favorites while the chain map is built: iterating it gives only
 	the favourites shown on the map (the chain map loops over it with for..in), but indexOf still answers
 	for every favourite so the star on favourite systems' nodes stays. */
@@ -164,6 +186,26 @@ const favouritesPanel = {
 	},
 
 	/** Whether upstream ever draws a favourite on the chain map: only k-space ones (not J-space, Thera...) */
+	/** New settings with "Show on map" on for one favourite and off for every other k-space favourite
+	(used when favourites on the map were switched off: turning them on then shows just that one).
+	Route flags and non-k-space favourites are left alone. systems: appData.systems-like lookup. */
+	showOnly: function(settings, favorites, systemID, systems) {
+		const id = favouritesPanel.toID(systemID);
+		let result = favouritesPanel.settings({ favoritesPanel: settings });
+		favouritesPanel.sanitize(favorites).forEach(function(f) {
+			if (!favouritesPanel.canShowOnMap(systems ? systems[f] : null)) { return; }
+			result = favouritesPanel.setFlag(result, f, "map", f === id);
+		});
+		return result;
+	},
+
+	/** Settings without the flags of one system (a favourite about to be removed) */
+	dropFlags: function(settings, systemID) {
+		const result = favouritesPanel.settings({ favoritesPanel: settings });
+		delete result.systems[favouritesPanel.toID(systemID)];
+		return result;
+	},
+
 	canShowOnMap: function(system) {
 		return !!system && !(Number(system.regionID) >= 11000000);
 	},
@@ -233,117 +275,221 @@ const favouritesPanel = {
 		return markup.replace("class='node ", "class='node " + cls + " ");
 	},
 
-	/** Ways to reach a favourite from the chain, each {exitSystemID, gateJumps, nodeIndex, lineIndex, kind}:
-	 - "chain": the favourite is itself on the chain (gateJumps 0, nodeIndex = its row)
-	 - "calc": a calculated route node to it is drawn (nodeIndex/lineIndex = that node and its connection)
-	 - "exit": no calculated node, so every k-space exit with a gate route (gateJumps from gateJumps(exit, fav))
-	@param exits [{systemID, nodeID}] k-space exits (only used when there is no chain/calc way) */
-	candidates: function(rows, lines, favID, exits, gateJumps) {
-		const id = favouritesPanel.toID(favID);
-		const result = [];
-		if (!id) { return result; }
-		const nodeSystems = rally.nodeSystems(rows);
-		(rows || []).forEach(function(row, index) {
-			const node = row && row.c && row.c[0];
-			if (!node || row.destination || favouritesPanel.toID(node.systemID) !== id) { return; }
-			if (favouritesPanel.isCalcRow(row)) {
-				const parentID = row.c[1] ? row.c[1].v : null;
-				const exitSystemID = favouritesPanel.toID(nodeSystems[parentID]);
-				const last = row.pathHome[row.pathHome.length - 1];
-				let lineIndex = null;
-				(lines || []).forEach(function(line, li) { if (line && line[0] === node.v && line[1] === parentID) { lineIndex = li; } });
-				if (exitSystemID) {
-					result.push({ kind: "calc", exitSystemID: exitSystemID, gateJumps: Number(last.jumps) || 0, nodeIndex: index, lineIndex: lineIndex });
-				}
-			} else {
-				result.push({ kind: "chain", exitSystemID: id, gateJumps: 0, nodeIndex: index, lineIndex: null });
-			}
-		});
-		// A calculated node already is the gate route from its exit. Without one (star button off, or the
-		// favourite is itself on the chain, where upstream draws none) try every exit: a gate route from a
-		// nearby exit can beat a long way round through wormholes.
-		// Gate jumps: calculated nodes come from guidance.findShortestPath(tripwire.map.shortest, favourite, exit)
-		// and gateJumps (routeDestinations.jumps) from the same function and map, exit to favourite, so both use
-		// the user's route preferences; the direction differs, which can rarely change the count by a jump.
-		if (result.some(function(c) { return c.kind === "calc"; })) { return result; }
-		(exits || []).forEach(function(exit) {
-			const jumps = gateJumps ? gateJumps(exit.systemID, id) : null;
-			if (jumps === null || jumps === undefined) { return; }
-			let nodeIndex = null;
-			(rows || []).forEach(function(row, index) {
-				if (nodeIndex === null && row && row.c && row.c[0] && row.c[0].v === exit.nodeID) { nodeIndex = index; }
-			});
-			result.push({ kind: "exit", exitSystemID: exit.systemID, gateJumps: jumps, nodeIndex: nodeIndex, lineIndex: null });
-		});
-		return result;
+	/** K-space: a known system without a wormhole class, outside the wormhole regions (Pochven counts) */
+	isKSpace: function(system) {
+		return !!system && !system.class && (Number(system.regionID) || 0) < 11000000;
 	},
 
-	/** Quickest route from startSystemID to a favourite: fewest wormhole + gate jumps (ties: fewer wormhole jumps).
-	Returns {status, holes, gates, kind, exitSystemID, lineIndexes, nodeIndex, lineIndex}; status is
-	"ok", "here" (you are in the favourite), "no-location" (not tracked / not on the chain) or "no-route". */
-	route: function(result, favID, startSystemID, exits, gateJumps) {
+	/** High-sec as the app shows it (security >= 0.45, like systemAnalysis), not Pochven */
+	isHighSec: function(system) {
+		return favouritesPanel.isKSpace(system) && system.factionID != 500026 && Number(system.security) >= 0.45;
+	},
+
+	/** Gate jumps from one system to every system reachable by gates (breadth-first over the gate map).
+	safe: only through high-sec systems (the start itself may be anything: you are already there).
+	Zarzakh is never passed through (its gates hold you for hours).
+	@param map gate adjacency keyed by systemID - 30000000 (appData.map.shortest)
+	@return {<systemID>: jumps} */
+	gateDistances: function(map, systems, fromID, safe) {
+		const from = favouritesPanel.toID(fromID);
+		const dist = {};
+		if (!from || !map) { return dist; }
+		dist[from] = 0;
+		const queue = [from];
+		for (let i = 0; i < queue.length; i++) {
+			const current = queue[i];
+			const system = systems[current];
+			if (current !== from && system && system.name === "Zarzakh") { continue; }
+			const next = map[current - 30000000] || {};
+			for (const key in next) {
+				const id = 30000000 + Number(key);
+				if (dist[id] !== undefined) { continue; }
+				if (safe && !favouritesPanel.isHighSec(systems[id])) { continue; }
+				dist[id] = dist[current] + 1;
+				queue.push(id);
+			}
+		}
+		return dist;
+	},
+
+	/** Everything a route needs about the current chain map, worked out once per draw.
+	@param result chain.nodes() output
+	@param startSystemID where the tracked character is
+	@param exits [{systemID, nodeID}] k-space systems on the chain (routeDestinations.chainExits)
+	@param distances function(systemID, safe) -> gateDistances (memoised by the caller)
+	@param systems appData.systems-like lookup */
+	context: function(result, startSystemID, exits, distances, systems) {
 		const rows = (result && result.map && result.map.rows) || [];
 		const lines = (result && result.lines) || [];
-		const id = favouritesPanel.toID(favID);
 		const start = favouritesPanel.toID(startSystemID);
-		if (start && start === id) { return { status: "here", holes: 0, gates: 0, lineIndexes: [] }; }
-		if (!start || !favouritesPanel.chainSystems(rows)[String(start)]) { return { status: "no-location" }; }
-
-		const connections = rally.systemConnections(rows, lines);
-		let best = null;
-		favouritesPanel.candidates(rows, lines, id, exits, gateJumps).forEach(function(c) {
-			const path = rally.routeTo(connections, start, c.exitSystemID);
-			if (!path) { return; }
-			const total = path.length + c.gateJumps;
-			if (!best || total < best.total || (total === best.total && path.length < best.holes)) {
-				best = { status: "ok", total: total, holes: path.length, gates: c.gateJumps, kind: c.kind,
-					exitSystemID: c.exitSystemID, lineIndexes: path, nodeIndex: c.nodeIndex, lineIndex: c.lineIndex };
-			}
-		});
-		return best || { status: "no-route" };
+		const chain = favouritesPanel.chainSystems(rows);
+		return {
+			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {},
+			connections: rally.systemConnections(rows, lines),
+			startOnChain: !!(start && chain[String(start)]),
+			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start]))
+		};
 	},
 
-	/** Decorate chain.nodes() output in place: route lines and end nodes for each favourite with Route on.
-	Returns {<favID>: route info}. */
-	decorate: function(result, routeFavorites, startSystemID, exits, gateJumps) {
-		const rows = (result && result.map && result.map.rows) || [];
+	/** Quickest way from the tracked location to a favourite, for one route mode ("shortest" or "safe": every
+	gate leg through high-sec only; wormhole legs through the chain are allowed either way).
+	Candidates: gates straight there (k-space start); otherwise into the chain (you are on it, or gates to a
+	k-space system on it), through wormholes, and out of it (the favourite is on the chain, or gates from a
+	k-space system on it). Fewest jumps in total wins; ties go to fewer wormhole jumps.
+	Returns {status: "ok" | "here" | "no-location" | "no-route", mode, kind: "direct" | "chain", total,
+	gatesIn, holes, gatesOut, entrySystemID, exitSystemID, lineIndexes (wormhole connections)} */
+	plan: function(ctx, favID, mode) {
+		const id = favouritesPanel.toID(favID);
+		const safe = mode === "safe";
+		if (ctx.start && ctx.start === id) { return { status: "here", mode: mode }; }
+		if (!ctx.start) { return { status: "no-location", reason: "untracked", mode: mode }; }
+		if (!ctx.startOnChain && !ctx.startKSpace) { return { status: "no-location", reason: "off-chain", mode: mode }; }
+
+		const fromFav = ctx.distances(id, safe);
+		const fromStart = ctx.startKSpace ? ctx.distances(ctx.start, safe) : null;
+		let best = null;
+		const consider = function(c) {
+			c.total = c.gatesIn + c.holes + c.gatesOut;
+			if (!best || c.total < best.total || (c.total === best.total && c.holes < best.holes)) { best = c; }
+		};
+
+		if (fromStart && fromStart[id] !== undefined) {
+			consider({ kind: "direct", gatesIn: fromStart[id], holes: 0, gatesOut: 0, lineIndexes: [] });
+		}
+		const entries = [];
+		if (ctx.startOnChain) { entries.push({ systemID: ctx.start, gates: 0 }); }
+		if (fromStart) {
+			ctx.exits.forEach(function(e) {
+				if (e.systemID !== ctx.start && fromStart[e.systemID] !== undefined) { entries.push({ systemID: e.systemID, gates: fromStart[e.systemID] }); }
+			});
+		}
+		const targets = [];
+		if (ctx.chain[String(id)]) { targets.push({ systemID: id, gates: 0 }); }
+		ctx.exits.forEach(function(x) {
+			if (x.systemID !== id && fromFav[x.systemID] !== undefined) { targets.push({ systemID: x.systemID, gates: fromFav[x.systemID] }); }
+		});
+		entries.forEach(function(entry) {
+			targets.forEach(function(target) {
+				const path = rally.routeTo(ctx.connections, entry.systemID, target.systemID);
+				if (!path || !path.length) { return; }	// no wormholes used: a gate route, covered by "direct"
+				consider({ kind: "chain", gatesIn: entry.gates, holes: path.length, gatesOut: target.gates,
+					entrySystemID: entry.systemID, exitSystemID: target.systemID, lineIndexes: path });
+			});
+		});
+		if (!best) { return { status: "no-route", mode: mode }; }
+		best.status = "ok";
+		best.mode = mode;
+		return best;
+	},
+
+	/** Mark a plan on the chain: wormhole connections, the system you enter the chain at (when you gate to it),
+	and where you leave it: the favourite's own node, its calculated route node (plus that connection), or the exit */
+	highlight: function(ctx, favID, plan) {
+		if (!plan || plan.status !== "ok" || plan.kind !== "chain") { return; }
+		const id = favouritesPanel.toID(favID);
+		const safe = plan.mode === "safe";
+		const lineClass = safe ? favouritesPanel.SAFE_ROUTE_CLASS : favouritesPanel.ROUTE_CLASS;
+		const nodeClass = safe ? favouritesPanel.SAFE_NODE_CLASS : favouritesPanel.NODE_CLASS;
+		const exitClass = safe ? favouritesPanel.SAFE_EXIT_CLASS : favouritesPanel.EXIT_CLASS;
+		const rows = ctx.rows, lines = ctx.lines;
+		const addLine = function(index) {
+			const line = lines[index];
+			if (line && Array.isArray(line[2]) && line[2].indexOf(lineClass) < 0) { line[2].push(lineClass); }
+		};
+		const markFirst = function(test, cls) {
+			for (let i = 0; i < rows.length; i++) {
+				const row = rows[i], node = row && row.c && row.c[0];
+				if (node && test(row, node)) { node.f = favouritesPanel.markNode(node.f, cls); return row; }
+			}
+			return null;
+		};
+		const realNode = function(systemID) {
+			return function(row, node) { return !row.destination && !favouritesPanel.isCalcRow(row) && favouritesPanel.toID(node.systemID) === systemID; };
+		};
+		plan.lineIndexes.forEach(addLine);
+		if (plan.gatesIn > 0) { markFirst(realNode(plan.entrySystemID), exitClass); }
+		if (plan.exitSystemID === id) { markFirst(realNode(id), nodeClass); return; }
+		const exitNodes = {};
+		rows.forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			if (node && !row.destination && !favouritesPanel.isCalcRow(row) && favouritesPanel.toID(node.systemID) === plan.exitSystemID) { exitNodes[node.v] = true; }
+		});
+		const calc = markFirst(function(row, node) {
+			return favouritesPanel.isCalcRow(row) && favouritesPanel.toID(node.systemID) === id && row.c[1] && exitNodes[row.c[1].v];
+		}, nodeClass);
+		if (calc) {
+			lines.forEach(function(line, index) { if (line && line[0] === calc.c[0].v && line[1] === calc.c[1].v) { addLine(index); } });
+		} else {
+			markFirst(realNode(plan.exitSystemID), exitClass);
+		}
+	},
+
+	/** Decorate chain.nodes() output in place for the favourites with Route on, and work out both modes for
+	each (the row's tooltip compares them). Returns {<favID>: {mode, shortest, safe}}.
+	@param routeFavorites [{systemID, mode}] */
+	decorate: function(result, routeFavorites, startSystemID, exits, distances, systems) {
 		const lines = (result && result.lines) || [];
+		const own = [favouritesPanel.ROUTE_CLASS, favouritesPanel.SAFE_ROUTE_CLASS];
 		lines.forEach(function(line) {
 			if (line && Array.isArray(line[2])) {
-				const i = line[2].indexOf(favouritesPanel.ROUTE_CLASS);
-				if (i >= 0) { line[2].splice(i, 1); }
+				for (let i = line[2].length - 1; i >= 0; i--) { if (own.indexOf(line[2][i]) >= 0) { line[2].splice(i, 1); } }
 			}
 		});
 		const routes = {};
-		(routeFavorites || []).forEach(function(favID) {
-			const info = favouritesPanel.route(result, favID, startSystemID, exits, gateJumps);
-			routes[favID] = info;
-			if (info.status !== "ok") { return; }
-			const lineIndexes = info.lineIndexes.concat(info.lineIndex === null || info.lineIndex === undefined ? [] : [info.lineIndex]);
-			lineIndexes.forEach(function(index) {
-				const line = lines[index];
-				if (line && Array.isArray(line[2]) && line[2].indexOf(favouritesPanel.ROUTE_CLASS) < 0) { line[2].push(favouritesPanel.ROUTE_CLASS); }
-			});
-			const row = info.nodeIndex === null || info.nodeIndex === undefined ? null : rows[info.nodeIndex];
-			if (row && row.c && row.c[0]) {
-				row.c[0].f = favouritesPanel.markNode(row.c[0].f, info.kind === "exit" ? favouritesPanel.EXIT_CLASS : favouritesPanel.NODE_CLASS);
-			}
+		if (!(routeFavorites || []).length) { return routes; }
+		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems);
+		routeFavorites.forEach(function(f) {
+			const info = { mode: f.mode, shortest: favouritesPanel.plan(ctx, f.systemID, "shortest"), safe: favouritesPanel.plan(ctx, f.systemID, "safe") };
+			routes[f.systemID] = info;
+			favouritesPanel.highlight(ctx, f.systemID, info[f.mode === "safe" ? "safe" : "shortest"]);
 		});
 		return routes;
 	},
 
-	/** Short text and tooltip for a favourite's route state */
-	routeSummary: function(info, favName, exitName) {
-		if (!info) { return { text: "", title: "Route: highlight the quickest way there from your location" }; }
-		if (info.status === "here") { return { text: "here", title: "You are in " + favName }; }
-		if (info.status === "no-location") { return { text: "", title: "No route: your location isn't on the chain map" }; }
-		if (info.status !== "ok") { return { text: "", title: "No route: no k-space exit on the chain with a gate route to " + favName }; }
+	/** Short breakdown of a plan, e.g. "4g → 2wh → 6g" or "direct 9g" */
+	planText: function(plan) {
+		if (!plan) { return ""; }
+		if (plan.status === "here") { return "here"; }
+		if (plan.status !== "ok") { return ""; }
+		if (plan.kind === "direct") { return "direct " + plan.gatesIn + "g"; }
+		const parts = [];
+		if (plan.gatesIn) { parts.push(plan.gatesIn + "g"); }
+		parts.push(plan.holes + "wh");
+		if (plan.gatesOut) { parts.push(plan.gatesOut + "g"); }
+		return parts.join(" → ");
+	},
+
+	/** One plan in words. name: function(systemID) -> system name */
+	planDetail: function(plan, favName, name) {
 		const plural = function(n, word) { return n + " " + word + (n === 1 ? "" : "s"); };
-		const text = info.holes + (info.gates ? "+" + info.gates : "") + "j";
-		const title = info.kind === "chain"
-			? plural(info.holes, "wormhole jump") + " to " + favName
-			: plural(info.holes, "wormhole jump") + " to " + exitName + ", then " + plural(info.gates, "gate jump") + " to " + favName;
-		return { text: text, title: title };
+		if (!plan) { return ""; }
+		if (plan.status === "here") { return "you are in " + favName; }
+		if (plan.status === "no-location") {
+			return plan.reason === "untracked" ? "no route: your location isn't known" : "no route: you are in J-space off the chain map";
+		}
+		if (plan.status !== "ok") {
+			return plan.mode === "safe" ? "no high-sec-only route" : "no route from here";
+		}
+		if (plan.kind === "direct") { return "direct: " + plural(plan.gatesIn, "gate jump") + ", no wormholes"; }
+		const steps = [];
+		if (plan.gatesIn) { steps.push(plural(plan.gatesIn, "gate jump") + " to " + name(plan.entrySystemID)); }
+		steps.push(plural(plan.holes, "wormhole jump") + " to " + name(plan.exitSystemID));
+		if (plan.gatesOut) { steps.push(plural(plan.gatesOut, "gate jump") + " to " + favName); }
+		return favouritesPanel.planText(plan) + " (" + steps.join(", ") + ")";
+	},
+
+	/** Text and tooltip for a favourite's route: the selected mode first, the other one too when it differs */
+	routeSummary: function(info, favName, name) {
+		if (!info || !info.mode) { return { text: "", title: "Route: off. Click for the shortest route, again for a high-sec-only (safe) route", ok: false }; }
+		const label = { shortest: "Shortest", safe: "Safe" };
+		const selected = info[info.mode];
+		const other = info[info.mode === "safe" ? "shortest" : "safe"];
+		let title = "Route (" + label[info.mode].toLowerCase() + "): " + favouritesPanel.planDetail(selected, favName, name);
+		if (other && other.status !== "no-location" && favouritesPanel.planText(other) !== favouritesPanel.planText(selected)) {
+			title += " · " + label[other.mode] + ": " + favouritesPanel.planDetail(other, favName, name);
+		}
+		const ok = !!selected && (selected.status === "ok" || selected.status === "here");
+		return { text: favouritesPanel.planText(selected), title: title, ok: ok };
 	}
 };
 
@@ -377,15 +523,28 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					: originalNodes.apply(this, arguments);
 				try {
 					lastTracked = trackedSystem();
-					const routeFavs = on ? fp.routeFavorites(favorites, settings) : [];
+					const routeFavs = on ? fp.routeModes(favorites, settings) : [];
 					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows) : [];
-					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, routeDestinations.jumps);
+					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems);
 				} catch (e) { console.error("Favourites panel: route decorate failed", e); }
 				clearTimeout(renderTimer);
 				renderTimer = setTimeout(render, 0);
 				return result;
 			};
 			chain.nodes.favouritesPanelWrapped = true;
+		}
+
+		// Gate jumps from a system to everywhere (shortest or high-sec only), kept between draws: the gate map
+		// doesn't change, and favourites and the location change rarely
+		let distanceCache = {}, distanceCount = 0;
+		function gateDistances(systemID, safe) {
+			const key = systemID + (safe ? "|safe" : "");
+			if (!distanceCache[key]) {
+				if (++distanceCount > 60) { distanceCache = {}; distanceCount = 1; }
+				const map = (tripwire.map && tripwire.map.shortest) || appData.map.shortest;
+				distanceCache[key] = fp.gateDistances(map, appData.systems, systemID, safe);
+			}
+			return distanceCache[key];
 		}
 
 		// ---- Widget ----
@@ -398,7 +557,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				return "<i class='fav-map disabled' data-icon='eye' title='" + esc("Show on map: only k-space favourites can be drawn on the chain map") + "'></i>";
 			}
 			const title = !globalMapOn()
-				? "Show on map: favourites on the chain map are off (star button in the chain map toolbar). Click to turn them on and show " + system.name
+				? "Show only " + system.name + " on the chain map (favourites on the map are off: this turns on the star button in the chain map toolbar and hides the others)"
 				: "Show on map: " + (flags.map ? "on" : "off") + ". Gate jumps to " + system.name + " from the chain's k-space exits";
 			return "<i class='fav-map" + (flags.map ? " active" : "") + (globalMapOn() ? "" : " fav-map-global-off") + "' data-icon='eye' title='" + esc(title) + "'></i>";
 		}
@@ -408,19 +567,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const system = systemAnalysis.analyse(id);
 			const region = (tripwire.regions && tripwire.regions[system.regionID]) ? tripwire.regions[system.regionID].name : "";
 			const flags = fp.flags(settings, id);
-			const info = flags.route ? fp.lastRoutes[id] : null;
-			const exitName = info && info.exitSystemID ? systemName(info.exitSystemID) : "";
-			const summary = flags.route ? fp.routeSummary(info, system.name, exitName) : fp.routeSummary(null);
-			const routeState = !flags.route ? "" : (info && (info.status === "ok" || info.status === "here") ? " fav-route-ok" : " fav-route-none");
+			const info = flags.route ? Object.assign({}, fp.lastRoutes[id] || {}, { mode: flags.route }) : null;
+			const summary = fp.routeSummary(info, system.name, systemName);
+			const routeState = !flags.route ? "" : (" fav-route-" + flags.route + (summary.ok ? " fav-route-ok" : " fav-route-none"));
+			const next = { shortest: "click for the safe (high-sec only) route", safe: "click to turn the route off" }[flags.route] || "";
+			const routeTitle = summary.title + (next ? " (" + next + ")" : "");
 			return "<li class='fav-row' data-systemid='" + id + "'>"
 				+ "<span class='fav-handle' title='Drag to reorder'>&#8942;&#8942;</span>"
 				+ "<span class='fav-class " + esc(system.systemTypeClass) + "'>" + esc(system.systemTypeName) + "</span>"
 				+ "<a class='fav-name " + esc(system.systemTypeClass) + "' href='.?system=" + esc(system.name) + "' title='View " + esc(system.name) + "'>" + esc(system.name) + "</a>"
 				+ "<span class='fav-region' title='" + esc(region) + "'>" + esc(region) + "</span>"
 				+ "<span class='fav-tools'>"
-				+ "<span class='fav-route-text' title='" + esc(summary.title) + "'>" + esc(flags.route ? summary.text : "") + "</span>"
+				+ "<span class='fav-route-text' title='" + esc(summary.title) + "'>"
+				+ (flags.route === "safe" ? "<span class='fav-route-mode' title='High-sec only'>safe</span>" : "")
+				+ esc(flags.route ? summary.text : "") + "</span>"
 				+ mapIconHtml(id, system, flags)
-				+ "<i class='fav-route" + (flags.route ? " active" : "") + routeState + "' data-icon='connection' title='" + esc("Route: " + (flags.route ? "on. " + summary.title : "off. Highlight the quickest way there from your location")) + "'></i>"
+				+ "<i class='fav-route" + (flags.route ? " active" : "") + routeState + "' data-icon='connection' title='" + esc(routeTitle) + "'></i>"
 				+ "<i class='fav-remove' data-icon='times' title='Remove " + esc(system.name) + " from favourites'></i>"
 				+ "</span>"
 				+ "</li>";
@@ -644,7 +806,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("click", sel + " .fav-route", function(e) {
 				e.preventDefault();
 				const id = $(this).closest(".fav-row").data("systemid");
-				save(null, fp.setFlag(current(), id, "route", !fp.flags(current(), id).route));
+				save(null, fp.setFlag(current(), id, "route", fp.nextRouteMode(fp.flags(current(), id).route)));
 			});
 			$doc.on("click", sel + " .fav-map", function(e) {
 				e.preventDefault();
@@ -654,9 +816,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					save(null, fp.setFlag(current(), id, "map", !fp.flags(current(), id).map));
 					return;
 				}
-				// Favourites on the map are off: show this one, then switch them on through the toolbar
-				// button's own handler (it redraws and saves options, flags included)
-				const s = fp.cleanFlags(fp.setFlag(current(), id, "map", true), options.favorites);
+				// Favourites on the map are off: show only this one (not every favourite at once), then switch
+				// them on through the toolbar button's own handler (it redraws and saves options, flags included)
+				const s = fp.cleanFlags(fp.showOnly(current(), options.favorites, id, tripwire.systems), options.favorites);
 				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
 				$("#show-favorite").trigger("click");
 				render();
@@ -664,11 +826,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// The toolbar button changes how the eyes look
 			$("#show-favorite").on("click", function() { setTimeout(render, 0); });
 
-			// The info panel's star (upstream handler runs first, as it was bound first)
+			// The info panel's star. Un-favouriting: drop that system's flags in the capture phase, i.e. before
+			// upstream's handler removes it and saves options, so the cleaned flags are saved with it (one save).
+			const star = document.getElementById("system-favorite");
+			if (star) {
+				document.addEventListener("click", function(e) {
+					if (e.target !== star || !$(star).hasClass("active") || typeof viewingSystemID === "undefined") { return; }
+					const s = fp.dropFlags(current(), viewingSystemID);
+					options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
+				}, true);
+			}
+			// After upstream's handler (bound first): refresh the list. A click triggered from script runs jQuery
+			// handlers before the capture listener, so if flags are still stale here, save them now.
 			$("#system-favorite").on("click", function() {
-				// Upstream already saved and redrew: just drop flags of a removed favourite and refresh the list
+				const before = JSON.stringify(current().systems);
 				const s = fp.cleanFlags(current(), options.favorites);
-				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
+				if (JSON.stringify(s.systems) !== before) {
+					options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { systems: s.systems });
+					options.save();
+				}
 				syncStar();
 				render();
 			});

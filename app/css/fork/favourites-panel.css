@@ -175,7 +175,50 @@
 	box-shadow: 0 0 0 1px #ffffff, 0 0 8px 2px rgba(47, 139, 255, 0.8) !important;
 }
 
-/* The exit a route leaves the chain by, when no calculated node is drawn */
+/* Where a route enters or leaves the chain over gates (when no calculated node is drawn) */
 #chainMap div.node.favourite-route-exit {
 	box-shadow: 0 0 0 1px #2f8bff, 0 0 6px 1px rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Safe (high-sec only) route: solid light-blue line with a white glow, white-ringed nodes */
+.temp.favourite-safe-route {
+	border-color: #8cc8ff;
+	border-style: solid;
+	border-width: 5px;
+	color: #ffffff;
+}
+
+#chainMap td.favourite-safe-route,
+#chainMap td.left-favourite-safe-route,
+#chainMap td.right-favourite-safe-route,
+#chainMap td.bottom-favourite-safe-route {
+	border-color: #2f8bff !important;
+	border-style: solid !important;
+}
+
+#chainMap div.node.favourite-safe-node {
+	border-color: #ffffff !important;
+	box-shadow: 0 0 0 1px #2f8bff, 0 0 8px 2px rgba(255, 255, 255, 0.7) !important;
+}
+
+#chainMap div.node.favourite-safe-exit {
+	box-shadow: 0 0 0 1px #ffffff, 0 0 6px 1px rgba(47, 139, 255, 0.7) !important;
+}
+
+/* Panel: safe route marker and icon */
+#favouritesWidget .fav-route-mode {
+	display: inline-block;
+	margin-right: 4px;
+	padding: 0 3px;
+	border: 1px solid #8fbfff;
+	border-radius: 2px;
+	color: #fff;
+	background: #1f5fbf;
+	font-size: 0.85em;
+	line-height: 1.2;
+}
+
+#favouritesWidget .fav-tools i.fav-route.active.fav-route-safe {
+	color: #ffffff;
+	text-shadow: 0 0 4px #2f8bff, 0 0 2px #2f8bff;
 }
