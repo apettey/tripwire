@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 42,
+      "date": "2026-10-10",
+      "title": "Smaller return bookmark pop-up, only for the first pilot through",
+      "description": "The return bookmark pop-up (e.g. <C) after jumping out through a named hole is now a single small line at the top right, under the top bar, so it no longer covers the map. Click it to copy.\n\nIt now only appears for the first pilot through. Once the far-side signature has an ID or name, or someone else has already jumped the hole, it stays quiet. To get it after every jump, or turn it off, use Settings > General Preferences > Return bookmark pop-up.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-42-jump-return-compact.png",
+          "caption": "The compact return bookmark pop-up, top right"
+        }
+      ]
+    },
+    {
       "pr": 33,
       "date": "2026-10-10",
       "title": "Clearing the rally point strikes through its Discord message",
