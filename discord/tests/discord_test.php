@@ -142,7 +142,8 @@ $row = ['wormholeID' => 7, 'type' => 'N110', 'parent' => 'initial',
 check('candidates: k-space side, hole in the J-space system', discord_kspace_candidates($row),
     [['systemID' => 30000142, 'sigRowID' => 2, 'via' => 31000123, 'viaSig' => 'ABC-123', 'hole' => 'N110', 'mapper' => 'Jumper', 'label' => 'AB']]);
 check('candidates: no label when the k-space side is named (a hole out) or the far side is a return bookmark',
-    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '<A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB']);
+    [discord_kspace_candidates(['bName' => 'C'] + $row)[0]['label'], discord_kspace_candidates(['aName' => '!A'] + $row)[0]['label'], discord_kspace_candidates(['bName' => '!A'] + $row)[0]['label'],
+     discord_kspace_candidates(['bName' => '<A'] + $row)[0]['label']], ['', '', 'AB', 'AB']);
 check('candidates: no label without a name on the far side', discord_kspace_candidates(['aName' => null] + $row)[0]['label'], '');
 check('candidates: K162 side', discord_kspace_candidates(['parent' => 'secondary'] + $row)[0]['hole'], 'K162');
 check('candidates: unknown far side', discord_kspace_candidates(['bSys' => 3] + $row), []);
@@ -594,7 +595,7 @@ $hole = function ($id, $from, $fromName, $to, $toName, $mask = '98000001.2', $sw
 // Home 31000001 -A-> 31000002 -AB-> 31000003 -ABC-> 30000142 (Jita); a loop: 31000001 -B-> 31000005 -BAA-> 31000003
 $hole(1, 31000001, 'A', 31000002, '');
 $hole(2, 31000002, 'AB', 31000003, '', '98000001.2', true);         // stored with the far side as secondary
-$hole(3, 31000003, ' ABC  ', 30000142, '<AB');                       // return bookmark on the near side
+$hole(3, 31000003, ' ABC  ', 30000142, '!AB');                       // return bookmark on the near side
 $hole(4, 31000001, 'B', 31000005, null);
 $hole(5, 31000005, 'BAA', 31000003, '');
 $hole(6, 31000003, 'X', 31000009, '', '98000002.2');                 // another mask's chain
@@ -615,6 +616,11 @@ check('chain label pick: a hole out (named near side) and a hole to itself are n
 check('chain label pick: a far name without a name token (return bookmark "<H", "?") is not a label', discord_chain_label_pick([
     ['wormholeID' => 1, 'nearName' => '', 'farName' => '<H', 'farSystem' => 1], ['wormholeID' => 2, 'nearName' => '', 'farName' => '?', 'farSystem' => 2],
     ['wormholeID' => 3, 'nearName' => '', 'farName' => 'AB - drifter', 'farSystem' => 4]], 3), 'AB - drifter');
+check('chain label pick: a near side named as a return bookmark, "!" or the older "<", still leads in', [discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => '!AB', 'farName' => 'AB', 'farSystem' => 1]], 3), discord_chain_label_pick([
+    ['wormholeID' => 1, 'nearName' => ' <AB', 'farName' => 'AB', 'farSystem' => 1]], 3)], ['AB', 'AB']);
+check('chain label pick: a far return bookmark "!H" is not a label', discord_chain_label_pick([['wormholeID' => 1, 'nearName' => '', 'farName' => '!H', 'farSystem' => 1]], 3), '');
+check('return bookmark names', array_map('discord_is_return_bookmark', ['!AB', '<AB', ' !C ', 'AB', '', '?', null]), [true, true, true, false, false, false, false]);
 check('chain label: one line, at most 100 characters', [discord_chain_label_clean("A\nB"), mb_strlen(discord_chain_label_clean(str_repeat('x', 300)))], ['A B', 100]);
 
 // --- rally messages with the chain label ---

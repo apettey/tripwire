@@ -7,6 +7,16 @@ const holeNaming = {
 	MEDIUM_DIGITS: "6789",
 	SMALL_MAX_JUMP: 5000000,
 	MEDIUM_MAX_JUMP: 62000000,
+	// Return bookmarks (the far side of a named hole, pointing back home) are "!" + the hole's name token, e.g. "!AB".
+	// Earlier versions wrote "<AB"; both are still recognised (discord/chain_label.php mirrors this).
+	RETURN_PREFIX: "!",
+	RETURN_PREFIXES: "!<",
+
+	/** True if a sig name is a return bookmark ("!AB", or the older "<AB"). */
+	isReturnBookmark: function(name) {
+		const s = String(name === undefined || name === null ? "" : name).trim();
+		return s !== "" && holeNaming.RETURN_PREFIXES.indexOf(s.charAt(0)) !== -1;
+	},
 
 	/** The leading name token of a sig name, e.g. "BA - DRIFTER" -> "BA". Empty string if none. */
 	leadingToken: function(name) {
@@ -84,7 +94,7 @@ const holeNaming = {
 
 	/** Leading name token of the hole leading into a system, derived from the wormholes themselves (for when
 		the chain map isn't rooted at home). A wormhole touching the system is an incoming hole if its far-side
-		sig has a name token and its near-side sig is unnamed or a return bookmark ("<C"); a named near side
+		sig has a name token and its near-side sig is unnamed or a return bookmark ("!C", or "<C"); a named near side
 		(e.g. "CA") is an outbound hole of this system. With several candidates the shortest token (closest to
 		home) wins, ties go to the lowest wormhole id. Returns undefined if there is none. */
 	incomingFromWormholes: function(systemID, wormholes, signatures) {
@@ -101,7 +111,7 @@ const holeNaming = {
 			const token = holeNaming.leadingToken(far.name);
 			if (!token) { return; }
 			const nearName = String(near.name === undefined || near.name === null ? "" : near.name).trim();
-			if (nearName !== "" && nearName.charAt(0) !== "<") { return; }
+			if (nearName !== "" && !holeNaming.isReturnBookmark(nearName)) { return; }
 			const id = Number(wormhole.id !== undefined ? wormhole.id : key);
 			if (!best || token.length < best.token.length || (token.length === best.token.length && id < best.id)) {
 				best = { token: token, id: id };
