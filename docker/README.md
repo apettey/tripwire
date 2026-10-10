@@ -276,7 +276,7 @@ was opened changes nothing until the next run, so disable auto-merge on that inf
 Re-runs are safe: the PR for that version is updated, not duplicated; `bump/tripwire-X.Y.Z` is reused
 only if it already has this pin on top of infra's current `main`, otherwise it is replaced (infra keeps
 merged branches, so old ones exist), and a branch with human commits is never overwritten (a new
-`bump/tripwire-X.Y.Z-run<id>` branch is used instead). Other open `bump/tripwire-*` PRs are closed as
+`bump/tripwire-X.Y.Z-run<id>-<attempt>` branch is used instead). Other open `bump/tripwire-*` PRs are closed as
 superseded only when all their commits were made by the workflow (a `Generated-by: tripwire
 infra-deploy` trailer); ones with human commits stay open and are linked in the new PR. Nothing happens
 when infra already runs that version. Hand-made bumps in infra use another prefix
