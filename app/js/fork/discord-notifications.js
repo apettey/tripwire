@@ -17,7 +17,7 @@ const discordNotifications = {
 		chainKill: "A kill in a wormhole, low-sec or null-sec system on this mask's chain map (high-sec systems only if you tick them below).",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
-		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). Changes within 30 seconds edit the last message instead of posting a new one. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings)."
+		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). A move within 30 seconds edits the message; a later move posts a new one (with the ping) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings)."
 	},
 	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
@@ -186,12 +186,21 @@ const discordNotifications = {
 		return { settings: settings, errors: errors };
 	},
 
+	/** A Discord timestamp (<t:unix:t>) as this browser shows times: hours and minutes in its own time zone */
+	timeText: function(unix) {
+		const d = new Date(unix * 1000);
+		return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+	},
+
 	/** The server's preview (a webhook payload) as safe HTML, roughly how Discord shows it */
 	previewHtml: function(payload) {
-		// Discord markdown, roughly: **bold** and backslash escapes; everything HTML-escaped first
+		// Discord markdown, roughly: **bold**, ~~strike~~, <t:unix:t> timestamps (in this browser's time zone, as Discord
+		// shows them to each reader) and backslash escapes; everything HTML-escaped first
 		const esc = function(text) {
 			return discordNotifications.escape(text)
+				.replace(/&lt;t:(\d{1,12}):[tTdDfFR]&gt;/g, function(m, unix) { return discordNotifications.escape(discordNotifications.timeText(Number(unix))); })
 				.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+				.replace(/~~(.+?)~~/g, "<s>$1</s>")
 				.replace(/\\([^A-Za-z0-9\s])/g, "$1");
 		};
 		if (!payload) { return ""; }
@@ -212,6 +221,17 @@ const discordNotifications = {
 			+ "</div>" : "")
 			+ "<div class='dn-preview-pings'>Pings: " + (pings.length ? esc(pings.join(", ")) : "nobody") + "</div>"
 			+ "</div>";
+	},
+
+	/** The preview answer: the message, and for the rally point what it becomes when cleared or moved (edits) */
+	previewsHtml: function(data) {
+		const dn = discordNotifications;
+		const titled = function(title, payload) {
+			return payload ? "<div class='dn-small'>" + dn.escape(title) + "</div>" + dn.previewHtml(payload) : "";
+		};
+		return dn.previewHtml(data.preview)
+			+ titled("When it is cleared, the message becomes:", data.previewClear)
+			+ titled("When it moves after 30 seconds, a new message is posted and the old one becomes:", data.previewMoved);
 	},
 
 	// ---- Server ----
@@ -275,7 +295,7 @@ const discordNotifications = {
 			if (kind === "rally") {
 				templateLabel = "Set or moved:";
 				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
-						+ "<div class='dn-small'>The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the rally was on, when it is known; otherwise only <code>{pings}</code> <code>{mask}</code> <code>{who}</code> are filled.</div></td></tr>";
+						+ "<div class='dn-small'>Replaces the rally message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the rally was on, when it is known. Nothing is sent when there is no rally message to edit.</div></td></tr>";
 				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
 			} else if (kind === "kspace") {
 				const chips = (t.pingSystems || []).map(function(id) {
@@ -314,7 +334,7 @@ const discordNotifications = {
 		};
 		const outbox = state.outbox || {};
 		const failures = (outbox.failures || []).map(function(f) {
-			return "<li>" + esc(dn.LABELS[f.kind] || f.kind) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
+			return "<li>" + esc(dn.LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
 		}).join("");
 
 		return "<div class='dn-page'>"
@@ -514,7 +534,7 @@ const discordNotifications = {
 			const $type = $(this).closest(".dn-type");
 			const $preview = $type.find(".dn-preview").removeClass("dn-bad").text("...");
 			dn.request("preview", { kind: $type.attr("data-kind"), template: $type.find(".dn-template").val(), templateClear: $type.find(".dn-templateClear").val(), ping: $type.find(".dn-ping").val() })
-				.done(function(data) { $preview.html(dn.previewHtml(data.preview) + (data.previewClear ? dn.previewHtml(data.previewClear) : "")); })
+				.done(function(data) { $preview.html(dn.previewsHtml(data)); })
 				.fail(fail($preview));
 		});
 		$doc.on("click", sel + " .dn-save", function(e) {

@@ -13,6 +13,7 @@
 //                                     404 Unknown Message (10008) for a message deleted with GET /delete/<messageID>
 //   GET  /delete/<messageID>          pretend that message was deleted in Discord
 //   GET  /messages                    the last 50 requests (JSON, newest first)
+//   GET  /channel                     the channel as a reader sees it: every message posted, as last edited, oldest first
 //   GET  /reset                       forget everything
 //
 //   php -S 0.0.0.0:8080 docker/dev/discord-mock.php
@@ -41,6 +42,14 @@ function mock_state($dir, $key, callable $update) {
 if ($path === '/messages') {
     $lines = is_file($log) ? array_slice(file($log, FILE_IGNORE_NEW_LINES), -50) : [];
     echo json_encode(array_reverse(array_map('json_decode', $lines)), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return;
+}
+if ($path === '/channel') {
+    $state = is_file($dir . '/state.json') ? (json_decode(file_get_contents($dir . '/state.json'), true) ?: []) : [];
+    $messages = [];
+    foreach ($state as $key => $value) if (strpos($key, 'msg:') === 0) $messages[] = $value;
+    usort($messages, function ($a, $b) { return strcmp($a['id'], $b['id']); });
+    echo json_encode($messages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     return;
 }
 if ($path === '/reset') {
@@ -88,7 +97,17 @@ $remaining = mock_state($dir, 'bucket:' . $id, function ($b) {
 $headers += ['X-RateLimit-Limit' => '5', 'X-RateLimit-Remaining' => (string) $remaining[0],
     'X-RateLimit-Reset-After' => number_format($remaining[1], 3, '.', ''), 'X-RateLimit-Bucket' => 'mock-' . $id];
 
-file_put_contents($log, json_encode(['at' => gmdate('Y-m-d H:i:s'), 'method' => $method, 'message' => isset($m[3]) ? $m[3] : null, 'webhook' => $id, 'status' => $status, 'query' => $_SERVER['QUERY_STRING'] ?? '',
+// The channel as a reader sees it (GET /channel): content as last edited, pings of the post only (an edit never pings)
+if ($status === 200) {
+    mock_state($dir, 'msg:' . $messageID, function ($old) use ($body, $method, $messageID) {
+        $content = array_key_exists('content', $body) ? $body['content'] : ($old['content'] ?? '');
+        $msg = $old ? ['edited' => true] + $old : ['id' => $messageID, 'edited' => false, 'pinged' => $body['allowed_mentions'] ?? null];
+        $msg['content'] = $content;
+        if ($method === 'PATCH') $msg['editAllowedMentions'] = $body['allowed_mentions'] ?? null;
+        return [$msg, null];
+    });
+}
+file_put_contents($log, json_encode(['at' => gmdate('Y-m-d H:i:s'), 'method' => $method, 'message' => $messageID, 'webhook' => $id, 'status' => $status, 'query' => $_SERVER['QUERY_STRING'] ?? '',
     'userAgent' => $_SERVER['HTTP_USER_AGENT'] ?? '', 'body' => $body], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
 http_response_code($status);
 foreach ($headers as $name => $value) header("$name: $value");

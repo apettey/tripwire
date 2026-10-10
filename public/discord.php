@@ -100,6 +100,11 @@ function discord_sample_label($systemID) {
 	return 'AABCA';
 }
 
+/** Sample chain label of the system a sample rally moves to */
+function discord_sample_label_moved($systemID) {
+	return 'AB';
+}
+
 /** Sample message contexts for the preview */
 function discord_sample_context($kind, $template, $ping, $maskName) {
 	$base = array('kind' => $kind, 'template' => $template, 'ping' => $ping, 'mask' => $maskName, 'time' => time());
@@ -236,9 +241,14 @@ try {
 				// The rally type has a second message, for when the rally is cleared
 				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
 				if ($templateClear === '') $templateClear = $defaults['types']['rally']['templateClear'];
-				// Built like a real clear of the sample rally (the system it was on is known, so {was} is filled)
-				$preview['previewClear'] = discord_payload(discord_rally_context(array('action' => 'clear', 'who' => 'Example Pilot',
+				// Built like a real clear of the sample rally: the edit of its message (the system it was on is known, so
+				// {was} is filled)
+				$preview['previewClear'] = discord_payload(array('previous' => $preview['preview']['content'])
+					+ discord_rally_context(array('action' => 'clear', 'who' => 'Other Pilot',
 					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null, 'discord_sample_label'));
+				// And moved after 30 s: the old message is edited like this (fixed text), a new one is posted
+				$preview['previewMoved'] = discord_payload(array('moved' => true, 'previous' => $preview['preview']['content'])
+					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot'), 'discord_sample_label_moved'));
 			}
 			echo json_encode($preview);
 			exit();

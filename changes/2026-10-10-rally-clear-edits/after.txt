@@ -1,0 +1,63 @@
+## Mask Admin > Discord (outbox)
+
+### set, clear within 30 s
+- ~~Tripwire rally point from *Commander Tyrael*: **J163701** (C5, E\-R00025)~~
+  Cleared by *Commander Tyrael* at <t:…:t>  (edited)  [pinged]
+
+### set, clear after 30 s (55 min)
+- ~~Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)~~
+  Cleared by *Aashai Modor* at <t:…:t>  (edited)  [pinged]
+
+### set, move within 30 s
+- @here Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\-R00024)
+  <http://localhost:8097/?system=J152820>  (edited)  [pinged]
+
+### set, move after 30 s
+- ~~Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)~~
+  Moved to **J152820** by *Aashai Modor* at <t:…:t>  (edited)  [pinged]
+- @here Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\-R00024)
+  <http://localhost:8097/?system=J152820>  [pinged]
+
+### ... then clear
+- ~~Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)~~
+  Moved to **J152820** by *Aashai Modor* at <t:…:t>  (edited)  [pinged]
+- ~~Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\-R00024)~~
+  Cleared by *Kytus Bos* at <t:…:t>  (edited)  [pinged]
+
+### clear with no rally message (never posted)
+
+### production sequence: Tyrael set + clear in 30 s, Kytus set, Aashai clear 55 min later
+- ~~Tripwire rally point from *Commander Tyrael*: **J163701** (C5, E\-R00025)~~
+  Cleared by *Commander Tyrael* at <t:…:t>  (edited)  [pinged]
+- ~~Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\-R00025)~~
+  Cleared by *Aashai Modor* at <t:…:t>  (edited)  [pinged]
+
+## DISCORD_WEB_HOOK (legacy)
+
+### legacy: set, clear within 30 s
+- ~~Tripwire rally point from *Commander Tyrael*: **J163701 (C5, E-R00025)**~~
+  Cleared by *Commander Tyrael* at <t:…:t>  (edited)
+
+### legacy: set, clear after 30 s
+- ~~Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**~~
+  Cleared by *Aashai Modor* at <t:…:t>  (edited)
+
+### legacy: set, move within 30 s
+- Tripwire rally point from *Aashai Modor*: **J152820 (C5, E-R00024)**  (edited)
+
+### legacy: set, move after 30 s
+- ~~Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**~~
+  Moved to **J152820** by *Aashai Modor* at <t:…:t>  (edited)
+- Tripwire rally point from *Aashai Modor*: **J152820 (C5, E-R00024)**
+rally discord: POST failed: file_get_contents(<webhook> Failed to open stream: HTTP request failed! HTTP/1.1 500 Internal Server Error
+
+
+### legacy: move whose post failed, then clear
+- ~~Tripwire rally point from *Kytus Bos*: **J163701 (C5, E-R00025)**~~
+  Cleared by *Aashai Modor* at <t:…:t>  (edited)
+
+### legacy: clear with no rally message
+rally discord: PATCH failed: file_get_contents(<webhook> Failed to open stream: HTTP request failed! HTTP/1.1 404 Not Found
+
+
+29 checks passed

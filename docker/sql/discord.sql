@@ -56,10 +56,12 @@ CREATE TABLE IF NOT EXISTS `discord_sent` (
   KEY `createdAt` (`createdAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE IF NOT EXISTS `discord_rally` (
+-- The live rally point message per mask (replaces discord_rally of 1.15-1.17, which is no longer read)
+CREATE TABLE IF NOT EXISTS `discord_rally_message` (
   `maskID` decimal(12,1) NOT NULL,
   `webhookID` int unsigned NOT NULL,
   `messageID` varchar(32) NOT NULL,
+  `content` text NOT NULL,
   `postedAt` datetime NOT NULL,
   PRIMARY KEY (`maskID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

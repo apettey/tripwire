@@ -30,6 +30,8 @@ function discord_placeholders() {
         'corpKill'  => $common + $kill,
         'corpLoss'  => $common + $kill,
         'rally'     => $common + $label + ['who' => 'who set, moved or cleared it',
+            'time' => 'when it was set, moved or cleared, shown in each reader\'s own time zone (Discord timestamp)',
+            'rally' => 'cleared text: the rally message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {rally})',
             'was' => 'cleared text: " (was on AABCA · J123456)" when the system it was on is known, else empty'],
     ];
 }
@@ -116,9 +118,10 @@ function discord_default_templates() {
         'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK. {zkill}',
         'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}',
         'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}',
-        // Rally point (discord/rally.php): set or moved, and cleared. Same wording as the first version (public/rally.php)
+        // Rally point (discord/rally.php): set or moved, and cleared. The cleared text replaces the rally message (an edit,
+        // nobody pinged): {rally} is that message struck through
         'rally'      => "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}",
-        'rallyClear' => '{pings} Tripwire rally point cleared by *{who}*{was}',
+        'rallyClear' => "{rally}\nCleared by *{who}* at {time}",
     ];
 }
 
@@ -128,7 +131,8 @@ function discord_retired_templates() {
     return [
         'rally' => [
             'template' => ["{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}"],
-            'templateClear' => ['{pings} Tripwire rally point cleared by *{who}*'],
+            // 1.15 (#30) and 1.17 (#31): a new "cleared" message, now an edit of the rally message
+            'templateClear' => ['{pings} Tripwire rally point cleared by *{who}*', '{pings} Tripwire rally point cleared by *{who}*{was}'],
         ],
     ];
 }
@@ -138,6 +142,32 @@ function discord_template_upgrade($kind, $field, $template, $default = null) {
     $template = (string) $template;
     if (!in_array(trim(str_replace("\r", '', $template)), discord_retired_templates()[$kind][$field] ?? [], true)) return $template;
     return $default ?? discord_default_templates()[$field === 'templateClear' ? $kind . 'Clear' : $kind];
+}
+
+/** A Discord timestamp: each reader's client shows it in their own time zone ('t': short time, e.g. 19:08) */
+function discord_timestamp($unix, $style = 't') {
+    return '<t:' . (int) $unix . ':' . (preg_match('/^[tTdDfFR]$/', $style) ? $style : 't') . '>';
+}
+
+/** $text without the mentions an admin can write (<@&role>, <@user>, @here, @everyone): game data never has them
+    (discord_escape), so only the admin's own pings are removed. Spaces they leave are collapsed per line. */
+function discord_strip_mentions($text) {
+    $text = preg_replace(['/<@[&!]?\d{17,21}>/', '/(?<![\w@.])@(everyone|here)(?![\w@]|\.\w)/'], '', (string) $text);
+    return implode("\n", array_map(function ($line) { return trim(preg_replace('/[ \t]{2,}/', ' ', $line)); }, explode("\n", $text)));
+}
+
+/**
+ * A rally message as it was posted, struck through for the edit that ends it: without the pings (nobody is pinged
+ * again, and no live-looking @here stays), without lines that are only a link (the {map} line of the default text), each
+ * remaining line struck on its own (Discord's ~~ does not span lines).
+ */
+function discord_rally_strike($content) {
+    $lines = [];
+    foreach (explode("\n", discord_strip_mentions($content)) as $line) {
+        if ($line === '' || preg_match('~^<https?://[^\s<>]+>$~', $line)) continue;
+        $lines[] = '~~' . $line . '~~';
+    }
+    return implode("\n", $lines);
 }
 
 /** "AABCA · J123456" from a chain label and a system name; only the system without a label */
@@ -203,21 +233,43 @@ function discord_payload(array $ctx) {
         ];
         if (!empty($ctx['map'])) $embed['url'] = $ctx['map'];
     } elseif ($kind === 'rally') {
-        // Short text only, no embed (the message is edited in place while the rally moves, see discord/rally.php)
-        $template = !empty($ctx['cleared']) ? ($ctx['templateClear'] ?? '') : ($ctx['template'] ?? '');
+        // Short text only, no embed (the message is edited in place while the rally moves, see discord/rally.php).
+        // cleared / moved: the edit that ends the rally message ($ctx['previous'], its content as last posted): struck
+        // through, then who cleared it / where it moved. Such an edit pings nobody: no pings in it, no allowed mentions.
+        $cleared = !empty($ctx['cleared']);
+        $ending = $cleared || !empty($ctx['moved']);
+        $template = $cleared ? ($ctx['templateClear'] ?? '') : ($ctx['template'] ?? '');
         $values['who'] = $ctx['who'] ?? 'someone';
         $values['label'] = $ctx['label'] ?? '';
         $values['labelSystem'] = discord_label_system($values['label'], $values['system']);
         // Cleared: the system it was on, when known. Built from escaped parts (the parentheses stay plain)
-        $values['was'] = !empty($ctx['cleared']) && $values['labelSystem'] !== '' ? ' (was on ' . discord_escape($values['labelSystem']) . ')' : '';
-        $raw[] = 'was';
-        $content = discord_render($template, $values, $raw);
-        if ($content === '') $content = discord_render(discord_default_templates()[!empty($ctx['cleared']) ? 'rallyClear' : 'rally'], $values, $raw);
-        return [
-            'username' => 'Tripwire',
-            'content' => $content,
-            'allowed_mentions' => discord_allowed_mentions($template, $ctx['ping'] ?? ''),
-        ];
+        $values['was'] = $cleared && $values['labelSystem'] !== '' ? ' (was on ' . discord_escape($values['labelSystem']) . ')' : '';
+        $values['time'] = discord_timestamp($ctx['time'] ?? time());
+        $struck = $ending ? discord_rally_strike($ctx['previous'] ?? '') : '';
+        // {rally} goes in last (a marker until then), so a long rally text is what gets cut, never the who / when
+        $marker = $ending ? '{rally' . bin2hex(random_bytes(6)) . '}' : '';
+        $values['rally'] = $cleared ? $marker : '';
+        if ($ending) $values['pings'] = '';
+        array_push($raw, 'was', 'time', 'rally');
+        if (!empty($ctx['moved']) && !$cleared) {
+            $content = discord_render("Moved to **{labelSystem}** by *{who}* at {time}", $values, $raw);
+        } else {
+            $content = discord_render($template, $values, $raw);
+            if ($content === '' || $content === $marker) {
+                $template = discord_default_templates()[$cleared ? 'rallyClear' : 'rally'];
+                $content = discord_render($template, $values, $raw);
+            }
+        }
+        if (!$ending) {
+            return ['username' => 'Tripwire', 'content' => $content, 'allowed_mentions' => discord_allowed_mentions($template, $ctx['ping'] ?? '')];
+        }
+        // A cleared text without {rally} (and the moved line) still ends the rally message: the struck message comes first
+        $content = trim(discord_strip_mentions($content));
+        if (strpos($content, $marker) === false) $content = $marker . "\n" . $content;
+        $room = DISCORD_CONTENT_MAX - (mb_strlen($content) - mb_strlen($marker));
+        if (mb_strlen($struck) > $room) $struck = $room > 6 ? discord_truncate($struck, $room - 2) . '~~' : '';
+        $content = trim(str_replace($marker, $struck, $content));
+        return ['content' => discord_truncate($content, DISCORD_CONTENT_MAX), 'allowed_mentions' => ['parse' => []]];
     } elseif ($kind === 'test') {
         $embed += ['title' => 'Tripwire test message', 'description' => discord_escape('Webhook "' . ($ctx['webhook'] ?? '') . '" works.')];
     } else {

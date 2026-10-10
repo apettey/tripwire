@@ -64,6 +64,16 @@ check('hostile label when cleared', strpos(rally_discord_payload('clear', 'A', n
 check('chain label helper without a database', rally_discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
 check('json has allowed_mentions', json_encode($set['allowed_mentions']), '{"parse":[]}');
 
+// --- rally_discord_end_payload: the edit that ends a rally message (cleared / moved), never a new message ---
+$posted = rally_discord_payload('set', 'Kytus Bos', 'J163701 (C5, E-R00025)', 'J163701', 'https://tw.example', 'AABCA');
+check('end: cleared', rally_discord_end_payload($posted['content'], 'clear', 'Aashai Modor', 1760123280),
+	array('content' => "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701 (C5, E-R00025)**~~\nCleared by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => array('parse' => array())));
+check('end: moved', rally_discord_end_payload($posted['content'], 'moved', 'Aashai Modor', 1760123280, 'J170122', 'AB')['content'],
+	"~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701 (C5, E-R00025)**~~\nMoved to **AB · J170122** by *Aashai Modor* at <t:1760123280:t>");
+check('end: cleared by someone else', rally_discord_end_payload('Rally', 'clear', null, 5)['content'], "~~Rally~~\nCleared by *someone* at <t:5:t>");
+check('end: hostile name cannot ping or format', rally_discord_end_payload('Rally', 'clear', "@here <@&1> *x*", 5)['content'], "~~Rally~~\nCleared by *@{$zw}here @{$zw}&1 \\*x\\** at <t:5:t>");
+check('end: no earlier text', rally_discord_end_payload('', 'clear', 'A', 5)['content'], 'Cleared by *A* at <t:5:t>');
+
 // --- rally_discord_decision (debounce, 30 s window) ---
 check('first post', rally_discord_decision(null), 'post');
 check('old post', rally_discord_decision(['messageID' => '1', 'age' => 31]), 'post');

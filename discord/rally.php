@@ -6,13 +6,21 @@
 //   - renders the rally as it is stored *when the message is sent* (fork_rally), not the change that queued it, so
 //     the last message always shows the final rally even when changes race;
 //   - skips a queued rally message when a newer one of the same mask is queued (the newer one shows the same rally);
-//   - edits the mask's last rally message (PATCH .../messages/<id>) instead of posting a new one while it is less
-//     than DISCORD_RALLY_WINDOW seconds old and went to the same webhook: at most one new message per mask per window.
-//     A deleted message (404 Unknown Message) is forgotten and the change is posted as a new message.
+//   - keeps the mask's live rally message (discord_rally_message: its id and its text as last posted) and
+//       * set / moved less than DISCORD_RALLY_WINDOW seconds after it was posted: edits it (PATCH .../messages/<id>);
+//       * moved later: posts a new message (with the pings, so people notice) and then edits the old one into its text
+//         struck through + "Moved to ..." (a queued 'rallyEdit' row);
+//       * cleared, at any time: edits it into its text struck through + the cleared text. No new message, no ping.
+//         Without a live message (never posted, deleted in Discord, another webhook, the type turned off and on since)
+//         a clear sends nothing;
+//     every edit has empty allowed_mentions, and an edit that ends a message (cleared / moved) has no pings in its
+//     text either (discord_payload; a live edit within the window keeps the post's text, pings included, which
+//     Discord doesn't notify again). A live message deleted in
+//     Discord (404 Unknown Message) is forgotten: a set / move is then posted as a new message, a clear sends nothing.
 // Everything else (rate limits, retries, broken webhooks, circuit breakers, delivery status) is the outbox's.
 //
 // Masks without the type configured keep the first version's behaviour (rally_discord.inc.php): upstream's
-// server-wide DISCORD_WEB_HOOK webhook of the mask, posted directly by public/rally.php.
+// server-wide DISCORD_WEB_HOOK webhook of the mask, posted directly by public/rally.php (same rules, fixed texts).
 
 const DISCORD_RALLY_WINDOW   = 30;   // seconds: changes within it edit the last message
 const DISCORD_PRIORITY_RALLY = 20;   // before kills and k-space (a rally is about now), after test messages
@@ -51,7 +59,7 @@ function discord_rally_data(array $type, $maskName, $action, $who, $now = null, 
     $data = [
         'kind' => 'rally', 'action' => $action === 'clear' ? 'clear' : 'set', 'who' => (string) $who,
         'template' => $type['template'], 'templateClear' => $type['templateClear'], 'ping' => $type['ping'],
-        'mask' => (string) $maskName, 'time' => (int) $now,
+        'mask' => (string) $maskName, 'time' => (int) $now, 'enabledAt' => (int) ($type['enabledAt'] ?? 0),
     ];
     if ($data['action'] === 'clear' && (int) $previousSystemID > 0) $data['systemID'] = (int) $previousSystemID;
     return $data;
@@ -140,7 +148,8 @@ function discord_chain_label_clean($name) {
 function discord_rally_context(array $data, $rally, ?callable $labelOf = null) {
     $base = ['kind' => 'rally', 'template' => discord_template_upgrade('rally', 'template', $data['template'] ?? ''),
         'templateClear' => discord_template_upgrade('rally', 'templateClear', $data['templateClear'] ?? ''),
-        'ping' => $data['ping'] ?? '', 'mask' => $data['mask'] ?? '', 'time' => (int) ($data['time'] ?? time())];
+        'ping' => $data['ping'] ?? '', 'mask' => $data['mask'] ?? '', 'time' => (int) ($data['time'] ?? time()),
+        'enabledAt' => (int) ($data['enabledAt'] ?? 0)];
     if ($rally === false) {
         if (($data['action'] ?? '') !== 'clear') return null;
         $rally = null;
@@ -178,49 +187,91 @@ function discord_rally_superseded(PDO $db, array $row) {
     return (int) $stmt->fetchColumn() > 0;
 }
 
-/** The mask's last rally message: ['webhookID', 'messageID', 'postedAt' (unix)] or null */
+/** The mask's live rally message: ['webhookID', 'messageID', 'content' (as last posted / edited), 'postedAt' (unix)] or null */
 function discord_rally_last(PDO $db, $maskID) {
-    $stmt = $db->prepare('SELECT webhookID, messageID, postedAt FROM discord_rally WHERE maskID = ?');
+    $stmt = $db->prepare('SELECT webhookID, messageID, content, postedAt FROM discord_rally_message WHERE maskID = ?');
     $stmt->execute([(string) $maskID]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) return null;
-    return ['webhookID' => (int) $row['webhookID'], 'messageID' => (string) $row['messageID'], 'postedAt' => (int) strtotime($row['postedAt'] . ' UTC')];
+    return ['webhookID' => (int) $row['webhookID'], 'messageID' => (string) $row['messageID'], 'content' => (string) $row['content'],
+        'postedAt' => (int) strtotime($row['postedAt'] . ' UTC')];
 }
 
-/** 'edit' the last message (to the same webhook, younger than the window, with an id) or 'post' a new one */
-function discord_rally_decision($last, $webhookID, $now = null, $window = DISCORD_RALLY_WINDOW) {
+/**
+ * The live message a rally row may edit, or null: it went to the row's webhook, has an id and its text, and was posted
+ * after the type was (last) turned on ($enabledAt; a message from before belongs to an earlier setup).
+ */
+function discord_rally_live($last, $webhookID, $enabledAt = 0) {
+    if (!$last || (int) $last['webhookID'] !== (int) $webhookID || !preg_match('/^\d{1,32}$/', (string) $last['messageID'])) return null;
+    if (($last['content'] ?? '') === '' || ((int) $enabledAt > 0 && (int) $last['postedAt'] < (int) $enabledAt)) return null;
+    return $last;
+}
+
+/**
+ * What the sender does with a rally row (pure). $ctx: the row's message context (discord_rally_context), $live: the
+ * live message (discord_rally_live). Returns
+ *   ['op' => 'skip', 'why' => ...]                     nothing to send (a clear without a live message, or no change)
+ *   ['op' => 'post', 'payload' => ..., 'strike' => null | ['messageID' => ..., 'payload' => ...]]
+ *                                                       a new message (with the pings); then the old one is ended (moved)
+ *   ['op' => 'edit', 'payload' => ..., 'live' => bool]  edit the live message: it stays live (set / moved within the
+ *                                                       window) or is ended (cleared)
+ * Edits never ping: no username (a message keeps its author), allowed_mentions empty.
+ */
+function discord_rally_plan(array $ctx, $live, $now = null, $window = DISCORD_RALLY_WINDOW) {
     $now = $now ?? time();
-    if (!$last || (int) $last['webhookID'] !== (int) $webhookID || !preg_match('/^\d{1,32}$/', (string) $last['messageID'])) return 'post';
-    $age = $now - (int) $last['postedAt'];
-    return $age >= 0 && $age < $window ? 'edit' : 'post';
+    if (!empty($ctx['cleared'])) {
+        if (!$live) return ['op' => 'skip', 'why' => 'no rally message to edit'];
+        return ['op' => 'edit', 'payload' => discord_payload(['previous' => $live['content']] + $ctx), 'live' => false];
+    }
+    $payload = discord_payload($ctx);
+    $age = $live ? $now - (int) $live['postedAt'] : null;
+    if ($live && $age >= 0 && $age < $window) {
+        if ($payload['content'] === $live['content']) return ['op' => 'skip', 'why' => 'the message already shows this rally'];
+        unset($payload['username']);
+        $payload['allowed_mentions'] = ['parse' => []];
+        return ['op' => 'edit', 'payload' => $payload, 'live' => true];
+    }
+    $strike = $live ? ['messageID' => $live['messageID'], 'payload' => discord_payload(['moved' => true, 'previous' => $live['content']] + $ctx)] : null;
+    return ['op' => 'post', 'payload' => $payload, 'strike' => $strike];
 }
 
-function discord_rally_remember(PDO $db, $maskID, $webhookID, $messageID, $now = null) {
+function discord_rally_remember(PDO $db, $maskID, $webhookID, $messageID, $content, $now = null) {
     discord_rally_forget($db, $maskID);
-    $db->prepare('INSERT INTO discord_rally (maskID, webhookID, messageID, postedAt) VALUES (?, ?, ?, ?)')
-        ->execute([(string) $maskID, (int) $webhookID, (string) $messageID, gmdate('Y-m-d H:i:s', $now ?? time())]);
+    $db->prepare('INSERT INTO discord_rally_message (maskID, webhookID, messageID, content, postedAt) VALUES (?, ?, ?, ?, ?)')
+        ->execute([(string) $maskID, (int) $webhookID, (string) $messageID, (string) $content, gmdate('Y-m-d H:i:s', $now ?? time())]);
+}
+
+/** After a live edit: the message's new text (its post time, and so the window, stays) */
+function discord_rally_update(PDO $db, $maskID, $messageID, $content) {
+    $db->prepare('UPDATE discord_rally_message SET content = ? WHERE maskID = ? AND messageID = ?')
+        ->execute([(string) $content, (string) $maskID, (string) $messageID]);
 }
 
 function discord_rally_forget(PDO $db, $maskID) {
-    $db->prepare('DELETE FROM discord_rally WHERE maskID = ?')->execute([(string) $maskID]);
+    $db->prepare('DELETE FROM discord_rally_message WHERE maskID = ?')->execute([(string) $maskID]);
 }
 
 /** A webhook's URL was replaced (public/discord.php): its last rally messages belong to the old URL, don't edit them */
 function discord_rally_forget_webhook(PDO $db, $webhookID) {
-    $db->prepare('DELETE FROM discord_rally WHERE webhookID = ?')->execute([(int) $webhookID]);
+    $db->prepare('DELETE FROM discord_rally_message WHERE webhookID = ?')->execute([(int) $webhookID]);
 }
 
 /**
- * How the sender sends a rally row: ['method' => 'POST'|'PATCH', 'url' => ..., 'payload' => ...]. $url: the webhook's
- * URL, $payload: discord_payload() of the row. An edit leaves out 'username' (a message keeps its author).
+ * How the sender sends a rally row ('rally': a change; 'rallyEdit': the edit that ends a moved rally's old message):
+ * ['method' => 'POST'|'PATCH', 'url' => ..., 'payload' => ..., 'plan' => discord_rally_plan() or null], or
+ * ['skip' => why] when nothing is sent. $url: the webhook's URL, $context: the row's message context.
  */
-function discord_rally_request(PDO $db, array $row, $url, array $payload, $now = null) {
-    $last = discord_rally_last($db, $row['maskID']);
-    if (discord_rally_decision($last, $row['webhookID'], $now) === 'edit') {
-        unset($payload['username']);
-        return ['method' => 'PATCH', 'url' => discord_webhook_edit_url($url, $last['messageID']), 'payload' => $payload];
+function discord_rally_request(PDO $db, array $row, $url, array $context, $now = null) {
+    if ($row['kind'] === 'rallyEdit') {
+        $edit = discord_webhook_edit_url($url, $context['messageID'] ?? '');
+        if ($edit === null || empty($context['payload']['content'])) return ['skip' => 'unreadable edit'];
+        return ['method' => 'PATCH', 'url' => $edit, 'payload' => $context['payload'], 'plan' => null];
     }
-    return ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => $payload];
+    $live = discord_rally_live(discord_rally_last($db, $row['maskID']), $row['webhookID'], $context['enabledAt'] ?? 0);
+    $plan = discord_rally_plan($context, $live, $now);
+    if ($plan['op'] === 'skip') return ['skip' => $plan['why']];
+    if ($plan['op'] === 'edit') return ['method' => 'PATCH', 'url' => discord_webhook_edit_url($url, $live['messageID']), 'payload' => $plan['payload'], 'plan' => $plan];
+    return ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => $plan['payload'], 'plan' => $plan];
 }
 
 /** Discord's error code from an error body ({"message": "...", "code": 10008}), or 0 */
@@ -230,20 +281,33 @@ function discord_error_code($body) {
 }
 
 /**
- * After a rally request: remember a new message (its id comes back with ?wait=true), and turn an edit of a deleted
- * message (404, code 10008 Unknown Message: the webhook itself is fine) into 'repost': the row is sent again as a new
- * message right away. Every other outcome is the outbox's usual one. Returns the (possibly changed) decision.
+ * After a rally request ($request: discord_rally_request): remember a new message and its text (its id comes back with
+ * ?wait=true) and queue the edit that ends the old one (moved); keep the text of a live edit; forget a message that was
+ * ended. An edit of a message deleted in Discord (404, code 10008 Unknown Message: the webhook itself is fine) is
+ * forgotten: a set / move becomes 'repost' (sent again as a new message right away), anything else 'skipped' (nothing
+ * left to edit). Every other outcome is the outbox's usual one. Returns the (possibly changed) decision.
  */
-function discord_rally_after_send(PDO $db, array $row, $method, $status, $body, array $decision, $now = null) {
-    if ($method === 'PATCH' && $status === 404 && discord_error_code($body) === 10008) {
+function discord_rally_after_send(PDO $db, array $row, array $request, $status, $body, array $decision, $now = null) {
+    $plan = $request['plan'] ?? null;
+    if ($request['method'] === 'PATCH' && $status === 404 && discord_error_code($body) === 10008) {
+        if ($row['kind'] === 'rallyEdit') return ['result' => 'skipped', 'delay' => 0, 'error' => 'the old rally message was deleted in Discord'];
         discord_rally_forget($db, $row['maskID']);
-        return ['result' => 'repost', 'delay' => 0, 'error' => 'the last rally message was deleted in Discord; posting a new one'];
+        if ($plan && !empty($plan['live'])) return ['result' => 'repost', 'delay' => 0, 'error' => 'the last rally message was deleted in Discord; posting a new one'];
+        return ['result' => 'skipped', 'delay' => 0, 'error' => 'the rally message was deleted in Discord; nothing to edit'];
     }
-    if ($decision['result'] === 'sent' && $method === 'POST') {
+    if ($decision['result'] !== 'sent' || !$plan) return $decision;
+    if ($request['method'] === 'POST') {
+        // Moved: end the old message, as an edit of its own (queued; it pings nobody)
+        if (!empty($plan['strike'])) discord_enqueue($db, (string) $row['maskID'], (int) $row['webhookID'], 'rallyEdit', $plan['strike'], DISCORD_PRIORITY_RALLY);
         $message = json_decode((string) $body, true);
         $id = is_array($message) && isset($message['id']) ? (string) $message['id'] : '';
-        if (preg_match('/^\d{1,32}$/', $id)) discord_rally_remember($db, $row['maskID'], $row['webhookID'], $id, $now);
+        if (preg_match('/^\d{1,32}$/', $id)) discord_rally_remember($db, $row['maskID'], $row['webhookID'], $id, $request['payload']['content'] ?? '', $now);
         else discord_rally_forget($db, $row['maskID']);
+    } elseif (!empty($plan['live'])) {
+        $last = discord_rally_last($db, $row['maskID']);
+        if ($last) discord_rally_update($db, $row['maskID'], $last['messageID'], $request['payload']['content'] ?? '');
+    } else {
+        discord_rally_forget($db, $row['maskID']);   // ended: the next rally is a new message
     }
     return $decision;
 }

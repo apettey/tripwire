@@ -14,8 +14,9 @@
 // shown on the mask's settings page), 2000 everything; all logged as CIRCUIT BREAKER. Messages of masks that no
 // longer qualify (discord_mask_sending_corporation) fail instead of being sent.
 // A pass sends at most $limit messages and stops after $budget seconds, so the worker loop stays responsive.
-// Rally point messages (discord/rally.php) are the only ones that are edited (PATCH) instead of posted, and a queued
-// one is skipped (deleted) when a newer one of the same mask is queued.
+// Rally point messages (discord/rally.php) are the only ones that are edited (PATCH) instead of posted: a change may
+// edit the live rally message or post a new one, a 'rallyEdit' row ends an old one; a queued change is skipped
+// (deleted) when a newer one of the same mask is queued, or when there is nothing to send (a clear without a message).
 
 const DISCORD_HTTP_TIMEOUT   = 10;
 const DISCORD_SPACING        = 0.05;   // seconds between any two requests (Discord's global limit is 50/s)
@@ -229,7 +230,7 @@ function discord_webhook_mark(PDO $db, $id, $status, $message) {
  */
 function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
     $started = microtime(true);
-    $counts = ['sent' => 0, 'retry' => 0, 'ratelimited' => 0, 'failed' => 0, 'broken' => 0, 'deferred' => 0, 'repost' => 0, 'superseded' => 0];
+    $counts = ['sent' => 0, 'retry' => 0, 'ratelimited' => 0, 'failed' => 0, 'broken' => 0, 'deferred' => 0, 'repost' => 0, 'superseded' => 0, 'skipped' => 0];
     $limits = &discord_limits();
     if ($limits['global'] > microtime(true)) return $counts;
     $rows = discord_outbox_due($db, $limit);
@@ -299,14 +300,20 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             $counts['failed']++;
             continue;
         }
+        $rally = in_array($row['kind'], ['rally', 'rallyEdit'], true);
+        $request = $rally ? discord_rally_request($db, $row, $url, $context)
+            : ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => discord_payload($context)];
+        if (isset($request['skip'])) {   // e.g. a rally cleared without a message to edit: nothing to send
+            $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
+            $counts['skipped']++;
+            continue;
+        }
         $spacing = DISCORD_SPACING - (microtime(true) - $limits['last']);
         if ($spacing > 0) usleep((int) ($spacing * 1e6));
         $limits['last'] = microtime(true);
-        $request = ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => discord_payload($context)];
-        if ($row['kind'] === 'rally') $request = discord_rally_request($db, $row, $url, $request['payload']);
         [$status, $body, $headers] = discord_http_post($request['url'], $request['payload'], $request['method']);
         $decision = discord_handle_response($bucket, $status, $headers, $body, (int) $row['attempts']);
-        if ($row['kind'] === 'rally') $decision = discord_rally_after_send($db, $row, $request['method'], $status, $body, $decision);
+        if ($rally) $decision = discord_rally_after_send($db, $row, $request, $status, $body, $decision);
         foreach (discord_breaker_record($status, null, $scopes) as $scope) {
             if ($scope !== 'global') discord_breaker_notes($db, $row['maskID'], $scope, discord_scope_wait($scope));
         }
@@ -321,6 +328,9 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
                 break;
             case 'repost':   // an edit of a deleted rally message: send it again as a new message, no attempt counted
                 discord_outbox_mark($db, $row['id'], 'queued', $decision['error'], 0, false);
+                break;
+            case 'skipped':   // an edit that ends a rally message deleted in Discord: nothing left to do
+                $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
                 break;
             case 'retry':
                 discord_outbox_mark($db, $row['id'], 'queued', $decision['error'], $decision['delay']);

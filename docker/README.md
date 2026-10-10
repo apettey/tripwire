@@ -67,11 +67,11 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` / `fork_rally_discord` (chain map rally point per mask, created by `public/rally.php`), `zkill_kills` /
+`fork_rally` / `fork_rally_discord_message` (chain map rally point per mask and its live legacy Discord message, created by `public/rally.php`; `fork_rally_discord` of 1.15-1.17 is no longer read), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
 `zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
-`docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally`
-([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`). The app user therefore
+`docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
+([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -114,7 +114,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `TRIPWIRE_API` | `true` | `config.php` (`TRIPWIRE_API`) | Enables the `/api` endpoints |
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
-| `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`), `public/ping.php`, `rally_discord.inc.php` | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}`. Used by upstream's pings and, for masks that don't have the "Rally point" type turned on in Mask Admin > Discord ([Discord notifications](#discord-notifications); that setting wins), by rally point posts (posted directly by `public/rally.php`; at most one new message per mask per 30 s; later changes edit it; links use the origin of `EVE_SSO_REDIRECT`). Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php` and, against the dev database, `php tests/rally_discord_lock_test.php` (`tests/` is not in the image) |
+| `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`), `public/ping.php`, `rally_discord.inc.php` | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}`. Used by upstream's pings and, for masks that don't have the "Rally point" type turned on in Mask Admin > Discord ([Discord notifications](#discord-notifications); that setting wins), by rally point posts (posted directly by `public/rally.php`; same rules as the Mask Admin type with fixed texts and no pings: changes within 30 s of the post edit it, a later move posts a new message and strikes through the old one, a clear strikes through the message and posts nothing; links use the origin of `EVE_SSO_REDIRECT`). Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php` and, against the dev database, `php tests/rally_discord_lock_test.php` (`tests/` is not in the image) |
 | `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php`, `zkill/` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting) and the [System Kill Feed](#zkillboard-integration). `false` = the worker idles and nothing is requested from zKillboard or ESI (no back-fills, no names) |
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
@@ -294,7 +294,7 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Any kill in our chain | A kill in a wormhole, low-sec or null-sec system that has one of the mask's wormhole signatures (like the Chain Kill Feed); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
-| Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`...) and cleared (`{who}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "Tripwire rally point from *Chribba*: **AABCA · J152820** (C5, E-R00024)", and ``{pings} Tripwire rally point cleared by *{who}*{was}``, e.g. "... cleared by *Chribba* (was on AABCA · J152820)". Texts saved with the earlier defaults (`**{system}**`, no `{was}`) are read as the new defaults; edited texts are kept. The message shows the rally as stored when it is sent; changes within 30 s edit the mask's last rally message (`PATCH .../messages/<id>`, state in `discord_rally`) instead of posting another, and a queued rally message is dropped when a newer one of the mask is queued. A deleted message (404 Unknown Message) is posted again as a new one without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
+| Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`, `{time}`...) and cleared (`{rally}`, `{who}`, `{time}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "@here Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)", and ``{rally}`` + ``Cleared by *{who}* at {time}`` on a new line. One live message per mask (`discord_rally_message`: id and text as last posted): a set or move within 30 s of its post edits it (`PATCH .../messages/<id>`); a move after that posts a new message (with the pings) and edits the old one into its text struck through + "Moved to **AB · J170122** by *who* at <time>" (fixed text); a clear, at any time, edits it into the cleared text: `{rally}` is the message struck through line by line, without its pings and its link line (a cleared text without `{rally}` gets it put above). E.g. "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)~~" / "Cleared by *Aashai Modor* at 19:08". A clear never posts a new message or pings: when there is no live message (never posted, deleted in Discord, another webhook, the type turned off and on since) nothing is sent. Every edit has empty `allowed_mentions` (Discord doesn't notify on edits anyway); the edits that end a message (cleared, moved) also have no pings in their text (the ping field and mentions the admin wrote are left out; a struck rally text that doesn't fit Discord's 2000 characters is cut, never the cleared line). `{time}` is a Discord timestamp (`<t:unix:t>`), shown in each reader's own time zone. Texts saved with an earlier default (1.15's, or 1.17's ``{pings} Tripwire rally point cleared by *{who}*{was}``) are read as today's; edited texts are kept. The message shows the rally as stored when it is sent, and a queued rally message is dropped when a newer one of the mask is queued (a set and a clear queued together send nothing). A live message deleted in Discord (404 Unknown Message) is posted again for a set/move, never for a clear, without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
@@ -370,7 +370,7 @@ BLAKE2b of the setting); without it they are stored in plain text (the UI says s
 as a key is configured. Changing or removing the key makes stored URLs unreadable: those webhooks are marked broken and
 admins have to paste the URL again. Keep the key in your secrets store, like `EVE_SSO_SECRET`.
 
-**Outbound hosts:** `discord.com` (from the worker: POST, and PATCH to edit the last rally point message; the legacy
+**Outbound hosts:** `discord.com` (from the worker: POST, and PATCH to edit or strike through rally point messages; the legacy
 `DISCORD_WEB_HOOK` rally posts come from `public/rally.php` as before). Embeds reference `images.evetech.net`,
 `zkillboard.com` and `evemaps.dotlan.net`; Discord fetches those, not Tripwire.
 
@@ -379,14 +379,14 @@ points `DISCORD_API_BASE` at it (only `localhost`, `127.0.0.0/8`, `::1` and `dis
 doesn't set it). Webhook IDs ending in
 `0404`/`0401` answer 404/401, `0429`/`0430` answer every other request with a per-webhook/global 429, `0500` fails
 twice; `PATCH .../messages/<id>` edits (rally point), `GET /delete/<id>` makes later edits of that message answer 404
-Unknown Message; `http://127.0.0.1:9095/messages` lists what was received. Any 18-digit ID and 68-character token works, e.g.
+Unknown Message; `http://127.0.0.1:9095/messages` lists what was received and `/channel` shows the channel as a reader sees it (each message as last edited). Any 18-digit ID and 68-character token works, e.g.
 `https://discord.com/api/webhooks/111111111111111111/<68 characters>`. Fake a kill through the same path as the worker:
 `docker compose -f docker-compose.dev.yml exec -T app php docker/dev/discord-fake-kill.php <systemID> <loss|kill|neutral>`.
 Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` (`discord/tests/` and
 `discord/tools/` are not in the image).
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
-tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`).
+tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`, legacy texts) and, against the running dev stack (worker + mock), `php tests/rally_discord_flow_test.php` (every set / move / clear sequence on both paths, printing the channel).
 
 ### Versions
 
