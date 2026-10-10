@@ -30,8 +30,11 @@ function discord_placeholders() {
         'corpKill'  => $common + $label + $kill,
         'corpLoss'  => $common + $label + $kill,
         'rally'     => $common + $label + ['who' => 'who set, moved or cleared it',
+            'comp' => 'the fleet comp it is for, e.g. Armor HACs (empty without one; comps: Mask Admin > Fight here)',
+            'compNote' => 'the fleet comp\'s note (empty without one)',
+            'withComp' => '" — comp: Armor HACs" when a fleet comp is chosen, else empty',
             'time' => 'when it was set, moved or cleared, shown in each reader\'s own time zone (Discord timestamp)',
-            'rally' => 'cleared text: the rally message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {rally})',
+            'rally' => 'cleared text: the fight message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {rally})',
             'was' => 'cleared text: " (was on AABCA · J123456)" when the system it was on is known, else empty'],
         'watchlist' => $common + ['filter' => 'name of the watchlist filter that matched', 'effect' => 'system effect, e.g. Wolf-Rayet (empty when none)',
             'details' => 'class and effect, e.g. "C5, Wolf-Rayet"', 'sig' => 'signature ID of the hole into the system, in the system it is off',
@@ -121,9 +124,9 @@ function discord_default_templates() {
         'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
         'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK, {attackers} pilots. {zkill}',
         'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
-        // Rally point (discord/rally.php): set or moved, and cleared. The cleared text replaces the rally message (an edit,
-        // nobody pinged): {rally} is that message struck through
-        'rally'      => "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}",
+        // Fight here (the rally point, discord/rally.php): set or moved, and cleared. The cleared text replaces the fight
+        // message (an edit, nobody pinged): {rally} is that message struck through
+        'rally'      => "{pings} Fight here: **{labelSystem}** ({class}){withComp} — set by *{who}*\n{map}",
         'rallyClear' => "{rally}\nCleared by *{who}* at {time}",
         'watchlist'  => "{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}\n{map}",
     ];
@@ -138,7 +141,9 @@ function discord_retired_templates() {
         'corpKill'  => ['template' => ['{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}']],
         'corpLoss'  => ['template' => ['{pings} Corp loss: {victim} lost a {ship} in {system}, {isk} ISK. {zkill}']],
         'rally' => [
-            'template' => ["{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}"],
+            // 1.15 (#30), then 1.17 (#31, chain label); "Fight here" since the fleet comps
+            'template' => ["{pings} Tripwire rally point from *{who}*: **{system}** ({class}, {region})\n{map}",
+                "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}"],
             // 1.15 (#30) and 1.17 (#31): a new "cleared" message, now an edit of the rally message
             'templateClear' => ['{pings} Tripwire rally point cleared by *{who}*', '{pings} Tripwire rally point cleared by *{who}*{was}'],
         ],
@@ -201,7 +206,7 @@ function discord_field($name, $value, $inline = true) {
  * The webhook payload for a notification. $ctx: everything the message needs, resolved (names etc.):
  *   common: kind, template, ping, mask, system, systemID, security, class, region, map, dotlan, time (unix)
  *   kspace: hubs [[name, jumps], ...] (closest first), sig, hole, from, mapper, label (chain label, discord_chain_label)
- *   rally:  who, cleared, label, template / templateClear (discord/rally.php)
+ *   rally:  who, cleared, label, comp, compNote, template / templateClear (discord/rally.php; "Fight here")
  *   kills:  killID, victim, victimID, ship, shipTypeID, corp, alliance, attackers, finalblow, attackercorp, value, zkill,
  *           label (chain label on the mask, discord_chain_labels; '' = none)
  */
@@ -258,14 +263,19 @@ function discord_payload(array $ctx) {
         // Cleared: the system it was on, when known. Built from escaped parts (the parentheses stay plain)
         $values['was'] = $cleared && $values['labelSystem'] !== '' ? ' (was on ' . discord_escape($values['labelSystem']) . ')' : '';
         $values['time'] = discord_timestamp($ctx['time'] ?? time());
+        // The fleet comp (an admin's text, escaped like game data): {comp}, {compNote}, and {withComp} built from
+        // escaped parts (" — comp: Armor HACs", or empty without a comp)
+        $values['comp'] = (string) ($ctx['comp'] ?? '');
+        $values['compNote'] = (string) ($ctx['compNote'] ?? '');
+        $values['withComp'] = $values['comp'] !== '' ? ' — comp: ' . discord_escape($values['comp']) : '';
         $struck = $ending ? discord_rally_strike($ctx['previous'] ?? '') : '';
         // {rally} goes in last (a marker until then), so a long rally text is what gets cut, never the who / when
         $marker = $ending ? '{rally' . bin2hex(random_bytes(6)) . '}' : '';
         $values['rally'] = $cleared ? $marker : '';
         if ($ending) $values['pings'] = '';
-        array_push($raw, 'was', 'time', 'rally');
+        array_push($raw, 'was', 'time', 'rally', 'withComp');
         if (!empty($ctx['moved']) && !$cleared) {
-            $content = discord_render("Moved to **{labelSystem}** by *{who}* at {time}", $values, $raw);
+            $content = discord_render("Moved to **{labelSystem}**" . ($values['comp'] !== '' ? ' ({comp})' : '') . " by *{who}* at {time}", $values, $raw);
         } else {
             $content = discord_render($template, $values, $raw);
             if ($content === '' || $content === $marker) {

@@ -3,7 +3,8 @@
 //	File: 		rally_discord.inc.php
 //	Author: 	Tripwire fork
 //
-//	Purpose:	Posts rally point changes (public/rally.php) to the mask's Discord webhook: the same
+//	Purpose:	Posts rally point changes ("Fight here" in the UI, with the fleet comp's name in the text; no
+//				pings on this path) (public/rally.php) to the mask's Discord webhook: the same
 //				DISCORD_WEB_HOOK entry upstream's pings use (ping.inc.php), sent the same way as
 //				public/ping.php (file_get_contents with an http stream context, JSON body).
 //
@@ -92,13 +93,16 @@ function rally_discord_with_label($chainLabel, $text, $max = 150) {
 	even if something slipped through. Format follows upstream's ping message.
 	$chainLabel: the system's chain label (e.g. AABCA), shown before the system; a clear with $systemName
 	names the system the rally was on. Same text as the Mask Admin > Discord default templates. */
-function rally_discord_payload($action, $who, $systemLabel = null, $systemName = null, $urlBase = null, $chainLabel = '') {
+function rally_discord_payload($action, $who, $systemLabel = null, $systemName = null, $urlBase = null, $chainLabel = '', $comp = '') {
 	$who = rally_discord_clean($who !== null && $who !== '' ? $who : 'someone');
 	if ($action === 'clear') {
-		$content = 'Tripwire rally point cleared by *' . $who . '*';
+		$content = 'Fight here cleared by *' . $who . '*';
 		if ($systemName !== null && $systemName !== '') $content .= ' (was on ' . rally_discord_with_label($chainLabel, $systemName) . ')';
 	} else {
-		$content = 'Tripwire rally point from *' . $who . '*: **' . rally_discord_with_label($chainLabel, $systemLabel) . '**';
+		// "Fight here" (the rally point) with its fleet comp ($comp: the name, an admin's text, cleaned like the rest)
+		$comp = str_replace(':', '\\:', rally_discord_clean(trim((string)$comp), 64));
+		$content = 'Fight here: **' . rally_discord_with_label($chainLabel, $systemLabel) . '**'
+			. ($comp !== '' ? ' — comp: ' . $comp : '') . ' — set by *' . $who . '*';
 		$urlBase = preg_replace('/[<>\s]+/', '', (string)$urlBase);	// can't break out of the <autolink>
 		if ($urlBase !== '' && $systemName !== null && $systemName !== '') {
 			$content .= "\n<" . $urlBase . '/?system=' . rawurlencode($systemName) . '>';
@@ -110,10 +114,11 @@ function rally_discord_payload($action, $who, $systemLabel = null, $systemName =
 /** The edit that ends a rally message: $previous (its text as posted) struck through, then $action 'clear'
 	("Cleared by *who* at <time>") or 'moved' ("Moved to **AB · J152820** by *who* at <time>"; $systemName and
 	$chainLabel: where it moved). <time> is a Discord timestamp, shown in each reader's own time zone. */
-function rally_discord_end_payload($previous, $action, $who, $time, $systemName = null, $chainLabel = '') {
+function rally_discord_end_payload($previous, $action, $who, $time, $systemName = null, $chainLabel = '', $comp = '') {
 	$who = rally_discord_clean($who !== null && $who !== '' ? $who : 'someone');
+	$comp = str_replace(':', '\\:', rally_discord_clean(trim((string)$comp), 64));
 	$line = $action === 'moved'
-		? 'Moved to **' . rally_discord_with_label($chainLabel, $systemName) . '** by *' . $who . '*'
+		? 'Moved to **' . rally_discord_with_label($chainLabel, $systemName) . '**' . ($comp !== '' ? ' (' . $comp . ')' : '') . ' by *' . $who . '*'
 		: 'Cleared by *' . $who . '*';
 	$struck = discord_rally_strike($previous);
 	$content = ($struck !== '' ? $struck . "\n" : '') . $line . ' at ' . discord_timestamp($time);
@@ -210,13 +215,10 @@ function rally_discord_chain_label($mysql, $mask, $systemID) {
 	}
 }
 
-/** Rally of $mask as stored right now: array('systemID', 'setBy') or null */
+/** Rally (fight point) of $mask as stored right now: array('systemID', 'setBy', 'comp' => null | the fleet comp stored
+	with it) or null (fight_rally_read, fight/fight.inc.php) */
 function rally_discord_current_rally($mysql, $mask) {
-	$stmt = $mysql->prepare('SELECT systemID, setBy FROM fork_rally WHERE maskID = :mask');
-	$stmt->bindValue(':mask', $mask);
-	if (!$stmt->execute()) return null;
-	$row = $stmt->fetch(PDO::FETCH_ASSOC);
-	return $row ? array('systemID' => (int)$row['systemID'], 'setBy' => $row['setBy']) : null;
+	return fight_rally_read($mysql, $mask);
 }
 
 /** Bring the mask's Discord message up to date with its rally, after a change.
@@ -272,7 +274,8 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		$systemName = $system ? $system['name'] : (string)$systemID;
 		$chainLabel = rally_discord_chain_label($mysql, $mask, $systemID);
 		$urlBase = rally_discord_url_base(defined('EVE_SSO_REDIRECT') ? EVE_SSO_REDIRECT : null, isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '');
-		$payload = rally_discord_payload('set', $rally['setBy'], $systemLabel, $system ? $system['name'] : null, $urlBase, $chainLabel);
+		$compName = !empty($rally['comp']) ? $rally['comp']['name'] : '';
+		$payload = rally_discord_payload('set', $rally['setBy'], $systemLabel, $system ? $system['name'] : null, $urlBase, $chainLabel, $compName);
 
 		if ($live && rally_discord_decision($live) === 'edit') {
 			if ($payload['content'] === $live['content']) return 'none';	// already shows it
@@ -303,7 +306,7 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		// Moved: end the old message (after the new one is out, so people see the new place first)
 		if ($live) {
 			rally_discord_send(rally_discord_message_url($hook, $live['messageID']),
-				rally_discord_end_payload($live['content'], 'moved', $rally['setBy'], time(), $systemName, $chainLabel), 'PATCH');
+				rally_discord_end_payload($live['content'], 'moved', $rally['setBy'], time(), $systemName, $chainLabel, $compName), 'PATCH');
 		}
 		return 'post';
 	} finally {

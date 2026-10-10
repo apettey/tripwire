@@ -1,5 +1,7 @@
 <?php
-// Fork-owned: notification type 5, "rally point" (see discord/discord.inc.php).
+// Fork-owned: notification type 5, "rally point", shown to users as "Fight here" since the fleet comps (see
+// discord/discord.inc.php, fight/fight.inc.php). Internal names (type key 'rally', tables) stay. The fleet comp stored
+// with the fight point is in the message ({comp}, {compNote}, {withComp}) and its mention is pinged with the type's.
 //
 // public/rally.php queues a message when someone sets, moves or clears the chain map's rally point (and wants it
 // posted, options.rallyDiscord). The sender (discord_dispatch) then:
@@ -74,16 +76,21 @@ function discord_rally_enqueue(PDO $db, $maskID, array $type, $action, $who, $pr
     return discord_enqueue($db, (string) $maskID, $type['webhookID'], 'rally', $data, DISCORD_PRIORITY_RALLY);
 }
 
-/** The mask's rally as stored now: ['systemID', 'setBy'], null when there is none, false when it can't be read */
+/** The mask's rally (fight point) as stored now: ['systemID', 'setBy', 'comp' (null or the fleet comp stored with it,
+    fight_rally_read)], null when there is none, false when it can't be read */
 function discord_rally_current(PDO $db, $maskID) {
     try {
-        $stmt = $db->prepare('SELECT systemID, setBy FROM fork_rally WHERE maskID = ?');
-        if (!$stmt || !$stmt->execute([(string) $maskID])) return false;
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return fight_rally_read($db, $maskID);
     } catch (PDOException $error) {
-        return false;   // no fork_rally table yet
+        return false;
     }
-    return $row ? ['systemID' => (int) $row['systemID'], 'setBy' => $row['setBy']] : null;
+}
+
+/** The pings of a fight point message: the comp's mention (admin configuration, fight/fight.inc.php) in front of the
+    type's ping field, each mention once */
+function discord_rally_pings($typePing, $compMention) {
+    $tokens = array_filter(explode(' ', trim((discord_ping_normalise($compMention) ?? '') . ' ' . (discord_ping_normalise($typePing) ?? ''))), 'strlen');
+    return implode(' ', array_values(array_unique($tokens)));
 }
 
 /**
@@ -111,7 +118,12 @@ function discord_rally_context(array $data, $rally, ?callable $labelOf = null) {
         $was = $clear && (int) ($data['systemID'] ?? 0) > 0 ? discord_rally_system((int) $data['systemID'], $known) : [];
         return $base + ['cleared' => true, 'who' => $who] + $was;
     }
-    return $base + ['cleared' => false, 'who' => ($rally['setBy'] ?? '') !== '' ? $rally['setBy'] : 'someone']
+    // The fleet comp stored with the fight point (fight_rally_read): its name and note in the text, its mention (admin
+    // configuration) pinged with the type's ping
+    $comp = $rally['comp'] ?? null;
+    if ($comp) $base['ping'] = discord_rally_pings($base['ping'], $comp['mention'] ?? '');
+    return $base + ['cleared' => false, 'who' => ($rally['setBy'] ?? '') !== '' ? $rally['setBy'] : 'someone',
+        'comp' => $comp ? (string) $comp['name'] : '', 'compNote' => $comp ? (string) ($comp['note'] ?? '') : '']
         + discord_rally_system((int) $rally['systemID'], $labelOf);
 }
 

@@ -10,7 +10,7 @@ const discordNotifications = {
 		chainKill: "Any kill in our chain",
 		corpKill: "Kills by our corporation",
 		corpLoss: "Losses of our corporation",
-		rally: "Rally point",
+		rally: "Fight here",
 		watchlist: "Watchlist match"
 	},
 	HELP: {
@@ -18,12 +18,12 @@ const discordNotifications = {
 		chainKill: "A kill in a system connected to your home system (above) through live wormholes, re-checked every minute: wormhole, low-sec and null-sec systems (high-sec only if you tick it below). Holes that collapsed or expired no longer count, so an old chain stops pinging.",
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
-		rally: "Someone sets, moves or clears the chain map's rally point (right-click a system > Rally here). A move within 30 seconds edits the message; a later move posts a new one (with the ping) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
+		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
 		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
 	},
 	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
-	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
+	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
 	MAX_PING_SYSTEMS: 20,
@@ -245,7 +245,7 @@ const discordNotifications = {
 			+ "</div>";
 	},
 
-	/** The preview answer: the message, and for the rally point what it becomes when cleared or moved (edits) */
+	/** The preview answer: the message, and for Fight here (the rally point) what it becomes when cleared or moved (edits) */
 	previewsHtml: function(data) {
 		const dn = discordNotifications;
 		const titled = function(title, payload) {
@@ -333,7 +333,7 @@ const discordNotifications = {
 			if (kind === "rally") {
 				templateLabel = "Set or moved:";
 				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
-						+ "<div class='dn-small'>Replaces the rally message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the rally was on, when it is known. Nothing is sent when there is no rally message to edit.</div></td></tr>";
+						+ "<div class='dn-small'>Replaces the fight message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the fight was on, when it is known. Nothing is sent when there is no fight message to edit.</div></td></tr>";
 				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
 			} else if (kind === "watchlist") {
 				extra = "";
