@@ -67390,7 +67390,7 @@ var appData = {
             "from": "Class-2",
             "leadsTo": "Low-Sec",
             "mass": 2000000000,
-            "jump": 300000000
+            "jump": 375000000
         },
         "B274": {
             "life": "24 Hours",
@@ -67539,7 +67539,7 @@ var appData = {
             ],
             "leadsTo": "Class-3",
             "mass": 1000000000,
-            "jump": 20000000
+            "jump": 62000000
         },
         "C125": {
             "life": "16 Hours",
@@ -67685,7 +67685,7 @@ var appData = {
             "jump": 1000000000
         },
         "Q003": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67700,7 +67700,7 @@ var appData = {
             "jump": 5000000
         },
         "G008": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67715,7 +67715,7 @@ var appData = {
             "jump": 5000000
         },
         "C008": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67730,7 +67730,7 @@ var appData = {
             "jump": 5000000
         },
         "M001": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67745,7 +67745,7 @@ var appData = {
             "jump": 5000000
         },
         "Z006": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67760,7 +67760,7 @@ var appData = {
             "jump": 5000000
         },
         "L005": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67775,7 +67775,7 @@ var appData = {
             "jump": 5000000
         },
         "E004": {
-            "life": "5 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67790,7 +67790,7 @@ var appData = {
             "jump": 5000000
         },
         "A009": {
-            "life": "16 Hours",
+            "life": "4.5 Hours",
             "from": [
                 "Class-1",
                 "Class-2",
@@ -67935,7 +67935,7 @@ var appData = {
             "jump": 410000000
         },
         "F216": {
-            "life": "16 Hours",
+            "life": "12 Hours",
             "from": [
                 "Class-2",
                 "Class-3",
@@ -67945,26 +67945,67 @@ var appData = {
             ],
             "leadsTo": "Triglavian",
             "mass": 1000000000,
-            "jump": 300000000
+            "jump": 375000000
         },
         "U372": {
-            "life": "16 Hours",
+            "life": "12 Hours",
             "from": "Null-Sec",
             "leadsTo": "Triglavian",
             "mass": 1000000000,
             "jump": 375000000
         },
         "R081": {
-            "life": "16 Hours",
+            "life": "12 Hours",
             "from": "Triglavian",
             "leadsTo": "Class-4",
             "mass": 1000000000,
             "jump": 375000000
         },
         "X450": {
-            "life": "16 Hours",
+            "life": "12 Hours",
             "from": "Triglavian",
             "leadsTo": "Null-Sec",
+            "mass": 1000000000,
+            "jump": 375000000
+        },
+        "I078": {
+            "life": "12 Hours",
+            "from": "Triglavian",
+            "leadsTo": "Triglavian",
+            "mass": 750000000,
+            "jump": 62000000
+        },
+        "L687": {
+            "life": "12 Hours",
+            "from": "Triglavian",
+            "leadsTo": "Triglavian",
+            "mass": 750000000,
+            "jump": 62000000
+        },
+        "O546": {
+            "life": "12 Hours",
+            "from": "Triglavian",
+            "leadsTo": "Triglavian",
+            "mass": 750000000,
+            "jump": 62000000
+        },
+        "O753": {
+            "life": "12 Hours",
+            "from": [
+                "Low-Sec",
+                "Null-Sec"
+            ],
+            "leadsTo": "Triglavian",
+            "mass": 1000000000,
+            "jump": 375000000
+        },
+        "R327": {
+            "life": "12 Hours",
+            "from": [
+                "Low-Sec",
+                "Null-Sec"
+            ],
+            "leadsTo": "Triglavian",
             "mass": 1000000000,
             "jump": 375000000
         },
@@ -94598,43 +94639,43 @@ var appData = {
         },
         "22428": {
             "typeName": "Redeemer",
-            "mass": 150300000
+            "mass": 112700000
         },
         "22430": {
             "typeName": "Sin",
-            "mass": 141700000
+            "mass": 106300000
         },
         "22436": {
             "typeName": "Widow",
-            "mass": 151100000
+            "mass": 113300000
         },
         "22440": {
             "typeName": "Panther",
-            "mass": 148800000
+            "mass": 111600000
         },
         "44996": {
             "typeName": "Marshal",
-            "mass": 150000000
+            "mass": 112500000
         },
         "85236": {
             "typeName": "Python",
-            "mass": 141700000
+            "mass": 106300000
         },
         "28659": {
             "typeName": "Paladin",
-            "mass": 160000000
+            "mass": 128000000
         },
         "28661": {
             "typeName": "Kronos",
-            "mass": 148000000
+            "mass": 118400000
         },
         "28665": {
             "typeName": "Vargur",
-            "mass": 150000000
+            "mass": 120000000
         },
         "28710": {
             "typeName": "Golem",
-            "mass": 157000000
+            "mass": 125600000
         },
         "34219": {
             "typeName": "Paladin Blood Raider Edition",
@@ -94694,7 +94735,7 @@ var appData = {
         },
         "88001": {
             "typeName": "Babaroga",
-            "mass": 143000000
+            "mass": 114400000
         },
         "28844": {
             "typeName": "Rhea",
@@ -94778,6 +94819,10 @@ var appData = {
         },
         "89807": {
             "typeName": "Anhinga",
+            "mass": 14760000
+        },
+        "95741": {
+            "typeName": "Akoman",
             "mass": 14760000
         },
         "12729": {
