@@ -1,21 +1,36 @@
-/* Return bookmark panel shown after jumping a named hole (fork-owned, see app/js/fork/jump-return.js) */
+/* Return bookmark panel shown after jumping a named hole (fork-owned, see app/js/fork/jump-return.js).
+   One compact line just under the top bar, top right, where it stays clear of the chain map's nodes. */
 #jump-return-panel {
 	position: fixed;
-	top: 48px;
-	left: 50%;
-	transform: translateX(-50%);
+	top: 50px;
+	right: 12px;
 	z-index: 9000;
 	box-sizing: border-box;
-	max-width: calc(100vw - 32px);
-	padding: 10px 34px 12px 14px;
-	background: rgba(20, 24, 20, 0.96);
-	border: 2px solid #3CC85A;
-	border-radius: 6px;
-	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+	max-width: calc(100vw - 24px);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 4px 3px 8px;
+	background: rgba(20, 24, 20, 0.94);
+	border: 1px solid #3CC85A;
+	border-radius: 4px;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
 	color: #E8F5E8;
-	text-align: center;
+	font-size: 11px;
+	line-height: 16px;
+	white-space: nowrap;
 	opacity: 1;
 	transition: opacity 0.4s ease;
+	animation: jump-return-in 0.25s ease-out;
+}
+
+@keyframes jump-return-in {
+	from { opacity: 0; transform: translateY(-6px); }
+	to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#jump-return-panel { animation: none; }
 }
 
 #jump-return-panel.jump-return-fading {
@@ -27,31 +42,41 @@
 }
 
 #jump-return-panel .jump-return-label {
-	margin-bottom: 8px;
-	font-size: 12px;
 	color: #CFE8CF;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 #jump-return-panel .jump-return-copy {
-	display: block;
-	width: 100%;
-	min-width: 180px;
-	padding: 8px 18px;
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	padding: 1px 8px;
 	background: #1E4D28;
 	border: 1px solid #3CC85A;
-	border-radius: 4px;
+	border-radius: 3px;
 	color: #FFFFFF;
-	font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
-	font-size: 32px;
-	font-weight: bold;
-	letter-spacing: 2px;
 	cursor: pointer;
+}
+
+#jump-return-panel .jump-return-text {
+	font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+	font-size: 15px;
+	font-weight: bold;
+	letter-spacing: 1px;
+}
+
+#jump-return-panel .jump-return-hint {
+	font-size: 10px;
+	color: #A8DDB0;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
 }
 
 #jump-return-panel .jump-return-copy:hover,
 #jump-return-panel .jump-return-copy:focus {
 	background: #2A6B37;
-	outline: 2px solid #7CF09A;
+	outline: 1px solid #7CF09A;
 	outline-offset: 1px;
 }
 
@@ -60,16 +85,21 @@
 	color: #0B1A0E;
 }
 
+#jump-return-panel .jump-return-copy.jump-return-copied .jump-return-hint {
+	color: #0B1A0E;
+}
+
+#jump-return-panel.jump-return-failed .jump-return-text {
+	user-select: all;
+}
+
 #jump-return-panel .jump-return-close {
-	position: absolute;
-	top: 4px;
-	right: 6px;
-	padding: 0 4px;
+	padding: 0 3px;
 	background: transparent;
 	border: none;
 	color: #9FBF9F;
-	font-size: 14px;
-	line-height: 18px;
+	font-size: 12px;
+	line-height: 16px;
 	cursor: pointer;
 }
 

@@ -18,7 +18,8 @@
  * home tab (holeNaming.incomingFromWormholes, app/js/fork/hole-naming.js): a wormhole of the mask touching the system
  * leads into it when its far-side signature has a name starting with a letter or digit (its leading token, so not a
  * return bookmark) and its near-side signature (in the system) has none or is a
- * return bookmark ("<C"); a named near side is a hole out of the system. With several (a system reached more than
+ * return bookmark ("!C", or the older "<C": discord_is_return_bookmark); a named near side is a hole out of the
+ * system. With several (a system reached more than
  * once, loops) the one closest to home wins: the shortest leading name token ("AB" before "ABC"), then the lowest
  * wormhole id. One query (both directions of the wormhole, UNION ALL), prepared.
  */
@@ -90,12 +91,19 @@ function discord_chain_label_pick(array $rows, $systemID) {
         $far = discord_chain_label_clean($row['farName']);
         if ($far === '') continue;
         $near = discord_chain_label_clean($row['nearName']);
-        if ($near !== '' && $near[0] !== '<') continue;   // a hole out of the system
-        if (!preg_match('/^[A-Za-z0-9]+/', $far, $m)) continue;   // no name token (e.g. a return bookmark "<C"), as holeNaming
+        if ($near !== '' && !discord_is_return_bookmark($near)) continue;   // a hole out of the system
+        if (!preg_match('/^[A-Za-z0-9]+/', $far, $m)) continue;   // no name token (e.g. a return bookmark "!C"), as holeNaming
         $rank = [strlen($m[0]), (int) $row['wormholeID']];
         if ($best === null || $rank < $best[0]) $best = [$rank, $far];
     }
     return $best ? $best[1] : '';
+}
+
+/** True for a return bookmark name: "!" + the hole's name ("!AB"), or the older "<AB". Mirrors holeNaming.isReturnBookmark
+ * (app/js/fork/hole-naming.js, RETURN_PREFIXES). */
+function discord_is_return_bookmark($name) {
+    $name = trim((string) $name);
+    return $name !== '' && strpos('!<', $name[0]) !== false;
 }
 
 /** A signature name as a label: one line, trimmed, at most 100 characters (the column's size). Escaped when rendered. */
