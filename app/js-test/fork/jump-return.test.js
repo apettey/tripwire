@@ -23,10 +23,11 @@ function fixtures(overrides) {
 
 describe('Jump return', () => {
 	describe('returnString', () => {
-		it('Single letter', () => assert.equal(jumpReturn.returnString('A', ''), '<A'));
-		it('Deep name with digits', () => assert.equal(jumpReturn.returnString('AB16', undefined), '<AB16'));
-		it('Name with suffix text, lower case', () => assert.equal(jumpReturn.returnString('ab1 - frig', null), '<AB1'));
-		it('To side already a return bookmark', () => assert.equal(jumpReturn.returnString('AB', '<AB'), '<AB'));
+		it('Single letter', () => assert.equal(jumpReturn.returnString('A', ''), '!A'));
+		it('Deep name with digits', () => assert.equal(jumpReturn.returnString('AB16', undefined), '!AB16'));
+		it('Name with suffix text, lower case', () => assert.equal(jumpReturn.returnString('ab1 - frig', null), '!AB1'));
+		it('To side already a return bookmark', () => assert.equal(jumpReturn.returnString('AB', '!AB'), '!AB'));
+		it('To side an older "<" return bookmark still counts, the new string uses "!"', () => assert.equal(jumpReturn.returnString('AB', '<AB'), '!AB'));
 		it('Unnamed from side', () => assert.equal(jumpReturn.returnString('', ''), null));
 		it('Missing from side name', () => assert.equal(jumpReturn.returnString(undefined, 'C'), null));
 		it('Named only on the to side (jumping toward home)', () => assert.equal(jumpReturn.returnString('', 'AB'), null));
@@ -86,26 +87,30 @@ describe('Jump return', () => {
 	});
 
 	describe('forJump', () => {
-		it('Home -> child via "C" gives <C', () => {
+		it('Home -> child via "C" gives !C', () => {
 			const f = fixtures();
 			const r = jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures);
-			assert.deepEqual({ text: r.text, token: r.token, wormholeId: r.wormholeId }, { text: '<C', token: 'C', wormholeId: 1 });
+			assert.deepEqual({ text: r.text, token: r.token, wormholeId: r.wormholeId }, { text: '!C', token: 'C', wormholeId: 1 });
 			assert.equal(r.toSig.id, 102);
 			assert.equal(r.fromSig.id, 101);
 		});
-		it('Child -> grandchild via "CA" gives <CA', () => {
+		it('Child -> grandchild via "CA" gives !CA', () => {
 			const f = fixtures();
-			assert.equal(jumpReturn.forJump(CHILD, GRANDCHILD, f.wormholes, f.signatures).text, '<CA');
+			assert.equal(jumpReturn.forJump(CHILD, GRANDCHILD, f.wormholes, f.signatures).text, '!CA');
 		});
 		it('Deep hole AB16', () => {
 			const f = fixtures({ 101: { name: 'AB16 frig' } });
-			assert.equal(jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures).text, '<AB16');
+			assert.equal(jumpReturn.forJump(HOME, CHILD, f.wormholes, f.signatures).text, '!AB16');
 		});
 		it('Jumping back toward home gives nothing', () => {
 			const f = fixtures();
 			assert.equal(jumpReturn.forJump(CHILD, HOME, f.wormholes, f.signatures), null);
 		});
 		it('Back toward home after the return bookmark was named', () => {
+			const f = fixtures({ 102: { name: '!C' } });
+			assert.equal(jumpReturn.forJump(CHILD, HOME, f.wormholes, f.signatures), null);
+		});
+		it('Back toward home after an older "<" return bookmark was named', () => {
 			const f = fixtures({ 102: { name: '<C' } });
 			assert.equal(jumpReturn.forJump(CHILD, HOME, f.wormholes, f.signatures), null);
 		});
@@ -140,7 +145,7 @@ describe('Jump return', () => {
 		it('"???" is not a signature ID', () => assert.equal(jumpReturn.alreadyHandled({ signatureID: '???', name: '' }, [], ME, false), null));
 		it('Far side has a signature ID', () => assert.ok(/signature ID/.test(jumpReturn.alreadyHandled({ signatureID: 'xyz987', name: null }, [], ME, false))));
 		it('Far side has a partial signature ID', () => assert.ok(jumpReturn.alreadyHandled({ signatureID: 'XYZ', name: null }, [], ME, false)));
-		it('Far side named (return bookmark recorded)', () => assert.ok(/named/.test(jumpReturn.alreadyHandled({ signatureID: null, name: '<C' }, [], ME, false))));
+		it('Far side named (return bookmark recorded)', () => assert.ok(/named/.test(jumpReturn.alreadyHandled({ signatureID: null, name: '!C' }, [], ME, false))));
 		it('Copied before in this browser', () => assert.equal(jumpReturn.alreadyHandled(fresh, [], ME, true), 'already copied'));
 		it('Another pilot jumped it', () => assert.equal(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Other Pilot', toID: CHILD }], ME, false), 'already jumped by Other Pilot'));
 		it('Another pilot jumped it the other way', () => assert.ok(jumpReturn.alreadyHandled(fresh, [{ characterName: 'Other Pilot', toID: HOME }], ME, false)));
@@ -197,7 +202,7 @@ describe('Jump return', () => {
 		describe('far side edited by one of my characters', () => {
 			const me = { names: ME, ids: [1, 196379789] };
 			const jumpAt = T('20:15:00');
-			const far = (by, when) => ({ signatureID: 'xyz987', name: '<C', modifiedByID: by, modifiedTime: at(when) });
+			const far = (by, when) => ({ signatureID: 'xyz987', name: '!C', modifiedByID: by, modifiedTime: at(when) });
 			it('I set the return sig right after my jump: not suppressed', () => assert.equal(jumpReturn.alreadyHandled(
 				far(196379789, '20:15:08'), [], me, false, undefined, jumpAt), null));
 			it('Within the polling slack before the jump seen', () => assert.equal(jumpReturn.alreadyHandled(

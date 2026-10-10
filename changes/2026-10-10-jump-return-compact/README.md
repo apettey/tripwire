@@ -4,9 +4,10 @@
 
 ## Description
 
-The return bookmark panel (e.g. `<C`) is now a single small line just under the top bar on the right, instead of
+The return bookmark panel (e.g. `!C`) is now a single small line just under the top bar on the right, instead of
 a big box in the middle of the screen, and by default it only pops up for the first pilot through a hole: once
-someone has been to the far side, everyone else is left alone.
+someone has been to the far side, everyone else is left alone. The return bookmark string now starts with `!`
+instead of `<` (`!C`, was `<C`), on request.
 
 ## Before / After
 
@@ -28,7 +29,7 @@ After a jump outbound through a named hole (unchanged), the pop-up is **not** sh
 someone has already been to the far side (checked in this order):
 
 1. the far-side (return) signature already has a signature ID (at least its 3 letters): it was scanned from inside;
-2. the far-side signature already has a name (e.g. `<C`): someone recorded the return;
+2. the far-side signature already has a name (e.g. `!C`): someone recorded the return;
    (1 and 2 are skipped when one of this browser's characters - the logged-in one, the tracked ones or the
    active one - made the far sig's last edit (`modifiedByID`) at or after this jump: `modifiedTime` no earlier
    than 15 s before the client saw the jump (5 s ESI location polling plus lag; server-corrected clock). So a first
@@ -72,6 +73,18 @@ Edge cases:
   any of this browser's characters don't count (so an alt jumping alongside doesn't suppress it).
 - Unknown/unnamed holes: unchanged (no pop-up).
 
+## Return bookmark prefix: `!` instead of `<`
+
+Requested by the user: the string offered after jumping out through a named hole is now `!` + the hole's name
+(`!A`, `!AB`) instead of `<A`. Signatures already named `<A` keep working: everything that recognises a return
+bookmark accepts both prefixes. The rule lives in one place in JS, `holeNaming.isReturnBookmark` /
+`RETURN_PREFIX` / `RETURN_PREFIXES` (`app/js/fork/hole-naming.js`), used by the Add Signature name suggestion's
+near-side check and by `jumpReturn.returnString`; PHP mirrors it in `discord_is_return_bookmark`
+(`discord/chain_label.php`) for the Discord chain label. Neither `!` nor `<` is part of a hole name token
+(`holeNaming.leadingToken` only takes letters and digits), so a far side named `!C` is never taken for a hole name.
+The older What's New entry for the return bookmark (#8) now shows `!AB` too; docs (primer, `docker/README.md`)
+updated. Screenshots `after.png`, `after-copied.png` and the What's New image were retaken with `!C`.
+
 ## Settings
 
 Settings > General Preferences > **Return bookmark pop-up**: *Only when I'm first through* (default) /
@@ -85,4 +98,6 @@ the string even when they're not first.
 Fork files only: `app/js/fork/jump-return.js` (new pure `jumpReturn.alreadyHandled`, `enabled`, `firstOnly`,
 `modeFor`/`optionsForMode`; `forJump` also returns the far-side sig; jump-log read via upstream's existing
 `mass.php`; compact markup; settings row), `app/css/fork/jump-return.css`, tests in
-`app/js-test/fork/jump-return.test.js`, rebuilt bundles. No upstream files touched.
+`app/js-test/fork/jump-return.test.js`. The `!` prefix also touches `app/js/fork/hole-naming.js` (+ its tests),
+`discord/chain_label.php` (+ `discord/tests/discord_test.php`), `docs/eve-wormhole-primer.md`, `docker/README.md` and
+the #8 entry in `public/whats-new/features.json`. No upstream files touched.

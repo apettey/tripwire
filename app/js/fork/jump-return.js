@@ -1,6 +1,6 @@
 const jumpReturn = {
 	// After the tracked character jumps outbound through a named hole (e.g. "AB", bookmarked "=AB ..." on the
-	// home side), offer the return bookmark string ("<AB") in a small click-to-copy panel - by default only to
+	// home side), offer the return bookmark string ("!AB") in a small click-to-copy panel - by default only to
 	// the first pilot through (see alreadyHandled). Setting: options.jumpReturn = {enabled, firstOnly} (missing = on).
 	AUTO_HIDE_MS: 60000,
 	RETRY_DELAYS_MS: [1500, 6000, 12000],
@@ -21,13 +21,13 @@ const jumpReturn = {
 
 	/** Return bookmark string for a hole jumped from the side named fromSigName to the side named toSigName.
 		Only outbound jumps through a named hole count: the from side has a name token and the to side is
-		unnamed or already a return bookmark ("<AB"). Returns e.g. "<AB", or null. */
+		unnamed or already a return bookmark ("!AB", or the older "<AB"). Returns e.g. "!AB", or null. */
 	returnString: function(fromSigName, toSigName) {
 		const token = holeNaming.leadingToken(fromSigName);
 		if (!token) { return null; }
 		const toName = String(toSigName === undefined || toSigName === null ? "" : toSigName).trim();
-		if (toName !== "" && toName.charAt(0) !== "<" && holeNaming.leadingToken(toName)) { return null; }
-		return "<" + token;
+		if (toName !== "" && !holeNaming.isReturnBookmark(toName) && holeNaming.leadingToken(toName)) { return null; }
+		return holeNaming.RETURN_PREFIX + token;
 	},
 
 	/** Wormhole connecting system from -> to (either sig orientation).
@@ -81,7 +81,7 @@ const jumpReturn = {
 	/** Has someone already started on the far side of this hole? Returns the reason (string), or null when
 		this pilot is first through. In order:
 		- the far-side (return) signature has a signature ID (at least its 3 letters): it was scanned from inside;
-		- the far-side signature has a name (e.g. "<AB"): someone recorded the return;
+		- the far-side signature has a name (e.g. "!AB"): someone recorded the return;
 		  (these two are skipped when one of our characters edited the far sig at or after this jump - minus
 		  OWN_EDIT_SLACK_MS for location polling lag -: the first pilot may already have pasted sigs / set the return
 		  sig before the hole was found. Note upstream bumps modifiedTime/modifiedByID on BOTH sigs on any wormhole

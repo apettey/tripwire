@@ -124,7 +124,8 @@ game patches; the source of truth for numbers in this repo is `public/js/combine
     `A`..`Z` for large holes, `1`-`5` for small (frigate) holes, `6`-`9` for medium holes.
     Example: home → `A` → `AB` → `AB6`.
   - In-game bookmark on the hole leading out (outbound side): `=A C2 XYZ [EOL]` (name, destination
-    class, signature letters, optional `EOL` flag). On the far side, pointing back home: `<A`.
+    class, signature letters, optional `EOL` flag). On the far side, pointing back home: `!A` (older
+    bookmarks and sig names use `<A`; Tripwire still recognises both, `holeNaming.isReturnBookmark`).
   - In Tripwire the name goes in the signature's `name`; the chain map can show it instead of / in
     front of the system name (`options.chain.sigNameLocation`).
 
