@@ -78,6 +78,37 @@ const sigAge = {
 		return (result.level === 'stale' ? 'Stale: ' : 'Aging: ') + 'not updated for ' + sigAge.formatAge(result.ageMs);
 	},
 
+	/** Clock offset from the server, like the Age column's countdowns (serverSync): the PC clock may be off by hours.
+	serverMs: the last server time seen; offset: server minus local time when it was first seen */
+	clock: { serverMs: null, offset: 0 },
+
+	/** Current time (ms) corrected to the server's clock.
+	@param serverTime the server time from the last sync (a Date or ms; tripwire.serverTime.getTime()), or undefined
+	@param localNow the local Date.now()
+	@param clock state kept between calls (sigAge.clock) */
+	serverNow: function(serverTime, localNow, clock) {
+		const serverMs = serverTime instanceof Date ? serverTime.getTime() : Number(serverTime);
+		if (serverTime === undefined || serverTime === null || isNaN(serverMs) || !serverMs) {
+			return clock && clock.serverMs !== null ? localNow + clock.offset : localNow;
+		}
+		if (clock.serverMs !== serverMs) {	// a new sync: re-measure the offset
+			clock.serverMs = serverMs;
+			clock.offset = serverMs - localNow;
+		}
+		return localNow + clock.offset;
+	},
+
+	/** Server-corrected now for the page, falling back to the local clock */
+	now: function() {
+		let serverTime;
+		try {
+			if (typeof tripwire !== 'undefined' && tripwire.serverTime && typeof tripwire.serverTime.getTime === 'function') {
+				serverTime = tripwire.serverTime.getTime();
+			}
+		} catch (e) { serverTime = undefined; }
+		return sigAge.serverNow(serverTime, Date.now(), sigAge.clock);
+	},
+
 	/** Whether the feature is switched on in the given user options (on unless explicitly false) */
 	enabled: function(opts) {
 		return !(opts && opts.sigAge && opts.sigAge.enabled === false);
@@ -106,7 +137,7 @@ const sigAge = {
 		const on = sigAge.enabled(typeof options !== 'undefined' ? options : undefined);
 		const signatures = tripwire.client.signatures || {};
 		const wormholes = on ? sigAge.wormholeIndex() : {};
-		const now = Date.now();
+		const now = sigAge.now();
 		$('#sigTable tbody tr[data-id]').each(function() {
 			const $cell = $(this).children('td.age-tooltip').first();
 			if (!$cell.length) { return; }

@@ -56,6 +56,34 @@ describe('Signature age colouring', () => {
 		});
 	});
 
+	describe('serverNow (clock skew)', () => {
+		const local = Date.UTC(2026, 9, 10, 15, 0, 0);	// PC clock 3 h fast
+		it('uses the local clock without a server time', () => assert.equal(sigAge.serverNow(undefined, local, { serverMs: null, offset: 0 }), local));
+		it('corrects to the server time from the last sync', () => {
+			const clock = { serverMs: null, offset: 0 };
+			assert.equal(sigAge.serverNow(new Date(now), local, clock), now);
+			// a minute later, same sync: the clock keeps running with the measured offset
+			assert.equal(sigAge.serverNow(new Date(now), local + 60000, clock), now + 60000);
+		});
+		it('re-measures on the next sync', () => {
+			const clock = { serverMs: null, offset: 0 };
+			sigAge.serverNow(new Date(now), local, clock);
+			assert.equal(sigAge.serverNow(now + 120000, local + 60000, clock), now + 120000);
+		});
+		it('keeps the last offset when the server time goes missing', () => {
+			const clock = { serverMs: null, offset: 0 };
+			sigAge.serverNow(new Date(now), local, clock);
+			assert.equal(sigAge.serverNow(undefined, local + 1000, clock), now + 1000);
+			assert.equal(sigAge.serverNow(new Date('junk'), local + 2000, clock), now + 2000);
+		});
+		it('skewed PC clock no longer changes the level', () => {
+			const clock = { serverMs: null, offset: 0 };
+			const s = sig(3, 3);	// 3 h old by server time: fresh
+			assert.equal(sigAge.levelFor(s, undefined, local).level, 'aging');	// uncorrected: 6 h
+			assert.equal(sigAge.levelFor(s, undefined, sigAge.serverNow(new Date(now), local, clock)).level, 'fresh');
+		});
+	});
+
 	describe('enabled', () => {
 		it('on by default', () => { assert.ok(sigAge.enabled(undefined)); assert.ok(sigAge.enabled({})); assert.ok(sigAge.enabled({ sigAge: {} })); });
 		it('off when switched off', () => assert.ok(!sigAge.enabled({ sigAge: { enabled: false } })));

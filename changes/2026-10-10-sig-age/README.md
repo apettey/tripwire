@@ -14,6 +14,9 @@ to its tooltip.
 | --- | --- |
 | ![before](before.png) | ![after](after.png) |
 
+"Before" is the same page and data with the feature switched off for that page view (it touches no upstream
+file, so the table is then exactly origin/main's).
+
 ## Settings
 
 Toggle: Settings > General Preferences > "Colour signatures by age" (on by default), stored as
@@ -33,6 +36,9 @@ Toggle: Settings > General Preferences > "Colour signatures by age" (on by defau
   creation).
 - **Look:** one amber hue in two strengths plus an inset left bar (2 px / 4 px), so the steps differ in
   more than colour. The bar stays visible on hovered and selected rows. Tripwire has a single dark theme.
+- **Clock:** "now" is corrected to the server's clock from the last sync (`tripwire.serverTime`), like the Age
+  column's countdowns, so a PC clock that is off doesn't make every sig stale or fresh. Falls back to the local
+  clock before the first sync.
 - **Updates:** re-coloured every minute and whenever the table's rows change (a `MutationObserver` on the
   table body's row list: adds, edits, deletes, system change, sort). Only classes and the tooltip attribute
   change; rows are not rebuilt.
