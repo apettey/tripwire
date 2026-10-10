@@ -1,5 +1,6 @@
 /* Signature dialog: wormhole type quick picks (app/js/fork/sig-quickpicks.js) */
 .wormholeTypeQuickSelect .quick-select.static {
+	padding-right: 7px;	/* room for the dot */
 	border-color: #ddd;
 	opacity: .75;
 	color: #eee;
