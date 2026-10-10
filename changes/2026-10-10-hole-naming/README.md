@@ -6,13 +6,14 @@
 
 The Add Signature dialog now suggests a hierarchical name for new wormholes (A, AB, AB6, AB61 ...: letters for
 large holes, 1-5 for frigate holes, 6-9 for medium holes, prefixed with the name of the hole leading into the
-system). After Add/Save, the in-game bookmark string (e.g. `=A C5 ABC EOL`) is copied to the clipboard.
+system; names count from the active chain tab, or, without one, from the named hole that leads in). After Add/Save, the in-game bookmark string (e.g. `=A C5 ABC EOL`) is copied to the clipboard.
 
 ## Before / After
 
 | Before | After |
 | --- | --- |
-| ![before](before.png) | ![after](after.png) |
+| ![before](before.png) Name left empty | ![after](after.png) Suggested name in J135100 (reached through hole C) |
+| | ![copied](after-copied.png) Bookmark string copied on Add |
 
 ## Change
 
