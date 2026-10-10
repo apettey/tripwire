@@ -279,7 +279,7 @@ describe('Watchlist', () => {
 			assert.ok(f.indexOf("class='node watchlist-match ") >= 0);
 			assert.ok(f.indexOf("title='Watchlist: &lt;b&gt;Hunt&lt;/b&gt;, It&#39;s here'") >= 0);
 			assert.ok(f.indexOf('<b>') < 0);
-			assert.ok(f.indexOf("</span><div class='nodeIcons'>") >= 0 && f.indexOf("watchlist-badge") < f.indexOf("<div class='nodeIcons'>"));
+			assert.ok(f.indexOf("<div class='nodeIcons'><div style='float: left;'><i class='effect'></i><span class='watchlist-badge'") >= 0);
 			assert.equal(r.map.rows[0].c[0].f.indexOf('watchlist'), -1);
 		});
 		it('Decorating twice adds one badge', () => {

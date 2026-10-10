@@ -446,11 +446,12 @@ const watchlist = {
 			const badge = "<span class='watchlist-badge' title='" + watchlist.escape(title) + "'>"
 				+ "<i data-icon='eye'></i></span>";
 			let f = node.f.replace("class='node ", "class='node watchlist-match ");
-			// On the node's left edge, half way down (CSS; centred on the top edge in the side-ways org chart, where
-			// connectors meet the left and right edges): the corners are taken (threat badge top-left, pilots
-			// top-right, local pill bottom-right, statics bottom-left)
-			const at = f.indexOf("<div class='nodeIcons'>");
-			f = at < 0 ? f : f.substring(0, at) + badge + f.substring(at);
+			// Inside the node's top row, right after the effect icon (that row only holds the centred class label
+			// and the pilots marker on the right), clear of the corner badges, connectors, statics and names
+			const marker = "<div class='nodeIcons'><div style='float: left;'>";
+			const at = f.indexOf(marker);
+			const end = at < 0 ? -1 : f.indexOf("</div>", at + marker.length);
+			f = end < 0 ? f : f.substring(0, end) + badge + f.substring(end);
 			node.f = f;
 		});
 		return result;
@@ -670,7 +671,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const model = wl.chainModel(result, { typeFor: typeFor, sizeFor: sizeFor, trackedSystemID: lastTracked });
 			const matches = wl.match(settings.filters, model, appData);
 			wl.decorate(result, wl.namesByNode(matches));
-			$("#chainMap").attr("data-watchlist-renderer", options.chain && options.chain.renderer || "");	// marker placement (CSS)
 			lastMatches = matches;
 			const key = contextKey();
 			const onChain = model.entries.map(function(e) { return e.systemID; });

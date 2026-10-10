@@ -177,41 +177,27 @@
 	outline: 1px solid #e05050;
 }
 
-/* Chain map: outline on matching nodes, eye marker on the left edge half way down, clear of the corner badges
-   (threat top-left, pilots top-right, local bottom-right, statics bottom-left) and of the connectors (top/bottom) */
+/* Chain map: outline on matching nodes, and an eye inside the node's top row right after the effect icon (that row
+   holds only the centred class label and the pilots marker on the right) */
 #chainMap .node.watchlist-match {
 	box-shadow: 0 0 0 2px #4fc3f7, 0 0 10px 2px rgba(79, 195, 247, 0.7);
 }
 
-.watchlist-badge {
-	position: absolute;	/* [data-nodeid] nodes are position: relative */
-	z-index: 1;
-	top: 50%;
-	left: -6px;
-	transform: translateY(-50%);
-	padding: 0 2px;
-	font-size: 9px;
-	font-weight: bold;
-	line-height: 11px;
-	text-align: center;
-	color: #04202c;
-	background: #4fc3f7;
-	border: 1px solid #b3e5fc;
-	border-radius: 7px;
-	white-space: nowrap;
+#chainMap .watchlist-badge {
+	display: inline-block;
+	padding: 0;
+	font-size: 8px;
+	line-height: 1;
+	vertical-align: top;
+	color: #4fc3f7;
+	text-shadow: 0 0 3px rgba(79, 195, 247, 0.9);
 	cursor: default;
 }
 
-.watchlist-badge i {
-	font-size: 9px;
-}
-
-/* Side-ways org chart: connectors meet the left and right edges, so sit above the top edge instead, right of
-   centre (clear of the statics of the node above and of the pilots marker) */
-#chainMap[data-watchlist-renderer='orgChartSide'] .watchlist-badge {
-	top: -12px;
-	left: 68%;
-	transform: translateX(-50%);
+/* Make room for the eye beside an effect icon (the class label starts about 20px in on a normal node) */
+#chainMap .node.watchlist-match i.whEffect {
+	padding-left: 0;
+	padding-right: 1px;
 }
 
 /* Pop-ups: top-right (Kill Reporting's sit bottom-right) */

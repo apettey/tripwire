@@ -19,9 +19,10 @@ After: four filters match; each new match got a pop-up (top right), the matching
 marker (its tooltip names the matching filters).
 
 The marker in the four chain renderers (radial, org chart, top-down, side-ways), with upstream's pilots marker shown on
-every node: it sits on the node's left edge half way down (above the top edge, right of centre, in the side-ways
-chart, where connectors meet the left and right edges), clear of the corners (threat top-left, pilots top-right,
-local bottom-right, statics bottom-left):
+every node: a small eye inside the node's top row, right after the effect icon (that row holds only the centred class
+label and the pilots marker on the right; on matching nodes the effect icon's padding is trimmed to make room). It
+stays clear of the corner badges (threat top-left, pilots top-right, local bottom-right, statics bottom-left), the
+connectors, size tags and the system/signature name line in every "Show name" setting:
 
 ![renderers](after-renderers.png)
 
@@ -62,8 +63,7 @@ chime. Settings > Reset restores both and keeps the filters (they are the user's
   longer matches; while its system is off the map (a collapsed hole, or the chain shrank because you viewed an
   unconnected system with no chain tab selected) it is remembered for 30 minutes after it last matched, so viewing
   Jita and coming back doesn't repeat the pop-ups. Kept in memory and `sessionStorage` (a reload in the same tab
-  doesn't repeat them; a new tab announces current matches once). The panel's `#chainMap` gets a
-  `data-watchlist-renderer` attribute for the marker's placement.
+  doesn't repeat them; a new tab announces current matches once).
   When a filter uses "jumps from you", the chain is re-matched when the tracked character moves.
 - Pop-ups (one per filter, top right, 15 s, dismissable) list the new systems; the sound is played through
   `killReporting.play` (its tones).
