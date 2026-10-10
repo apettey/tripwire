@@ -388,7 +388,9 @@ and every merge there deploys to production, so it is effectively a production c
 can run a workflow with it can deploy. That is why it lives in the `infra-deploy` environment, which
 only `main` may use (a repo-level secret would be readable by workflows on any branch). Both workflows
 also refuse refs other than `main`. The job passes the token only to `actions/checkout` and `gh`, not to
-infra's bump script, and never prints it.
+infra's bump script, and never prints it. `docker-publish.yml` calls the workflow with
+`secrets: inherit`: a called workflow sees an environment secret only if its caller passes secrets,
+otherwise it silently gets an empty string (that is why v1.9.0 skipped the infra job).
 
 One-time setup (owner):
 
