@@ -50,6 +50,15 @@ RUN rm -rf \
  && rm -rf .docker \
  && mkdir -p .docker/mysql \
  && mv /tmp/tripwire.sql .docker/mysql/tripwire.sql
+# Upstream's settings.php only defines VERSION; docker/settings.php replaces it (fork version as VERSION)
+# and reads upstream's version from settings.upstream.php. Fail if upstream starts defining anything else,
+# which the override would silently drop.
+RUN defines=$(grep -o 'define(' settings.php | wc -l) \
+ && if [ "$defines" -ne 1 ] || ! grep -q "define('VERSION'" settings.php; then \
+      echo "settings.php has $defines define() calls (expected only VERSION): update docker/settings.php" >&2; \
+      exit 1; \
+    fi \
+ && mv settings.php settings.upstream.php
 
 ############################################################
 # Stage 3: runtime
@@ -86,6 +95,8 @@ COPY --from=assets /src/public/js/app.min.js /src/public/js/app.min.js.map /opt/
 COPY --from=assets /src/public/css/app.min.css /src/public/css/app.min.css.map /opt/app/public/css/
 COPY docker/config.php /opt/app/config.php
 COPY docker/db.inc.php /opt/app/db.inc.php
+# VERSION = TRIPWIRE_FORK_VERSION, UPSTREAM_VERSION from settings.upstream.php (see docker/README.md#versions)
+COPY docker/settings.php /opt/app/settings.php
 # Replace upstream's Google Analytics property and PayPal panel/pixel with opt-in versions
 # (GA_MEASUREMENT_ID, DONATION_PANEL_HTML_FILE; see docker/README.md)
 COPY docker/analytics.inc.php /opt/app/analytics.inc.php
@@ -93,12 +104,13 @@ COPY docker/donation_panel.inc /opt/app/donation_panel.inc
 
 RUN chown -R www-data:www-data /opt/app/cache
 
-# Fork release version (CI passes the vX.Y.Z tag without the v), shown in the What's New dialog via
-# public/version.json. Generated in the image only; the dev stack bind-mounts the repo over it ("dev").
+# Fork release version (CI passes the vX.Y.Z tag without the v). docker/settings.php makes it the app's
+# VERSION at runtime (PHP-FPM sees it: upstream's www.conf has clear_env = no). Also written, from the same
+# settings.php, to public/version.json for the What's New dialog; generated in the image only, the dev
+# stack bind-mounts the repo over it.
 ARG TRIPWIRE_FORK_VERSION=dev
 ENV TRIPWIRE_FORK_VERSION=$TRIPWIRE_FORK_VERSION
-RUN upstream=$(sed -n "s/.*define('VERSION', *'\([^']*\)').*/\1/p" settings.php | head -n1) \
- && UPSTREAM="${upstream:-unknown}" php -r 'echo json_encode(["version" => getenv("TRIPWIRE_FORK_VERSION") ?: "dev", "upstream" => getenv("UPSTREAM")], JSON_UNESCAPED_SLASHES), "\n";' > public/version.json \
+RUN php -r 'require "settings.php"; if (UPSTREAM_VERSION === "unknown") { fwrite(STDERR, "Could not read the upstream version from settings.upstream.php\n"); exit(1); } echo json_encode(["version" => VERSION, "upstream" => UPSTREAM_VERSION], JSON_UNESCAPED_SLASHES), "\n";' > public/version.json \
  && cat public/version.json
 
 EXPOSE 80

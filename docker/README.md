@@ -112,7 +112,8 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
 | `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
 | `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
-| `TRIPWIRE_FORK_VERSION` | build arg (`dev` for local builds) | `public/version.json` (generated at build time) | Fork release version shown in What's New; set by CI, don't override at runtime |
+| `TRIPWIRE_FORK_VERSION` | build arg (`dev` for local builds) | `settings.php` (`VERSION`), `public/version.json` (generated at build time) | Fork release version, the app's version everywhere (see [Versions](#versions)); set by CI, don't override at runtime. Anything but letters, digits and `.+_-` becomes `dev` |
+| `TRIPWIRE_UPSTREAM_SETTINGS` | `/opt/app/settings.upstream.php` | `settings.php` (`UPSTREAM_VERSION`) | Upstream's `settings.php`, read for upstream's version; only the dev stack sets it |
 
 Empty values fall back to the default; unparseable booleans in `config.php` do too (`DB_AUTO_INIT`
 must be exactly `true` to run, `DB_SSL` must be `true`/`false`). The compose files pass each variable
@@ -129,11 +130,32 @@ them over the repo copies), which send nothing to third parties unless `GA_MEASU
 `DONATION_PANEL_HTML_FILE` are set. `docker/analytics.inc.php` always defines a no-op `ga()` because
 `tripwire.php` calls it every 4 minutes.
 
+### Versions
+
+The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
+`docker/settings.php` replaces upstream's `settings.php` (copied over it in the image, mounted over it in
+the dev stack): `VERSION` is the fork version (`dev` when unset), and `UPSTREAM_VERSION` is upstream's
+`define('VERSION', ...)`, read from upstream's file (kept as `/opt/app/settings.upstream.php`). The
+build fails if upstream's `settings.php` ever defines anything besides `VERSION`; extend
+`docker/settings.php` then. The version shows up in:
+
+- the top-left of the app (its tooltip adds the upstream version from `version.json`) and the landing
+  page panel;
+- the "Tripwire update available ... Reload" prompt, which open tabs show after each release (the page's
+  version no longer matches the server's);
+- `?v=` cache busting of the css/js bundles, so a release makes browsers fetch new bundles;
+- `public/version.json` (`{"version":"1.2.0","upstream":"1.30b"}`), shown in What's New and its Settings row;
+- the image's `org.opencontainers.image.version` label and its `X.Y.Z` / `X.Y` / `X` tags
+  (plus `upstream-<upstream version>`).
+
+The dev stack (and local builds without `--build-arg TRIPWIRE_FORK_VERSION=...`) shows `dev`. The dev
+stack has no `version.json` (the repo is mounted over it), so its tooltip shows no upstream version.
+
 ### What is in `/opt/app`
 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
-`assets` stage), `vendor/`, `cache/`, `settings.php` and `.docker/mysql/tripwire.sql` (imported by the
-entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
+`assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
+and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
 files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
@@ -179,9 +201,9 @@ Every tag is a multi-arch image for `linux/amd64` and `linux/arm64` (built with 
 the `assets` and `src` stages run natively). `org.opencontainers.image.version` is set to `X.Y.Z`.
 
 The fork version is baked into the image as `TRIPWIRE_FORK_VERSION` and `public/version.json`
-(`{"version":"1.2.0","upstream":"1.30b"}`); the What's New dialog and its Settings row show it. Local
-builds without `--build-arg TRIPWIRE_FORK_VERSION=...` and the dev stack show `dev`.
-The build fails if the version can't be read from `settings.php`.
+(`{"version":"1.2.0","upstream":"1.30b"}`) and is the app's version everywhere (see [Versions](#versions)).
+Local builds without `--build-arg TRIPWIRE_FORK_VERSION=...` and the dev stack show `dev`.
+The build fails if the upstream version can't be read from `settings.php`.
 
 ### Manual release
 

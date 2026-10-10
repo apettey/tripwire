@@ -32,6 +32,9 @@ services:
       DISCORD_WEB_HOOK: ${DISCORD_WEB_HOOK:-}
       USER_AGENT: ${USER_AGENT:-}
       TZ: ${TZ:-}
+      # Upstream's settings.php, mounted outside /opt/app (a mount point inside it would leave an empty
+      # file in the repo); docker/settings.php reads upstream's version from it
+      TRIPWIRE_UPSTREAM_SETTINGS: /opt/tripwire-upstream/settings.php
     volumes:
       - ./:/opt/app
       # Docker creates empty (gitignored) config.php / db.inc.php in the repo as mount points
@@ -40,6 +43,9 @@ services:
       # Same as the image: no upstream Google Analytics / PayPal panel (opt in with GA_MEASUREMENT_ID etc.)
       - ./docker/analytics.inc.php:/opt/app/analytics.inc.php:ro
       - ./docker/donation_panel.inc:/opt/app/donation_panel.inc:ro
+      # Same as the image: VERSION is the fork version ("dev" here), upstream's version is UPSTREAM_VERSION
+      - ./docker/settings.php:/opt/app/settings.php:ro
+      - ./settings.php:/opt/tripwire-upstream/settings.php:ro
       - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
       - php-sessions:/var/lib/php/session   # stay logged in across rebuilds
     depends_on:

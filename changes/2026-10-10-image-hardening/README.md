@@ -11,7 +11,7 @@ arm64 too, and the database connection and entrypoint are more portable.
 ## Settings
 
 No toggle: operator-facing image and deployment changes, nothing in the Tripwire UI changes for users
-(except that upstream's donation panel in the footer is gone).
+(except that upstream's donation panel in the footer is gone and the version shown is the fork's).
 
 ## Change
 
@@ -35,6 +35,14 @@ No toggle: operator-facing image and deployment changes, nothing in the Tripwire
 - **#9.6 Entrypoint / docs:** `DB_SSL=false` makes the schema import connect without TLS (default
   `true`, as before). `docker/README.md` has a complete environment variable table;
   `.env.example` and `docker-compose.prod.yml` list the new optional variables.
+- **Fork version everywhere:** `docker/settings.php` replaces upstream's `settings.php` (image: copied
+  over it, upstream's kept as `settings.upstream.php`; dev stack: mounted over it, upstream's mounted at
+  `/opt/tripwire-upstream/settings.php` via `TRIPWIRE_UPSTREAM_SETTINGS`). `VERSION` is now the fork
+  release version (`TRIPWIRE_FORK_VERSION`, `dev` in the dev stack) and `UPSTREAM_VERSION` upstream's,
+  so the top-left of the app, the landing page, the "update available" reload prompt and `?v=` cache
+  busting follow fork releases instead of staying on upstream's `1.30b`. The top-left version gets a
+  tooltip with the upstream version (`app/js/whats-new.js`); `public/version.json` is generated from the
+  same file. The build fails if upstream's `settings.php` starts defining anything besides `VERSION`.
 
-No upstream files touched (upstream's `analytics.inc.php` / `donation_panel.inc` are overridden from the
-image and the dev compose file).
+No upstream files touched (upstream's `analytics.inc.php` / `donation_panel.inc` / `settings.php` are
+overridden from the image and the dev compose file).
