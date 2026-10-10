@@ -388,6 +388,19 @@ Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/d
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
 tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`, legacy texts) and, against the running dev stack (worker + mock), `php tests/rally_discord_flow_test.php` (every set / move / clear sequence on both paths, printing the channel).
 
+### D-scan and local scans
+
+Pilots paste a d-scan or local member list into the Intel dialog (system info panel, or chain map right-click
+"Paste d-scan / local"); `public/intel_scans.php` validates and normalises it with `intel/intel.inc.php` (at most
+200 kB and 2000 lines; d-scan rows with or without the leading type ID, character names for local) and stores the
+normalised rows, not the pasted text, in `fork_intel_scans` (created on first use). Same session/mask checks and
+`X-Requested-With` rule as `rally.php`; at most 20 scans per user per minute; rows are deleted after 24 hours and
+only the newest 30 per mask and system are kept. The browser builds the summary from the rows and
+`public/intel/types.json`, static type data regenerated from ESI's public universe endpoints with
+`node intel/tools/generate-types.js` after a game update (no runtime ESI calls). No configuration.
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/intel_test.php` and, against the dev
+database, `php intel/tests/intel_endpoint_test.php`.
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
@@ -419,7 +432,7 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `intel/tests/`, `intel/tools/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
