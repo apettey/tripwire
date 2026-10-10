@@ -43,6 +43,10 @@ No toggle: operator-facing image and deployment changes, nothing in the Tripwire
   busting follow fork releases instead of staying on upstream's `1.30b`. The top-left version gets a
   tooltip with the upstream version (`app/js/whats-new.js`); `public/version.json` is generated from the
   same file. The build fails if upstream's `settings.php` starts defining anything besides `VERSION`.
+- **Fixes #14 (stale JS/CSS after upgrades):** the `?v=` asset URLs in `tripwire.php` now change with
+  every release (above), and `docker/nginx.conf` serves js/css requested with a release `?v=X.Y.Z` as
+  `public, max-age=31536000, immutable`; everything else (`?v=dev`, unversioned, JSON) stays `no-cache`.
+  A CDN rewriting `no-cache` into a max-age (Cloudflare) can no longer keep old bundles after an upgrade.
 
 No upstream files touched (upstream's `analytics.inc.php` / `donation_panel.inc` / `settings.php` are
 overridden from the image and the dev compose file).

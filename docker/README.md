@@ -143,7 +143,12 @@ build fails if upstream's `settings.php` ever defines anything besides `VERSION`
   page panel;
 - the "Tripwire update available ... Reload" prompt, which open tabs show after each release (the page's
   version no longer matches the server's);
-- `?v=` cache busting of the css/js bundles, so a release makes browsers fetch new bundles;
+- `?v=` on the css/js that `tripwire.php` loads (`app.min.css`, `jquery-ui-custom.css`, `combine.js`,
+  `app.min.js`): the URLs change with every release, and nginx serves js/css requested with a release
+  `?v=X.Y.Z` as `Cache-Control: public, max-age=31536000, immutable`. Everything else (`?v=dev`,
+  unversioned files such as the landing page's, `whats-new/features.json`, `version.json`) stays
+  `no-cache`. So a CDN that rewrites `no-cache` into a max-age (Cloudflare's Browser Cache TTL) can't
+  serve stale bundles after an upgrade (#14);
 - `public/version.json` (`{"version":"1.2.0","upstream":"1.30b"}`), shown in What's New and its Settings row;
 - the image's `org.opencontainers.image.version` label and its `X.Y.Z` / `X.Y` / `X` tags
   (plus `upstream-<upstream version>`).
