@@ -25,6 +25,22 @@
       ]
     },
     {
+      "pr": 25,
+      "date": "2026-10-10",
+      "title": "Set route in game",
+      "description": "Send a route straight to your in-game autopilot. In the Favourites panel (for favourites with Route on) and in the Destinations window, click the blue autopilot button next to the route: Tripwire sets the gate part of the route it worked out as waypoints, so the autopilot flies exactly that route, including the safe, high-sec only one, instead of picking its own.\n\nA small window asks which of your tracked characters get the route: tick them, or use Select all, then press Send (or Enter). Your tracked character is ticked the first time, and Tripwire remembers your choice after that. Characters whose EVE SSO login has expired are greyed out until you log in with them again.\n\nTake the wormholes to the exit yourself; the autopilot takes it from there.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-25-autopilot-route.png",
+          "caption": "The autopilot button in the Favourites panel and the Destinations window"
+        },
+        {
+          "src": "whats-new/img/pr-25-autopilot-characters.png",
+          "caption": "Choose which tracked characters get the route"
+        }
+      ]
+    },
+    {
       "pr": 24,
       "date": "2026-10-10",
       "title": "Worst-case rolling calculator",

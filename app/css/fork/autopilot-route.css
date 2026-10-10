@@ -1,0 +1,89 @@
+/* Set route in game (fork-owned, see app/js/fork/autopilot-route.js) */
+
+.autopilot-route-btn {
+	color: #4191ff;
+	cursor: pointer;
+}
+
+.autopilot-route-btn:hover {
+	color: #FFF;
+}
+
+.autopilot-route-btn.disabled,
+.autopilot-route-btn.disabled:hover {
+	color: #555;
+	cursor: default;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn {
+	color: #4191ff;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn:hover {
+	color: #FFF;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn.disabled {
+	color: #555;
+}
+
+#dialog-routeDestinations td.route-dest-autopilot,
+#dialog-routeDestinations th.route-dest-autopilot {
+	width: 16px;
+	text-align: center;
+}
+
+/* Character picker (which tracked characters get the route) */
+#dialog-autopilotCharacters {
+	text-align: left;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-route {
+	margin: 2px 0 8px 0;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-tools {
+	padding: 0 4px 4px 4px;
+	border-bottom: 1px solid #555;
+	color: #999;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-row {
+	padding: 4px;
+	border-bottom: 1px solid #333;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-row label {
+	display: block;
+	cursor: pointer;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-row.disabled,
+#dialog-autopilotCharacters .autopilot-chars-row.disabled label {
+	color: #777;
+	cursor: default;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-note,
+#dialog-autopilotCharacters .autopilot-chars-reason {
+	color: #888;
+	font-size: 0.85em;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-reason {
+	color: #c9813a;
+}
+
+#dialog-autopilotCharacters .autopilot-chars-hint {
+	margin: 8px 0 0 0;
+	color: #888;
+	font-size: 0.85em;
+}
