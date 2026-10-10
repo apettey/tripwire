@@ -96,6 +96,8 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 ## 5. Commits and PRs
 
 - One feature per PR, branched from `main`. Describe what changed and link the change-log entry.
+- Every feature goes through a review loop before its PR: a fresh reviewer checks the diff, the author fixes,
+  and it repeats until a review round has no findings (see the tripwire-feature skill, section 7).
 - Every merge to `main` is released automatically: it gets a `vX.Y.Z` tag, a GitHub Release and the
   `petdog/tripwire:latest` image, so `main` must always build and run.
 - The version bump follows the PR: a What's New entry is minor, docs-only is no release, anything else is
