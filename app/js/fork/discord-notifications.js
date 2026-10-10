@@ -21,7 +21,7 @@ const discordNotifications = {
 	},
 	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
-	LEGACY_RALLY:"While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
+	LEGACY_RALLY: "While this is off, rally changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
 	MAX_PING_SYSTEMS: 20,

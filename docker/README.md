@@ -301,15 +301,18 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
 
 **Home system** (per mask, Mask Admin > Discord, stored as `homeSystemID` in the mask's settings; any known system,
-validated against the static data). "The chain" for chain kills is every system connected to home through the
-mask's live wormholes, walked outward from home (`discord_chain_systems` in `discord/chain.php`, through k-space
-exits too, like the chain map). A wormhole is live while its `wormholes` row and both signatures exist in the mask
-and neither signature is past its `lifeLeft` (signatures with `lifeLength` 0 never expire; EOL holes count until
-they expire; a hole that collapsed early counts until it is deleted from the map). Signatures with an unknown far side are never walked through. The chain is reloaded with the kill
-settings every `DISCORD_KILL_REFRESH` (60 s). Without a home set, chain kills post nothing and the page warns; corp
-kills/losses don't use it. Before 2026-10-10 any system with one of the mask's wormhole signatures counted, so
-fragments of an old chain (holes collapsed or rolled but not deleted; upstream's `wormholeClean` only deletes them at
-`lifeLeft` + 10 % of their life) kept posting (`changes/2026-10-10-chain-kills-connected/`).
+validated against the static data). "The chain" for chain kills is every system connected to home through the mask's
+live wormholes, walked outward from home (`discord_chain_systems` in `discord/chain.php`, through k-space exits too,
+like the chain map). A wormhole is live while its `wormholes` row and both signatures exist in the mask and neither
+signature is past its `lifeLeft` (signatures with `lifeLength` 0 never expire; EOL holes count until they expire; a
+hole that collapsed early counts until it is deleted from the map). Signatures with an unknown far side are never
+walked through, and neither are EVE-Scout's Thera/Turnur connections the chain map draws (they aren't in the mask's
+tables): a kill behind a Thera hole that only EVE-Scout knows doesn't count until the hole is added to the mask. The
+chain is reloaded with the kill settings every `DISCORD_KILL_REFRESH` (60 s). Without a home set, chain kills post
+nothing and the page warns; corp kills/losses don't use it. Before 2026-10-10 any system with one of the mask's
+wormhole signatures counted, so fragments of an old chain (holes collapsed or rolled but not deleted; upstream's
+`wormholeClean` only deletes them at `lifeLeft` + 10 % of their life) kept posting
+(`changes/2026-10-10-chain-kills-connected/`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by

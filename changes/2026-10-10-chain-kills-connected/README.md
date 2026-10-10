@@ -54,12 +54,14 @@ The home system is required for chain kills rather than optional, so the result 
   A hole that has expired but isn't deleted yet stops counting at `lifeLeft`, up to 10 % of its life before
   `wormholeClean` deletes it. Limit: a hole that collapsed early (rolled) and is still on the map counts until it is
   deleted or its `lifeLeft` passes; deleting it from the map (as pilots do) cuts off what's behind it within a minute.
+  EVE-Scout's Thera/Turnur connections drawn on the chain map are not walked either (they aren't in the mask's
+  tables): a system reached only through such a hole doesn't count until the hole is added to the mask.
 - **No home set:** chain kills post nothing (no fallback to "every system") and the page shows "Set a home system so
   Tripwire knows which chain is yours." at the top and next to the setting. Saving is still allowed. Masks that had
   chain kills on before this change show the warning until an admin sets a home. Corp kills and losses are unaffected.
 - Mask Admin help text for chain kills: "A kill in a system connected to your home system (above) through live
   wormholes, re-checked every minute ...".
-- Tests: `discord/tests/discord_test.php` (+33 checks: connected chain only, disconnected fragment excluded, expired
+- Tests: `discord/tests/discord_test.php` (+34 checks: connected chain only, disconnected fragment excluded, expired
   hole breaks the chain and what's behind it, deleted signature, unknown far sides, EOL / no-life holes, home without
   holes, no home, mask scoping, the 60 s cache, home setting validation, `discord_kill_state` + classification with and
   without home) and `app/js-test/fork/discord-notifications.test.js` (home picker, warning, settings, page).

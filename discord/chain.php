@@ -14,6 +14,8 @@
 //     nobody deleted stops counting here up to that long before it disappears from the database.
 //   - both ends are real systems (systemID >= 30000000). A signature whose far side is unknown carries a generic
 //     placeholder ID, which is never walked through (two unknown ends must not join two chains).
+// EVE-Scout's Thera/Turnur connections that the chain map draws are not walked: they aren't in the mask's `wormholes` /
+// `signatures` tables (add the hole to the mask to make what's behind it count).
 //
 // discord/kills.php uses it for "Chain kills". It's written for any per-mask matcher (the Watchlist's Discord matcher
 // can switch to it): discord_chain_systems() for many masks at once (one query), discord_chain_systems_cached() for
@@ -82,11 +84,13 @@ function discord_chain_systems(PDO $db, array $homes, $now = null) {
 
 /** discord_chain_systems() for one mask, reused for DISCORD_CHAIN_CACHE seconds (per process) */
 function discord_chain_systems_cached(PDO $db, $maskID, $homeID, $now = null) {
-    static $cache = [];
+    static $cache = [];   // maskID => [loadedAt, homeID, chain]: one entry per mask, replaced when its home changes
     $now = $now ?? time();
-    $key = $maskID . '|' . (int) $homeID;
-    if (isset($cache[$key]) && $now - $cache[$key][0] < DISCORD_CHAIN_CACHE) return $cache[$key][1];
-    $chain = discord_chain_systems($db, [(string) $maskID => (int) $homeID], $now)[(string) $maskID];
-    $cache[$key] = [$now, $chain];
+    $maskID = (string) $maskID;
+    $entry = $cache[$maskID] ?? null;
+    if ($entry && $entry[1] === (int) $homeID && $now - $entry[0] < DISCORD_CHAIN_CACHE) return $entry[2];
+    $chain = discord_chain_systems($db, [$maskID => (int) $homeID], $now)[$maskID];
+    foreach ($cache as $key => $old) { if ($now - $old[0] >= DISCORD_CHAIN_CACHE) unset($cache[$key]); }   // drop stale masks
+    $cache[$maskID] = [$now, (int) $homeID, $chain];
     return $chain;
 }

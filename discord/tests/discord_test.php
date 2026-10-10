@@ -859,6 +859,7 @@ $first = discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow);
 $link(31000011, 31000040);
 check('chain cache: reused within the minute', discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow + 30), $first);
 check('chain cache: reloaded after it', isset(discord_chain_systems_cached($ch, '98000001.2', 31000010, $chNow + DISCORD_CHAIN_CACHE)[31000040]), true);
+check('chain cache: another home for the mask is loaded at once', isset(discord_chain_systems_cached($ch, '98000001.2', 31000001, $chNow + DISCORD_CHAIN_CACHE + 1)[31000002]), true);
 
 // --- home system setting ---
 $hd = discord_settings_defaults();
