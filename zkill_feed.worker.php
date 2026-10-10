@@ -2,8 +2,12 @@
 // Fork-owned: Kill Reporting feed worker (see changes/ and docker/README.md#kill-reporting).
 //
 // Long-running CLI process (supervisord [program:zkill-feed]) that follows zKillboard's R2Z2 feed once
-// for the whole instance and stores kills in systems that are on someone's chain in `zkill_kills`.
-// Browsers never talk to zKillboard; they poll public/kills.php, which reads that table.
+// for the whole instance. It is the only process that calls zKillboard / ESI; all of that goes through the
+// pooled module in zkill/ (one HTTP client, rate limiter, set of tables). Per kill it
+//   - stores every kill in `zkill_killmails` (System Kill Feed and other readers, ZKILL_RETENTION_HOURS), and
+//   - stores kills in systems that are on someone's chain in `zkill_kills` (Kill Reporting's alert log, 24 h).
+// Between kills it drains the back-fill queue (zKillboard API, ZKILL_API_INTERVAL) and the ESI name queue.
+// Browsers never talk to zKillboard; they poll public/kills.php and public/system_kills.php, which read the tables.
 //
 //   php zkill_feed.worker.php
 //
@@ -22,6 +26,7 @@ register_shutdown_function(function () {
 
 chdir(__DIR__);
 require('config.php');
+require_once(__DIR__ . '/zkill/zkill.inc.php');
 date_default_timezone_set('UTC');
 
 const ZKF_BASE_URL         = 'https://r2z2.zkillboard.com/ephemeral/';
@@ -35,6 +40,7 @@ const ZKF_PRUNE_EVERY      = 600;      // seconds between prunes
 const ZKF_KEEP_HOURS       = 24;
 const ZKF_HEARTBEAT_EVERY  = 300;
 const ZKF_STATE_SAVE_EVERY = 5;        // seconds; the sequence is also saved after every stored kill
+const ZKF_NAMES_EVERY      = 2;        // seconds between ESI name-queue passes
 
 // Same DDL as docker/sql/kill-reporting.sql (keep in sync)
 const ZKF_DDL = [
@@ -73,16 +79,11 @@ function zkf_log($message) {
 }
 
 function zkf_enabled() {
-    if (defined('ZKILL_FEED_ENABLED')) return (bool) ZKILL_FEED_ENABLED;
-    $value = getenv('ZKILL_FEED_ENABLED');
-    if ($value === false || $value === '') return true;
-    $parsed = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-    return $parsed === null ? true : $parsed;
+    return zk_feed_enabled();
 }
 
 function zkf_user_agent() {
-    $agent = getenv('USER_AGENT');
-    return ($agent === false || trim($agent) === '') ? 'Tripwire kill feed (+https://github.com/apettey/tripwire)' : $agent;
+    return zk_user_agent();
 }
 
 // Fresh connection from db.inc.php (included in function scope so it can be re-run after a drop)
@@ -93,27 +94,15 @@ function zkf_connect() {
     $mysql->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $mysql->query('SELECT 1');
     foreach (ZKF_DDL as $ddl) $mysql->exec($ddl);
+    zk_ensure_schema($mysql);
+    zk_backfill_recover($mysql);
     return $mysql;
 }
 
-// GET a URL; returns [httpStatus, body]. Status 0 = network error.
+// GET a URL through the pooled HTTP client (zkill/http.php); returns [httpStatus, body]. Status 0 = network error.
 function zkf_get($url) {
-    $curl = curl_init($url);
-    curl_setopt_array($curl, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERAGENT      => zkf_user_agent(),
-        CURLOPT_ENCODING       => 'gzip',   // sends Accept-Encoding: gzip and decodes the response
-        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 3,
-    ]);
-    $body = curl_exec($curl);
-    $status = $body === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-    $error = $body === false ? curl_error($curl) : '';
-    curl_close($curl);
-    return [$status, $body === false ? $error : $body];
+    [$status, $body] = zk_http_get($url);
+    return [$status, $body];
 }
 
 function zkf_latest_sequence() {
@@ -128,9 +117,12 @@ function zkf_load_sequence(PDO $db) {
     $row = $db->query('SELECT sequence, TIMESTAMPDIFF(SECOND, updatedAt, UTC_TIMESTAMP()) AS age FROM zkill_feed_state WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
     if ($row && (int) $row['age'] < ZKF_RESUME_MAX_AGE) {
         zkf_log('resuming at sequence ' . $row['sequence']);
+        // Resuming catches up without a gap; only the first run that stores all kills starts the coverage
+        if (zk_stream_covered_since($db) === null) zk_stream_reset_coverage($db);
         return (int) $row['sequence'];
     }
     $sequence = zkf_latest_sequence();
+    zk_stream_reset_coverage($db);   // kills before now are missing from the stream: back-fills cover them
     zkf_log(($row ? 'stored sequence ' . $row['sequence'] . ' is too old' : 'no stored sequence') . ', starting at ' . $sequence);
     return $sequence;
 }
@@ -207,6 +199,36 @@ function zkf_store(PDO $db, array $kill, array $chainSystems) {
 function zkf_prune(PDO $db) {
     $deleted = $db->exec('DELETE FROM zkill_kills WHERE receivedAt < UTC_TIMESTAMP() - INTERVAL ' . ZKF_KEEP_HOURS . ' HOUR');
     if ($deleted) zkf_log("pruned $deleted kills older than " . ZKF_KEEP_HOURS . ' h');
+    $deleted = zk_prune($db);
+    if ($deleted) zkf_log("pruned $deleted stored killmails older than " . (zk_retention_seconds() / 3600) . ' h');
+}
+
+// Queue work between kills: one back-fill when the zKillboard API may be called, names every few seconds.
+// Database errors go up to the main loop (reconnect); anything else is logged and doesn't stop the stream.
+function zkf_tick(PDO $db) {
+    static $lastNames = 0;
+    try {
+        $line = zk_backfill_run_one($db);
+        if ($line !== null) zkf_log($line);
+        if (time() - $lastNames >= ZKF_NAMES_EVERY) {
+            $lastNames = time();
+            $resolved = zk_names_resolve($db);
+            if ($resolved) zkf_log("resolved $resolved names");
+        }
+    } catch (PDOException $error) {
+        throw $error;
+    } catch (Throwable $error) {
+        zkf_log('queue error: ' . $error->getMessage());
+    }
+}
+
+// Wait $seconds (the stream is caught up) while working the queues
+function zkf_idle(PDO $db, $seconds) {
+    $until = microtime(true) + $seconds;
+    while (($left = $until - microtime(true)) > 0) {
+        zkf_tick($db);
+        usleep((int) (min(0.5, $left) * 1e6));
+    }
 }
 
 function zkf_run() {
@@ -264,6 +286,7 @@ function zkf_run() {
                     $stored++;
                     $lastSave = 0; // save right after the kill
                 }
+                zk_store_killmail($db, $kill, 'feed');
                 $sequence++;
                 $backoff = 0;
                 if ($sequence !== $savedSequence && time() - $lastSave >= ZKF_STATE_SAVE_EVERY) {
@@ -271,6 +294,7 @@ function zkf_run() {
                     $savedSequence = $sequence;
                     $lastSave = time();
                 }
+                zkf_tick($db);
                 usleep(ZKF_CATCHUP_DELAY_US);
                 continue;
             }
@@ -292,6 +316,7 @@ function zkf_run() {
                     if ($latestKnown - $sequence > 200000) {
                         zkf_log("sequence $sequence is far behind the feed ($latestKnown), jumping ahead");
                         $sequence = $latestKnown;
+                        zk_stream_reset_coverage($db);
                     } else {
                         zkf_log("sequence $sequence is missing (feed is at $latestKnown), skipping it");
                         $sequence++;
@@ -299,7 +324,7 @@ function zkf_run() {
                     usleep(ZKF_CATCHUP_DELAY_US);
                     continue;
                 }
-                sleep(ZKF_CAUGHT_UP_SLEEP);
+                zkf_idle($db, ZKF_CAUGHT_UP_SLEEP);
                 continue;
             }
 

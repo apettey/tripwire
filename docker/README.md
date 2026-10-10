@@ -66,8 +66,10 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` (chain map rally point per mask, created by `public/rally.php`) and `zkill_kills` /
-`zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`). The app user therefore
+`fork_rally` (chain map rally point per mask, created by `public/rally.php`), `zkill_kills` /
+`zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
+`zkill_state` / `zkill_backfill` / `zkill_names` (the [zKillboard integration](#zkillboard-integration), DDL in
+`docker/sql/zkill.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -111,8 +113,10 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
 | `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`) | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}` |
-| `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting). `false` = the worker idles and nothing is requested from zKillboard |
+| `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php`, `zkill/` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting) and the [System Kill Feed](#zkillboard-integration). `false` = the worker idles and nothing is requested from zKillboard or ESI (no back-fills, no names) |
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
+| `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
+| `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone |
 | `GA_MEASUREMENT_ID` | unset | `analytics.inc.php` | Your own Google Analytics 4 ID (`G-...`): loads gtag.js and sends a `page_view` on load and every 4 minutes in the app. Unset = no analytics, no request to Google |
 | `DONATION_PANEL_HTML_FILE` | unset | `donation_panel.inc` | Path (inside the container) to an HTML file shown in the footer of the app and landing page, e.g. your own donation panel. Output as-is, so only point it at a file you control. Unset = nothing shown |
@@ -151,6 +155,53 @@ returns the stored kills for the systems on the user's chain map and marks frien
 (the user's corporation plus `KILL_REPORT_FRIENDLY_CORPORATIONS`). Set `ZKILL_FEED_ENABLED=false` to turn
 the feed off for the instance; the endpoint then simply returns no kills.
 
+### zKillboard integration
+
+All zKillboard and ESI access of the fork goes through one module, `zkill/` (fork-owned), and only one process
+uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
+tables and at most add rows to two queues the worker drains. New features that need kills must read these tables
+(`zkill/query.php`) and queue work, never add their own zKillboard callers.
+
+| File | Owns |
+| --- | --- |
+| `zkill/zkill.inc.php` | Entry point (require this), settings (`ZKILL_*`, `USER_AGENT`) |
+| `zkill/http.php` | The HTTP client: one User-Agent, per-host rate limits (`zkillboard.com`: `ZKILL_API_INTERVAL`; ESI: 20/s), 429 `Retry-After`, exponential backoff on 420/5xx/network errors, ESI error-limit headers |
+| `zkill/schema.php` | DDL of the tables below (`docker/sql/zkill.sql` is the reference copy) |
+| `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage, pruning |
+| `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
+| `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names/` (worker) |
+| `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
+| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (not in the image) |
+
+Data flow:
+
+1. **Stream.** The worker follows R2Z2 as described in [Kill Reporting](#kill-reporting). Every killmail (all of
+   New Eden, NPC kills included, flagged `npc`) goes into `zkill_killmails` (victim, final blow
+   character/corporation/alliance/ship, pilot count, value, flags) and is kept for `ZKILL_RETENTION_HOURS` (by kill
+   time). Kills in chain systems still also go into `zkill_kills`, Kill Reporting's alert log, exactly as before.
+   `zkill_state` `stream.coveredSince` records since when the stream has stored every kill without a gap; it is
+   reset when the worker starts from the current sequence (first start, or after more than 20 hours down) or skips
+   ahead. Expect roughly 10-30 thousand rows per day of retention.
+2. **Back-fill.** When an endpoint asks for a window (e.g. the last 48 hours of a system) that the stream doesn't
+   cover yet, `zk_backfill_request()` queues the system in `zkill_backfill` (one row per system, deduped; a failed
+   back-fill or one older than a stream restart is retried after 10 minutes) and the response says `pending`.
+   Between kills the worker takes the oldest queued system and requests
+   `https://zkillboard.com/api/systemID/<id>/pastSeconds/<window>/` (at most one request per
+   `ZKILL_API_INTERVAL` seconds, instance-wide). Entries that come back without the killmail are fetched from ESI
+   (`/killmails/<id>/<hash>/`, 5 in parallel, at most 100 per job). Back-filled kills go into `zkill_killmails`
+   only, never into `zkill_kills`, so they never trigger kill sounds. Busy systems where zKillboard's answer is cut
+   off (about 200 kills) are covered from their oldest returned kill and not asked again.
+3. **Names.** Endpoints return IDs plus the names already in `zkill_names` and queue unknown IDs; the worker resolves
+   up to 500 queued IDs every 2 seconds through ESI `POST /universe/names/` (splitting a batch that ESI rejects to
+   isolate invalid IDs). Names are re-resolved after 30 days.
+4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
+   older than the retention, stale names.
+
+`public/system_kills.php` (logged-in users, GET): `systemID=<id>` and/or `systems=<id,...>` (at most 25),
+`pastSeconds` (60 up to the retention, default the retention), `limit` (1-50 kills over all systems, default 20).
+It returns the kills newest first plus `names`, per-system coverage and `pending` / `namesPending` flags (poll again
+while either is true). With `ZKILL_FEED_ENABLED=false` it returns what is stored and queues nothing.
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
@@ -182,7 +233,7 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
