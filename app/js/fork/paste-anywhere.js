@@ -103,6 +103,21 @@ const pasteAnywhere = {
 		return !!(diff && (diff.add.length || diff.update.length || (includeRemovals && diff.remove.length)));
 	},
 
+	/** A diff reduced to what applying it would do, for comparing the preview with the state at Apply time */
+	diffKey: function(diff, includeRemovals) {
+		return JSON.stringify({
+			systemID: String(diff.systemID),
+			add: diff.add.map(a => [a.id, a.type, a.name]),
+			update: diff.update.map(u => [u.id, u.signature.id, u.changes.map(c => [c.field, c.to])]),
+			remove: includeRemovals ? diff.remove.map(r => [r.id, r.signature.id]) : []
+		});
+	},
+
+	/** Whether applying now would do exactly what the preview showed */
+	sameDiff: function(previewed, now, includeRemovals) {
+		return pasteAnywhere.diffKey(previewed, includeRemovals) === pasteAnywhere.diffKey(now, includeRemovals);
+	},
+
 	escape: function(text) {
 		return String(text === undefined || text === null ? '' : text)
 			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -191,14 +206,39 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			upstream().parsePaste(text);
 		}
 
+		function busy() {
+			const up = upstream();
+			return !!(up && typeof up.isProcessing === "function" && up.isProcessing());
+		}
+
+		const BUSY_NOTICE = "Still saving the previous paste, try again in a moment";
+
 		function apply() {
 			const $dialog = $("#dialog-pasteAnywhere");
 			if (!pending) { $dialog.dialog("close"); return; }
+			if (busy()) { Notify.trigger(BUSY_NOTICE); return; }	// keep the preview open
 			const p = pending;
+			if (p.diff.systemID != viewingSystemID) { $dialog.dialog("close"); return; }	// moved on to another system meanwhile
+			const removals = p.diff.remove.length > 0 && $("#pasteAnywhere-delete").prop("checked");
+
+			// Upstream works from the signatures as they are now, so check that is still what was previewed
+			// (another user may have added or changed signatures meanwhile). Nothing can change between this
+			// check and the upstream calls below: they run synchronously in the same tick.
+			const now = currentDiff(pa.parseRows(p.text, upstream().rowParse));
+			if (!pa.sameDiff(p.diff, now, removals)) {
+				if (!pa.hasChanges(now, true)) {
+					$dialog.dialog("close");
+					Notify.trigger("Signatures changed meanwhile: nothing left to apply");
+					return;
+				}
+				pending = { text: p.text, diff: now };
+				$dialog.html("<p class='pa-changed'>Signatures in this system changed since the preview. Check the list and apply again.</p>" +
+					pa.renderHTML(now, removals && now.remove.length > 0));
+				return;
+			}
+
 			pending = null;
 			$dialog.dialog("close");
-			if (p.diff.systemID != viewingSystemID) { return; }	// moved on to another system meanwhile
-			const removals = p.diff.remove.length > 0 && $("#pasteAnywhere-delete").prop("checked");
 			if (removals) { upstream().removeMissing(p.text); }
 			if (p.diff.add.length || p.diff.update.length) { upstream().parsePaste(p.text); }
 			Notify.trigger(pa.escape(pa.summary(p.diff, removals)));
@@ -277,6 +317,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			e.stopImmediatePropagation();
 			if (viaClipboard) { $("#clipboard").blur(); }
 			if (!rows.length) { return; }	// not scanner output: ignore
+			// Upstream ignores pastes while its last import is saving (pasting again would add duplicates)
+			if (busy()) { Notify.trigger(BUSY_NOTICE); return; }
 
 			if (withPreview) { preview(text, rows); } else { applyDirect(text); }
 		}, true);

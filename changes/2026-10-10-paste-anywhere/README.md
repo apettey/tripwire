@@ -19,6 +19,13 @@ text that isn't scanner output is ignored.
 
 Before: the paste is applied straight away with a "Paste detected" notice. After: a preview to confirm.
 
+If the system's signatures changed between the preview and Apply (e.g. another user added one), nothing is
+applied: the preview is refreshed with a warning and asks again, so only what was shown gets added, updated or
+deleted. While the previous paste is still saving, a new paste is ignored with a notice (as upstream does), so
+quick repeated pastes don't create duplicates.
+
+![preview refreshed after a change](after-changed.png)
+
 ## Settings
 
 Settings > General Preferences > Signature paste: "Paste scans anywhere on the page" and "Preview changes before
@@ -34,6 +41,6 @@ hidden `#clipboard` field (which Ctrl+V focuses), before upstream's handler. Par
 rows go through upstream `rowParse`, Apply calls upstream `parsePaste` (add/update) and `removeMissing` (delete),
 so undo works as before. Pasted and stored text is HTML-escaped in the preview.
 
-Upstream file touched: `app/js/tripwire/paste.js` (3 small edits): expose `rowParse` as
-`tripwire.pasteSignatures.rowParse`, and move the body of the `#fullPaste` click handler into
+Upstream file touched: `app/js/tripwire/paste.js` (small edits): expose `rowParse` as
+`tripwire.pasteSignatures.rowParse` and its private `processing` flag as `tripwire.pasteSignatures.isProcessing()`, and move the body of the `#fullPaste` click handler into
 `tripwire.pasteSignatures.removeMissing(paste)`, which the handler now calls.

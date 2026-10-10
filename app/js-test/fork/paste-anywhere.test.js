@@ -10,7 +10,8 @@ const hadDocument = typeof document !== 'undefined';
 if (!hadDocument) { global.document = {}; }
 include('app/js/tripwire/paste');
 if (!hadDocument) { delete global.document; }
-const rowParse = tripwire.pasteSignatures.rowParse;
+const upstreamPaste = tripwire.pasteSignatures;
+const rowParse = upstreamPaste.rowParse;
 include('app/js/fork/paste-anywhere');
 
 const SYSTEM = 31001880;
@@ -142,6 +143,47 @@ describe('Paste anywhere', () => {
 			assert.equal(pasteAnywhere.hasChanges(d, false), false);
 			assert.equal(pasteAnywhere.hasChanges(d, true), true);	// others are missing from the paste
 			assert.equal(pasteAnywhere.hasChanges(diff(), false), true);
+		});
+	});
+
+	describe('sameDiff (preview still valid at Apply time)', () => {
+		const rows = () => pasteAnywhere.parseRows(SCAN, rowParse);
+		const previewed = () => pasteAnywhere.diff(rows(), signatures(), WORMHOLES, SYSTEM);
+
+		it('nothing changed meanwhile', () => {
+			const now = pasteAnywhere.diff(rows(), signatures(), WORMHOLES, String(SYSTEM));
+			assert.equal(pasteAnywhere.sameDiff(previewed(), now, true), true);
+		});
+		it('another user added a signature: deletion set grew', () => {
+			const sigs = signatures();
+			sigs[20] = { id: 20, signatureID: 'eee555', systemID: SYSTEM, type: 'unknown', name: null };
+			const now = pasteAnywhere.diff(rows(), sigs, WORMHOLES, SYSTEM);
+			assert.deepEqual(now.remove.map(r => r.id), ['OLD111', 'WHX999', 'EEE555']);
+			assert.equal(pasteAnywhere.sameDiff(previewed(), now, true), false);
+			// irrelevant when nothing is being deleted
+			assert.equal(pasteAnywhere.sameDiff(previewed(), now, false), true);
+		});
+		it('a previewed deletion was already removed', () => {
+			const sigs = signatures();
+			delete sigs[4];
+			assert.equal(pasteAnywhere.sameDiff(previewed(), pasteAnywhere.diff(rows(), sigs, WORMHOLES, SYSTEM), true), false);
+		});
+		it('someone else added a signature that the paste would add', () => {
+			const sigs = signatures();
+			sigs[21] = { id: 21, signatureID: 'pqr678', systemID: SYSTEM, type: 'gas', name: null };
+			assert.equal(pasteAnywhere.sameDiff(previewed(), pasteAnywhere.diff(rows(), sigs, WORMHOLES, SYSTEM), false), false);
+		});
+		it('someone else changed a signature that the paste would update', () => {
+			const sigs = signatures();
+			sigs[1].type = 'wormhole';
+			assert.equal(pasteAnywhere.sameDiff(previewed(), pasteAnywhere.diff(rows(), sigs, WORMHOLES, SYSTEM), false), false);
+		});
+	});
+
+	describe('upstream hooks', () => {
+		it('exposes whether an import is still saving', () => {
+			assert.equal(typeof upstreamPaste.isProcessing, 'function');
+			assert.equal(upstreamPaste.isProcessing(), false);
 		});
 	});
 

@@ -9,6 +9,11 @@
 	color: #bbb;
 }
 
+#dialog-pasteAnywhere .pa-changed {
+	margin: 2px 0 6px 0;
+	color: darkorange;
+}
+
 #dialog-pasteAnywhere .pa-table {
 	width: 100%;
 	border-collapse: collapse;

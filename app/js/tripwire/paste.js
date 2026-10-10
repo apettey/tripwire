@@ -113,6 +113,7 @@ tripwire.pasteSignatures = function() {
         return scanner;
     }
     this.pasteSignatures.rowParse = rowParse; // fork: used by app/js/fork/paste-anywhere.js
+    this.pasteSignatures.isProcessing = function() { return processing; }; // fork: as above
 
     this.pasteSignatures.parsePaste = function(paste) {
         var paste = paste.split("\n");
