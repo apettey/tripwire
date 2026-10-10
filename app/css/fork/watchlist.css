@@ -177,21 +177,22 @@
 	outline: 1px solid #e05050;
 }
 
-/* Chain map: marker on matching nodes (top-right corner; threat badges sit top-left) */
+/* Chain map: outline on matching nodes, eye marker on the left edge half way down, clear of the corner badges
+   (threat top-left, pilots top-right, local bottom-right, statics bottom-left) and of the connectors (top/bottom) */
 #chainMap .node.watchlist-match {
 	box-shadow: 0 0 0 2px #4fc3f7, 0 0 10px 2px rgba(79, 195, 247, 0.7);
 }
 
 .watchlist-badge {
-	position: absolute;
+	position: absolute;	/* [data-nodeid] nodes are position: relative */
 	z-index: 1;
-	top: -7px;
-	right: -7px;
-	padding: 0 3px;
-	min-width: 10px;
+	top: 50%;
+	left: -6px;
+	transform: translateY(-50%);
+	padding: 0 2px;
 	font-size: 9px;
 	font-weight: bold;
-	line-height: 12px;
+	line-height: 11px;
 	text-align: center;
 	color: #04202c;
 	background: #4fc3f7;
@@ -203,6 +204,14 @@
 
 .watchlist-badge i {
 	font-size: 9px;
+}
+
+/* Side-ways org chart: connectors meet the left and right edges, so sit above the top edge instead, right of
+   centre (clear of the statics of the node above and of the pilots marker) */
+#chainMap[data-watchlist-renderer='orgChartSide'] .watchlist-badge {
+	top: -12px;
+	left: 68%;
+	transform: translateX(-50%);
 }
 
 /* Pop-ups: top-right (Kill Reporting's sit bottom-right) */

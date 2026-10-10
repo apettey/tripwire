@@ -15,12 +15,12 @@ const THERA = sid('Thera'), SENTINEL = sid('Sentinel MZ'), C13 = sid('J000102');
 const POCHVEN = Number(Object.keys(appData.systems).find(k => appData.systems[k].factionID == 500026));
 
 // Rows and lines shaped like chain.nodes() output: node v, its system, the parent node, the step's type
-function root(v, systemID) { return { c: [{ v: v, systemID: systemID, f: "<div id='node" + v + "' data-nodeid='" + systemID + "' class='node top-level'><div class='nodeIcons'></div></div>" }, { v: null }] }; }
+function root(v, systemID) { return { c: [{ v: v, systemID: systemID, f: "<div id='node" + v + "' data-nodeid='" + systemID + "' class='node top-level'><div class='nodeIcons'><div style='float: left;'><i class='effect'></i></div></div></div>" }, { v: null }] }; }
 function child(v, parent, systemID, type, depth) {
 	const pathHome = [];
 	for (let i = 1; i < (depth || 1); i++) { pathHome.push({ systemID: 0 }); }
 	pathHome.push({ systemID: systemID, type: type || 'K162' });
-	return { c: [{ v: v, systemID: systemID, f: "<div id='node" + v + "' data-nodeid='" + systemID + "' class='node '><div class='nodeIcons'></div></div>" }, { v: parent }], pathHome: pathHome };
+	return { c: [{ v: v, systemID: systemID, f: "<div id='node" + v + "' data-nodeid='" + systemID + "' class='node '><div class='nodeIcons'><div style='float: left;'><i class='effect'></i></div></div></div>" }, { v: parent }], pathHome: pathHome };
 }
 function line(v, parent, wormholeID) { return [v, parent, [], wormholeID]; }
 
@@ -101,7 +101,9 @@ describe('Watchlist', () => {
 			assert.deepEqual(wl.leadsToKeys('High-Sec', ix.byName), ['HS']);
 			assert.deepEqual(wl.leadsToKeys('Triglavian', ix.byName), ['Pochven']);
 			assert.deepEqual(wl.leadsToKeys('Turnur', ix.byName), ['LS']);
-			assert.deepEqual(wl.leadsToKeys('J055520', ix.byName), wl.classKeys(appData.systems[sid('J055520')]));
+			['J055520', 'J110145', 'J164710', 'J200727', 'J174618'].forEach(j => assert.deepEqual(wl.leadsToKeys(j, ix.byName), ['Drifter', 'Shattered']));
+			assert.deepEqual(wl.leadsToKeys(appData.wormholes.S877.leadsTo, ix.byName), ['Drifter', 'Shattered']);
+			assert.deepEqual(wl.leadsToKeys('J122515', ix.byName), ['C5']);
 			assert.deepEqual(wl.leadsToKeys('Nowhere', ix.byName), []);
 		});
 	});
@@ -110,10 +112,10 @@ describe('Watchlist', () => {
 		const m = model(null, WR_C5);
 		const entry = id => m.entries.find(e => e.systemID === id);
 		it('One entry per real system, in chain order', () => assert.deepEqual(m.entries.map(e => e.systemID), [HOME, WR_C5, C2, AMAMAKE, PULSAR_C3]));
-		it('Connection into a system: real type, K162 never', () => {
-			assert.deepEqual(entry(WR_C5).connections, [{ wormholeID: 1, type: 'H296', size: 'XL' }]);
+		it('Connections of a system, to its parent and its children: real type, K162 never', () => {
+			assert.deepEqual(entry(WR_C5).connections, [{ wormholeID: 1, type: 'H296', size: 'XL' }, { wormholeID: 2, type: 'D845', size: 'L' }]);
 			assert.deepEqual(entry(AMAMAKE).connections, [{ wormholeID: 4, type: null, size: null }]);
-			assert.deepEqual(entry(HOME).connections, []);
+			assert.deepEqual(entry(HOME).connections.map(c => c.wormholeID), [1, 3, 4]);
 		});
 		it('Jumps from home', () => assert.deepEqual(m.entries.map(e => e.jumpsHome), [0, 1, 1, 1, 2]));
 		it('Jumps from the tracked system, both directions', () => assert.deepEqual(m.entries.map(e => e.jumpsMe), [1, 0, 2, 2, 1]));
@@ -134,7 +136,7 @@ describe('Watchlist', () => {
 			r.lines.push(line(8, 3, 9));
 			const e = model(r).entries.find(x => x.systemID === WR_C5);
 			assert.deepEqual(e.nodeIDs, [2, 8]);
-			assert.equal(e.connections.length, 2);
+			assert.deepEqual(e.connections.map(c => c.wormholeID), [1, 2, 9]);
 			assert.equal(e.jumpsHome, 1);
 		});
 		it('Empty or missing result', () => {
@@ -164,17 +166,27 @@ describe('Watchlist', () => {
 		it('Static leading to a class combined with the class', () => assert.deepEqual(matchedSystems([filter('a', { classes: ['C2'], staticLeadsTo: 'C5' })]), [C2]));
 		it('Static to high-sec', () => assert.deepEqual(matchedSystems([filter('a', { staticLeadsTo: 'HS' })]), [PULSAR_C3]));
 		it('A specific static type', () => assert.deepEqual(matchedSystems([filter('a', { staticType: 'N062' })]), [C2]));
-		it('Connection type', () => {
-			assert.deepEqual(matchedSystems([filter('a', { whType: 'H296' })]), [WR_C5]);
-			assert.deepEqual(matchedSystems([filter('a', { whType: 'N062' })]), [C2]);
-			assert.deepEqual(matchedSystems([filter('a', { whType: 'D845' })]), [PULSAR_C3]);
+		it('Connection type: both systems it joins', () => {
+			assert.deepEqual(matchedSystems([filter('a', { whType: 'H296' })]), [HOME, WR_C5]);
+			assert.deepEqual(matchedSystems([filter('a', { whType: 'N062' })]), [HOME, C2]);
+			assert.deepEqual(matchedSystems([filter('a', { whType: 'D845' })]), [WR_C5, PULSAR_C3]);
 		});
 		it('Connection type: an unknown hole never matches', () => assert.deepEqual(matchedSystems([filter('a', { whType: 'K162' })]), []));
-		it('Hole type leading to a class', () => assert.deepEqual(matchedSystems([filter('a', { whLeadsTo: 'C5' })]), [WR_C5, C2]));
+		it('Hole type leading to a class (H296 and N062 lead to C5)', () => assert.deepEqual(matchedSystems([filter('a', { whLeadsTo: 'C5' })]), [HOME, WR_C5, C2]));
+		it('Hole type leading to high-sec (D845)', () => assert.deepEqual(matchedSystems([filter('a', { whLeadsTo: 'HS' })]), [WR_C5, PULSAR_C3]));
+		it('Same matches whichever end the chain map starts from', () => {
+			// The same H296 between HOME and WR_C5, the chain rooted at WR_C5 this time
+			const reversed = { map: { rows: [root(1, WR_C5), child(2, 1, HOME, 'K162', 1)] }, lines: [line(2, 1, 1)] };
+			const forward = { map: { rows: [root(1, HOME), child(2, 1, WR_C5, 'H296', 1)] }, lines: [line(2, 1, 1)] };
+			[{ whLeadsTo: 'C5' }, { whType: 'H296' }, { whType: 'H296', classes: ['C5'], effects: ['Wolf-Rayet Star'] }].forEach(c => {
+				assert.deepEqual(matchedSystems([filter('a', c)], model(reversed)).sort(), matchedSystems([filter('a', c)], model(forward)).sort());
+			});
+		});
 		it('Connection type and system class together', () => assert.deepEqual(matchedSystems([filter('a', { whType: 'D845', classes: ['C3'] })]), [PULSAR_C3]));
+		it('Connection conditions must fit the same hole', () => assert.deepEqual(matchedSystems([filter('a', { whType: 'D845', minSize: 'XL' })]), []));
 		it('Minimum size', () => {
-			assert.deepEqual(matchedSystems([filter('a', { minSize: 'L' })]), [WR_C5, C2, PULSAR_C3]);
-			assert.deepEqual(matchedSystems([filter('a', { minSize: 'XL' })]), [WR_C5]);
+			assert.deepEqual(matchedSystems([filter('a', { minSize: 'L' })]), [HOME, WR_C5, C2, PULSAR_C3]);
+			assert.deepEqual(matchedSystems([filter('a', { minSize: 'XL' })]), [HOME, WR_C5]);
 		});
 		it('Jumps from you', () => assert.deepEqual(matchedSystems([filter('a', { classes: ['C5', 'C3', 'C2'], maxJumpsMe: 1 })], model(null, WR_C5)), [HOME, WR_C5, PULSAR_C3]));
 		it('Jumps from you, location unknown: no match', () => assert.deepEqual(matchedSystems([filter('a', { classes: ['C5'], maxJumpsMe: 5 })], model(null, null)), []));
@@ -194,32 +206,64 @@ describe('Watchlist', () => {
 
 	describe('new matches (repeat suppression)', () => {
 		const m1 = wl.match([filter('a', { classes: ['C5'] })], model(), appData);
+		const all = model().entries.map(e => e.systemID);
+		const T = 1000000, MIN = 60 * 1000;
 		it('First time: everything is new', () => {
-			const d = wl.diff(null, m1);
+			const d = wl.diff(null, m1, all, T);
 			assert.deepEqual(d.fresh.map(x => x.systemID), [HOME, WR_C5]);
-			assert.deepEqual(d.seen, { ['a|' + HOME]: true, ['a|' + WR_C5]: true });
+			assert.deepEqual(d.seen, { ['a|' + HOME]: T, ['a|' + WR_C5]: T });
 		});
 		it('Same matches on the next sync: nothing new', () => {
-			const d1 = wl.diff(null, m1);
-			assert.deepEqual(wl.diff(d1.seen, m1).fresh, []);
+			const d1 = wl.diff(null, m1, all, T);
+			assert.deepEqual(wl.diff(d1.seen, m1, all, T + MIN).fresh, []);
 		});
 		it('Only the newly added system is announced', () => {
-			const d1 = wl.diff(null, m1);
+			const d1 = wl.diff(null, m1, all, T);
 			const extra = { key: 'a|31000999', filterID: 'a', filterName: 'Filter a', systemID: 31000999, nodeIDs: [9] };
-			assert.deepEqual(wl.diff(d1.seen, m1.concat([extra])).fresh, [extra]);
+			assert.deepEqual(wl.diff(d1.seen, m1.concat([extra]), all.concat([31000999]), T + MIN).fresh, [extra]);
 		});
-		it('A match that disappeared and came back is announced again', () => {
-			const d1 = wl.diff(null, m1);
-			const gone = wl.diff(d1.seen, m1.slice(0, 1));
+		it('Still on the map but no longer matching, then matching again: announced again', () => {
+			const d1 = wl.diff(null, m1, all, T);
+			const gone = wl.diff(d1.seen, m1.slice(0, 1), all, T + MIN);	// WR_C5 still on the chain, no longer matching
 			assert.deepEqual(gone.fresh, []);
-			assert.deepEqual(wl.diff(gone.seen, m1).fresh.map(x => x.systemID), [WR_C5]);
+			assert.deepEqual(Object.keys(gone.seen), ['a|' + HOME]);
+			assert.deepEqual(wl.diff(gone.seen, m1, all, T + 2 * MIN).fresh.map(x => x.systemID), [WR_C5]);
+		});
+		it('Viewing an unconnected system and back (no chain tab): nothing announced again', () => {
+			// J115405's chain: matches announced; view Jita (the chain is just Jita); back to J115405
+			const d1 = wl.diff(null, m1, all, T);
+			assert.equal(d1.fresh.length, 2);
+			const jita = model({ map: { rows: [root(1, JITA)] }, lines: [] });
+			const atJita = wl.diff(d1.seen, wl.match([filter('a', { classes: ['C5'] })], jita, appData), jita.entries.map(e => e.systemID), T + MIN);
+			assert.deepEqual(atJita.fresh, []);
+			assert.deepEqual(Object.keys(atJita.seen).sort(), Object.keys(d1.seen).sort());
+			assert.deepEqual(wl.diff(atJita.seen, m1, all, T + 2 * MIN).fresh, []);
+		});
+		it('An empty chain (still loading) keeps them too', () => {
+			const d1 = wl.diff(null, m1, all, T);
+			assert.deepEqual(wl.diff(wl.diff(d1.seen, [], [], T + MIN).seen, m1, all, T + 2 * MIN).fresh, []);
+		});
+		it('Gone from the map for longer than FORGET_MS: announced again', () => {
+			const d1 = wl.diff(null, m1, all, T);
+			const away = wl.diff(d1.seen, [], [JITA], T + wl.FORGET_MS + 1);
+			assert.deepEqual(away.seen, {});
+			assert.equal(wl.diff(away.seen, m1, all, T + wl.FORGET_MS + 2).fresh.length, 2);
+		});
+		it('Remembered since it last matched, not since first seen', () => {
+			const d1 = wl.diff(null, m1, all, T);
+			const later = wl.diff(d1.seen, m1, all, T + wl.FORGET_MS - MIN);
+			const away = wl.diff(later.seen, [], [JITA], T + wl.FORGET_MS + MIN);
+			assert.equal(Object.keys(away.seen).length, 2);
+		});
+		it('Legacy true values count as now', () => {
+			assert.deepEqual(wl.diff({ ['a|' + WR_C5]: true }, [], [JITA], T).seen, { ['a|' + WR_C5]: T });
 		});
 		it('The same system for another filter is new for that filter', () => {
-			const d1 = wl.diff(null, m1);
+			const d1 = wl.diff(null, m1, all, T);
 			const m2 = m1.concat(wl.match([filter('b', { systemID: WR_C5 })], model(), appData));
-			assert.deepEqual(wl.diff(d1.seen, m2).fresh.map(x => x.key), ['b|' + WR_C5]);
+			assert.deepEqual(wl.diff(d1.seen, m2, all, T + MIN).fresh.map(x => x.key), ['b|' + WR_C5]);
 		});
-		it('Duplicate keys count once', () => assert.equal(wl.diff(null, m1.concat(m1)).fresh.length, 2));
+		it('Duplicate keys count once', () => assert.equal(wl.diff(null, m1.concat(m1), all, T).fresh.length, 2));
 		it('Context key per mask and chain tab', () => {
 			assert.equal(wl.contextKey('123.2', ''), '123.2#viewing');
 			assert.equal(wl.contextKey('123.2', 31002238), '123.2#31002238');
@@ -235,7 +279,7 @@ describe('Watchlist', () => {
 			assert.ok(f.indexOf("class='node watchlist-match ") >= 0);
 			assert.ok(f.indexOf("title='Watchlist: &lt;b&gt;Hunt&lt;/b&gt;, It&#39;s here'") >= 0);
 			assert.ok(f.indexOf('<b>') < 0);
-			assert.ok(f.indexOf("watchlist-badge") < f.indexOf("<div class='nodeIcons'>"));
+			assert.ok(f.indexOf("</span><div class='nodeIcons'>") >= 0 && f.indexOf("watchlist-badge") < f.indexOf("<div class='nodeIcons'>"));
 			assert.equal(r.map.rows[0].c[0].f.indexOf('watchlist'), -1);
 		});
 		it('Decorating twice adds one badge', () => {
@@ -282,7 +326,7 @@ describe('Watchlist', () => {
 		it('Conditions in words', () => assert.deepEqual(
 			wl.describe(wl.normaliseConditions({ systemID: WR_C5, classes: ['C5', 'C6'], effects: ['Wolf-Rayet Star'], staticLeadsTo: 'C5',
 				whType: 'H296', minSize: 'L', maxJumpsMe: 1, maxJumpsHome: 3 }), appData),
-			['J122515', 'C5 or C6', 'Wolf-Rayet', 'static to C5', 'through H296', 'hole size L or larger', '≤ 1 jump from you', '≤ 3 jumps from home']));
+			['J122515', 'C5 or C6', 'Wolf-Rayet', 'static to C5', 'hole H296', 'hole size L or larger', '≤ 1 jump from you', '≤ 3 jumps from home']));
 		it('Region and constellation', () => assert.deepEqual(
 			wl.describe({ regionID: appData.systems[JITA].regionID, constellationID: appData.systems[JITA].constellationID, constellationRef: JITA }, appData),
 			['in The Forge', 'in the constellation of Jita']));

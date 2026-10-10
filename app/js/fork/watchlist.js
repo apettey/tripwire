@@ -6,8 +6,9 @@ const watchlist = {
 	// the default (on, chime, no filters).
 	// Keep `const watchlist` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "watchlistWidget",
-	DEFAULT_SIZE: { x: 5, y: 6 },
+	DEFAULT_SIZE: { x: 7, y: 6 },
 	MIN_SIZE: { x: 4, y: 3 },
+	FORGET_MS: 30 * 60 * 1000,	// a match whose system left the chain map is remembered this long
 	MAX_FILTERS: 50,
 	MAX_NAME: 60,
 	TOAST_MS: 15000,
@@ -189,7 +190,10 @@ const watchlist = {
 		const map = { "High-Sec": ["HS"], "Low-Sec": ["LS"], "Null-Sec": ["NS"], "Thera": ["Thera"], "Triglavian": ["Pochven"] };
 		if (map[text]) { return map[text]; }
 		const system = systemsByName ? systemsByName[text.toUpperCase()] : null;
-		return system ? watchlist.classKeys(system) : [];
+		if (system) { return watchlist.classKeys(system); }
+		// Drifter hole types (S877, B735...) name the Drifter system's J-code, which appData lists under its
+		// in-game name (Sentinel MZ...), so an unknown J-code here is a Drifter system
+		return /^J\d{6}$/.test(text) ? ["Drifter", "Shattered"] : [];
 	},
 
 	/** Data lookup with a name index (built once per data object) */
@@ -279,19 +283,33 @@ const watchlist = {
 		return out;
 	},
 
-	/** New matches since the previous evaluation of the same chain: a key seen last time isn't announced again;
-	one that disappeared and comes back is. @param seen {<key>: true} from the last call (or null)
-	@return {fresh: matches not in seen, seen: the keys to remember now} */
-	diff: function(seen, matches) {
+	/** New matches since the previous evaluation of the same chain. A remembered key isn't announced again.
+	A key that no longer matches is forgotten (so it is announced when it matches again) only when its system is
+	still on the chain map; when the system is gone from the map (a hole collapsed, or you viewed an unconnected
+	system and the chain shrank to it) it is kept for FORGET_MS since it last matched.
+	@param seen {<key>: last matched (ms)} from the last call (or null; legacy `true` values count as now)
+	@param onChain system IDs on the chain map now (chainModel entries)
+	@return {fresh: matches not remembered, seen: the keys to remember now} */
+	diff: function(seen, matches, onChain, now) {
 		const before = seen && typeof seen === "object" ? seen : {};
-		const now = {};
+		const time = Number(now) || 0;
+		const present = {};
+		(onChain || []).forEach(function(id) { present[id] = true; });
+		const next = {};
 		const fresh = [];
 		(matches || []).forEach(function(m) {
-			if (now[m.key]) { return; }
-			now[m.key] = true;
-			if (!before[m.key]) { fresh.push(m); }
+			if (next[m.key] !== undefined) { return; }
+			next[m.key] = time;
+			if (before[m.key] === undefined || before[m.key] === null || before[m.key] === false) { fresh.push(m); }
 		});
-		return { fresh: fresh, seen: now };
+		Object.keys(before).forEach(function(key) {
+			if (next[key] !== undefined) { return; }
+			const systemID = Number(String(key).split("|")[1]);
+			if (present[systemID]) { return; }	// on the map but no longer matching: forget
+			const last = before[key] === true ? time : Number(before[key]);
+			if (isFinite(last) && time - last < watchlist.FORGET_MS) { next[key] = last; }
+		});
+		return { fresh: fresh, seen: next };
 	},
 
 	/** Matches grouped per filter, filter order kept: [{filterID, filterName, systemIDs}] */
@@ -337,7 +355,8 @@ const watchlist = {
 	 * @param result {map: {rows}, lines} from chain.nodes()
 	 * @param opts {typeFor(wormholeID, row) -> type, sizeFor(row, type, parentSystemID) -> "S".."XL" or null,
 	 *        trackedSystemID: where the user is}
-	 * @return {entries: [{systemID, nodeIDs, connections: [{wormholeID, type, size}], jumpsHome, jumpsMe}]}
+	 * @return {entries: [{systemID, nodeIDs, connections: [{wormholeID, type, size}], jumpsHome, jumpsMe}]};
+	 *         connections are all of the system's wormholes on the map (to its parent and to its children)
 	 */
 	chainModel: function(result, opts) {
 		opts = opts || {};
@@ -348,6 +367,7 @@ const watchlist = {
 		const nodes = {};		// v -> {systemID, parent v}
 		const byID = {};		// systemID -> entry
 		const entries = [];
+		const links = [];		// [{child, parent: systemIDs, connection}]
 		const rawSystem = {};	// v -> the node's systemID as the chain has it (also unknown "x|y" systems)
 		rows.forEach(function(row) { if (row && row.c && row.c[0]) { rawSystem[row.c[0].v] = row.c[0].systemID; } });
 		rows.forEach(function(row) {
@@ -371,8 +391,18 @@ const watchlist = {
 				type = watchlist.typeCode(type);
 				if (type === "K162") { type = null; }
 				const size = opts.sizeFor ? opts.sizeFor(row, type, rawSystem[parentV]) : null;
-				entry.connections.push({ wormholeID: wormholeID, type: type, size: watchlist.SIZES.indexOf(size) >= 0 ? size : null });
+				links.push({ child: systemID, parent: watchlist.toID(rawSystem[parentV]),
+					connection: { wormholeID: wormholeID, type: type, size: watchlist.SIZES.indexOf(size) >= 0 ? size : null } });
 			}
+		});
+		// A connection belongs to both systems it joins, whichever end the chain map started from
+		links.forEach(function(l) {
+			[l.child, l.parent].forEach(function(id) {
+				const e = id ? byID[id] : null;
+				if (e && !e.connections.some(function(c) { return c.wormholeID === l.connection.wormholeID && c.wormholeID !== undefined; })) {
+					e.connections.push(l.connection);
+				}
+			});
 		});
 
 		// Wormhole jumps from the tracked system, over the chain's connections (systems linked by a parent/child node)
@@ -414,8 +444,11 @@ const watchlist = {
 			const names = byNode[node.v];
 			const title = "Watchlist: " + names.join(", ");
 			const badge = "<span class='watchlist-badge' title='" + watchlist.escape(title) + "'>"
-				+ "<i data-icon='eye'></i>" + (names.length > 1 ? names.length : "") + "</span>";
+				+ "<i data-icon='eye'></i></span>";
 			let f = node.f.replace("class='node ", "class='node watchlist-match ");
+			// On the node's left edge, half way down (CSS; centred on the top edge in the side-ways org chart, where
+			// connectors meet the left and right edges): the corners are taken (threat badge top-left, pilots
+			// top-right, local pill bottom-right, statics bottom-left)
 			const at = f.indexOf("<div class='nodeIcons'>");
 			f = at < 0 ? f : f.substring(0, at) + badge + f.substring(at);
 			node.f = f;
@@ -546,8 +579,8 @@ const watchlist = {
 		if (c.effects) { parts.push(c.effects.map(function(k) { return label(watchlist.EFFECTS, k); }).join(" or ")); }
 		if (c.staticLeadsTo) { parts.push("static to " + label(watchlist.CLASSES, c.staticLeadsTo)); }
 		if (c.staticType) { parts.push("static " + c.staticType); }
-		if (c.whType) { parts.push("through " + c.whType); }
-		if (c.whLeadsTo) { parts.push("through a hole type to " + label(watchlist.CLASSES, c.whLeadsTo)); }
+		if (c.whType) { parts.push("hole " + c.whType); }
+		if (c.whLeadsTo) { parts.push("hole type to " + label(watchlist.CLASSES, c.whLeadsTo)); }
 		if (c.minSize) { parts.push("hole size " + c.minSize + (c.minSize === "XL" ? "" : " or larger")); }
 		if (c.maxJumpsMe !== undefined) { parts.push("≤ " + c.maxJumpsMe + " jump" + (c.maxJumpsMe === 1 ? "" : "s") + " from you"); }
 		if (c.maxJumpsHome !== undefined) { parts.push("≤ " + c.maxJumpsHome + " jump" + (c.maxJumpsHome === 1 ? "" : "s") + " from home"); }
@@ -637,15 +670,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const model = wl.chainModel(result, { typeFor: typeFor, sizeFor: sizeFor, trackedSystemID: lastTracked });
 			const matches = wl.match(settings.filters, model, appData);
 			wl.decorate(result, wl.namesByNode(matches));
+			$("#chainMap").attr("data-watchlist-renderer", options.chain && options.chain.renderer || "");	// marker placement (CSS)
 			lastMatches = matches;
-			const rows = result && result.map && Array.isArray(result.map.rows) ? result.map.rows : [];
-			if (rows.length) {	// an empty map is the chain still loading: keep what was announced
-				const key = contextKey();
-				const d = wl.diff(seen[key], matches);
-				seen[key] = d.seen;
-				storeSeen();
-				if (d.fresh.length) { notify(d.fresh, settings); }
-			}
+			const key = contextKey();
+			const onChain = model.entries.map(function(e) { return e.systemID; });
+			const d = wl.diff(seen[key], matches, onChain, Date.now());
+			seen[key] = d.seen;
+			storeSeen();
+			if (d.fresh.length) { notify(d.fresh, settings); }
 			scheduleRender();
 		}
 
@@ -777,7 +809,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function defaultPlacement(widgets) {
 			let maxRow = 0;
 			(widgets || []).forEach(function(w) { if (w) { maxRow = Math.max(maxRow, (Number(w.row) || 1) + (Number(w.size_y) || 1) - 1); } });
-			return { col: 1, row: maxRow + 1, size_x: 7, size_y: wl.DEFAULT_SIZE.y };
+			return { col: 1, row: maxRow + 1, size_x: wl.DEFAULT_SIZE.x, size_y: wl.DEFAULT_SIZE.y };
 		}
 
 		function gridEntry(gridOptions, id) {
@@ -855,7 +887,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<tr><th>Connection:</th><td>hole type <input type='text' name='whType' class='wl-code' placeholder='e.g. H296' /> &nbsp; leads to " + classSelect("whLeadsTo", "any class")
 				+ " &nbsp; size at least <select name='minSize'><option value=''>any</option>"
 				+ wl.SIZES.map(function(s) { return "<option value='" + s + "'>" + s + "</option>"; }).join("") + "</select>"
-				+ "<div class='wl-hint'>The hole the chain map reaches the system through. Sizes: S frigates, M up to battlecruisers, L battleships, VL freighters, XL capitals.</div></td></tr>"
+				+ "<div class='wl-hint'>Any wormhole of the system on the chain map (in or out); type, leads to and size must fit the same hole. <em>Leads to</em> is the hole type's destination (H296: C5), whichever side was scanned. Sizes: S frigates, M up to battlecruisers, L battleships, VL freighters, XL capitals.</div></td></tr>"
 				+ "<tr><th>Jumps:</th><td>at most <input type='text' inputmode='numeric' name='maxJumpsMe' class='wl-num' maxlength='3' /> from you"
 				+ " &nbsp; at most <input type='text' inputmode='numeric' name='maxJumpsHome' class='wl-num' maxlength='3' /> from home"
 				+ "<div class='wl-hint'>Wormhole jumps on the chain map; home is where the chain starts.</div></td></tr>"
