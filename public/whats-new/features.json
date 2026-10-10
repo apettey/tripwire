@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 2,
+      "date": "2026-10-10",
+      "title": "Statics in the signature Type quick picks",
+      "description": "When you add or edit a wormhole signature, the buttons next to Type now show this system's statics, marked with a dot. Click one to fill in the type and its destination class in one go; once Leads To is set, the matching static is listed first.",
+      "images": [
+        { "src": "whats-new/img/pr-2-quickpicks.png", "caption": "Static quick picks in the signature dialog" }
+      ]
+    },
+    {
       "pr": 1,
       "date": "2026-10-10",
       "title": "What's New",
