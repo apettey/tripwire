@@ -86,10 +86,10 @@ const autoMass = {
 			if (t.x > 0) { multiplier *= t.x; higgs = t.n; }
 			if (t.a > 0) {
 				if (t.p) {
-					if (!prop || t.a > prop.mass) { prop = { typeID: Number(typeID), name: t.n, mass: t.a }; }
+					if (!prop || t.a > prop.mass) { prop = { typeID: Number(typeID), name: autoMass.moduleName(t), mass: t.a }; }
 				} else {
 					base += t.a;
-					additions.push({ typeID: Number(typeID), name: t.n, mass: t.a });
+					additions.push({ typeID: Number(typeID), name: autoMass.moduleName(t), mass: t.a });
 				}
 			}
 		});
@@ -98,6 +98,11 @@ const autoMass = {
 			cold: base * multiplier, hot: (base + (prop ? prop.mass : 0)) * multiplier,
 			prop: prop, additions: additions, higgs: higgs
 		};
+	},
+
+	/** Display name of a fit-mass-data entry; abyssal (mutated) modules say their mass is a base value */
+	moduleName: function(t) {
+		return t.n + (t.m ? ' (base value)' : '');
 	},
 
 	/** Upstream's guess for a hot jump without a fit: +50,000 t, or +500,000 t over 500,000 t hull (mass.js) */
@@ -266,7 +271,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function typeName(typeID) {
 			const t = data().types[typeID];
-			return t ? t.n : null;
+			return t ? autoMass.moduleName(t) : null;
 		}
 
 		// --- Assets (fit) lookup, with the tracking character's own token like location/ship in esi.js ---
@@ -347,7 +352,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function reasonText(fit) {
-			return fit.reason === 'noscope' ? "Hull only: no asset access for this character (remove and add it again under Tracking to allow it)" :
+			return fit.reason === 'noscope' ? "Hull only: this character hasn't granted asset access (remove and add it again under Tracking, if this Tripwire asks for it)" :
 				fit.reason === 'notinassets' ? "Hull only: this ship isn't in ESI's asset snapshot yet" :
 				"Hull only: fit not loaded yet";
 		}

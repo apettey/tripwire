@@ -293,6 +293,12 @@ describe('Rolling calculator', () => {
 				{ name: 'Megathron', mass: kt(98.4), current: false }
 			]);
 		});
+		it('leaves out the current pilot\'s logged fits when their current fit is known', () => {
+			const jumps = [{ shipName: 'Megathron', characterName: 'Me', characterID: '91', originalMass: kt(98.4), fit: { source: 'assets', base: kt(105.9), propMass: kt(50), multiplier: 2 } }];
+			const current = { typeName: 'Megathron, fitted', mass: kt(105.9), propKg: kt(50), higgs: true };
+			assert.deepEqual(rollingCalc.shipChoices(current, jumps, 91).map(s => s.name), ['Megathron, fitted']);
+			assert.deepEqual(rollingCalc.shipChoices({ typeName: 'Megathron', mass: kt(98.4) }, jumps, 91).map(s => s.name), ['Megathron', "Megathron (Me's fit)"]);
+		});
 		it('skips ships without a mass and copes with nothing', () => {
 			assert.deepEqual(rollingCalc.shipChoices(null, [{ shipName: 'X' }]), []);
 			assert.deepEqual(rollingCalc.shipChoices(null, undefined), []);

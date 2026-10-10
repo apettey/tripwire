@@ -113,6 +113,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `APP_NAME` | `Tripwire` | `config.php` (`APP_NAME`) | Name shown in the UI |
 | `TRIPWIRE_API` | `true` | `config.php` (`TRIPWIRE_API`) | Enables the `/api` endpoints |
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
+| `ENABLE_ASSETS_SCOPE` | `false` | `config.php` (`ENABLE_ASSETS_SCOPE`), `public/login.php` | Asks tracking characters (Tracking > Add) for `esi-assets.read_assets.v1`, so [fitted jump mass](#fitted-jump-mass) can read the active ship's fit. EVE SSO refuses a scope your CCP developer application doesn't have (`invalid_scope`, adding characters fails), so: 1. enable `esi-assets.read_assets.v1` on the application at developers.eveonline.com, 2. set `ENABLE_ASSETS_SCOPE=true` and restart, 3. users remove and re-add their tracking characters. Without it jumps are logged with the hull mass only |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
 | `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`), `public/ping.php`, `rally_discord.inc.php` | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}`. Used by upstream's pings and, for masks that don't have the "Rally point" type turned on in Mask Admin > Discord ([Discord notifications](#discord-notifications); that setting wins), by rally point posts (posted directly by `public/rally.php`; same rules as the Mask Admin type with fixed texts and no pings: changes within 30 s of the post edit it, a later move posts a new message and strikes through the old one, a clear strikes through the message and posts nothing; links use the origin of `EVE_SSO_REDIRECT`). Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php` and, against the dev database, `php tests/rally_discord_lock_test.php` (`tests/` is not in the image) |
 | `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php`, `zkill/` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting) and the [System Kill Feed](#zkillboard-integration). `false` = the worker idles and nothing is requested from zKillboard or ESI (no back-fills, no names) |
@@ -141,6 +142,23 @@ replaces them with `docker/analytics.inc.php` and `docker/donation_panel.inc` (t
 them over the repo copies), which send nothing to third parties unless `GA_MEASUREMENT_ID` /
 `DONATION_PANEL_HTML_FILE` are set. `docker/analytics.inc.php` always defines a no-op `ga()` because
 `tripwire.php` calls it every 4 minutes.
+
+### Fitted jump mass
+
+Tracked jumps through a mapped hole are logged by upstream's `jumpHistory` trigger with the hull only. The fork adds
+the ship's real mass from its fitting (`app/js/fork/auto-mass.js`, `public/jump_fit.php`, table `fork_jump_fits`
+created on first use): the tracking character's browser reads its assets from ESI with its own token and reports
+the fitted mass of each jump. This needs the `esi-assets.read_assets.v1` scope, which is **off by default**:
+
+1. Enable `esi-assets.read_assets.v1` on your application at developers.eveonline.com (EVE SSO refuses scopes the
+   application doesn't have, so adding tracking characters would fail with `invalid_scope`).
+2. Set `ENABLE_ASSETS_SCOPE=true` and restart.
+3. Users remove and re-add their tracking characters (Tracking > Add) to grant it.
+
+Without the scope, jumps are logged with the hull mass (and the pilot's hot/cold answer). The list of modules that
+change mass is static (`app/js/fork/fit-mass-data.js`); regenerate it from public ESI with
+`node tools/fork/build-fit-mass-data.mjs > app/js/fork/fit-mass-data.js` when CCP adds plates or prop modules.
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/jump_fit_test.php`.
 
 ### Kill Reporting
 

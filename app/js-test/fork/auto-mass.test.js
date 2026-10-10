@@ -70,6 +70,15 @@ describe('Fitted jump mass (auto-mass)', () => {
 			assert.equal(m.multiplier, 1);
 			assert.equal(m.higgs, null);
 		});
+		it('abyssal props and plates count with their size\'s heaviest base value', () => {
+			const m = autoMass.fitMass(t(13800), [47408, 47820], fitMassData);	// 50MN Abyssal MWD, Large Abyssal Armor Plates
+			assert.equal(m.prop.mass, t(5000));
+			assert.equal(m.prop.name, '50MN Abyssal Microwarpdrive (base value)');
+			assert.equal(m.cold, t(13800) + t(3750));
+			assert.equal(m.hot, t(13800) + t(3750) + t(5000));
+			assert.equal(fitMassData.types[56306].a, t(500000));	// 50000MN Abyssal MWD
+			assert.equal(fitMassData.types[47812].m, 1);
+		});
 		it('several prop modules: only the heaviest counts (one can be active)', () => {
 			const m = autoMass.fitMass(t(1000), [12076, 12068], fitMassData);
 			assert.equal(m.prop.typeID, 12068);

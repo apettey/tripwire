@@ -154,8 +154,9 @@ const rollingCalc = {
 	/** Ship choices for the dialog: the current ship first, then ships seen in this hole's log (unique by name).
 		@param currentShip {typeName, mass, propKg?, higgs?} or null; jumps parseMassData().jumps ({shipName, originalMass},
 			plus fit: {source: 'assets', base, propMass, multiplier} and characterName for a logged fit, auto-mass-logging)
-		A fitted ship's mass is hull + plates (before Higgs), with its real prop module (propKg) and Higgs anchor (higgs). */
-	shipChoices: function(currentShip, jumps) {
+		A fitted ship's mass is hull + plates (before Higgs), with its real prop module (propKg) and Higgs anchor (higgs).
+		currentCharacterID: with a current fit, that pilot's logged fits are left out (the current one is listed first). */
+	shipChoices: function(currentShip, jumps, currentCharacterID) {
 		const out = [], seen = {};
 		const add = function(name, mass, current, fit) {
 			if (!name || !(Number(mass) > 0) || seen[name]) { return; }
@@ -170,6 +171,7 @@ const rollingCalc = {
 		(jumps || []).forEach(function(j) {
 			if (!j) { return; }
 			if (j.fit && j.fit.source === 'assets' && Number(j.fit.base) > 0) {
+				if (currentShip && currentShip.propKg !== undefined && currentCharacterID && j.characterID == currentCharacterID) { return; }
 				add(j.shipName + " (" + (j.characterName || "logged") + "'s fit)", j.fit.base, false,
 					{ propKg: j.fit.propMass, higgs: Number(j.fit.multiplier) > 1 });
 			} else {
@@ -275,7 +277,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!info || !state.massData) { $p.hide().empty(); return; }
 			$p.show();
 
-			const ships = state.ships = rollingCalc.shipChoices(currentShip(), state.massData.jumps);
+			const eve = tripwire.client ? tripwire.client.EVE : null;
+			const ships = state.ships = rollingCalc.shipChoices(currentShip(), state.massData.jumps, eve ? eve.characterID : null);
 			if (state.choice === null) { state.choice = ships.length ? ships[0].name : 'custom'; }
 			const chosen = ships.filter(function(s) { return s.name === state.choice; })[0];
 			if (state.higgs === null) { state.higgs = chosen && chosen.higgs !== undefined ? chosen.higgs : !!(tripwire.massOptions && tripwire.massOptions.higgs); }
