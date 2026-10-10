@@ -23,7 +23,8 @@ if(!isset($fetch_data)) {
 // Fetch into cache if not set
 $cache_file = dirname(dirname(__FILE__)) . '/cache/' . $fetch_data['cache_file'];
 if (!file_exists($cache_file) || (time() - filemtime($cache_file) >= $fetch_data['cache_for'])){
-	$in_resource = fopen( $fetch_data['url'], 'r');
+	require_once(dirname(__DIR__) . '/esi/esi.inc.php');	// fork: ESI compatibility date + rate limits; other URLs: plain fopen
+	$in_resource = esi_open_url($fetch_data['url'], $cache_file);
 	if($in_resource) file_put_contents($cache_file, $in_resource);
 	else { 
 		http_response_code(500);

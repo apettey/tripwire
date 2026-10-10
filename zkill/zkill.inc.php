@@ -19,6 +19,7 @@
 // Tables: zkill_killmails (all kills, from the stream and back-fill), zkill_state, zkill_backfill, zkill_names,
 // zkill_system_stats (System Threat), plus Kill Reporting's zkill_kills (alert log, chain systems only, unchanged) and zkill_feed_state.
 
+require_once(__DIR__ . '/../esi/esi.inc.php');   // ESI_COMPATIBILITY_DATE (one date for every server ESI call)
 require_once(__DIR__ . '/http.php');
 require_once(__DIR__ . '/schema.php');
 require_once(__DIR__ . '/killmails.php');
@@ -30,7 +31,7 @@ require_once(__DIR__ . '/threat.php');
 
 const ZK_API_BASE  = 'https://zkillboard.com/api/';
 const ZK_ESI_BASE  = 'https://esi.evetech.net/';       // versionless routes, pinned with X-Compatibility-Date
-const ZK_ESI_COMPATIBILITY_DATE = '2025-12-16';
+const ZK_ESI_COMPATIBILITY_DATE = ESI_COMPATIBILITY_DATE;
 
 /** Integer setting from a config.php constant or the environment, clamped to [min, max] */
 function zk_config_int($name, $default, $min, $max) {
