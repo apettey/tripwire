@@ -23,7 +23,8 @@ No toggle, because this is a data correction: the values are what the game uses,
 
 ## Change
 
-Edited the sources `tools/mass.json` and `tools/wormholes.json` (upstream files) and the generated `public/js/combine.js`
+Edited the sources `tools/mass.json` and `tools/wormholes.json` (upstream files), one line of upstream
+`app/js/dialogs/signature-dialog.js` (see below, bundle rebuilt) and the generated `public/js/combine.js`
 (upstream, `appData.mass` / `appData.wormholes` only). Upstream's generator (`tools/json_builder.php`) needs the SDE in
 MySQL, so a new fork tool `tools/fork/splice-combine.js` rewrites just those two sections of `combine.js` from the JSON
 files in the generator's format (`node tools/fork/splice-combine.js`, `--check` to verify). Test fixture values in
@@ -68,7 +69,9 @@ the 2026-09-22.1 notes give for intra-Pochven wormholes. O753/R327 are the newes
 notes put the new Extra-Pochven wormholes in Blood Raider space in Delve (null-sec) and the Eugidi, Angils and Essin
 constellations (Metropolis low-sec).
 
-"4.5 Hours" pre-fills the signature dialog's duration with 4 h (upstream reads the first two characters), not 5 h.
+Upstream `app/js/dialogs/signature-dialog.js` (one line) read the first two characters of the life text to pre-fill
+the signature duration, which would turn "4.5 Hours" into 4 h. It now uses `parseFloat`, so "4.5 Hours" gives 4 h 30 min
+and 12/16/24/48 Hours are unchanged (checked in the dev stack; the code sits inside the dialog and has no unit test).
 
 Not stored by Tripwire, so nothing to change: Extra-Pochven holes now change phase every 30 min (was 60).
 

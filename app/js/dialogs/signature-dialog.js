@@ -168,7 +168,7 @@ sigDialog.openSignatureDialog = function(e) {
 
 						// Also auto calculate duration
 						if (appData.wormholes[this.value.toUpperCase()]) {
-							$("#dialog-signature #durationPicker").val(appData.wormholes[this.value.toUpperCase()].life.substring(0, 2) * 60 * 60).change();
+							$("#dialog-signature #durationPicker").val(parseFloat(appData.wormholes[this.value.toUpperCase()].life) * 60 * 60).change();
 						}
 					} else if (this.value.toUpperCase() === "K162") {
 						if (aSigWormholes[$("#dialog-signature .wormholeType").not(this).val().toUpperCase()] || $("#dialog-signature .wormholeType").not(this).val().toUpperCase() === "K162") {
