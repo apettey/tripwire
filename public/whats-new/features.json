@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 40,
+      "date": "2026-10-10",
+      "title": "Favourites: route as jump markers",
+      "description": "Each favourite with a route now shows it as a strip of small markers, one per jump: squares are stargates, circles are wormholes, and hops into or out of Thera or Turnur are ringed circles (yellow for Thera, pink for Turnur). The colour shows the security or wormhole class of each system. Hover a marker to see the system, its region and how you get there; long routes are shortened to fit the panel.\n\nPrefer the old \"1g → 2wh → 6g\" text? Turn it off in Settings > General Preferences > Show routes as jump markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-40-favourites-route-strip.png",
+          "caption": "Routes in the Favourites panel as jump markers"
+        }
+      ]
+    },
+    {
       "pr": 39,
       "date": "2026-10-10",
       "title": "High-sec region instead of hole type",
@@ -9,6 +21,30 @@
         {
           "src": "whats-new/img/pr-39-highsec-region-label.png",
           "caption": "High-sec exits labelled with their region"
+        }
+      ]
+    },
+    {
+      "pr": 37,
+      "date": "2026-10-10",
+      "title": "Routes through Thera and Turnur",
+      "description": "Favourite routes and the Destinations window now also look at the public Thera and Turnur connections from EVE-Scout. When going through Thera or Turnur is shorter, the route uses it: every jump is a small marker, Thera hops are yellow circles and Turnur hops pink ones, and the signatures to warp to are listed next to the route (click one to copy it). Hover a Thera or Turnur marker for the hole type, the signature, the largest ship it takes and the life left. By default holes with under 4 hours left (EOL) are skipped.\n\nSet route in game sends each gate stretch separately: the first one now, the next once you are out of Thera. Choose Thera, Turnur, your ship size and which holes to skip in Settings > General Preferences > Routes through; untick both Thera and Turnur to turn it off.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-37-exit-finder-thera.png",
+          "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
+        }
+      ]
+    },
+    {
+      "pr": 34,
+      "date": "2026-10-10",
+      "title": "Up-to-date ship and Pochven wormhole data",
+      "description": "Marauder and Black Ops battleship masses now match their lighter hulls from the September 22 patch, so the mass log and rolling calculator count them correctly.\n\nPochven wormholes now show a 12-hour life. The new Pochven-to-Pochven holes (I078, L687, O546) and the new holes into Pochven (O753, R327) now show their life and mass when you hover the wormhole type.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-34-game-data.png",
+          "caption": "Hovering a Pochven wormhole type shows its life and mass"
         }
       ]
     },
