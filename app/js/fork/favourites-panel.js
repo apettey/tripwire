@@ -285,12 +285,23 @@ const favouritesPanel = {
 		return favouritesPanel.isKSpace(system) && system.factionID != 500026 && Number(system.security) >= 0.45;
 	},
 
+	/** Whether a route may pass through a system on its way (not as its start or destination): never Zarzakh
+	(its gates hold you for hours) or a system on the user's avoid list; in safe mode only high-sec.
+	@param ignore {<lower-case name>: true} (Settings > General Preferences > avoid list, when enabled) */
+	passable: function(system, safe, ignore) {
+		if (!system) { return false; }
+		const name = String(system.name || "");
+		if (name === "Zarzakh" || (ignore && ignore[name.toLowerCase()])) { return false; }
+		return !safe || favouritesPanel.isHighSec(system);
+	},
+
 	/** Gate jumps from one system to every system reachable by gates (breadth-first over the gate map).
-	safe: only through high-sec systems (the start itself may be anything: you are already there).
-	Zarzakh is never passed through (its gates hold you for hours).
+	The start and every system reached may be anything, but only passable systems are travelled through:
+	in safe mode the start and the destination may be any security, everything in between is high-sec.
 	@param map gate adjacency keyed by systemID - 30000000 (appData.map.shortest)
+	@param ignore see passable
 	@return {<systemID>: jumps} */
-	gateDistances: function(map, systems, fromID, safe) {
+	gateDistances: function(map, systems, fromID, safe, ignore) {
 		const from = favouritesPanel.toID(fromID);
 		const dist = {};
 		if (!from || !map) { return dist; }
@@ -298,15 +309,12 @@ const favouritesPanel = {
 		const queue = [from];
 		for (let i = 0; i < queue.length; i++) {
 			const current = queue[i];
-			const system = systems[current];
-			if (current !== from && system && system.name === "Zarzakh") { continue; }
 			const next = map[current - 30000000] || {};
 			for (const key in next) {
 				const id = 30000000 + Number(key);
 				if (dist[id] !== undefined) { continue; }
-				if (safe && !favouritesPanel.isHighSec(systems[id])) { continue; }
-				dist[id] = dist[current] + 1;
-				queue.push(id);
+				dist[id] = dist[current] + 1;	// reachable as a destination...
+				if (favouritesPanel.passable(systems[id], safe, ignore)) { queue.push(id); }	// ...and onwards
 			}
 		}
 		return dist;
@@ -317,22 +325,24 @@ const favouritesPanel = {
 	@param startSystemID where the tracked character is
 	@param exits [{systemID, nodeID}] k-space systems on the chain (routeDestinations.chainExits)
 	@param distances function(systemID, safe) -> gateDistances (memoised by the caller)
-	@param systems appData.systems-like lookup */
-	context: function(result, startSystemID, exits, distances, systems) {
+	@param systems appData.systems-like lookup
+	@param ignore avoid list, see passable */
+	context: function(result, startSystemID, exits, distances, systems, ignore) {
 		const rows = (result && result.map && result.map.rows) || [];
 		const lines = (result && result.lines) || [];
 		const start = favouritesPanel.toID(startSystemID);
 		const chain = favouritesPanel.chainSystems(rows);
 		return {
-			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {},
+			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {}, ignore: ignore || null,
 			connections: rally.systemConnections(rows, lines),
 			startOnChain: !!(start && chain[String(start)]),
 			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start]))
 		};
 	},
 
-	/** Quickest way from the tracked location to a favourite, for one route mode ("shortest" or "safe": every
-	gate leg through high-sec only; wormhole legs through the chain are allowed either way).
+	/** Quickest way from the tracked location to a favourite, for one route mode ("shortest" or "safe": your
+	location and the favourite may be any security, every system you gate through in between is high-sec, including
+	the chain systems you gate into or out of; wormhole legs through the chain are allowed either way).
 	Candidates: gates straight there (k-space start); otherwise into the chain (you are on it, or gates to a
 	k-space system on it), through wormholes, and out of it (the favourite is on the chain, or gates from a
 	k-space system on it). Fewest jumps in total wins; ties go to fewer wormhole jumps.
@@ -346,6 +356,8 @@ const favouritesPanel = {
 		if (!ctx.startOnChain && !ctx.startKSpace) { return { status: "no-location", reason: "off-chain", mode: mode }; }
 
 		const fromFav = ctx.distances(id, safe);
+		// Chain systems you gate into or out of are passed through, so they must be passable too
+		const through = function(systemID) { return favouritesPanel.passable(ctx.systems[systemID], safe, ctx.ignore); };
 		const fromStart = ctx.startKSpace ? ctx.distances(ctx.start, safe) : null;
 		let best = null;
 		const consider = function(c) {
@@ -360,13 +372,13 @@ const favouritesPanel = {
 		if (ctx.startOnChain) { entries.push({ systemID: ctx.start, gates: 0 }); }
 		if (fromStart) {
 			ctx.exits.forEach(function(e) {
-				if (e.systemID !== ctx.start && fromStart[e.systemID] !== undefined) { entries.push({ systemID: e.systemID, gates: fromStart[e.systemID] }); }
+				if (e.systemID !== ctx.start && fromStart[e.systemID] !== undefined && through(e.systemID)) { entries.push({ systemID: e.systemID, gates: fromStart[e.systemID] }); }
 			});
 		}
 		const targets = [];
 		if (ctx.chain[String(id)]) { targets.push({ systemID: id, gates: 0 }); }
 		ctx.exits.forEach(function(x) {
-			if (x.systemID !== id && fromFav[x.systemID] !== undefined) { targets.push({ systemID: x.systemID, gates: fromFav[x.systemID] }); }
+			if (x.systemID !== id && fromFav[x.systemID] !== undefined && through(x.systemID)) { targets.push({ systemID: x.systemID, gates: fromFav[x.systemID] }); }
 		});
 		entries.forEach(function(entry) {
 			targets.forEach(function(target) {
@@ -427,7 +439,7 @@ const favouritesPanel = {
 	/** Decorate chain.nodes() output in place for the favourites with Route on, and work out both modes for
 	each (the row's tooltip compares them). Returns {<favID>: {mode, shortest, safe}}.
 	@param routeFavorites [{systemID, mode}] */
-	decorate: function(result, routeFavorites, startSystemID, exits, distances, systems) {
+	decorate: function(result, routeFavorites, startSystemID, exits, distances, systems, ignore) {
 		const lines = (result && result.lines) || [];
 		const own = [favouritesPanel.ROUTE_CLASS, favouritesPanel.SAFE_ROUTE_CLASS];
 		lines.forEach(function(line) {
@@ -437,7 +449,7 @@ const favouritesPanel = {
 		});
 		const routes = {};
 		if (!(routeFavorites || []).length) { return routes; }
-		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems);
+		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems, ignore);
 		routeFavorites.forEach(function(f) {
 			const info = { mode: f.mode, shortest: favouritesPanel.plan(ctx, f.systemID, "shortest"), safe: favouritesPanel.plan(ctx, f.systemID, "safe") };
 			routes[f.systemID] = info;
@@ -480,11 +492,12 @@ const favouritesPanel = {
 
 	/** Text and tooltip for a favourite's route: the selected mode first, the other one too when it differs */
 	routeSummary: function(info, favName, name) {
-		if (!info || !info.mode) { return { text: "", title: "Route: off. Click for the shortest route, again for a high-sec-only (safe) route", ok: false }; }
+		if (!info || !info.mode) { return { text: "", title: "Route: off. Click for the shortest route, again for a safe route (only high-sec between here and there)", ok: false }; }
 		const label = { shortest: "Shortest", safe: "Safe" };
 		const selected = info[info.mode];
 		const other = info[info.mode === "safe" ? "shortest" : "safe"];
-		let title = "Route (" + label[info.mode].toLowerCase() + "): " + favouritesPanel.planDetail(selected, favName, name);
+		let title = "Route (" + (info.mode === "safe" ? "safe, only high-sec between here and there" : "shortest") + "): "
+			+ favouritesPanel.planDetail(selected, favName, name);
 		if (other && other.status !== "no-location" && favouritesPanel.planText(other) !== favouritesPanel.planText(selected)) {
 			title += " · " + label[other.mode] + ": " + favouritesPanel.planDetail(other, favName, name);
 		}
@@ -525,7 +538,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					lastTracked = trackedSystem();
 					const routeFavs = on ? fp.routeModes(favorites, settings) : [];
 					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows) : [];
-					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems);
+					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems, avoidList());
 				} catch (e) { console.error("Favourites panel: route decorate failed", e); }
 				clearTimeout(renderTimer);
 				renderTimer = setTimeout(render, 0);
@@ -536,13 +549,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		// Gate jumps from a system to everywhere (shortest or high-sec only), kept between draws: the gate map
 		// doesn't change, and favourites and the location change rarely
-		let distanceCache = {}, distanceCount = 0;
+		let distanceCache = {}, distanceCount = 0, distanceAvoid = "";
+		/** The user's avoid list (Settings > General Preferences), when switched on: {<lower-case name>: true} */
+		function avoidList() {
+			const r = options.chain && options.chain.routeIgnore;
+			if (!r || !r.enabled || !Array.isArray(r.systems)) { return null; }
+			const list = {};
+			r.systems.forEach(function(n) { if (n) { list[String(n).trim().toLowerCase()] = true; } });
+			return list;
+		}
 		function gateDistances(systemID, safe) {
+			const avoid = avoidList();
+			const avoidKey = avoid ? Object.keys(avoid).sort().join(",") : "";
+			if (avoidKey !== distanceAvoid) { distanceCache = {}; distanceCount = 0; distanceAvoid = avoidKey; }
 			const key = systemID + (safe ? "|safe" : "");
 			if (!distanceCache[key]) {
 				if (++distanceCount > 60) { distanceCache = {}; distanceCount = 1; }
 				const map = (tripwire.map && tripwire.map.shortest) || appData.map.shortest;
-				distanceCache[key] = fp.gateDistances(map, appData.systems, systemID, safe);
+				distanceCache[key] = fp.gateDistances(map, appData.systems, systemID, safe, avoid);
 			}
 			return distanceCache[key];
 		}

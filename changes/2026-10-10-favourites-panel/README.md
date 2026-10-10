@@ -46,10 +46,13 @@ Stored in `options.favoritesPanel.enabled`; a missing key means on; Settings > R
     no route.
   - Leaves the chain at the favourite itself (if it is on the chain) or at the k-space system with the quickest gate
     route to it. Fewest jumps in total wins; ties go to fewer wormhole jumps.
-  - Safe: every gate leg only through high-sec (security ≥ 0.45, as the app classifies HS; the system you are in may
-    be anything). Wormhole legs are allowed. Shortest: any security. Zarzakh is never passed through.
-  - Gate jumps come from a breadth-first search over `appData.map.shortest` (cached per system and mode), not
-    `guidance`, so the user's K-space route preference doesn't change the shortest/safe meaning.
+  - Safe: your location and the favourite may be any security; every system you gate through in between is
+    high-sec (security ≥ 0.45, as the app classifies HS), including the chain systems you gate into or out of, so
+    a low-sec exit is never used for a safe route. Wormhole legs are allowed. Shortest: any security.
+  - Never passed through: Zarzakh, and the systems on the user's avoid list (Settings > General Preferences, when
+    switched on); they can still be the start or the destination.
+  - Gate jumps come from a breadth-first search over `appData.map.shortest` (cached per system, mode and avoid
+    list), not `guidance`, so the user's K-space route preference doesn't change the shortest/safe meaning.
   - On the map: wormhole connections, the system you enter the chain at (ringed), the calculated node to the
     favourite and its connection (or the exit, ringed). Shortest: white dashes on a blue glow; safe: solid light
     blue with a white glow. A direct gate route highlights nothing.
@@ -65,7 +68,8 @@ Stored in `options.favoritesPanel.enabled`; a missing key means on; Settings > R
 
 ## Limitations
 
-- Upstream's calculated nodes show gate jumps from `guidance` (with the K-space route preference); the panel counts
-  its own (shortest or safe), so the two can differ by a few jumps.
+- Upstream's calculated nodes show gate jumps from `guidance`, weighted by the K-space route preference (high-sec,
+  avoid high/null); the panel counts its own (shortest or safe, honouring the avoid list), so the two can differ by
+  a few jumps.
 - The info panel's list of routes to favourites refreshes on the next system change, not on edits in the panel.
 - The panel and rally each redraw the map when the tracked character moves (two cheap checks, not shared).

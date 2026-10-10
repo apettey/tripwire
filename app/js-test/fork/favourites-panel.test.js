@@ -169,7 +169,25 @@ describe('Favourites panel', () => {
 		it('Never through Zarzakh', () => assert.equal(fp.gateDistances(map, systems, a, false)[z], 1));
 		it('Safe stays in high-sec', () => assert.equal(fp.gateDistances(map, systems, a, true)[c], 3));
 		it('Safe: may start in low-sec', () => assert.equal(fp.gateDistances(map, systems, b, true)[a], 1));
-		it('Safe: never enters low-sec', () => assert.equal(fp.gateDistances(map, systems, a, true)[b], undefined));
+		it('Safe: low-sec is reached as a destination, never passed through', () => {
+			const d = fp.gateDistances(map, systems, a, true);
+			assert.equal(d[b], 1);
+			assert.equal(d[c], 3);
+		});
+		it('Avoid list: reached as a destination, never passed through', () => {
+			const named = Object.assign({}, systems, { [d]: Object.assign({ name: 'Dee' }, hs) });
+			const dist = fp.gateDistances({ 1: { 4: 0 }, 4: { 1: 0, 5: 0 }, 5: { 4: 0 } }, named, a, false, { dee: true });
+			assert.equal(dist[d], 1);
+			assert.equal(dist[e], undefined);
+		});
+		it('passable', () => {
+			assert.ok(fp.passable(hs, true));
+			assert.ok(!fp.passable(ls, true));
+			assert.ok(fp.passable(ls, false));
+			assert.ok(!fp.passable({ name: 'Zarzakh', security: -1, regionID: 10000001 }, false));
+			assert.ok(!fp.passable({ name: 'Tama', security: 0.3, regionID: 10000001 }, false, { tama: true }));
+			assert.ok(!fp.passable(undefined, false));
+		});
 		it('Unknown start', () => assert.deepEqual(fp.gateDistances(map, systems, null, false), {}));
 	});
 
@@ -179,14 +197,15 @@ describe('Favourites panel', () => {
 		// L - D1 - D2 - D3 - D4 - D5 - D6 - F (direct, 7 jumps, high-sec); B - T (low-sec favourite).
 		const R = 10000001;
 		const L = 30000001, A = 30000002, B = 30000003, U = 30000004, F = 30000005, Q1 = 30000006, Q2 = 30000007,
-			D = [30000011, 30000012, 30000013, 30000014, 30000015, 30000016], T = 30000020, JOFF = 31000099;
+			D = [30000011, 30000012, 30000013, 30000014, 30000015, 30000016], T = 30000020, JOFF = 31000099,
+			N = 30000021, M = 30000022;	// low-sec favourites one gate from high-sec D[2] / Q1
 		const hs = { regionID: R, security: 0.8 }, ls = { regionID: R, security: 0.2 };
 		const systems = { [HOME]: { regionID: 11000001, class: 5 }, [JOFF]: { regionID: 11000001, class: 3 },
-			[L]: hs, [A]: hs, [B]: ls, [U]: hs, [F]: hs, [Q1]: hs, [Q2]: hs, [T]: ls };
+			[L]: hs, [A]: hs, [B]: ls, [U]: hs, [F]: hs, [Q1]: hs, [Q2]: hs, [T]: ls, [N]: ls, [M]: ls };
 		D.forEach(d => { systems[d] = hs; });
 		const map = {};
 		const link = (x, y) => { (map[x - 30000000] = map[x - 30000000] || {})[y - 30000000] = 0; (map[y - 30000000] = map[y - 30000000] || {})[x - 30000000] = 0; };
-		link(L, A); link(B, F); link(U, Q1); link(Q1, Q2); link(Q2, F); link(B, T);
+		link(L, A); link(B, F); link(U, Q1); link(Q1, Q2); link(Q2, F); link(B, T); link(D[2], N); link(Q1, M);
 		[L].concat(D, [F]).forEach((x, i, all) => { if (i) { link(all[i - 1], x); } });
 		const distances = (id, safe) => fp.gateDistances(map, systems, id, safe);
 		const exits = [{ systemID: A, nodeID: 2 }, { systemID: B, nodeID: 3 }, { systemID: U, nodeID: 4 }];
@@ -241,6 +260,22 @@ describe('Favourites panel', () => {
 			const p = fp.plan(ctx(world(), JOFF), F, 'shortest');
 			assert.equal(p.status, 'no-location');
 			assert.equal(p.reason, 'off-chain');
+		});
+		it('Safe: k-space start to a low-sec favourite one gate from high-sec goes direct', () => {
+			const p = fp.plan(ctx(world(), L), N, 'safe');
+			assert.equal(p.status, 'ok');
+			assert.equal(p.kind, 'direct');
+			assert.equal(p.gatesIn, 4);
+		});
+		it('Safe: high-sec system on the chain to a low-sec favourite by gates', () => {
+			const p = fp.plan(ctx(world(), U), M, 'safe');
+			assert.equal(p.kind, 'direct');
+			assert.equal(p.gatesIn, 2);
+		});
+		it('Safe: a low-sec chain exit is never gated through', () => {
+			const p = fp.plan(ctx(world(), HOME), F, 'safe');
+			assert.equal(p.exitSystemID, U);
+			assert.equal(fp.plan(ctx(world(), HOME), F, 'shortest').exitSystemID, B);
 		});
 		it('Not tracked', () => assert.equal(fp.plan(ctx(world(), null), F, 'shortest').reason, 'untracked'));
 		it('In the favourite', () => assert.equal(fp.plan(ctx(world(), F), F, 'safe').status, 'here'));

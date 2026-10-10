@@ -4,7 +4,7 @@
       "pr": 17,
       "date": "2026-10-10",
       "title": "Favourites panel",
-      "description": "A new Favourites panel lists your favourite systems. Add one with the search box, remove it with the cross, and drag the handle to change the order. Move and resize the panel like the others with Customize layout.\n\nThe eye picks which favourites get a route node on the chain map when the star button in the chain map toolbar is on, so a long list no longer clutters the map. The route button highlights the way there from where you are, through the chain or straight through k-space gates: click once for the shortest route, again for a safe route that keeps every gate jump in high-sec. The panel shows the jumps, for example 1g → 2wh → 6g (gates, wormholes, gates). Hover it for the systems and how the shortest and safe routes compare.\n\nDon't want it? Turn it off in Settings > General Preferences.",
+      "description": "A new movable Favourites panel lists your favourite systems: add them with the search box, drag to reorder, and use the eye to choose which ones the chain map shows routes to. The route button highlights the way there from where you are, through the chain or by gates, as the shortest route or (click again) a safe route through high-sec only, with the jumps shown like 1g → 2wh → 6g. Don't want it? Turn it off in Settings > General Preferences.",
       "images": [
         {
           "src": "whats-new/img/pr-17-favourites-panel.png",
