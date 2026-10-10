@@ -1,23 +1,44 @@
 /* Region name in place of the hole type on chain map nodes in high-sec (fork feature: highsec-region).
-   The line fills the node's width without adding to it, and long names end in an ellipsis (full name and hole
-   type in the tooltip). The hidden copy of the original text keeps the node as wide as it was before, so the
-   chain layouts don't change. */
-#chainMap .nodeType .highsec-region-line {
-	display: block;
-	width: 0;
-	min-width: 100%;
+   The region takes its natural width up to a cap that fits every high-sec region; longer text ends in an
+   ellipsis (full name and hole type in the tooltip). The chain renderers lay nodes out from their measured size,
+   measured in #temp-div-node-width (chain-map-renderer-base.js measureNode), so the rules apply there too. */
+#chainMap .nodeType .highsec-region-line,
+#temp-div-node-width .nodeType .highsec-region-line {
+	display: inline-block;
+	max-width: 8.5em;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-#chainMap .nodeType .highsec-region {
+	vertical-align: top;
 	text-transform: none;
 }
 
-#chainMap .nodeType .highsec-region-reserve {
-	display: block;
-	height: 0;
+/* Hole type for screen readers (it is in the tooltip for everyone else) */
+#chainMap .nodeType .highsec-region-sr,
+#temp-div-node-width .nodeType .highsec-region-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
 	overflow: hidden;
-	visibility: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* "Reference - prefix": hole name on the type line, region on a line of its own below it. The node grows by
+   one line; the two lines are set a little tighter so it stays within the side org chart's 45px rows. */
+#chainMap .nodeType .highsec-region-name,
+#temp-div-node-width .nodeType .highsec-region-name {
+	display: block;
+	line-height: 1;
+}
+#chainMap .nodeType .highsec-region-line.highsec-region-below,
+#temp-div-node-width .nodeType .highsec-region-line.highsec-region-below {
+	display: block;
+	margin: 0 auto;
+	line-height: 1;
+}
+#chainMap div.node.highsec-region-tall,
+#temp-div-node-width div.node.highsec-region-tall {
+	height: auto;
+	min-height: 30px;
 }

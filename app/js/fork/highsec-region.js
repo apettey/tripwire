@@ -9,7 +9,7 @@ const highsecRegion = {
 	},
 
 	/** Whether a system counts as high-sec the way Tripwire classifies it (systemAnalysis: no wormhole class,
-	not Triglavian, security >= 0.45, which EVE rounds to 0.5). Takes appData.systems[id] or systemAnalysis.analyse(id). */
+	not Triglavian, security >= 0.45, which EVE displays as 0.5). Takes appData.systems[id] or systemAnalysis.analyse(id). */
 	isHighSec: function(system) {
 		if (!system) { return false; }
 		if (Array.isArray(system.class) ? system.class.length : system.class) { return false; }
@@ -36,16 +36,17 @@ const highsecRegion = {
 	/** The hole type text a chain node shows, as upstream's chain.nodes builds it (chain-map.js).
 	@param child the connection's child (last pathHome entry: { type, name, signatureID, path })
 	@param chainOptions options.chain ({ "node-reference", sigNameLocation })
-	@return { prefix, type }: the node shows prefix + type; or null when it doesn't show the hole type
-	(gate route, signature IDs instead of types, or only the hole's name) */
+	@return { prefix, name, type }: the node shows prefix + type (with "Reference - prefix", prefix is
+	"<name> - " and name the hole's name; otherwise both are ''); or null when it doesn't show the hole type (gate route, signature IDs instead of types, or only
+	the hole's name) */
 	typeText: function(child, chainOptions) {
 		if (!child || child.path) { return null; }
 		chainOptions = chainOptions || {};
 		if (chainOptions['node-reference'] == 'id') { return null; }
 		const type = child.type || '(?)';
 		if (child.name && chainOptions.sigNameLocation == 'ref') { return null; }
-		if (child.name && chainOptions.sigNameLocation == 'ref_prefix') { return { prefix: child.name + ' - ', type: type }; }
-		return { prefix: '', type: type };
+		if (child.name && chainOptions.sigNameLocation == 'ref_prefix') { return { prefix: child.name + ' - ', name: String(child.name), type: type }; }
+		return { prefix: '', name: '', type: type };
 	},
 
 	/** Tooltip for the label: the full region name and the hole type it replaces */
@@ -55,14 +56,22 @@ const highsecRegion = {
 	},
 
 	/** Markup for the node's type line with the region in place of the hole type (text from typeText).
-	The line takes the node's width without adding to it (ellipsis when the region is longer); an invisible,
-	zero-height copy of the original text keeps the node exactly as wide as it was, so layouts don't move. */
+	The region takes its natural width up to a cap that fits every high-sec region (ellipsis beyond it); the
+	renderers lay nodes out from their measured width, so wider nodes get room. With "Reference - prefix" the
+	hole name keeps the line and the region goes on a line of its own below it ("AABA - The Bleak Lands" on one
+	line would make the node too wide for the layouts). The hole type stays in the tooltip and, for screen
+	readers, in visually hidden text. */
 	labelHtml: function(text, region) {
 		const esc = highsecRegion.escape;
-		return "<span class='highsec-region-line' title='" + esc(highsecRegion.title(region, text.type)) + "'>" +
-			esc(text.prefix) + "<span class='highsec-region'>" + esc(region) + "</span></span>" +
-			"<span class='highsec-region-reserve' aria-hidden='true'>" + esc(text.prefix + text.type) + "</span>";
+		const type = text.type && text.type != '(?)' ? text.type : 'unknown';
+		return (text.name ? "<span class='highsec-region-name'>" + esc(text.name) + "</span>" : '') +
+			"<span class='highsec-region-line" + (text.name ? " highsec-region-below" : '') + "' title='" +
+			esc(highsecRegion.title(region, text.type)) + "'>" + esc(region) + "</span>" +
+			"<span class='highsec-region-sr'>, hole type " + esc(type) + "</span>";
 	},
+
+	/** Class added to the node when the region gets a line of its own, so the node can be one line taller */
+	TALL_CLASS: 'highsec-region-tall',
 
 	/** Replace the hole type in a chain node's markup (the h4.nodeType line) with the region.
 	Only changes the line when it holds exactly the text upstream put there (text), optionally inside
@@ -84,7 +93,14 @@ const highsecRegion = {
 			inner = inner.substring(close + 1, inner.length - 4);
 		}
 		if (inner !== highsecRegion.escape(text.prefix + text.type)) { return null; }
-		return html.substring(0, innerStart) + before + highsecRegion.labelHtml(text, region) + after + html.substring(end);
+		var head = html.substring(0, innerStart);
+		if (text.name) {
+			// The node's own class list (makeSystemNode: class='node ...')
+			const nodeClass = head.indexOf("class='node ");
+			if (nodeClass < 0) { return null; }
+			head = head.substring(0, nodeClass) + "class='node " + highsecRegion.TALL_CLASS + ' ' + head.substring(nodeClass + "class='node ".length);
+		}
+		return head + before + highsecRegion.labelHtml(text, region) + after + html.substring(end);
 	},
 
 	/** Decorate the result of chain.nodes() in place: holes into known high-sec systems show the region
@@ -129,7 +145,9 @@ const highsecRegion = {
 
 	/** Wrap chain.nodes so every redraw (including the one options.apply() does on Save/Reset) is labelled */
 	install: function(chainObj) {
-		if (!chainObj || typeof chainObj.nodes !== 'function' || chainObj.nodes.highsecRegionWrapped) { return; }
+		// The flag lives on the chain, not on chain.nodes: other features wrap chain.nodes later without copying it
+		if (!chainObj || typeof chainObj.nodes !== 'function' || chainObj.highsecRegionInstalled) { return; }
+		chainObj.highsecRegionInstalled = true;
 		const previous = chainObj.nodes;
 		const wrapped = function() {
 			const result = previous.apply(this, arguments);
@@ -138,7 +156,6 @@ const highsecRegion = {
 			return highsecRegion.decorate(result, highsecRegion.systemFor, highsecRegion.regions(), opts && opts.chain);
 		};
 		Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
-		wrapped.highsecRegionWrapped = true;
 		chainObj.nodes = wrapped;
 	}
 };

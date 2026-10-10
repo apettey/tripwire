@@ -61,44 +61,52 @@ describe('High-sec region label', () => {
 
 	describe('typeText', () => {
 		const child = { type: 'D845', name: 'AABA' };
-		it('default shows the type', () => assert.deepEqual(highsecRegion.typeText(child, { sigNameLocation: 'name', 'node-reference': 'type' }), { prefix: '', type: 'D845' }));
-		it('ref_prefix shows name - type', () => assert.deepEqual(highsecRegion.typeText(child, { sigNameLocation: 'ref_prefix' }), { prefix: 'AABA - ', type: 'D845' }));
+		it('default shows the type', () => assert.deepEqual(highsecRegion.typeText(child, { sigNameLocation: 'name', 'node-reference': 'type' }), { prefix: '', name: '', type: 'D845' }));
+		it('ref_prefix shows name - type', () => assert.deepEqual(highsecRegion.typeText(child, { sigNameLocation: 'ref_prefix' }), { prefix: 'AABA - ', name: 'AABA', type: 'D845' }));
 		it('ref shows only the name: nothing to replace', () => assert.equal(highsecRegion.typeText(child, { sigNameLocation: 'ref' }), null));
-		it('ref without a name falls back to the type', () => assert.deepEqual(highsecRegion.typeText({ type: 'B274' }, { sigNameLocation: 'ref' }), { prefix: '', type: 'B274' }));
+		it('ref without a name falls back to the type', () => assert.deepEqual(highsecRegion.typeText({ type: 'B274' }, { sigNameLocation: 'ref' }), { prefix: '', name: '', type: 'B274' }));
+		it('ref_prefix without a name is the type alone', () => assert.deepEqual(highsecRegion.typeText({ type: 'B274' }, { sigNameLocation: 'ref_prefix' }), { prefix: '', name: '', type: 'B274' }));
 		it('signature IDs: nothing to replace', () => assert.equal(highsecRegion.typeText(child, { 'node-reference': 'id' }), null));
 		it('gate routes: nothing to replace', () => assert.equal(highsecRegion.typeText({ path: [1, 2] }, {}), null));
-		it('unknown type is (?)', () => assert.deepEqual(highsecRegion.typeText({}, {}), { prefix: '', type: '(?)' }));
+		it('unknown type is (?)', () => assert.deepEqual(highsecRegion.typeText({}, {}), { prefix: '', name: '', type: '(?)' }));
 	});
 
 	describe('rewriteHtml', () => {
-		const node = inner => "<div class='node'><h4 class='nodeClass'>x</h4><h4 class='nodeType'>" + inner + "</h4><div class='statics'></div></div>";
+		const node = inner => "<div id='node5' data-nodeid='30000142' class='node jm-375kt'><h4 class='nodeClass'>x</h4><h4 class='nodeType'>" + inner + "</h4><div class='statics'></div></div>";
 		const link = "<a href='#' onclick='sigDialog.openSignatureDialog({data: { signature: 7, mode: \"update\" }}); return false;'>";
-		it('replaces the type inside the signature link', () => {
-			const html = highsecRegion.rewriteHtml(node(link + 'D845</a>'), { prefix: '', type: 'D845' }, 'The Forge');
-			assert.equal(html, node(link + "<span class='highsec-region-line' title='The Forge (high-sec region) - hole type D845'><span class='highsec-region'>The Forge</span></span>" +
-				"<span class='highsec-region-reserve' aria-hidden='true'>D845</span></a>"));
+		const plain = { prefix: '', name: '', type: 'D845' };
+		it('replaces the type inside the signature link, hole type in tooltip and screen reader text', () => {
+			const html = highsecRegion.rewriteHtml(node(link + 'D845</a>'), plain, 'The Forge');
+			assert.equal(html, node(link + "<span class='highsec-region-line' title='The Forge (high-sec region) - hole type D845'>The Forge</span>" +
+				"<span class='highsec-region-sr'>, hole type D845</span></a>"));
 		});
-		it('keeps the name prefix', () => {
-			const html = highsecRegion.rewriteHtml(node(link + 'AABA - D845</a>'), { prefix: 'AABA - ', type: 'D845' }, 'The Bleak Lands');
-			assert.ok(html.indexOf(link + "<span class='highsec-region-line' title='The Bleak Lands (high-sec region) - hole type D845'>AABA - <span class='highsec-region'>The Bleak Lands</span></span>") >= 0, html);
-			assert.ok(html.indexOf("<span class='highsec-region-reserve' aria-hidden='true'>AABA - D845</span></a></h4>") >= 0, html);
+		it('with a hole name: name keeps the line, region on its own line, node marked tall', () => {
+			const html = highsecRegion.rewriteHtml(node(link + 'AABA - D845</a>'), { prefix: 'AABA - ', name: 'AABA', type: 'D845' }, 'The Bleak Lands');
+			assert.ok(html.indexOf("class='node highsec-region-tall jm-375kt'") >= 0, html);
+			assert.ok(html.indexOf(link + "<span class='highsec-region-name'>AABA</span><span class='highsec-region-line highsec-region-below' " +
+				"title='The Bleak Lands (high-sec region) - hole type D845'>The Bleak Lands</span><span class='highsec-region-sr'>, hole type D845</span></a></h4>") >= 0, html);
 		});
-		it('works without a link', () => assert.ok(highsecRegion.rewriteHtml(node('D845'), { prefix: '', type: 'D845' }, 'Domain').indexOf("<h4 class='nodeType'><span class='highsec-region-line'") >= 0));
-		it('unknown type says so in the tooltip', () => assert.ok(highsecRegion.rewriteHtml(node('(?)'), { prefix: '', type: '(?)' }, 'Domain').indexOf('hole type unknown') >= 0));
+		it('single line does not mark the node tall', () => assert.ok(highsecRegion.rewriteHtml(node('D845'), plain, 'Domain').indexOf('highsec-region-tall') < 0));
+		it('works without a link', () => assert.ok(highsecRegion.rewriteHtml(node('D845'), plain, 'Domain').indexOf("<h4 class='nodeType'><span class='highsec-region-line'") >= 0));
+		it('unknown type says so', () => {
+			const html = highsecRegion.rewriteHtml(node('(?)'), { prefix: '', name: '', type: '(?)' }, 'Domain');
+			assert.ok(html.indexOf("title='Domain (high-sec region) - hole type unknown'") >= 0 && html.indexOf(', hole type unknown</span>') >= 0, html);
+		});
 		it('escapes names', () => {
-			const html = highsecRegion.rewriteHtml(node('&lt;b&gt; - D845'), { prefix: '<b> - ', type: 'D845' }, "A'B<");
-			assert.ok(html.indexOf("title='A&#39;B&lt; (high-sec region) - hole type D845'>&lt;b&gt; - <span class='highsec-region'>A&#39;B&lt;</span>") >= 0, html);
-			assert.ok(html.indexOf("aria-hidden='true'>&lt;b&gt; - D845</span>") >= 0, html);
+			const html = highsecRegion.rewriteHtml(node('&lt;b&gt; - D845'), { prefix: '<b> - ', name: '<b>', type: 'D845' }, "A'B<");
+			assert.ok(html.indexOf("<span class='highsec-region-name'>&lt;b&gt;</span>") >= 0, html);
+			assert.ok(html.indexOf("title='A&#39;B&lt; (high-sec region) - hole type D845'>A&#39;B&lt;</span>") >= 0, html);
 		});
 		it('leaves markup it does not recognise alone', () => {
-			assert.equal(highsecRegion.rewriteHtml(node(link + 'K162</a>'), { prefix: '', type: 'D845' }, 'Domain'), null);
-			assert.equal(highsecRegion.rewriteHtml("<div>no type line</div>", { prefix: '', type: 'D845' }, 'Domain'), null);
-			assert.equal(highsecRegion.rewriteHtml(node('D845'), { prefix: '', type: 'D845' }, null), null);
+			assert.equal(highsecRegion.rewriteHtml(node(link + 'K162</a>'), plain, 'Domain'), null);
+			assert.equal(highsecRegion.rewriteHtml("<div>no type line</div>", plain, 'Domain'), null);
+			assert.equal(highsecRegion.rewriteHtml(node('D845'), plain, null), null);
+			assert.equal(highsecRegion.rewriteHtml("<div><h4 class='nodeType'>AABA - D845</h4></div>", { prefix: 'AABA - ', name: 'AABA', type: 'D845' }, 'Domain'), null);
 		});
 	});
 
 	describe('decorate', () => {
-		const nodeHtml = text => "<div class='node'><h4 class='nodeType'>" + text + "</h4></div>";
+		const nodeHtml = text => "<div class='node '><h4 class='nodeType'>" + text + "</h4></div>";
 		const row = (id, parent, systemID, child, text) => ({ c: [{ v: id, systemID: systemID, f: nodeHtml(text) }, { v: parent }], pathHome: child ? [{ systemID: 1 }, child] : undefined });
 		const build = () => ({ map: { rows: [
 			{ c: [{ v: 1, systemID: J114342, f: nodeHtml('&nbsp;') }, { v: null }] },
@@ -114,7 +122,8 @@ describe('High-sec region label', () => {
 		it('labels high-sec holes only', () => {
 			const result = highsecRegion.decorate(build(), highsecRegion.systemFor, appData.regions, { sigNameLocation: 'ref_prefix' });
 			const out = html(result);
-			assert.ok(out[1].indexOf("title='The Bleak Lands (high-sec region) - hole type D845'>AABA - <span class='highsec-region'>The Bleak Lands</span>") >= 0, out[1]);
+			assert.ok(out[1].indexOf("<span class='highsec-region-name'>AABA</span>") >= 0, out[1]);
+			assert.ok(out[1].indexOf("title='The Bleak Lands (high-sec region) - hole type D845'>The Bleak Lands</span>") >= 0, out[1]);
 			assert.ok(out[2].indexOf('>The Forge</span>') >= 0 && out[2].indexOf('hole type K162') >= 0, out[2]);
 			const before = html(build());
 			[0, 3, 4, 5, 6].forEach(i => assert.equal(out[i], before[i], 'row ' + i));
@@ -147,6 +156,23 @@ describe('High-sec region label', () => {
 				global.options.highsecRegion = { enabled: false };
 				assert.equal(fake.nodes().map.rows[1].c[0].f, "<h4 class='nodeType'>D845</h4>");
 			} finally { delete global.options; }
+		});
+		it('does not wrap again after another feature wrapped chain.nodes with a bare function', () => {
+			var calls = 0;
+			const fake = { nodes: function() { calls++; return { map: { rows: [] } }; } };
+			const decorate = highsecRegion.decorate;
+			var decorated = 0;
+			highsecRegion.decorate = function(r) { decorated++; return r; };
+			global.options = { chain: {} };
+			try {
+				highsecRegion.install(fake);
+				const inner = fake.nodes;
+				fake.nodes = function() { return inner.apply(this, arguments); };	// e.g. size tags, rally
+				highsecRegion.install(fake);
+				fake.nodes();
+				assert.equal(calls, 1);
+				assert.equal(decorated, 1);
+			} finally { highsecRegion.decorate = decorate; delete global.options; }
 		});
 	});
 });
