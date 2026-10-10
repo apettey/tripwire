@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 23,
+      "date": "2026-10-10",
+      "title": "Paste scans anywhere, with a preview",
+      "description": "Copy your probe scanner results (Ctrl+A, Ctrl+C in the scanner window) and press Ctrl+V anywhere in Tripwire. Before anything is saved, a preview lists the signatures to add, the ones whose type or name will change, and any signatures in the system that are no longer in your scan. Tick \"Delete … not in the paste\" to remove those too, then press Apply or Enter.\n\nYou can turn off the preview, or pasting outside the signature list, in Settings > General Preferences > Signature paste.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-23-paste-anywhere.png",
+          "caption": "The preview shows what a paste will add, change and delete"
+        }
+      ]
+    },
+    {
       "pr": 21,
       "date": "2026-10-10",
       "title": "Chain kill feed",
