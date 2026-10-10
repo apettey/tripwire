@@ -53,3 +53,10 @@ define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORA
 // spacing of zKillboard API requests made by the worker for back-fills (seconds, 1-60)
 define('ZKILL_RETENTION_HOURS', tw_env('ZKILL_RETENTION_HOURS', 48));
 define('ZKILL_API_INTERVAL', tw_env('ZKILL_API_INTERVAL', 2));
+
+// Discord notifications (fork, discord/, docker/README.md#discord-notifications). Read straight from the
+// environment by discord/ (no constants, so the key never shows up in defined constants):
+//   DISCORD_SECRET_KEY  long random string; webhook URLs are stored encrypted with a key derived from it.
+//                       Unset = stored in plain text (still never sent to browsers). Changing or removing it
+//                       makes stored webhooks unreadable: they are marked broken and must be added again.
+//   DISCORD_API_BASE    dev only: base URL of a local fake Discord (local hosts only; ignored otherwise).
