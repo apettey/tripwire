@@ -11,7 +11,9 @@ side), a panel at the top of the window offers the return bookmark string (`<AB`
 
 | Before | After |
 | --- | --- |
-| No pop-up after a jump; the return bookmark had to be typed by hand. | ![after](after.png) |
+| No pop-up after a jump; the return bookmark had to be typed by hand. | ![after](after.png) Panel after jumping J152820 → J135100 through hole C |
+| | ![copied](after-copied.png) After clicking: copied |
+| | ![in app](after-in-app.jpg) In the app (top centre, doesn't block the map) |
 
 ## Change
 
