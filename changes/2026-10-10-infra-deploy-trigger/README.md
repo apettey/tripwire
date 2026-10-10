@@ -15,9 +15,10 @@ No toggle: internal release tooling, nothing users see.
 ## Change
 
 - New `.github/workflows/infra-deploy.yml` (reusable + manual "Deploy release to infra" with `version`,
-  `auto_merge`, `allow_downgrade`) and `.github/scripts/open-infra-pr.sh`.
+  `auto_merge`, `allow_downgrade`, `dry_run`; `main` only) and `.github/scripts/open-infra-pr.sh`.
 - `.github/workflows/docker-publish.yml`: new `infra` job after `release` (fork-owned file).
-- Uses the new secret `INFRA_REPO_TOKEN` (fine-grained PAT for eve-infrastructure only); skipped with a
-  warning while it is missing. Calls only GitHub and Docker Hub; no new third-party hosts.
+- Uses the new secret `INFRA_REPO_TOKEN` (fine-grained PAT for eve-infrastructure only) from the
+  `infra-deploy` environment (`main` only); skipped with a warning while it is missing. Public logs show
+  only the image change, never infra contents. Calls only GitHub and Docker Hub; no new third-party hosts.
 - Docs: [docker/README.md](../../docker/README.md#deploying-to-eve-infrastructure), AGENTS.md section 5.
 - No upstream files touched.

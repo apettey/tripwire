@@ -4,9 +4,11 @@
 # workflow_call:      docker-publish.yml runs it after every release.
 # workflow_dispatch:  deploy an existing release by hand (first rollout, re-deploy, rollback).
 #
-# Needs the INFRA_REPO_TOKEN secret (fine-grained PAT or GitHub App token for eve-infrastructure;
-# not GITHUB_TOKEN, whose PRs and merges would not start that repo's checks and deploy).
+# Needs INFRA_REPO_TOKEN (fine-grained PAT or GitHub App token for eve-infrastructure; not
+# GITHUB_TOKEN, whose PRs and merges would not start that repo's checks and deploy) as a secret of
+# the `infra-deploy` environment, which only `main` may use: the token can deploy to production.
 # Without it the job only writes a warning, so releases never fail because of it.
+# Runs only on main. This repo is public: never print infra file contents (see the script).
 name: Deploy release to infra
 
 on:
@@ -24,9 +26,6 @@ on:
       dry_run:
         type: boolean
         default: false
-    secrets:
-      INFRA_REPO_TOKEN:
-        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -42,7 +41,7 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: Dry run, only show the infra diff and PR body in the job summary (no push, no PR)
+        description: Dry run, only report the image change, PRs and auto-merge decision (no push, no PR)
         type: boolean
         default: false
 
@@ -55,11 +54,24 @@ env:
   INFRA_REPO: apettey/eve-infrastructure
 
 jobs:
+  not-main:
+    name: Refuse refs other than main
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Deploy release to infra runs on main only (got $GITHUB_REF)"
+          exit 1
+
   infra-pr:
     name: Open eve-infrastructure PR
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Holds INFRA_REPO_TOKEN; deployment branches: main only (owner setting)
+    environment: infra-deploy
+    # Separate queue for dry runs, so one can never replace a pending real deploy
     concurrency:
-      group: infra-deploy
+      group: infra-deploy-${{ inputs.dry_run && 'dry-run' || 'deploy' }}
       cancel-in-progress: false
     steps:
       - name: Check for INFRA_REPO_TOKEN
@@ -71,11 +83,11 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::INFRA_REPO_TOKEN is not set: no eve-infrastructure PR was opened (docker/README.md#deploying-to-eve-infrastructure)"
+            echo "::warning::INFRA_REPO_TOKEN is not set in the infra-deploy environment: no eve-infrastructure PR was opened (docker/README.md#deploying-to-eve-infrastructure)"
             {
               echo "### eve-infrastructure"
               echo ""
-              echo "- **Skipped**: the \`INFRA_REPO_TOKEN\` secret is not set, so no deploy PR was opened."
+              echo "- **Skipped**: no \`INFRA_REPO_TOKEN\` secret in the \`infra-deploy\` environment, so no deploy PR was opened."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -118,6 +130,7 @@ jobs:
           ref: main
           token: ${{ secrets.INFRA_REPO_TOKEN }}
           path: .infra
+          fetch-depth: 0 # full history: the branch checks compare against main
 
       - name: Bump Tripwire in eve-infrastructure and open the PR
         if: steps.token.outputs.present == 'true'

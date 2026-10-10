@@ -243,7 +243,8 @@ jobs:
           echo "Released **$TAG**: \`${IMAGE}:${VERSION}\`, \`latest\`, \`upstream-${UPSTREAM}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # Deploy: open the eve-infrastructure PR that pins this release (auto-merged unless a PR in the
-  # release has the deploy:manual label). Skipped with a warning while INFRA_REPO_TOKEN is not set.
+  # release has the deploy:manual label). The token comes from the infra-deploy environment (main
+  # only), not from here; without it the job is skipped with a warning.
   infra:
     needs: [version, release]
     if: needs.version.outputs.push == 'true' && github.ref == 'refs/heads/main'
@@ -253,5 +254,3 @@ jobs:
     uses: ./.github/workflows/infra-deploy.yml
     with:
       version: ${{ needs.version.outputs.version }}
-    secrets:
-      INFRA_REPO_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
