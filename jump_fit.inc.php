@@ -112,6 +112,8 @@ function jump_fit_owns_character($mysql, $userID, $characterID) {
 
 /**
  * Attach a report to the character's latest upstream jump row between the two systems in this mask.
+ * Known limitation: upstream's jumpHistory trigger picks the hole with LIMIT 1 (no mask filter, no order), so with
+ * two holes between the same pair of systems the jump (and this fit) may land on the wrong one. Rare; left on purpose.
  * @return array|null ['wormholeID' => int, 'time' => 'Y-m-d H:i:s'] or null when no such jump was logged (yet)
  */
 function jump_fit_report($mysql, $maskID, array $r) {

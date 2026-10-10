@@ -88,6 +88,9 @@ Off: no asset requests and no reports; upstream still logs the jump with the hul
   leave the browser (to this Tripwire server, visible to the mask in the mass dialog). Existing
   tracking characters must be removed and added again (Tracking > Add) to grant it; until then they log hull only.
   No new third-party hosts (ESI only).
+- **Known limitation (left on purpose, rare):** when two holes connect the same pair of systems, upstream's
+  `jumpHistory` trigger logs the jump on one of them arbitrarily (`LIMIT 1`, no mask filter), so its fitted mass and
+  hot/cold land on that hole too. ESI doesn't say which hole was used, so this can't be fixed automatically.
 - Tests: `app/js-test/fork/auto-mass.test.js` (realistic two-page asset fixtures in
   `app/js-test/testdata/auto-mass/`), new cases in `rolling-calculator.test.js`, and
   `php tests/jump_fit_test.php` (validation, plus the report/hot/log flow against the dev database).
