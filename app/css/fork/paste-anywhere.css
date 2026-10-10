@@ -1,0 +1,55 @@
+/* Paste preview dialog (app/js/fork/paste-anywhere.js) */
+#dialog-pasteAnywhere {
+	text-align: left;
+	overflow-y: auto;
+}
+
+#dialog-pasteAnywhere .pa-summary {
+	margin: 2px 0 8px 0;
+	color: #bbb;
+}
+
+#dialog-pasteAnywhere .pa-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+#dialog-pasteAnywhere .pa-table td {
+	padding: 3px 4px;
+	border-bottom: 1px solid #333;
+	vertical-align: top;
+}
+
+#dialog-pasteAnywhere .pa-badge {
+	width: 4.5em;
+	font-size: 0.85em;
+	text-transform: uppercase;
+}
+
+#dialog-pasteAnywhere .pa-id {
+	width: 5.5em;
+	white-space: nowrap;
+}
+
+#dialog-pasteAnywhere .pa-add .pa-badge { color: #50D25A; }
+#dialog-pasteAnywhere .pa-update .pa-badge { color: darkorange; }
+#dialog-pasteAnywhere .pa-remove .pa-badge { color: #FF4747; }
+
+#dialog-pasteAnywhere .pa-old {
+	color: #888;
+}
+
+/* Delete rows while "Delete ... not in the paste" is unticked */
+#dialog-pasteAnywhere .pa-remove.pa-off td {
+	color: #666;
+	text-decoration: line-through;
+}
+
+#dialog-pasteAnywhere .pa-remove.pa-off .pa-badge {
+	color: #666;
+}
+
+#dialog-pasteAnywhere .pa-delete {
+	display: block;
+	margin: 8px 0 0 0;
+}

@@ -112,6 +112,7 @@ tripwire.pasteSignatures = function() {
 
         return scanner;
     }
+    this.pasteSignatures.rowParse = rowParse; // fork: used by app/js/fork/paste-anywhere.js
 
     this.pasteSignatures.parsePaste = function(paste) {
         var paste = paste.split("\n");
@@ -256,8 +257,11 @@ tripwire.pasteSignatures = function() {
 
         $("body").on("click", "#fullPaste", function(e) {
             e.preventDefault();
+            tripwire.pasteSignatures.removeMissing($(this).data("paste"));
+        });
 
-            var paste = $(this).data("paste").split("\n");
+        tripwire.pasteSignatures.removeMissing = function(paste) { // fork: also used by app/js/fork/paste-anywhere.js
+            var paste = paste.split("\n");
             var pasteIDs = [];
             var removes = [];
             var undo = [];
@@ -304,7 +308,7 @@ tripwire.pasteSignatures = function() {
 
                 tripwire.refresh('refresh', payload, success);
             }
-        });
+        };
 
         $("#clipboard").on("paste", function(e) {
             e.preventDefault();
