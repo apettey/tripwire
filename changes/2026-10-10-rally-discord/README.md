@@ -48,10 +48,15 @@ turns it back on.
   - A failed post deletes the claim, so the next change posts. A failed edit (message deleted: 404, or
     Discord unreachable) falls back to a new post.
   - Errors are logged with the webhook URL redacted (it contains the token).
+  - Connections are persistent (`db.inc.php`), so a fatal error inside the locked section must not leave
+    the lock held on a pooled connection. The lock is also released in a shutdown function, and any hold
+    the connection still has on that lock name is dropped before `GET_LOCK` (`RELEASE_LOCK` of that name
+    only, never `RELEASE_ALL_LOCKS`). `tests/rally_discord_lock_test.php` (needs the dev database) dies
+    with a fatal error while holding the lock and checks it is free afterwards.
 - `app/js/fork/rally.js` / `app/css/fork/rally.css`: the menu entry (keeps the menu open when toggled),
   the Settings row, `discord=1|0` on changes. Mocha tests for the option and payload logic; PHP tests in
   `tests/rally_discord_test.php` (escaping, labels, payload, debounce, webhook URLs, link base with a
-  hostile Host / `REQUEST_URI`, log redaction; 50 checks).
+  hostile Host / `REQUEST_URI`, log redaction, lock release; 55 checks).
 - `docker/Dockerfile` leaves `tests/` out of the image; `docker/README.md` documents the webhook use.
 - No upstream files touched.
 - **Third-party host:** rally posts go to the mask's configured webhook, normally `discord.com`, which

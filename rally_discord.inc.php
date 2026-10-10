@@ -177,9 +177,7 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who) {
 
 	// Wait behind any send in progress for this mask (each send is at most a few 5 s requests)
 	$lockName = 'rally_discord_' . $mask;
-	$lock = $mysql->prepare('SELECT GET_LOCK(:name, 20)');
-	$lock->bindValue(':name', $lockName);
-	if (!$lock->execute() || (int)$lock->fetchColumn() !== 1) { error_log('rally discord: lock timeout for mask ' . $mask); return 'failed'; }
+	if (!rally_discord_lock($mysql, $lockName, 20)) { error_log('rally discord: lock timeout for mask ' . $mask); return 'failed'; }
 
 	try {
 		$stmt = $mysql->prepare('SELECT messageID, TIMESTAMPDIFF(SECOND, postedAt, NOW()) AS age FROM fork_rally_discord WHERE maskID = :mask');
@@ -229,8 +227,36 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who) {
 		}
 		return 'post';
 	} finally {
-		$unlock = $mysql->prepare('SELECT RELEASE_LOCK(:name)');
-		$unlock->bindValue(':name', $lockName);
-		$unlock->execute();
+		rally_discord_unlock($mysql, $lockName);
 	}
+}
+
+/** Release every hold this connection has on lock $name (GET_LOCK is re-entrant per connection, so a
+	stale hold can count more than once). Only touches this lock name, never RELEASE_ALL_LOCKS.
+	@return the number of holds released */
+function rally_discord_unlock($mysql, $name) {
+	$released = 0;
+	for ($i = 0; $i < 100; $i++) {
+		$stmt = $mysql->prepare('SELECT RELEASE_LOCK(:name)');
+		$stmt->bindValue(':name', $name);
+		if (!$stmt->execute() || (int)$stmt->fetchColumn() !== 1) break;
+		$released++;
+	}
+	return $released;
+}
+
+/** GET_LOCK($name) for up to $timeout seconds. db.inc.php uses persistent connections, so a request that
+	died inside the locked section (fatal error) could leave the lock held on a pooled connection:
+	drop any hold this connection still has first, and release again at shutdown if a fatal error skips
+	the caller's `finally`. */
+function rally_discord_lock($mysql, $name, $timeout) {
+	rally_discord_unlock($mysql, $name);
+	$stmt = $mysql->prepare('SELECT GET_LOCK(:name, :timeout)');
+	$stmt->bindValue(':name', $name);
+	$stmt->bindValue(':timeout', (int)$timeout, PDO::PARAM_INT);
+	if (!$stmt->execute() || (int)$stmt->fetchColumn() !== 1) return false;
+	register_shutdown_function(function() use ($mysql, $name) {
+		try { rally_discord_unlock($mysql, $name); } catch (Throwable $e) { /* connection gone: MySQL released it */ }
+	});
+	return true;
 }

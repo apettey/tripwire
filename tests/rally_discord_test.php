@@ -88,5 +88,29 @@ check('redact webhook', rally_discord_redact('file_get_contents(https://discord.
 	'file_get_contents(<webhook> failed to open stream: HTTP 404');
 check('redact nothing', rally_discord_redact('timeout'), 'timeout');
 
+// --- rally_discord_unlock: releases every hold on this lock name only (fake PDO, no database) ---
+class FakeLockStmt {
+	public $db; public $sql; public $params = [];
+	function bindValue($k, $v, $t = null) { $this->params[$k] = $v; }
+	function execute() { $this->db->calls[] = [$this->sql, $this->params]; return true; }
+	function fetchColumn() { return array_shift($this->db->results); }
+}
+class FakeLockDb {
+	public $calls = []; public $results = [];
+	function prepare($sql) { $s = new FakeLockStmt(); $s->db = $this; $s->sql = $sql; return $s; }
+}
+$db = new FakeLockDb();
+$db->results = [1, 1, 0];	// held twice (re-entrant stale hold), then free
+check('unlock releases all holds', rally_discord_unlock($db, 'rally_discord_1.2'), 2);
+check('unlock only this name', array_unique(array_map(function($c) { return $c[0] . ' ' . $c[1][':name']; }, $db->calls)), ['SELECT RELEASE_LOCK(:name) rally_discord_1.2']);
+$db = new FakeLockDb();
+$db->results = [null];	// lock doesn't exist
+check('unlock nothing held', rally_discord_unlock($db, 'rally_discord_1.2'), 0);
+$db = new FakeLockDb();
+$db->results = [1, 0, 1];	// stale hold released, then GET_LOCK succeeds
+check('lock drops a stale hold first', rally_discord_lock($db, 'rally_discord_1.2', 20), true);
+check('lock calls', array_map(function($c) { return $c[0]; }, $db->calls), ['SELECT RELEASE_LOCK(:name)', 'SELECT RELEASE_LOCK(:name)', 'SELECT GET_LOCK(:name, :timeout)']);
+$db->results = [];	// the shutdown release registered by rally_discord_lock reads nothing: stops at once
+
 echo ($count - $failures) . "/$count passed\n";
 exit($failures ? 1 : 0);
