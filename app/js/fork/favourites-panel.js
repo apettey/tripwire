@@ -326,16 +326,16 @@ const favouritesPanel = {
 	@param exits [{systemID, nodeID}] k-space systems on the chain (routeDestinations.chainExits)
 	@param distances function(systemID, safe) -> gateDistances (memoised by the caller)
 	@param systems appData.systems-like lookup
-	@param ignore avoid list, see passable */
-	context: function(result, startSystemID, exits, distances, systems, ignore) {
+	@param ignore avoid list, see passable
+	@param dropScout leave out EVE-Scout links drawn on the chain (when theraRoute routes them, with its filters) */
+	context: function(result, startSystemID, exits, distances, systems, ignore, dropScout) {
 		const rows = (result && result.map && result.map.rows) || [];
 		const lines = (result && result.lines) || [];
 		const start = favouritesPanel.toID(startSystemID);
 		const chain = favouritesPanel.chainSystems(rows);
 		return {
 			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {}, ignore: ignore || null,
-			// EVE-Scout links drawn on the chain are left to theraRoute, which applies the Thera/Turnur filters
-			connections: rally.systemConnections(rows, lines).filter(function(c) { return !favouritesPanel.isScoutLine(lines[c[3]]); }),
+			connections: rally.systemConnections(rows, lines).filter(function(c) { return !(dropScout && favouritesPanel.isScoutLine(lines[c[3]])); }),
 			startOnChain: !!(start && chain[String(start)]),
 			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start]))
 		};
@@ -460,7 +460,7 @@ const favouritesPanel = {
 		});
 		const routes = {};
 		if (!(routeFavorites || []).length) { return routes; }
-		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems, ignore);
+		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems, ignore, !!scout);
 		routeFavorites.forEach(function(f) {
 			const info = { mode: f.mode, shortest: favouritesPanel.plan(ctx, f.systemID, "shortest"), safe: favouritesPanel.plan(ctx, f.systemID, "safe") };
 			if (scout && typeof theraRoute !== "undefined") {
@@ -556,8 +556,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				try {
 					lastTracked = trackedSystem();
 					const routeFavs = on ? fp.routeModes(favorites, settings) : [];
-					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows, result.lines) : [];
-					const scout = typeof theraRoute !== "undefined" ? theraRoute.favouriteScout : null;
+					// Thera/Turnur routes on: EVE-Scout links drawn on the chain go through theraRoute (with its filters);
+					// off: they count as chain wormholes and exits, as before
+					const scout = typeof theraRoute !== "undefined" && theraRoute.enabled && theraRoute.enabled() ? theraRoute.favouriteScout : null;
+					const exits = routeFavs.length ? routeDestinations.chainExits(result.map.rows, scout ? result.lines : null) : [];
 					fp.lastRoutes = fp.decorate(result, routeFavs, lastTracked, exits, gateDistances, appData.systems, avoidList(), scout);
 				} catch (e) { console.error("Favourites panel: route decorate failed", e); }
 				clearTimeout(renderTimer);

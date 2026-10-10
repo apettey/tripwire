@@ -238,9 +238,12 @@ const routeDestinations = {
 	/** Add destination nodes to the result of chain.nodes(). Mutates and returns it. */
 	decorate: function(result, destinations, limit) {
 		if (!result || !result.map || !Array.isArray(result.map.rows)) return result;
-		const exits = routeDestinations.chainExits(result.map.rows, result.lines);
+		// While Thera/Turnur routes are on, systems drawn through EVE-Scout links are routed by theraRoute (with its
+		// filters), not used as exits; while off, they are exits as before
+		const scoutLines = typeof routeDestinations.scoutEnabled === "function" && routeDestinations.scoutEnabled() ? result.lines : null;
+		const exits = routeDestinations.chainExits(result.map.rows, scoutLines);
 		routeDestinations.lastExits = exits;
-		routeDestinations.lastChainSystems = routeDestinations.chainSystems(result.map.rows, result.lines);
+		routeDestinations.lastChainSystems = routeDestinations.chainSystems(result.map.rows, scoutLines);
 		const extra = routeDestinations.syntheticRows(exits, destinations === undefined ? routeDestinations.saved() : destinations,
 			limit === undefined ? routeDestinations.routingLimit() : limit);
 		if (extra.rows.length) {
@@ -426,7 +429,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "K-space route selection (Settings &gt; General Preferences). Holes to unidentified systems (e.g. just \"Low-Sec\") can't be routed. "
 				+ "On the map, a destination is attached to every exit within the \"Show Route as Blobs\" limit, or else to the nearest one. "
 				+ "A route through Thera or Turnur (EVE-Scout's connections) is shown instead when it has fewer jumps, gates plus the two holes "
-				+ "(Settings &gt; General Preferences &gt; Routes through).</p>"
+				+ "(Settings &gt; General Preferences &gt; Routes through). Its gate jumps keep strictly to your K-space route selection: "
+				+ "Prefer HS only goes through high-sec, Avoid NS / Avoid HS never through null-sec / high-sec.</p>"
 				+ "</div>"
 			);
 

@@ -111,12 +111,25 @@ const theraRoute = {
 	},
 
 	/** Same rule as the Favourites panel (favouritesPanel.passable): never Zarzakh or an avoided system; in safe
-	mode only high-sec (security >= 0.45, not Pochven) */
+	mode only high-sec (security >= 0.45, not Pochven).
+	@param safe true or "highsec": only high-sec; "avoid-null": no null-sec (security <= 0.0, as guidance); "avoid-high":
+		no high-sec (security >= 0.45, as guidance); anything else ("shortest", false): any security */
 	passable: function(system, safe, ignore) {
 		if (!system) { return false; }
 		const name = String(system.name || "");
 		if (name === "Zarzakh" || (ignore && ignore[name.toLowerCase()])) { return false; }
-		return !safe || (theraRoute.isKSpace(system) && system.factionID != 500026 && Number(system.security) >= 0.45);
+		const security = Number(system.security);
+		if (safe === "avoid-null") { return !(security <= 0.0); }
+		if (safe === "avoid-high") { return !(security >= 0.45); }
+		return !(safe === true || safe === "highsec") || (theraRoute.isKSpace(system) && system.factionID != 500026 && security >= 0.45);
+	},
+
+	/** The gate rule for Destinations routes from the user's K-space route selection (options.chain.routeSecurity).
+	Upstream's guidance weighs these as penalties; here the Thera/Turnur route's gate legs must keep to them, so it
+	never goes against the preference: "highsec" (Prefer HS) only high-sec, "avoid-null" no null-sec, "avoid-high" no
+	high-sec; "shortest" or anything else: false (any security) */
+	destinationRule: function(routeSecurity) {
+		return ["highsec", "avoid-null", "avoid-high"].indexOf(routeSecurity) >= 0 ? routeSecurity : false;
 	},
 
 	/** Line ids of EVE-Scout connections drawn on the chain map (upstream's supplier uses 'ES-<id>') */
@@ -129,7 +142,7 @@ const theraRoute = {
 	a system you gate into or out of is passable (safe: high-sec), unless it is a source or the destination; wormhole
 	jumps are always allowed. Each state remembers whether an EVE-Scout connection was used, so pathTo can ask for
 	the best route that does use one.
-	@param o {sources: [systemID], gateMap (appData.map.shortest), systems, safe, ignore, connections: [[a, b, modifiers,
+	@param o {sources: [systemID], gateMap (appData.map.shortest), systems, safe (see passable), ignore, connections: [[a, b, modifiers,
 		lineIndex]] chain wormholes (rally.systemConnections), links: usable EVE-Scout links}
 	@return {labels, sources} for pathTo */
 	search: function(o) {
@@ -442,12 +455,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const usable = tr.usableLinks(links(), settings, Date.now());
 			if (!usable.length) { return null; }
 			const avoid = avoidList();
-			const key = JSON.stringify([sources.slice().sort(), !!safe, avoid ? Object.keys(avoid).sort() : 0,
+			const key = JSON.stringify([sources.slice().sort(), safe || false, avoid ? Object.keys(avoid).sort() : 0,
 				(connections || []).map(function(c) { return c[0] + "-" + c[1] + "-" + c[3]; }),
 				usable.map(function(l) { return l.id + ":" + l.in_system_id + ":" + l.out_system_id; })]);
 			const hit = cache.filter(function(c) { return c.key === key; })[0];
 			if (hit) { return hit.result; }
-			const result = tr.search({ sources: sources, gateMap: gateMap(), systems: appData.systems, safe: !!safe, ignore: avoid,
+			const result = tr.search({ sources: sources, gateMap: gateMap(), systems: appData.systems, safe: safe || false, ignore: avoid,
 				connections: connections, links: usable });
 			cache.unshift({ key: key, result: result });
 			cache.length = Math.min(cache.length, 6);
@@ -462,15 +475,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		};
 
 		// Destinations window: from any system on the chain (its wormholes aren't counted there), with the user's
-		// K-space route selection: "Prefer HS" uses the high-sec only rule, anything else the shortest
+		// K-space route selection as a rule for the gate legs (see destinationRule)
 		if (typeof routeDestinations !== "undefined") {
 			routeDestinations.scoutRoute = function(destinationID) {
 				const sources = routeDestinations.lastChainSystems || [];
 				if (!sources.length) { return null; }
-				const safe = options.chain && options.chain.routeSecurity === "highsec";
-				return tr.plan(tr.pathTo(cachedSearch(sources, safe, []), destinationID), safe ? "safe" : "shortest");
+				const rule = tr.destinationRule(options.chain && options.chain.routeSecurity);
+				return tr.plan(tr.pathTo(cachedSearch(sources, rule, []), destinationID), rule || "shortest");
 			};
+			// EVE-Scout links drawn on the chain are left out of the exits only while theraRoute routes them itself
+			routeDestinations.scoutEnabled = function() { return tr.anyHub(current()); };
 		}
+		/** Whether Thera/Turnur routes are on (a hub is ticked in Settings) */
+		tr.enabled = function() { return tr.anyHub(current()); };
 
 		tr.name = systemName;
 

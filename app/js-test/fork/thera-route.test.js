@@ -10,11 +10,11 @@ const THERA = 31000005, TURNUR = 30002086;
 // A line of high-sec systems A - B - C - D - E - F - G - H (7 gate jumps end to end),
 // X: 1 jump from A, Y: 1 jump from H, Z: 1 jump from Turnur, J1: a J-space system
 const A = 30000001, B = 30000002, C = 30000003, D = 30000004, E = 30000005, F = 30000006, G = 30000007, H = 30000008,
-	X = 30000011, Y = 30000012, Z = 30000013, LOW = 30000014, J1 = 31000100;
+	X = 30000011, Y = 30000012, Z = 30000013, LOW = 30000014, NUL = 30000015, J1 = 31000100;
 const hs = name => ({ name: name, security: 0.9, regionID: 10000001 });
 const systems = {
 	[A]: hs('A'), [B]: hs('B'), [C]: hs('C'), [D]: hs('D'), [E]: hs('E'), [F]: hs('F'), [G]: hs('G'), [H]: hs('H'),
-	[X]: hs('X'), [Y]: hs('Y'), [Z]: hs('Z'), [LOW]: { name: 'LOW', security: 0.3, regionID: 10000001 },
+	[X]: hs('X'), [Y]: hs('Y'), [Z]: hs('Z'), [LOW]: { name: 'LOW', security: 0.3, regionID: 10000001 }, [NUL]: { name: 'NUL', security: -0.2, regionID: 10000001 },
 	[TURNUR]: { name: 'Turnur', security: 0.39, regionID: 10000042 },
 	[THERA]: { name: 'Thera', security: -0.99, regionID: 11000031, class: 12 },
 	[J1]: { name: 'J1', security: -0.99, regionID: 11000001, class: 3 }
@@ -24,7 +24,7 @@ const gate = (a, b) => {
 	(gateMap[a - 30000000] = gateMap[a - 30000000] || {})[b - 30000000] = 1;
 	(gateMap[b - 30000000] = gateMap[b - 30000000] || {})[a - 30000000] = 1;
 };
-[[A, B], [B, C], [C, D], [D, E], [E, F], [F, G], [G, H], [A, X], [H, Y], [TURNUR, Z], [Z, H], [A, LOW]].forEach(p => gate(p[0], p[1]));
+[[A, B], [B, C], [C, D], [D, E], [E, F], [F, G], [G, H], [A, X], [H, Y], [TURNUR, Z], [Z, H], [A, LOW], [A, NUL]].forEach(p => gate(p[0], p[1]));
 const name = id => (systems[id] || {}).name || String(id);
 
 const NOW = Date.parse('2026-10-10T12:00:00Z');
@@ -126,6 +126,24 @@ describe('Thera route', () => {
 		it('Safe: low-sec destination is fine', () => {
 			assert.equal(tr.planText(route({ sources: [H], links: [link(2, THERA, Y), link(1, THERA, X)], to: LOW, safe: true })), '1g → Thera → 2g');
 		});
+		it('Destination rule from the K-space route selection', () => assert.deepEqual(
+			['shortest', 'highsec', 'avoid-null', 'avoid-high', 'odd', undefined].map(tr.destinationRule), [false, 'highsec', 'avoid-null', 'avoid-high', false, false]));
+		it('Avoid NS: a null-sec Thera system is not gated through', () => {
+			const nul = link(1, THERA, NUL);
+			assert.equal(tr.planText(route({ links: [nul, L2] })), '1g → Thera → 1g');
+			const r = tr.search({ sources: [A], gateMap: gateMap, systems: systems, safe: 'avoid-null', connections: [], links: [nul, L2] });
+			assert.equal(tr.pathTo(r, H), null);
+		});
+		it('Avoid HS: high-sec systems are not gated through', () => {
+			const r = tr.search({ sources: [A], gateMap: gateMap, systems: systems, safe: 'avoid-high', connections: [], links: [L1, L2] });
+			assert.equal(tr.pathTo(r, H), null);
+			const low = tr.search({ sources: [A], gateMap: gateMap, systems: systems, safe: 'avoid-high', connections: [], links: [link(1, THERA, LOW), link(2, THERA, Y)] });
+			assert.equal(tr.planText(tr.plan(tr.pathTo(low, Y), 'avoid-high')), '1g → Thera');
+		});
+		it('Prefer HS is the high-sec rule', () => {
+			const r = tr.search({ sources: [A], gateMap: gateMap, systems: systems, safe: 'highsec', connections: [], links: [link(1, THERA, LOW), L2] });
+			assert.equal(tr.pathTo(r, H), null);
+		});
 		it('Avoid list: never gated through', () => assert.equal(route({ ignore: { x: true } }), null));
 		it('Turnur: in by its hole, out by gates', () => {
 			const p = route({ sources: [LOW], links: [LT], to: H });
@@ -193,8 +211,12 @@ describe('Thera route', () => {
 		const scout = (ctx, favID, mode) => tr.plan(tr.pathTo(tr.search({ sources: [ctx.start], gateMap: gateMap, systems: systems, safe: mode === 'safe',
 			connections: ctx.connections, links: [L1, L2] }), favID), mode);
 		it('EVE-Scout lines on the chain are not chain wormholes', () => {
-			const ctx = fp.context({ map: { rows: rows }, lines: lines }, J1, [], distances, systems, null);
+			const ctx = fp.context({ map: { rows: rows }, lines: lines }, J1, [], distances, systems, null, true);
 			assert.deepEqual(ctx.connections.map(c => c[3]), [0]);
+		});
+		it('Thera/Turnur routes off: EVE-Scout lines stay chain wormholes, as before', () => {
+			const ctx = fp.context({ map: { rows: rows }, lines: lines }, J1, [], distances, systems, null);
+			assert.deepEqual(ctx.connections.map(c => c[3]), [0, 1]);
 		});
 		it('Uses the Thera route when shorter, and highlights its chain wormholes', () => {
 			const result = { map: { rows: JSON.parse(JSON.stringify(rows)) }, lines: JSON.parse(JSON.stringify(lines)) };

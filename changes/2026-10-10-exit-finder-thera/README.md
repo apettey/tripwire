@@ -25,10 +25,16 @@ Destinations window shows the same Turnur route for Jita (13 jumps: 11 gates plu
 ## Settings
 
 The toggle is the filter row itself: Settings > General Preferences > "Routes through": Thera on/off, Turnur on/off (both
-on by default, so users see the feature; both off = the routes are as before), Ship (Frigate / destroyer (S, the default:
-every hole) to Capital (XL)), Holes (Use all / skip under 1h / 2h / Skip EOL (under 4h), the default). Stored per user in
+on by default, so users see the feature), Ship (Frigate / destroyer (S, the default: every hole) to Capital (XL)), Holes
+(Use all / skip under 1h / 2h / Skip EOL (under 4h), the default). Stored per user in
 `options.theraRoute = {thera, turnur, shipSize, minHours}`; a missing key means the defaults; Save applies and redraws;
 Settings > Reset removes the key (back to the defaults).
+
+- Both off: routes are exactly as before, including on a chain tab that draws EVE-Scout's connections (they count as
+  chain wormholes in Favourites and as exits in Destinations again, with no filters).
+- Either on (the default): EVE-Scout connections drawn on a chain tab are routed only through this feature, with the
+  filters. So with the defaults an EOL Thera/Turnur hole (under 4h left) that is visible on the map is no longer used for
+  routes, as it was before; choose "Use all" under Holes to use it.
 
 ## Change
 
@@ -50,8 +56,10 @@ Settings > Reset removes the key (back to the defaults).
     Turnur itself, or through a mapped hole into Thera. One search per mode per redraw covers every favourite (cached
     while the chain, location, filters, avoid list and usable holes are unchanged; about 7 ms on the full gate map).
   - Destinations: from any system on the chain (chain wormholes aren't counted there, as before); jumps = gates + the two
-    holes, compared with the gate jumps from the best exit. "Prefer HS" (K-space route selection) uses the high-sec only
-    rule, the other choices the shortest. The map nodes for destinations still use the gate route.
+    holes, compared with the gate jumps from the best exit. The gate legs keep strictly to the K-space route selection
+    (`theraRoute.destinationRule`): Prefer HS = only high-sec, Avoid NS = never null-sec (security <= 0.0), Avoid HS =
+    never high-sec (>= 0.45), Shortest = any; upstream's guidance only weighs these, so the Thera route is never against
+    the preference (the window's note says so). The map nodes for destinations still use the gate route.
   - Data: uses `eveScout.links` when the chain tab shows EVE-Scout (no extra request). Otherwise it reads the same
     local, server-cached `cached_third_party.php?key=eve-scout-signatures` (the server fetches EVE-Scout at most every
     5 minutes for all users), only while a favourite has Route on or destinations exist and a hub is on, at most every
@@ -59,18 +67,19 @@ Settings > Reset removes the key (back to the defaults).
 - `app/js/fork/favourites-panel.js`: `decorate` takes the Thera search as an optional argument and uses its plan when
   shorter; `plan` kind `scout` in `planText` / `planDetail` / `highlight` (chain wormholes used, and EVE-Scout lines when
   the tab draws them); a second line under the row ("J132401 KYY-030 → Turnur TVG-265 → Adreland"); the tooltip has each
-  hole's type, max size and life left. EVE-Scout links drawn on the chain are no longer used as plain chain wormholes (so
-  the filters apply to them too).
-- `app/js/fork/route-destinations.js`: `chainExits(rows, lines)` skips systems drawn through an EVE-Scout link (same
-  reason), new `chainSystems`, `evaluate(...).scout`, the window shows the route, its line and total jumps, note text.
+  hole's type, max size and life left. While a hub is on, EVE-Scout links drawn on the chain are not used as plain chain
+  wormholes (`context(..., dropScout)`), so the filters apply to them too.
+- `app/js/fork/route-destinations.js`: while a hub is on (`scoutEnabled`), `chainExits(rows, lines)` skips systems drawn
+  through an EVE-Scout link (same reason); new `chainSystems`, `evaluate(...).scout`, the window shows the route, its line
+  and total jumps, note text.
 - `app/js/fork/autopilot-route.js`: "Set route in game" for a Thera/Turnur route sends only gate legs. **Choice:** one
   button per gate leg, numbered 1, 2 when there are two; each tooltip says when to send it ("Send it once you are out of
   Thera in Suner: the autopilot can't route through wormholes"). Sending both legs at once would make EVE plan a gate
   route from the Thera entry system to the second leg (it doesn't know about wormholes), and we couldn't confirm how the
   in-game route updates after the jump, so the second leg is sent as a separate step.
-- `app/css/fork/thera-route.css` (new), `app/js-test/fork/thera-route.test.js` (new, 57 tests: Thera beats gates; skipped
-  when too small, EOL, disabled or only reachable straight back; Thera in the chain; safe variant; Turnur; texts; legs;
-  Favourites integration), new tests in `route-destinations.test.js`; rebuilt bundles.
+- `app/css/fork/thera-route.css` (new), `app/js-test/fork/thera-route.test.js` (new, 62 tests: Thera beats gates; skipped
+  when too small, EOL, disabled or only reachable straight back; Thera in the chain; safe variant; Avoid NS / Avoid HS /
+  Prefer HS rules; Turnur; texts; legs; Favourites integration with hubs on and off), new tests in `route-destinations.test.js`; rebuilt bundles.
 - Upstream files touched: none (besides the rebuilt bundles).
 
 ## Limitations
@@ -78,6 +87,7 @@ Settings > Reset removes the key (back to the defaults).
 - EVE-Scout's list is up to about 5 minutes old (server cache) and a hole can close early; the life shown is from
   `expires_at`.
 - Hole sizes are only checked for EVE-Scout holes, not for the chain's own wormholes (as before).
-- Signature IDs: `out_signature` is taken as the signature in Thera/Turnur and `in_signature` as the one in the other
-  system, as the field names say (not confirmed in game). Upstream's chain map overlay puts them the other way round;
-  not changed here.
+- Signature IDs follow EVE-Scout's API spec (https://api.eve-scout.com/ui/openapi.yaml, `schemas/signature_representation.yaml`):
+  `out_system_id` is always Thera or Turnur, `out_signature` is the signature in the hub, `in_signature` the one in the
+  other system (`wh_exits_outward` true means `wh_type` is on the hub side). Upstream's chain map overlay
+  (`app/js/map-data-suppliers/eve-scout.js`, `findLinks`) swaps the two signature IDs; not changed here (upstream file).
