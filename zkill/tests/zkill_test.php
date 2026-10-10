@@ -92,6 +92,10 @@ check('covered: skipped entries (ESI cap / budget / failure): up to the first ga
     zk_backfill_covered_from($started, 86400, 50, [905 => $started - 60, 904 => $started - 120, 903 => $started - 600, 902 => null, 901 => $started - 9000]), $started - 600);
 check('covered: does not rely on the answer order',
     zk_backfill_covered_from($started, 86400, 50, [901 => $started - 9000, 903 => $started - 600, 902 => null, 905 => $started - 60, 904 => $started - 120]), $started - 600);
+check('covered: a late-reported kill above the gap does not stretch coverage',
+    zk_backfill_covered_from($started, 86400, 50, [905 => $started - 60, 904 => $started - 50000, 903 => $started - 600, 902 => null]), $started - 600);
+check('covered: nor on a cut-off page',
+    zk_backfill_covered_from($started, 86400, 200, [905 => $started - 60, 904 => $started - 50000, 903 => $started - 600]), $started - 600);
 check('covered: gap at the newest kill covers nothing', zk_backfill_covered_from($started, 86400, 50, [905 => null, 904 => $started - 120]), $started);
 check('covered: nothing returned', zk_backfill_covered_from($started, 3600, 0, []), $started - 3600);
 check('covered: ESI cap reaches the page size', ZK_BACKFILL_ESI_MAX >= 200, true);

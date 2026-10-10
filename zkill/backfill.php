@@ -81,16 +81,17 @@ function zk_backfill_admit($queued, $queuedByUser, $source, $userID) {
  *                       (ESI cap, budget, failure)
  */
 function zk_backfill_covered_from($started, $pastSeconds, $listCount, array $entries) {
-    // Newest kill first by killID (doesn't rely on zKillboard's order): everything before the first gap is complete
+    // Newest kill first by killID (doesn't rely on zKillboard's order). With a gap (or a cut-off page) the coverage
+    // starts at the kill time of the last stored entry above the gap (the lowest stored killID), not at the oldest
+    // kill time seen: a late-reported kill (high killID, old kill time) must not stretch the coverage back.
     krsort($entries);
     $gap = in_array(null, $entries, true);
-    $oldest = null;
+    $boundary = null;
     foreach ($entries as $time) {
         if ($time === null) break;
-        $oldest = $oldest === null ? $time : min($oldest, $time);
+        $boundary = $time;
     }
-    if ($gap) return $oldest ?? $started;
-    if ($listCount >= ZK_BACKFILL_PAGE_FULL) return $oldest ?? $started;
+    if ($gap || $listCount >= ZK_BACKFILL_PAGE_FULL) return $boundary === null ? $started : min($started, $boundary);
     return $started - $pastSeconds;
 }
 
