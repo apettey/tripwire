@@ -120,7 +120,7 @@ if ($discordAction && $hook && isset($_POST['discord']) && $_POST['discord'] ===
 	session_write_close();
 	if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 	try {
-		rally_discord_notify($mysql, $mask, $hook, $discordAction, $who, $discordAction === 'set' ? $systemID : null);
+		rally_discord_notify($mysql, $mask, $hook, $discordAction, $who);
 	} catch (Exception $e) {
 		error_log('rally discord: ' . $e->getMessage());
 	}

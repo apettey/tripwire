@@ -57,7 +57,7 @@ check('first post', rally_discord_decision(null), 'post');
 check('old post', rally_discord_decision(['messageID' => '1', 'age' => 31]), 'post');
 check('window edge', rally_discord_decision(['messageID' => '1', 'age' => 30]), 'post');
 check('recent with id edits', rally_discord_decision(['messageID' => '1', 'age' => 5]), 'edit');
-check('recent without id skips', rally_discord_decision(['messageID' => null, 'age' => 5]), 'skip');
+check('recent without id posts', rally_discord_decision(['messageID' => null, 'age' => 5]), 'post');
 check('clock skew posts', rally_discord_decision(['messageID' => '1', 'age' => -5]), 'post');
 check('custom window', rally_discord_decision(['messageID' => '1', 'age' => 50], 60), 'edit');
 
@@ -66,6 +66,27 @@ check('post url', rally_discord_message_url('https://discord.com/api/webhooks/1/
 check('post url with thread', rally_discord_message_url('https://discord.com/api/webhooks/1/abc?thread_id=9'), 'https://discord.com/api/webhooks/1/abc?thread_id=9&wait=true');
 check('edit url', rally_discord_message_url('https://discord.com/api/webhooks/1/abc', '777'), 'https://discord.com/api/webhooks/1/abc/messages/777');
 check('edit url with thread', rally_discord_message_url('https://discord.com/api/webhooks/1/abc/?thread_id=9', '777'), 'https://discord.com/api/webhooks/1/abc/messages/777?thread_id=9');
+
+// --- rally_discord_url_base: configuration only, never request input ---
+check('base from redirect', rally_discord_url_base('https://tw.example/index.php?mode=sso', '/rally.php'), 'https://tw.example');
+check('base with port', rally_discord_url_base('http://rallydiscord.localhost:8096/index.php?mode=sso', '/rally.php'), 'http://rallydiscord.localhost:8096');
+check('base in a subdirectory', rally_discord_url_base('https://tw.example/index.php', '/tripwire/rally.php'), 'https://tw.example/tripwire');
+check('no redirect', rally_discord_url_base(null, '/rally.php'), null);
+check('bad scheme', rally_discord_url_base('javascript://x/', '/rally.php'), null);
+check('hostile script path dropped', rally_discord_url_base('https://tw.example/', '/x>**PWNED**[a](https://evil.example)<a/rally.php'), 'https://tw.example');
+// A hostile Host / REQUEST_URI has no effect: the base doesn't read them
+$_SERVER['HTTP_HOST'] = 'evil.example'; $_SERVER['SERVER_NAME'] = 'evil.example';
+$_SERVER['REQUEST_URI'] = '/rally.php?x=>**PWNED**[Tripwire](https://evil.example)<a/';
+check('hostile request ignored', rally_discord_url_base('https://tw.example/index.php?mode=sso', '/rally.php'), 'https://tw.example');
+// And the payload can't be broken out of even with a bad base
+$hostile = rally_discord_payload('set', 'A', 'Jita', 'Jita', 'http://x/>**PWNED**[T](https://evil.example)< a');
+check('hostile base neutralised', $hostile['content'], "Tripwire rally point from *A*: **Jita**\n<http://x/**PWNED**[T](https://evil.example)a/?system=Jita>");
+check('hostile base single autolink', substr_count($hostile['content'], '<') + substr_count($hostile['content'], '>'), 2);
+
+// --- rally_discord_redact ---
+check('redact webhook', rally_discord_redact('file_get_contents(https://discord.com/api/webhooks/1/SECRET?wait=true): failed to open stream: HTTP 404'),
+	'file_get_contents(<webhook> failed to open stream: HTTP 404');
+check('redact nothing', rally_discord_redact('timeout'), 'timeout');
 
 echo ($count - $failures) . "/$count passed\n";
 exit($failures ? 1 : 0);
