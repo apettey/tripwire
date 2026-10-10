@@ -8,6 +8,8 @@
 //				POST mode=set&systemID=<id>  -> set the rally point
 //				POST mode=clear              -> clear the rally point
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header.
+//				Add discord=1 to a change to also post it to the mask's Discord webhook (upstream's
+//				ping webhook, see rally_discord.inc.php); GET's "discord" says whether there is one.
 //
 //	The fork_rally table is created on first use, so existing databases need no migration.
 //***********************************************************
@@ -22,12 +24,15 @@ if (!isset($_SESSION['userID']) || !isset($_SESSION['mask'])) {
 
 require_once('../config.php');
 require_once('../db.inc.php');
+require_once('../ping.inc.php');
+require_once('../rally_discord.inc.php');
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
 $mask = $_SESSION['mask'];
 $output = array();
+$discordAction = null;	// 'set' / 'clear' when the rally actually changed
 
 function rally_fail($code, $message) {
 	http_response_code($code);
@@ -67,6 +72,7 @@ try {
 		}
 
 		$mode = isset($_POST['mode']) ? $_POST['mode'] : '';
+		$previous = rally_current($mysql, $mask);
 
 		if ($mode === 'set') {
 			$systemID = isset($_POST['systemID']) ? filter_var($_POST['systemID'], FILTER_VALIDATE_INT) : false;
@@ -82,11 +88,13 @@ try {
 			$stmt->bindValue(':setBy', $setBy);
 			if (!$stmt->execute()) throw new PDOException('Could not set rally: ' . implode(' ', $stmt->errorInfo()));
 			$output['result'] = true;
+			if (!$previous || $previous['systemID'] !== $systemID) $discordAction = 'set';
 		} else if ($mode === 'clear') {
 			$stmt = $mysql->prepare('DELETE FROM fork_rally WHERE maskID = :mask');
 			$stmt->bindValue(':mask', $mask);
 			if (!$stmt->execute()) throw new PDOException('Could not clear rally: ' . implode(' ', $stmt->errorInfo()));
 			$output['result'] = true;
+			if ($previous) $discordAction = 'clear';
 		} else {
 			rally_fail(400, 'Unknown mode');
 		}
@@ -100,6 +108,20 @@ try {
 	rally_fail(500, 'Database error');
 }
 
+$hook = discord_webhook_for_current_mask();
+$output['discord'] = !!$hook;
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
 echo json_encode($output);
+
+// Discord: after the response is sent, so a slow webhook doesn't hold up the map
+if ($discordAction && $hook && isset($_POST['discord']) && $_POST['discord'] === '1') {
+	$who = isset($_SESSION['characterName']) ? $_SESSION['characterName'] : (isset($_SESSION['username']) ? $_SESSION['username'] : null);
+	session_write_close();
+	if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+	try {
+		rally_discord_notify($mysql, $mask, $hook, $discordAction, $who, $discordAction === 'set' ? $systemID : null);
+	} catch (Exception $e) {
+		error_log('rally discord: ' . $e->getMessage());
+	}
+}
