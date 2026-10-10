@@ -277,6 +277,57 @@ describe('Chain map size tags', () => {
 			});
 		});
 
+		it('a chain draw with only new occupied/activity data places the tags again once', () => {
+			const order = [];
+			const radial = { drawConnection: () => {}, collapse: () => {}, draw: () => {} };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				draw: function(data) { if (data.map) { this.renderer.draw(); } this.occupied(); this.activity(); },
+				activity: () => order.push('activity'), occupied: () => order.push('occupied')
+			};
+			withStub('placeAgain', () => order.push('placeAgain'), () => {
+				sizeTags.installRenderers(fakeChain);
+				fakeChain.draw({ map: null, occupied: [] });
+			});
+			assert.deepEqual(order, ['occupied', 'activity', 'placeAgain']);
+		});
+
+		it('placeAgain skips the old org chart, a renderer mid-collapse, and replaces the tags otherwise', () => {
+			const removed = [], placed = [];
+			const container = { id: 'inner' };
+			const nodes = [{ domNode: { parentNode: container } }, { domNode: { parentNode: container } }];
+			const r = { sizeTagsLast: { drawConnection: 'dc', nodes: nodes } };
+			const saved$ = global.$;
+			global.$ = el => ({ children: sel => ({ remove: () => removed.push([el.id, sel]) }) });
+			try {
+				withStub('placeOnDrawnMap', (rr, dc, ns) => placed.push([dc, ns.length]), () => {
+					sizeTags.placeAgain({ renderer: { sizeTagsOrgChart: true } });
+					sizeTags.placeAgain({ renderer: Object.assign({ sizeTagsBusy: true }, r) });
+					assert.equal(placed.length, 0);
+					sizeTags.placeAgain({ renderer: r });
+				});
+			} finally { global.$ = saved$; }
+			assert.deepEqual(removed, [['inner', '.size-tag-connector']]);
+			assert.deepEqual(placed, [['dc', 2]]);
+		});
+
+		it('a canvas collapse places the tags once, after its redraw', () => {
+			const calls = [];
+			const radial = { drawConnection: () => {}, draw: () => {},
+				collapse: function() { fakeChain.updateCollapsed(); calls.push('redraw'); } };
+			const fakeChain = {
+				renderer: radial, useRenderer: () => {},
+				updateCollapsed: function() { this.activity(); this.occupied(); },
+				activity: () => {}, occupied: () => {}
+			};
+			withStub('placeOnDrawnMap', () => calls.push('place'), () => {
+				sizeTags.installRenderers(fakeChain);
+				radial.sizeTagsLast = { drawConnection: () => {}, nodes: [] };	// as after an earlier draw
+				radial.collapse();
+			});
+			assert.deepEqual(calls, ['redraw', 'place']);
+		});
+
 		it('installRenderers hooks the current renderer, renderer switches and the org chart collapse', () => {
 			const legacy = { collapseHandler: () => {}, draw: () => {}, lastLineData: { map: { rows: ['x'] } } };
 			const radial = { drawConnection: () => {}, draw: () => {}, collapse: () => {} };

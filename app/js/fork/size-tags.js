@@ -367,8 +367,11 @@ const sizeTags = {
 				const original = renderer[name];
 				renderer[name] = function() {
 					renderer.sizeTagsNodes = [];
+					// placeAgain waits for this (collapse updates the chain's badges before it redraws)
+					renderer.sizeTagsBusy = true;
 					try { return original.apply(this, arguments); }
 					finally {
+						renderer.sizeTagsBusy = false;
 						const nodes = renderer.sizeTagsNodes;
 						renderer.sizeTagsNodes = null;
 						renderer.sizeTagsLast = { drawConnection: drawConnection, nodes: nodes };
@@ -392,7 +395,7 @@ const sizeTags = {
 	without a redraw (system-threat's patchChain). The old org chart sits in connector cells and needs nothing. */
 	placeAgain: function(chainObj) {
 		const r = chainObj && chainObj.renderer;
-		if (!r || !r.sizeTagsLast || r.drawing) { return; }
+		if (!r || !r.sizeTagsLast || r.drawing || r.sizeTagsBusy) { return; }
 		const containers = [];
 		r.sizeTagsLast.nodes.forEach(function(node) {
 			const c = node.domNode && node.domNode.parentNode;
@@ -416,7 +419,7 @@ const sizeTags = {
 		};
 		// chain.draw reveals the activity dots, occupied counts etc. only after the renderer has drawn: place the
 		// canvas tags once it's done, so they are measured with those badges
-		var inDraw = false;
+		var inDraw = false, badgesChanged = false;
 		if (typeof chainObj.draw === 'function') {
 			const draw = chainObj.draw;
 			chainObj.draw = function() {
@@ -426,10 +429,15 @@ const sizeTags = {
 				finally {
 					if (outer) {
 						inDraw = false;
+						const changed = badgesChanged;
+						badgesChanged = false;
 						const r = chainObj.renderer;
 						if (r && r.sizeTagsPending) {
 							r.sizeTagsPending = false;
 							sizeTags.placeOnDrawnMap(r, r.sizeTagsLast.drawConnection, r.sizeTagsLast.nodes);
+						} else if (changed) {
+							// no map change, only new occupied/activity data (sync.js parses { map: null, occupied })
+							sizeTags.placeAgain(chainObj);
 						}
 					}
 				}
@@ -441,7 +449,7 @@ const sizeTags = {
 			const original = chainObj[name];
 			chainObj[name] = function() {
 				const result = original.apply(this, arguments);
-				if (!inDraw) { sizeTags.placeAgain(chainObj); }
+				if (inDraw) { badgesChanged = true; } else { sizeTags.placeAgain(chainObj); }
 				return result;
 			};
 		});
