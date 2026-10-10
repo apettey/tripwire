@@ -466,6 +466,7 @@ const chainKillFeed = {
 		chainKillFeed.ids.forEach(function(id) { allowed[id] = true; });
 		const merged = chainKillFeed.merge(chainKillFeed.kills, kills, { systems: allowed, nowMs: now, max: chainKillFeed.MAX_KILLS, maxAgeMs: chainKillFeed.MAX_AGE_MS });
 		if (live) {
+			chainKillFeed.settling = chainKillFeed.pruneSettling(chainKillFeed.settling, now, false);
 			const quiet = Object.assign({}, chainKillFeed.pending, chainKillFeed.settling);
 			chainKillFeed.freshKills(merged.kills, merged.added, quiet, now).forEach(function(id) {
 				chainKillFeed.fresh[id] = now + chainKillFeed.HIGHLIGHT_MS;

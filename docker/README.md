@@ -231,10 +231,10 @@ means partial history that won't improve for now: a busy system whose zKillboard
 can at most queue real systems up to the caps.
 
 Browser consumers: the System Kill Feed panel (`app/js/fork/system-killfeed.js`, one system, 24 h) and the Chain
-Kill Feed panel (`app/js/fork/chain-killfeed.js`): a window request (`systems=<joining ids>&pastSeconds=3600`, `source=chain` for wormhole systems and the first 10 k-space systems of a
-join, `source=panel` for the rest)
-when systems join the chain, then one shared `since` cursor polled every 20 s (4 s while back-fills or names are
-pending, `queue=0`), at most 200 systems per request.
+Kill Feed panel (`app/js/fork/chain-killfeed.js`): a window request (`systems=<joining ids>&pastSeconds=3600`,
+`source=chain` for wormhole systems and the first 10 k-space systems of a join, `source=panel` for the rest) when
+systems join the chain, then one shared `since` cursor polled every 20 s (4 s while back-fills or names are pending,
+`queue=0`), at most 200 systems per request.
 
 ### Versions
 
