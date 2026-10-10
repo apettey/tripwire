@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-10 | [Set route in game](2026-10-10-autopilot-route/README.md) | Button in the Favourites panel and Destinations window sends Tripwire's gate route (e.g. the safe one) to the in-game autopilot as ESI waypoints |
 | 2026-10-10 | [Infra deploy: pass the environment secret](2026-10-10-infra-deploy-secret/README.md) | Release path called `infra-deploy.yml` without secrets, so the environment's `INFRA_REPO_TOKEN` was empty and v1.9.0 opened no infra PR; now `secrets: inherit` |
 | 2026-10-10 | [System Kill Feed](2026-10-10-system-killfeed/README.md) | Kills panel with the 20 latest kills in the viewed system; all zKillboard/ESI access pooled in one server module (`zkill/`) used only by the feed worker, with back-fill and name queues |
 | 2026-10-10 | [Deploy releases to eve-infrastructure](2026-10-10-infra-deploy-trigger/README.md) | Each release opens an auto-merging PR in eve-infrastructure pinning the new image by digest; `deploy:manual` label opts out; manual "Deploy release to infra" workflow for existing releases and rollbacks |

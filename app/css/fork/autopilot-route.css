@@ -1,0 +1,34 @@
+/* Set route in game (fork-owned, see app/js/fork/autopilot-route.js) */
+
+.autopilot-route-btn {
+	color: #4191ff;
+	cursor: pointer;
+}
+
+.autopilot-route-btn:hover {
+	color: #FFF;
+}
+
+.autopilot-route-btn.disabled,
+.autopilot-route-btn.disabled:hover {
+	color: #555;
+	cursor: default;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn {
+	color: #4191ff;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn:hover {
+	color: #FFF;
+}
+
+#favouritesWidget .fav-tools i.autopilot-route-btn.disabled {
+	color: #555;
+}
+
+#dialog-routeDestinations td.route-dest-autopilot,
+#dialog-routeDestinations th.route-dest-autopilot {
+	width: 16px;
+	text-align: center;
+}
