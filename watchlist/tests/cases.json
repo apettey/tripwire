@@ -1,0 +1,3330 @@
+{
+	"about": "Shared cases for the watchlist matcher: app/js/fork/watchlist.js (mocha, app/js-test/fork/watchlist.test.js) and watchlist/watchlist.inc.php (watchlist/tests/watchlist_test.php) must give these results. data is a subset of watchlist/data.json.",
+	"data": {
+		"systems": {
+			"30000021": {
+				"name": "Kuharah",
+				"security": -1,
+				"regionID": 10000070,
+				"constellationID": 20000788,
+				"factionID": 500026
+			},
+			"30000142": {
+				"name": "Jita",
+				"security": 0.946,
+				"regionID": 10000002,
+				"constellationID": 20000020,
+				"factionID": 500006
+			},
+			"30000208": {
+				"name": "LZ-6SU",
+				"security": -0.173,
+				"regionID": 10000003,
+				"constellationID": 20000030
+			},
+			"30002086": {
+				"name": "Turnur",
+				"security": 0.387,
+				"regionID": 10000042,
+				"constellationID": 20000307,
+				"factionID": 500002
+			},
+			"30002537": {
+				"name": "Amamake",
+				"security": 0.439,
+				"regionID": 10000030,
+				"constellationID": 20000372,
+				"factionID": 500002
+			},
+			"31000001": {
+				"name": "Sentinel MZ",
+				"security": -0.99,
+				"regionID": 11000033,
+				"constellationID": 21000334,
+				"factionID": 500027,
+				"class": 14,
+				"effect": "Red Giant",
+				"statics": [
+					"Z647",
+					"D382",
+					"O477",
+					"Y683",
+					"N062",
+					"R474"
+				]
+			},
+			"31000005": {
+				"name": "Thera",
+				"security": -0.99,
+				"regionID": 11000031,
+				"constellationID": 21000324,
+				"class": 12,
+				"statics": [
+					"Q063",
+					"V898",
+					"E587"
+				]
+			},
+			"31000702": {
+				"name": "J150627",
+				"security": -0.99,
+				"regionID": 11000007,
+				"constellationID": 21000055,
+				"class": 2,
+				"statics": [
+					"E545",
+					"N062"
+				]
+			},
+			"31001088": {
+				"name": "J133207",
+				"security": -0.99,
+				"regionID": 11000012,
+				"constellationID": 21000108,
+				"class": 3,
+				"effect": "Pulsar",
+				"statics": [
+					"D845"
+				]
+			},
+			"31001882": {
+				"name": "J122515",
+				"security": -0.99,
+				"regionID": 11000024,
+				"constellationID": 21000232,
+				"class": 5,
+				"effect": "Wolf-Rayet Star",
+				"statics": [
+					"H296"
+				]
+			},
+			"31002238": {
+				"name": "J115405",
+				"security": -0.99,
+				"regionID": 11000028,
+				"constellationID": 21000280,
+				"class": 5,
+				"statics": [
+					"H296"
+				]
+			},
+			"31002604": {
+				"name": "J000102",
+				"security": -0.99,
+				"regionID": 11000032,
+				"constellationID": 21000333,
+				"class": 13,
+				"effect": "Wolf-Rayet Star",
+				"statics": [
+					"Q003",
+					"Z006"
+				]
+			}
+		},
+		"wormholes": {
+			"A009": {
+				"leadsTo": "Class-13",
+				"jump": 5000000
+			},
+			"A239": {
+				"leadsTo": "Low-Sec",
+				"jump": 375000000
+			},
+			"A641": {
+				"leadsTo": "High-Sec",
+				"jump": 1000000000
+			},
+			"A982": {
+				"leadsTo": "Class-6",
+				"jump": 375000000
+			},
+			"B041": {
+				"leadsTo": "Class-6",
+				"jump": 1000000000
+			},
+			"B274": {
+				"leadsTo": "High-Sec",
+				"jump": 375000000
+			},
+			"B449": {
+				"leadsTo": "High-Sec",
+				"jump": 1000000000
+			},
+			"B520": {
+				"leadsTo": "High-Sec",
+				"jump": 1000000000
+			},
+			"B735": {
+				"leadsTo": "J110145",
+				"jump": 375000000
+			},
+			"C008": {
+				"leadsTo": "Class-5",
+				"jump": 5000000
+			},
+			"C125": {
+				"leadsTo": "Class-2",
+				"jump": 62000000
+			},
+			"C140": {
+				"leadsTo": "Low-Sec",
+				"jump": 2000000000
+			},
+			"C247": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"C248": {
+				"leadsTo": "Null-Sec",
+				"jump": 2000000000
+			},
+			"C391": {
+				"leadsTo": "Low-Sec",
+				"jump": 2000000000
+			},
+			"C414": {
+				"leadsTo": "J200727",
+				"jump": 375000000
+			},
+			"C729": {
+				"leadsTo": "Triglavian",
+				"jump": 410000000
+			},
+			"D364": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"D382": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"D792": {
+				"leadsTo": "High-Sec",
+				"jump": 1000000000
+			},
+			"D845": {
+				"leadsTo": "High-Sec",
+				"jump": 375000000
+			},
+			"E004": {
+				"leadsTo": "Class-1",
+				"jump": 5000000
+			},
+			"E175": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"E545": {
+				"leadsTo": "Null-Sec",
+				"jump": 375000000
+			},
+			"E587": {
+				"leadsTo": "Null-Sec",
+				"jump": 1000000000
+			},
+			"F135": {
+				"leadsTo": "Thera",
+				"jump": 375000000
+			},
+			"F216": {
+				"leadsTo": "Triglavian",
+				"jump": 375000000
+			},
+			"F353": {
+				"leadsTo": "Thera",
+				"jump": 62000000
+			},
+			"G008": {
+				"leadsTo": "Class-6",
+				"jump": 5000000
+			},
+			"G024": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"H121": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"H296": {
+				"leadsTo": "Class-5",
+				"jump": 2000000000
+			},
+			"H900": {
+				"leadsTo": "Class-5",
+				"jump": 375000000
+			},
+			"I078": {
+				"leadsTo": "Triglavian",
+				"jump": 62000000
+			},
+			"I182": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"J244": {
+				"leadsTo": "Low-Sec",
+				"jump": 62000000
+			},
+			"J377": {
+				"leadsTo": "Turnur",
+				"jump": 62000000
+			},
+			"J492": {
+				"leadsTo": "Low-Sec",
+				"jump": 62000000
+			},
+			"K329": {
+				"leadsTo": "Null-Sec",
+				"jump": 375000000
+			},
+			"K346": {
+				"leadsTo": "Null-Sec",
+				"jump": 375000000
+			},
+			"L005": {
+				"leadsTo": "Class-2",
+				"jump": 5000000
+			},
+			"L031": {
+				"leadsTo": "Thera",
+				"jump": 1000000000
+			},
+			"L477": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"L614": {
+				"leadsTo": "Class-5",
+				"jump": 62000000
+			},
+			"L687": {
+				"leadsTo": "Triglavian",
+				"jump": 62000000
+			},
+			"M001": {
+				"leadsTo": "Class-4",
+				"jump": 5000000
+			},
+			"M164": {
+				"leadsTo": "Thera",
+				"jump": 1000000000
+			},
+			"M267": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"M555": {
+				"leadsTo": "Class-5",
+				"jump": 1000000000
+			},
+			"M609": {
+				"leadsTo": "Class-4",
+				"jump": 62000000
+			},
+			"N062": {
+				"leadsTo": "Class-5",
+				"jump": 375000000
+			},
+			"N110": {
+				"leadsTo": "High-Sec",
+				"jump": 62000000
+			},
+			"N290": {
+				"leadsTo": "Low-Sec",
+				"jump": 375000000
+			},
+			"N432": {
+				"leadsTo": "Class-5",
+				"jump": 2000000000
+			},
+			"N766": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"N770": {
+				"leadsTo": "Class-5",
+				"jump": 375000000
+			},
+			"N944": {
+				"leadsTo": "Low-Sec",
+				"jump": 2000000000
+			},
+			"N968": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"O128": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"O477": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"O546": {
+				"leadsTo": "Triglavian",
+				"jump": 62000000
+			},
+			"O753": {
+				"leadsTo": "Triglavian",
+				"jump": 375000000
+			},
+			"O883": {
+				"leadsTo": "Class-3",
+				"jump": 62000000
+			},
+			"P060": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"Q003": {
+				"leadsTo": "Null-Sec",
+				"jump": 5000000
+			},
+			"Q063": {
+				"leadsTo": "High-Sec",
+				"jump": 62000000
+			},
+			"Q317": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"R051": {
+				"leadsTo": "Low-Sec",
+				"jump": 1000000000
+			},
+			"R081": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"R259": {
+				"leadsTo": "J174618",
+				"jump": 375000000
+			},
+			"R327": {
+				"leadsTo": "Triglavian",
+				"jump": 375000000
+			},
+			"R474": {
+				"leadsTo": "Class-6",
+				"jump": 375000000
+			},
+			"R943": {
+				"leadsTo": "Class-2",
+				"jump": 375000000
+			},
+			"S047": {
+				"leadsTo": "High-Sec",
+				"jump": 375000000
+			},
+			"S199": {
+				"leadsTo": "Null-Sec",
+				"jump": 2000000000
+			},
+			"S804": {
+				"leadsTo": "Class-6",
+				"jump": 62000000
+			},
+			"S877": {
+				"leadsTo": "J055520",
+				"jump": 375000000
+			},
+			"T405": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"T458": {
+				"leadsTo": "Thera",
+				"jump": 62000000
+			},
+			"U210": {
+				"leadsTo": "Low-Sec",
+				"jump": 375000000
+			},
+			"U319": {
+				"leadsTo": "Class-6",
+				"jump": 2000000000
+			},
+			"U372": {
+				"leadsTo": "Triglavian",
+				"jump": 375000000
+			},
+			"U574": {
+				"leadsTo": "Class-6",
+				"jump": 375000000
+			},
+			"V283": {
+				"leadsTo": "Null-Sec",
+				"jump": 1000000000
+			},
+			"V301": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"V753": {
+				"leadsTo": "Class-6",
+				"jump": 2000000000
+			},
+			"V898": {
+				"leadsTo": "Low-Sec",
+				"jump": 1000000000
+			},
+			"V911": {
+				"leadsTo": "Class-5",
+				"jump": 2000000000
+			},
+			"V928": {
+				"leadsTo": "J164710",
+				"jump": 375000000
+			},
+			"W237": {
+				"leadsTo": "Class-6",
+				"jump": 2000000000
+			},
+			"X450": {
+				"leadsTo": "Null-Sec",
+				"jump": 375000000
+			},
+			"X702": {
+				"leadsTo": "Class-3",
+				"jump": 375000000
+			},
+			"X877": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"Y683": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"Y790": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"Z006": {
+				"leadsTo": "Class-3",
+				"jump": 5000000
+			},
+			"Z060": {
+				"leadsTo": "Null-Sec",
+				"jump": 62000000
+			},
+			"Z142": {
+				"leadsTo": "Null-Sec",
+				"jump": 2000000000
+			},
+			"Z457": {
+				"leadsTo": "Class-4",
+				"jump": 375000000
+			},
+			"Z647": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			},
+			"Z971": {
+				"leadsTo": "Class-1",
+				"jump": 62000000
+			}
+		},
+		"regions": {
+			"10000002": "The Forge",
+			"10000003": "Vale of the Silent",
+			"10000030": "Heimatar",
+			"10000042": "Metropolis",
+			"10000070": "Pochven",
+			"11000007": "B-R00007",
+			"11000012": "C-R00012",
+			"11000024": "E-R00024",
+			"11000028": "E-R00028",
+			"11000031": "G-R00031",
+			"11000032": "H-R00032",
+			"11000033": "K-R00033"
+		}
+	},
+	"normaliseFilter": [
+		{
+			"in": {
+				"id": "a",
+				"name": "  Hunt  ",
+				"conditions": {
+					"classes": [
+						"C5",
+						"C99"
+					],
+					"bogus": 1,
+					"systemID": "x|3"
+				}
+			},
+			"out": {
+				"id": "a",
+				"name": "Hunt",
+				"enabled": true,
+				"conditions": {
+					"classes": [
+						"C5"
+					]
+				}
+			}
+		},
+		{
+			"in": {
+				"id": "b<script>",
+				"enabled": false,
+				"conditions": {
+					"whType": "h296",
+					"minSize": "XXL",
+					"maxJumpsMe": "3"
+				}
+			},
+			"out": {
+				"id": "bscript",
+				"name": "Unnamed filter",
+				"enabled": false,
+				"conditions": {
+					"whType": "H296",
+					"maxJumpsMe": 3
+				}
+			}
+		},
+		{
+			"in": {
+				"name": "no id",
+				"conditions": {
+					"classes": [
+						"C1"
+					]
+				}
+			},
+			"out": null
+		},
+		{
+			"in": null,
+			"out": null
+		},
+		{
+			"in": "text",
+			"out": null
+		},
+		{
+			"in": {
+				"id": "f1",
+				"name": "All",
+				"enabled": "yes",
+				"conditions": {
+					"systemID": "31001882",
+					"regionID": "10000002",
+					"constellationID": 20000020,
+					"constellationRef": 30000142,
+					"classes": [
+						"C5",
+						"C5",
+						"HS"
+					],
+					"effects": [
+						"Pulsar",
+						"Nope"
+					],
+					"staticLeadsTo": "C5",
+					"staticType": " n062 ",
+					"whType": "K162",
+					"whLeadsTo": "Drifter",
+					"minSize": "L",
+					"maxJumpsMe": 0,
+					"maxJumpsHome": "999"
+				}
+			},
+			"out": {
+				"id": "f1",
+				"name": "All",
+				"enabled": true,
+				"conditions": {
+					"systemID": 31001882,
+					"regionID": 10000002,
+					"constellationID": 20000020,
+					"constellationRef": 30000142,
+					"classes": [
+						"C5",
+						"HS"
+					],
+					"effects": [
+						"Pulsar"
+					],
+					"staticLeadsTo": "C5",
+					"staticType": "N062",
+					"whType": "K162",
+					"whLeadsTo": "Drifter",
+					"minSize": "L",
+					"maxJumpsMe": 0,
+					"maxJumpsHome": 999
+				}
+			}
+		},
+		{
+			"in": {
+				"id": "f2",
+				"name": "Bad",
+				"conditions": {
+					"systemID": 29999999,
+					"regionID": 9999999,
+					"constellationID": "abc",
+					"constellationRef": 30000142,
+					"maxJumpsMe": -1,
+					"maxJumpsHome": 1000,
+					"staticLeadsTo": "C9",
+					"minSize": "xl",
+					"classes": "C5",
+					"effects": null,
+					"whType": "H2960"
+				}
+			},
+			"out": {
+				"id": "f2",
+				"name": "Bad",
+				"enabled": true,
+				"conditions": {}
+			}
+		},
+		{
+			"in": {
+				"id": "f3",
+				"name": "Numbers",
+				"conditions": {
+					"systemID": 31001882.5,
+					"regionID": 10000002.5,
+					"maxJumpsMe": "3.0",
+					"maxJumpsHome": " 4 ",
+					"staticType": 7
+				}
+			},
+			"out": {
+				"id": "f3",
+				"name": "Numbers",
+				"enabled": true,
+				"conditions": {
+					"maxJumpsMe": 3,
+					"maxJumpsHome": 4
+				}
+			}
+		},
+		{
+			"in": {
+				"id": "f4",
+				"name": "Booleans",
+				"conditions": {
+					"systemID": true,
+					"maxJumpsMe": false,
+					"regionID": true
+				}
+			},
+			"out": {
+				"id": "f4",
+				"name": "Booleans",
+				"enabled": true,
+				"conditions": {}
+			}
+		},
+		{
+			"in": {
+				"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+				"name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+				"conditions": {
+					"classes": [
+						"Thera"
+					]
+				}
+			},
+			"out": {
+				"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+				"name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+				"enabled": true,
+				"conditions": {
+					"classes": [
+						"Thera"
+					]
+				}
+			}
+		}
+	],
+	"normaliseFilters": [
+		{
+			"in": [
+				{
+					"id": "a",
+					"name": "First",
+					"conditions": {
+						"classes": [
+							"C1"
+						]
+					}
+				},
+				{
+					"id": "a",
+					"name": "Duplicate"
+				},
+				null,
+				{
+					"id": "b",
+					"name": "B"
+				}
+			],
+			"out": [
+				"a",
+				"b"
+			]
+		}
+	],
+	"classKeys": [
+		{
+			"systemID": 31002238,
+			"keys": [
+				"C5"
+			]
+		},
+		{
+			"systemID": 31002604,
+			"keys": [
+				"C13",
+				"Shattered"
+			]
+		},
+		{
+			"systemID": 31000005,
+			"keys": [
+				"Thera"
+			]
+		},
+		{
+			"systemID": 31000001,
+			"keys": [
+				"Drifter",
+				"Shattered"
+			]
+		},
+		{
+			"systemID": 30000021,
+			"keys": [
+				"Pochven"
+			]
+		},
+		{
+			"systemID": 30000142,
+			"keys": [
+				"HS"
+			]
+		},
+		{
+			"systemID": 30002537,
+			"keys": [
+				"LS"
+			]
+		},
+		{
+			"systemID": 30000208,
+			"keys": [
+				"NS"
+			]
+		},
+		{
+			"system": {
+				"security": 0.45,
+				"regionID": 10000001
+			},
+			"keys": [
+				"HS"
+			]
+		},
+		{
+			"system": {
+				"security": 0,
+				"regionID": 10000001
+			},
+			"keys": [
+				"NS"
+			]
+		},
+		{
+			"system": {
+				"class": 19,
+				"regionID": 12000001
+			},
+			"keys": []
+		},
+		{
+			"system": {
+				"class": [
+					3
+				],
+				"regionID": 11000001
+			},
+			"keys": [
+				"C3"
+			]
+		},
+		{
+			"system": {
+				"regionID": 11000001
+			},
+			"keys": []
+		},
+		{
+			"system": null,
+			"keys": []
+		}
+	],
+	"leadsTo": [
+		{
+			"leadsTo": "Class-5",
+			"keys": [
+				"C5"
+			]
+		},
+		{
+			"leadsTo": "Class-13",
+			"keys": [
+				"C13",
+				"Shattered"
+			]
+		},
+		{
+			"leadsTo": "High-Sec",
+			"keys": [
+				"HS"
+			]
+		},
+		{
+			"leadsTo": "Low-Sec",
+			"keys": [
+				"LS"
+			]
+		},
+		{
+			"leadsTo": "Null-Sec",
+			"keys": [
+				"NS"
+			]
+		},
+		{
+			"leadsTo": "Thera",
+			"keys": [
+				"Thera"
+			]
+		},
+		{
+			"leadsTo": "Triglavian",
+			"keys": [
+				"Pochven"
+			]
+		},
+		{
+			"leadsTo": "Turnur",
+			"keys": [
+				"LS"
+			]
+		},
+		{
+			"leadsTo": "J055520",
+			"keys": [
+				"Drifter",
+				"Shattered"
+			]
+		},
+		{
+			"leadsTo": "J110145",
+			"keys": [
+				"Drifter",
+				"Shattered"
+			]
+		},
+		{
+			"leadsTo": "J122515",
+			"keys": [
+				"C5"
+			]
+		},
+		{
+			"leadsTo": "Nowhere",
+			"keys": []
+		},
+		{
+			"leadsTo": "",
+			"keys": []
+		}
+	],
+	"sizeOf": [
+		{
+			"jump": 0,
+			"size": null
+		},
+		{
+			"jump": 5000000,
+			"size": "S"
+		},
+		{
+			"jump": 5000001,
+			"size": "M"
+		},
+		{
+			"jump": 62000000,
+			"size": "M"
+		},
+		{
+			"jump": 375000000,
+			"size": "L"
+		},
+		{
+			"jump": 410000000,
+			"size": "L"
+		},
+		{
+			"jump": 1000000000,
+			"size": "VL"
+		},
+		{
+			"jump": 2000000000,
+			"size": "XL"
+		}
+	],
+	"entries": [
+		{
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"out": [
+				{
+					"systemID": 31002238,
+					"connections": [
+						1,
+						3,
+						4,
+						5
+					]
+				},
+				{
+					"systemID": 31001882,
+					"connections": [
+						1,
+						2
+					]
+				},
+				{
+					"systemID": 31000702,
+					"connections": [
+						3
+					]
+				},
+				{
+					"systemID": 30002537,
+					"connections": [
+						4
+					]
+				},
+				{
+					"systemID": 31001088,
+					"connections": [
+						2
+					]
+				}
+			],
+			"types": {
+				"1": "H296",
+				"2": "D845",
+				"3": "N062",
+				"4": null,
+				"5": null
+			}
+		},
+		{
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"out": [
+				{
+					"systemID": 30000208,
+					"connections": []
+				},
+				{
+					"systemID": 31002604,
+					"connections": [
+						7
+					]
+				},
+				{
+					"systemID": 31000001,
+					"connections": [
+						7
+					]
+				},
+				{
+					"systemID": 31000005,
+					"connections": [
+						8
+					]
+				},
+				{
+					"systemID": 30000142,
+					"connections": [
+						8
+					]
+				},
+				{
+					"systemID": 30000021,
+					"connections": [
+						9
+					]
+				},
+				{
+					"systemID": 30002086,
+					"connections": [
+						9
+					]
+				}
+			],
+			"types": {
+				"7": "S877",
+				"8": null,
+				"9": null
+			}
+		}
+	],
+	"match": [
+		{
+			"name": "a J-code",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"systemID": 31001088
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31001088",
+					"filterID": "a",
+					"systemID": 31001088,
+					"wormholeIDs": [
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "a k-space system",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"systemID": 30002537
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|30002537",
+					"filterID": "a",
+					"systemID": 30002537,
+					"wormholeIDs": [
+						4
+					]
+				}
+			]
+		},
+		{
+			"name": "a system not on the chain",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"systemID": 30000142
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "class",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C5"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1,
+						3,
+						4,
+						5
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1,
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "any of several classes",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C2",
+							"LS"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				},
+				{
+					"key": "a|30002537",
+					"filterID": "a",
+					"systemID": 30002537,
+					"wormholeIDs": [
+						4
+					]
+				}
+			]
+		},
+		{
+			"name": "class and effect",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C5"
+						],
+						"effects": [
+							"Wolf-Rayet Star"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1,
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "class and effect, no system has both",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C3"
+						],
+						"effects": [
+							"Wolf-Rayet Star"
+						]
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "region",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"regionID": 10000030
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|30002537",
+					"filterID": "a",
+					"systemID": 30002537,
+					"wormholeIDs": [
+						4
+					]
+				}
+			]
+		},
+		{
+			"name": "constellation",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"constellationID": 21000280,
+						"constellationRef": 31002238
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1,
+						3,
+						4,
+						5
+					]
+				}
+			]
+		},
+		{
+			"name": "a static to C5",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"staticLeadsTo": "C5"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1,
+						3,
+						4,
+						5
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1,
+						2
+					]
+				},
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				}
+			]
+		},
+		{
+			"name": "a static to high-sec",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"staticLeadsTo": "HS"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31001088",
+					"filterID": "a",
+					"systemID": 31001088,
+					"wormholeIDs": [
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "a static type",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"staticType": "N062"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				}
+			]
+		},
+		{
+			"name": "class and static",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C2"
+						],
+						"staticLeadsTo": "C5"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				}
+			]
+		},
+		{
+			"name": "hole type: both systems it joins",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whType": "H296"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1
+					]
+				}
+			]
+		},
+		{
+			"name": "hole type leading to C5",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whLeadsTo": "C5"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1,
+						3
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1
+					]
+				},
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				}
+			]
+		},
+		{
+			"name": "hole type leading to high-sec",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whLeadsTo": "HS"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						2
+					]
+				},
+				{
+					"key": "a|31001088",
+					"filterID": "a",
+					"systemID": 31001088,
+					"wormholeIDs": [
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "a K162 is never a hole type",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whType": "K162"
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "minimum size",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"minSize": "L"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1,
+						3
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1,
+						2
+					]
+				},
+				{
+					"key": "a|31000702",
+					"filterID": "a",
+					"systemID": 31000702,
+					"wormholeIDs": [
+						3
+					]
+				},
+				{
+					"key": "a|31001088",
+					"filterID": "a",
+					"systemID": 31001088,
+					"wormholeIDs": [
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "minimum size XL",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"minSize": "XL"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002238",
+					"filterID": "a",
+					"systemID": 31002238,
+					"wormholeIDs": [
+						1
+					]
+				},
+				{
+					"key": "a|31001882",
+					"filterID": "a",
+					"systemID": 31001882,
+					"wormholeIDs": [
+						1
+					]
+				}
+			]
+		},
+		{
+			"name": "hole conditions fit the same hole",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whType": "D845",
+						"minSize": "XL"
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "hole type and class",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whType": "D845",
+						"classes": [
+							"C3"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31001088",
+					"filterID": "a",
+					"systemID": 31001088,
+					"wormholeIDs": [
+						2
+					]
+				}
+			]
+		},
+		{
+			"name": "disabled filter",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": false,
+					"conditions": {
+						"classes": [
+							"C5"
+						]
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "no conditions",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "only a constellation reference is no condition",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"constellationRef": 31002238
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "jump limits need a location",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C5"
+						],
+						"maxJumpsHome": 5
+					}
+				}
+			],
+			"expected": []
+		},
+		{
+			"name": "several filters",
+			"chain": {
+				"systems": [
+					31002238
+				],
+				"links": [
+					{
+						"wormholeID": 1,
+						"a": 31002238,
+						"b": 31001882,
+						"type": "H296",
+						"size": "XL"
+					},
+					{
+						"wormholeID": 3,
+						"a": 31002238,
+						"b": 31000702,
+						"type": "N062",
+						"size": "L"
+					},
+					{
+						"wormholeID": 4,
+						"a": 31002238,
+						"b": 30002537,
+						"type": "????",
+						"size": null
+					},
+					{
+						"wormholeID": 2,
+						"a": 31001882,
+						"b": 31001088,
+						"type": "D845",
+						"size": "L"
+					},
+					{
+						"wormholeID": 5,
+						"a": 31002238,
+						"b": "3|1234",
+						"type": "K162",
+						"size": "S"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"systemID": 30002537
+					}
+				},
+				{
+					"id": "b",
+					"name": "Filter b",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"LS"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|30002537",
+					"filterID": "a",
+					"systemID": 30002537,
+					"wormholeIDs": [
+						4
+					]
+				},
+				{
+					"key": "b|30002537",
+					"filterID": "b",
+					"systemID": 30002537,
+					"wormholeIDs": [
+						4
+					]
+				}
+			]
+		},
+		{
+			"name": "Drifter class",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"Drifter"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000001",
+					"filterID": "a",
+					"systemID": 31000001,
+					"wormholeIDs": [
+						7
+					]
+				}
+			]
+		},
+		{
+			"name": "shattered",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"Shattered"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002604",
+					"filterID": "a",
+					"systemID": 31002604,
+					"wormholeIDs": [
+						7
+					]
+				},
+				{
+					"key": "a|31000001",
+					"filterID": "a",
+					"systemID": 31000001,
+					"wormholeIDs": [
+						7
+					]
+				}
+			]
+		},
+		{
+			"name": "hole type to a Drifter system",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"whLeadsTo": "Drifter"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002604",
+					"filterID": "a",
+					"systemID": 31002604,
+					"wormholeIDs": [
+						7
+					]
+				},
+				{
+					"key": "a|31000001",
+					"filterID": "a",
+					"systemID": 31000001,
+					"wormholeIDs": [
+						7
+					]
+				}
+			]
+		},
+		{
+			"name": "Thera",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"Thera"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000005",
+					"filterID": "a",
+					"systemID": 31000005,
+					"wormholeIDs": [
+						8
+					]
+				}
+			]
+		},
+		{
+			"name": "Pochven and null-sec",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"Pochven",
+							"NS"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|30000208",
+					"filterID": "a",
+					"systemID": 30000208,
+					"wormholeIDs": []
+				},
+				{
+					"key": "a|30000021",
+					"filterID": "a",
+					"systemID": 30000021,
+					"wormholeIDs": [
+						9
+					]
+				}
+			]
+		},
+		{
+			"name": "size without a type",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"minSize": "XL"
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31000005",
+					"filterID": "a",
+					"systemID": 31000005,
+					"wormholeIDs": [
+						8
+					]
+				},
+				{
+					"key": "a|30000142",
+					"filterID": "a",
+					"systemID": 30000142,
+					"wormholeIDs": [
+						8
+					]
+				}
+			]
+		},
+		{
+			"name": "C13 with Wolf-Rayet",
+			"chain": {
+				"systems": [
+					30000208
+				],
+				"links": [
+					{
+						"wormholeID": 7,
+						"a": 31002604,
+						"b": 31000001,
+						"type": "s877",
+						"size": "L"
+					},
+					{
+						"wormholeID": 8,
+						"a": 31000005,
+						"b": 30000142,
+						"type": null,
+						"size": "XL"
+					},
+					{
+						"wormholeID": 9,
+						"a": 30000021,
+						"b": 30002086,
+						"type": "K162",
+						"size": "L"
+					}
+				]
+			},
+			"filters": [
+				{
+					"id": "a",
+					"name": "Filter a",
+					"enabled": true,
+					"conditions": {
+						"classes": [
+							"C13"
+						],
+						"effects": [
+							"Wolf-Rayet Star"
+						]
+					}
+				}
+			],
+			"expected": [
+				{
+					"key": "a|31002604",
+					"filterID": "a",
+					"systemID": 31002604,
+					"wormholeIDs": [
+						7
+					]
+				}
+			]
+		}
+	]
+}

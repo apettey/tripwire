@@ -111,6 +111,11 @@ function discord_sample_context($kind, $template, $ping, $maskName) {
 	if ($kind === 'rally') {
 		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'), 'discord_sample_label');
 	}
+	if ($kind === 'watchlist') {
+		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
+			'effect' => 'Wolf-Rayet', 'region' => 'E-R00028', 'map' => discord_map_url(31001882), 'dotlan' => discord_dotlan_url(31001882),
+			'sig' => 'ABC-123', 'hole' => 'H296', 'from' => 'J115405');
+	}
 	if ($kind === 'kspace') {
 		return $base + array('systemID' => 30002659, 'system' => 'Dodixie', 'security' => 0.87, 'class' => 'HS', 'region' => 'Sinq Laison',
 			'map' => discord_map_url(30002659), 'dotlan' => discord_dotlan_url(30002659), 'hubs' => array(array('Jita', 6), array('Amarr', 9)),

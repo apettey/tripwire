@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -33,6 +33,9 @@ function discord_placeholders() {
             'time' => 'when it was set, moved or cleared, shown in each reader\'s own time zone (Discord timestamp)',
             'rally' => 'cleared text: the rally message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {rally})',
             'was' => 'cleared text: " (was on AABCA · J123456)" when the system it was on is known, else empty'],
+        'watchlist' => $common + ['filter' => 'name of the watchlist filter that matched', 'effect' => 'system effect, e.g. Wolf-Rayet (empty when none)',
+            'details' => 'class and effect, e.g. "C5, Wolf-Rayet"', 'sig' => 'signature ID of the hole into the system, in the system it is off',
+            'hole' => 'wormhole type of that signature (K162 when it is the exit side, empty when not scanned)', 'from' => 'system the hole is in'],
     ];
 }
 
@@ -122,6 +125,7 @@ function discord_default_templates() {
         // nobody pinged): {rally} is that message struck through
         'rally'      => "{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})\n{map}",
         'rallyClear' => "{rally}\nCleared by *{who}* at {time}",
+        'watchlist'  => "{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}\n{map}",
     ];
 }
 
@@ -185,7 +189,7 @@ function discord_label_system($label, $system) {
 /** Embed colours */
 function discord_colour($kind, $class = null) {
     if ($kind === 'kspace') return ['HS' => 0x2ecc71, 'LS' => 0xe67e22, 'NS' => 0xe74c3c][$class] ?? 0x95a5a6;
-    return ['chainKill' => 0x3498db, 'corpKill' => 0x2ecc71, 'corpLoss' => 0xe74c3c, 'test' => 0x7289da][$kind] ?? 0x95a5a6;
+    return ['chainKill' => 0x3498db, 'corpKill' => 0x2ecc71, 'corpLoss' => 0xe74c3c, 'test' => 0x7289da, 'watchlist' => 0x4fc3f7][$kind] ?? 0x95a5a6;
 }
 
 /** One embed field (game data escaped by the caller), within Discord's limits */
@@ -279,6 +283,24 @@ function discord_payload(array $ctx) {
         if (mb_strlen($struck) > $room) $struck = $room > 6 ? discord_truncate($struck, $room - 2) . '~~' : '';
         $content = trim(str_replace($marker, $struck, $content));
         return ['content' => discord_truncate($content, DISCORD_CONTENT_MAX), 'allowed_mentions' => ['parse' => []]];
+    } elseif ($kind === 'watchlist') {
+        // discord/watchlist.php: the filter's name is admin text, everything else game data; all of it escaped
+        $effect = (string) ($ctx['effect'] ?? '');
+        $values += [
+            'filter' => $ctx['filter'] ?? '', 'effect' => $effect,
+            'details' => implode(', ', array_filter([$ctx['class'] ?? '', $effect], 'strlen')),
+            'sig' => $ctx['sig'] ?? '', 'hole' => $ctx['hole'] ?? '', 'from' => $ctx['from'] ?? '',
+        ];
+        $through = trim(($ctx['sig'] ?? '') . ' ' . ($ctx['hole'] ?? '')) . ' in ' . ($ctx['from'] ?? '?');
+        $embed += [
+            'title' => discord_truncate('Watchlist: ' . discord_escape($ctx['filter'] ?? ''), 256),
+            'description' => $where . ($effect !== '' ? ' · ' . discord_escape($effect) : ''),
+            'fields' => [
+                discord_field('Through', discord_escape($through)),
+                discord_field('Links', '[Tripwire](' . ($ctx['map'] ?? '') . ')', true),
+            ],
+        ];
+        if (!empty($ctx['map'])) $embed['url'] = $ctx['map'];
     } elseif ($kind === 'test') {
         $embed += ['title' => 'Tripwire test message', 'description' => discord_escape('Webhook "' . ($ctx['webhook'] ?? '') . '" works.')];
     } else {
