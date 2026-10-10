@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 7,
+      "date": "2026-10-10",
+      "title": "Return bookmark after a jump",
+      "description": "When your tracked character jumps out through a named wormhole (for example AB), a panel appears at the top of the window with the return bookmark text, <AB. Click it (or press Enter) to copy it, then paste it into the bookmark for the wormhole you just came through.\n\nThe panel closes by itself after a minute, or with the small x.",
+      "images": [
+        { "src": "whats-new/img/pr-7-jump-return.png", "caption": "Return bookmark panel after a jump" }
+      ]
+    },
+    {
       "pr": 6,
       "date": "2026-10-10",
       "title": "Automatic wormhole names",
