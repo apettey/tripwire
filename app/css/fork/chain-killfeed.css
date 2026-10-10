@@ -33,7 +33,7 @@
 }
 
 /* System of the kill: name in its class / security colour, the hole's name or signature under it */
-.ckf-sys {
+#chainKillFeedWidget .ckf-sys {
 	flex: 0 0 auto;	/* the system name wins over the pilot name */
 	min-width: 0;
 	max-width: 34%;
@@ -45,29 +45,29 @@
 	text-align: right;
 }
 
-.ckf-sysname, .ckf-sig {
+#chainKillFeedWidget .ckf-sysname, #chainKillFeedWidget .ckf-sig {
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.ckf-sysname {
+#chainKillFeedWidget .ckf-sysname {
 	font-weight: bold;
 }
 
-.ckf-sys:hover .ckf-sysname {
+#chainKillFeedWidget .ckf-sys:hover .ckf-sysname {
 	text-decoration: underline;
 }
 
-.ckf-sig {
+#chainKillFeedWidget .ckf-sig {
 	color: #777;
 	font-size: 0.85em;
 	font-weight: normal;
 }
 
-/* A kill that just arrived */
-.skf-row.ckf-new {
+/* A kill that just arrived (8 s = chainKillFeed.HIGHLIGHT_MS; re-renders resume it with a negative animation-delay) */
+#chainKillFeedWidget .skf-row.ckf-new {
 	animation: ckf-flash 8s ease-out 1;
 }
 
@@ -77,7 +77,10 @@
 	100% { background: transparent; }
 }
 
-/* Panel width classes (systemKillFeed.widthClasses) */
-.skf-lt280 .ckf-sig { display: none; }
-.skf-lt230 .ckf-sys { max-width: 40%; }
-.skf-wide .ckf-sys { flex: 0 0 auto; max-width: 160px; min-width: 80px; }
+/* Panel width classes (systemKillFeed.widthClasses). The time is the sort key, so it stays longest; the pilot count
+   goes first at the narrowest size */
+#chainKillFeedWidget.skf-lt280 .ckf-sig { display: none; }
+#chainKillFeedWidget.skf-lt230 .ckf-sys { max-width: 40%; }
+#chainKillFeedWidget.skf-lt230 .skf-time { display: inline; min-width: 0; }
+#chainKillFeedWidget.skf-lt230 .skf-pilots { display: none; }
+#chainKillFeedWidget.skf-wide .ckf-sys { flex: 0 0 auto; max-width: 160px; min-width: 80px; }

@@ -171,6 +171,25 @@ describe('Chain kill feed', () => {
 			assert.equal(ckf().needsBackfill(handled, 3, T0), true);
 			assert.equal(ckf().needsBackfill(handled, 4, T0), true);
 		});
+		it('gives chain priority to wormholes and the first k-space systems only', () => {
+			const kinds = {};
+			const ids = [];
+			for (let i = 0; i < 30; i++) { ids.push(30000001 + i); kinds[30000001 + i] = i % 2 ? 'ls' : 'ns'; }
+			ids.splice(5, 0, 31000005); kinds[31000005] = 'wh';
+			ids.push(31000409); kinds[31000409] = 'wh';
+			const r = ckf().backfillSources(ids, (id) => kinds[id], 10);
+			assert.deepEqual(r.chain, [30000001, 30000002, 30000003, 30000004, 30000005, 31000005, 30000006, 30000007, 30000008, 30000009, 30000010, 31000409]);
+			assert.deepEqual(r.panel, ids.filter(id => r.chain.indexOf(id) < 0));
+			assert.equal(r.panel.length, 20);
+			assert.deepEqual(ckf().backfillSources([31000005, 30002537], (id) => kinds[id] || 'ls', 0), { chain: [31000005], panel: [30002537] });
+			assert.deepEqual(ckf().backfillSources([], () => 'wh', 10), { chain: [], panel: [] });
+		});
+		it('refills only when leaving systems took kills with them', () => {
+			assert.equal(ckf().needsRefill(30, 6, 20), true);
+			assert.equal(ckf().needsRefill(6, 6, 20), false);	// the system that left had no kills
+			assert.equal(ckf().needsRefill(50, 25, 20), false);	// still enough
+			assert.equal(ckf().needsRefill(0, 0, 20), false);
+		});
 		it('bounds the handled systems', () => {
 			const handled = {};
 			for (let i = 0; i < 3000; i++) { handled[i] = { leftAt: i < 10 ? null : T0 - (i % 2 ? 100 * i : REQUEUE + i) }; }
@@ -191,9 +210,40 @@ describe('Chain kill feed', () => {
 			const fresh = { 1: T0 + 5000, 2: T0 - 1, 3: T0 + 5000 };
 			assert.deepEqual(ckf().pruneFresh(fresh, [kill(1, 31000005, 1), kill(2, 31000005, 1)], T0), { 1: T0 + 5000 });
 		});
+		it('treats since polls and names re-reads as live, join and refill reads as history', () => {
+			assert.equal(ckf().isLiveStep({ kind: 'since', ids: [1] }), true);
+			assert.equal(ckf().isLiveStep({ kind: 'window', ids: [1], refresh: true }), true);
+			assert.equal(ckf().isLiveStep({ kind: 'window', ids: [1], queue: true }), false);
+			assert.equal(ckf().isLiveStep({ kind: 'window', ids: [1], queue: false }), false);
+			assert.equal(ckf().isLiveStep(null), false);
+			// a kill that arrives in a names re-read is highlighted like one from a since poll
+			const kills = [kill(1, 31000005, 1), kill(2, 30002537, 1)];
+			assert.deepEqual(ckf().freshKills(kills, [1, 2], { 30002537: true }, T0), [1]);
+		});
+		it('resumes a highlight instead of restarting it', () => {
+			assert.equal(ckf().highlightDelay(T0 + 8000, T0), -0);
+			assert.equal(ckf().highlightDelay(T0 + 3000, T0), -5000);
+			assert.equal(ckf().highlightDelay(T0 - 10, T0), -8000);
+			assert.equal(ckf().highlightDelay(undefined, T0), -8000);
+		});
 		it('ends settle periods', () => {
-			assert.deepEqual(ckf().pruneUntil({ 31000005: T0 + 1, 30002537: T0, 30004759: T0 - 1 }, T0), { 31000005: T0 + 1 });
-			assert.deepEqual(ckf().pruneUntil(undefined, T0), {});
+			const s = ckf().settle(T0);
+			assert.deepEqual(s, { until: T0 + 90000, rounds: 3 });
+			// time alone doesn't end it (a hidden tab polls rarely): it also needs 3 live rounds
+			let m = { 31000005: s };
+			m = ckf().pruneSettling(m, T0 + 600000, false);
+			assert.ok(m[31000005]);
+			m = ckf().pruneSettling(m, T0 + 600000, true);
+			m = ckf().pruneSettling(m, T0 + 600000, true);
+			assert.ok(m[31000005]);
+			m = ckf().pruneSettling(m, T0 + 600000, true);
+			assert.deepEqual(m, {});
+			// nor do rounds alone (fast polls)
+			m = { 31000005: s };
+			for (let i = 0; i < 10; i++) { m = ckf().pruneSettling(m, T0 + 1000, true); }
+			assert.ok(m[31000005]);
+			assert.deepEqual(ckf().pruneSettling(m, T0 + 90000, true), {});
+			assert.deepEqual(ckf().pruneSettling(undefined, T0, true), {});
 		});
 	});
 

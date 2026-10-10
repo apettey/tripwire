@@ -22,7 +22,10 @@ const chainKillFeed = {
 	MAX_HANDLED: 1000,	// systems remembered as handled this session
 	FRESH_MS: 15 * 60000,	// a live kill younger than this is highlighted when it arrives
 	HIGHLIGHT_MS: 8000,
-	SETTLE_MS: 90000,	// after joining or finishing a back-fill, a system's kills are history, not news
+	MAX_KSPACE_CHAIN: 10,	// k-space systems per join that get chain (high) back-fill priority
+	STALE_MS: 10 * 60000,	// after a pause this long (hidden tab), start from a fresh window read instead of the old cursor
+	SETTLE_MS: 90000,	// after joining or finishing a back-fill, a system's kills are history, not news, for this long
+	SETTLE_ROUNDS: 3,	// ... and this many more live rounds (back-fill stragglers beyond a round's pages)
 	CHAIN_DEBOUNCE_MS: 400,
 	TICK_MS: 30000,
 	SIZE: { x: 7, y: 6, minX: 4, minY: 3 },
@@ -179,6 +182,36 @@ const chainKillFeed = {
 		return valid.length ? Math.min.apply(null, valid) : null;
 	},
 
+	/**
+	 * Back-fill priority for systems that join together: wormhole systems and the first `maxKspace` k-space systems
+	 * (map order) as 'chain'; the rest as 'panel', so a big k-space chain doesn't queue ahead of everyone's System panel.
+	 * @param ids system IDs in map order; @param kindOf systemID => 'wh'|'ls'|'ns'|...
+	 * @return {chain: [ids], panel: [ids]}
+	 */
+	backfillSources: function(ids, kindOf, maxKspace) {
+		const result = { chain: [], panel: [] };
+		let kspace = 0;
+		(ids || []).forEach(function(id) {
+			if (kindOf(id) === "wh") { result.chain.push(id); }
+			else if (kspace < maxKspace) { kspace++; result.chain.push(id); }
+			else { result.panel.push(id); }
+		});
+		return result;
+	},
+
+	/**
+	 * Whether a request step brings live kills (highlighted when new): since polls and the window re-reads that replace
+	 * them while names resolve; not the window reads for joining systems or a refill (history)
+	 */
+	isLiveStep: function(step) {
+		return !!step && (step.kind === "since" || !!step.refresh);
+	},
+
+	/** After systems left: re-read the others only if their kills were dropped and the feed is now short */
+	needsRefill: function(countBefore, countAfter, target) {
+		return countAfter < countBefore && countAfter < target;
+	},
+
 	/** Whether a system joining the chain should ask the server for a back-fill (queue=1) */
 	needsBackfill: function(handled, systemID, nowMs) {
 		const h = handled[systemID];
@@ -206,10 +239,24 @@ const chainKillFeed = {
 		return result;
 	},
 
-	/** Map without the entries whose time (ms) has passed */
-	pruneUntil: function(map, nowMs) {
+	/** animation-delay (ms, <= 0) that resumes a highlight ending at `until` (the CSS animation lasts HIGHLIGHT_MS) */
+	highlightDelay: function(until, nowMs) {
+		const elapsed = chainKillFeed.HIGHLIGHT_MS - ((Number(until) || 0) - nowMs);
+		return -Math.max(0, Math.min(chainKillFeed.HIGHLIGHT_MS, Math.round(elapsed)));
+	},
+
+	/** A settle period: at least SETTLE_MS and SETTLE_ROUNDS more live rounds (timers of a hidden tab are throttled) */
+	settle: function(nowMs) {
+		return { until: nowMs + chainKillFeed.SETTLE_MS, rounds: chainKillFeed.SETTLE_ROUNDS };
+	},
+
+	/** Settle periods still running; with `roundDone`, one live round is counted first */
+	pruneSettling: function(map, nowMs, roundDone) {
 		const result = {};
-		Object.keys(map || {}).forEach(function(k) { if (map[k] > nowMs) { result[k] = map[k]; } });
+		Object.keys(map || {}).forEach(function(k) {
+			const s = { until: map[k].until, rounds: map[k].rounds - (roundDone ? 1 : 0) };
+			if (s.until > nowMs || s.rounds > 0) { result[k] = s; }
+		});
 		return result;
 	},
 
@@ -250,6 +297,7 @@ const chainKillFeed = {
 	joining: {},	// systemID => queue (bool): window request still to make
 	fresh: {},	// killID => highlight until (ms)
 	settling: {},	// systemID => no highlights until (ms)
+	lastLive: 0,	// when the last live answer arrived (ms)
 	feed: null,
 	error: "",
 	generation: 0,	// bumped on stop: answers of older requests are ignored
@@ -360,6 +408,7 @@ const chainKillFeed = {
 		chainKillFeed.joining = {};
 		chainKillFeed.fresh = {};
 		chainKillFeed.settling = {};
+		chainKillFeed.lastLive = 0;
 		chainKillFeed.feed = null;
 		chainKillFeed.error = "";
 		// `handled` survives: turning the panel off and on again shouldn't queue every back-fill again
@@ -393,14 +442,15 @@ const chainKillFeed = {
 		diff.added.forEach(function(id) {
 			chainKillFeed.joining[id] = chainKillFeed.needsBackfill(chainKillFeed.handled, id, now);
 			chainKillFeed.handled[id] = { leftAt: null };
-			chainKillFeed.settling[id] = now + chainKillFeed.SETTLE_MS;
+			chainKillFeed.settling[id] = chainKillFeed.settle(now);
 		});
 		chainKillFeed.handled = chainKillFeed.pruneHandled(chainKillFeed.handled, now, chainKillFeed.MAX_HANDLED);
 		let refill = false;
 		if (diff.removed.length) {
+			const before = chainKillFeed.kills.length;
 			chainKillFeed.mergeKills([], false);
 			// A busy system that left may have taken most of the feed: read the others' last hour again (no back-fill)
-			if (chainKillFeed.kills.length < chainKillFeed.JOIN_LIMIT && chainKillFeed.cursor !== null) {
+			if (chainKillFeed.needsRefill(before, chainKillFeed.kills.length, chainKillFeed.JOIN_LIMIT) && chainKillFeed.cursor !== null) {
 				ids.forEach(function(id) { if (!(id in chainKillFeed.joining)) { chainKillFeed.joining[id] = false; } });
 				refill = ids.length > 0;
 			}
@@ -416,7 +466,6 @@ const chainKillFeed = {
 		chainKillFeed.ids.forEach(function(id) { allowed[id] = true; });
 		const merged = chainKillFeed.merge(chainKillFeed.kills, kills, { systems: allowed, nowMs: now, max: chainKillFeed.MAX_KILLS, maxAgeMs: chainKillFeed.MAX_AGE_MS });
 		if (live) {
-			chainKillFeed.settling = chainKillFeed.pruneUntil(chainKillFeed.settling, now);
 			const quiet = Object.assign({}, chainKillFeed.pending, chainKillFeed.settling);
 			chainKillFeed.freshKills(merged.kills, merged.added, quiet, now).forEach(function(id) {
 				chainKillFeed.fresh[id] = now + chainKillFeed.HIGHLIGHT_MS;
@@ -438,7 +487,7 @@ const chainKillFeed = {
 			} else if (chainKillFeed.pending[s.systemID]) {
 				delete chainKillFeed.pending[s.systemID];
 				// Stragglers of the back-fill (later pages) are not highlighted either
-				chainKillFeed.settling[s.systemID] = Date.now() + chainKillFeed.SETTLE_MS;
+				chainKillFeed.settling[s.systemID] = chainKillFeed.settle(Date.now());
 			}
 		});
 	},
@@ -461,15 +510,27 @@ const chainKillFeed = {
 		const steps = [];
 		// Joining systems: their history (kills the stream stored before our cursor never come back via since)
 		const joining = Object.keys(chainKillFeed.joining).map(Number).filter(function(id) { return chainKillFeed.info[id]; });
-		[true, false].forEach(function(queue) {
-			chainKillFeed.chunk(joining.filter(function(id) { return chainKillFeed.joining[id] === queue; }), chainKillFeed.MAX_SYSTEMS).forEach(function(ids) {
-				steps.push({ kind: "window", ids: ids, queue: queue, limit: chainKillFeed.JOIN_LIMIT });
+		const inMapOrder = chainKillFeed.ids.filter(function(id) { return chainKillFeed.joining[id] === true; });
+		const sources = chainKillFeed.backfillSources(inMapOrder, function(id) { return chainKillFeed.info[id] ? chainKillFeed.info[id].kind : null; },
+			chainKillFeed.MAX_KSPACE_CHAIN);
+		const groups = [
+			{ ids: sources.chain, queue: true, source: "chain" },
+			{ ids: sources.panel, queue: true, source: "panel" },
+			{ ids: joining.filter(function(id) { return chainKillFeed.joining[id] === false; }), queue: false, source: "chain" }
+		];
+		groups.forEach(function(group) {
+			chainKillFeed.chunk(group.ids, chainKillFeed.MAX_SYSTEMS).forEach(function(ids) {
+				steps.push({ kind: "window", ids: ids, queue: group.queue, source: group.source, limit: chainKillFeed.JOIN_LIMIT });
 			});
 		});
 		joining.forEach(function(id) { delete chainKillFeed.joining[id]; });
 		const live = !joining.length || chainKillFeed.cursor !== null;
 		if (!joining.length && document.hidden) { chainKillFeed.missed = true; return; }	// resumes on visibilitychange
 		chainKillFeed.missed = false;
+		// Back after a long pause (hidden tab): a fresh window read instead of paging through everything stored since
+		if (chainKillFeed.cursor !== null && chainKillFeed.lastLive && Date.now() - chainKillFeed.lastLive > chainKillFeed.STALE_MS) {
+			chainKillFeed.cursor = null;
+		}
 		if (live && chainKillFeed.ids.length) {
 			// While names resolve, re-read the window instead (since answers don't repeat kills); not forever if they never do
 			const refreshNames = chainKillFeed.cursor === null || chainKillFeed.namesPending && chainKillFeed.fastPolls < chainKillFeed.MAX_FAST_POLLS;
@@ -493,6 +554,7 @@ const chainKillFeed = {
 			const cursor = chainKillFeed.nextCursor(cursors);
 			if (cursor !== null) { chainKillFeed.cursor = cursor; }
 			if (!failed) { chainKillFeed.namesPending = namesPending; }
+			chainKillFeed.settling = chainKillFeed.pruneSettling(chainKillFeed.settling, Date.now(), !failed && steps.some(chainKillFeed.isLiveStep));
 			chainKillFeed.error = failed ? "Could not load kills" + (failed.status ? " (HTTP " + failed.status + ")" : "") + ", retrying…" : "";
 			chainKillFeed.render();
 			if (!failed && Object.keys(chainKillFeed.joining).length) { chainKillFeed.run(); return; }	// joined meanwhile
@@ -504,7 +566,7 @@ const chainKillFeed = {
 			const step = steps[i];
 			const ids = step.ids.filter(function(id) { return chainKillFeed.info[id]; });	// may have left meanwhile
 			if (!ids.length) { next(i + 1, null, 0); return; }
-			const params = { systems: ids.join(","), pastSeconds: chainKillFeed.WINDOW_SECONDS, source: "chain" };
+			const params = { systems: ids.join(","), pastSeconds: chainKillFeed.WINDOW_SECONDS, source: step.source || "chain" };
 			if (step.kind === "window") {
 				params.limit = step.limit;
 				params.queue = step.queue ? 1 : 0;
@@ -517,7 +579,11 @@ const chainKillFeed = {
 				if (generation !== chainKillFeed.generation || !response) { return; }
 				// Kills first, judged against the status from before this answer: a back-fill that just finished
 				// delivers its (old) kills in the same answer that reports it done, and they must not light up
-				changed = chainKillFeed.mergeKills(response.kills, step.kind === "since", response.names) || changed;
+				// Live: since answers, and the window re-reads that replace them while names resolve (new kills arrive
+				// there too). Not the window reads for joining systems or a refill: those are history.
+				const live = chainKillFeed.isLiveStep(step);
+				changed = chainKillFeed.mergeKills(response.kills, live, response.names) || changed;
+				if (live) { chainKillFeed.lastLive = Date.now(); }
 				chainKillFeed.applyStatus(response);
 				namesPending = namesPending || !!response.namesPending;
 				const kills = Array.isArray(response.kills) ? response.kills : [];
@@ -617,6 +683,10 @@ const chainKillFeed = {
 		$body.html(html);
 		$w.find(".content").scrollTop(scroll);
 		if (typeof Tooltips !== "undefined") { Tooltips.attach($body.find("[data-tooltip]")); }
+		// A re-rendered highlight continues where it was instead of starting over
+		$body.find(".ckf-new").each(function() {
+			this.style.animationDelay = chainKillFeed.highlightDelay(chainKillFeed.fresh[this.getAttribute("data-killid")], now) + "ms";
+		});
 
 		const count = chainKillFeed.kills.length;
 		$w.find(".ckf-status").text(state === "list" ? count + (count === 1 ? " kill" : " kills") : "")

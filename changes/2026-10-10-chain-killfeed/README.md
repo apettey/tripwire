@@ -40,23 +40,29 @@ back on.
   mask switch, system change), skipping high-sec (same 0.45 threshold as `systemAnalysis`), calculated route nodes and
   unknown destinations; Thera, shattered, drifter and Pochven systems are included. NPC kills are shown (greyed), as
   in the System Kill Feed.
-- **Requests**: when systems join, one window request for them (`pastSeconds=3600&source=chain`, back-fill queued;
-  a system that left less than 30 minutes ago only re-reads, no back-fill); then one shared `since` cursor for all
-  systems (`queue=0`), every 20 s, every 4 s while back-fills or names are pending (at most 45 times in a row),
-  paused while the tab is hidden, chunks of 200 systems, at most 5 full pages per chunk and poll. Kills are always
-  merged by kill time, never by arrival (back-fills and late zKillboard uploads arrive with old kill times). Systems
-  that leave drop their kills; if that leaves fewer than 20, the others' last hour is read again.
+- **Requests**: when systems join, one window request for them (`pastSeconds=3600`, back-fill queued with
+  `source=chain` for wormhole systems and the first 10 k-space systems of a join, `source=panel` for the rest, so a
+  big k-space chain doesn't queue ahead of everyone's System Kill Feed; a system that left less than 30 minutes ago
+  only re-reads, no back-fill); then one shared `since` cursor for all systems (`queue=0`), every 20 s, every 4 s
+  while back-fills or names are pending (at most 45 times in a row), paused while the tab is hidden (after more than
+  10 minutes it restarts from a window read), chunks of 200 systems, at most 5 full pages per chunk and poll. Kills
+  are always merged by kill time, never by arrival (back-fills and late zKillboard uploads arrive with old kill
+  times). Systems that leave drop their kills; if that dropped kills and leaves fewer than 20, the others' last hour
+  is read again.
 - **Memory bounds**: at most 50 kills (newest by kill time, older than 6 h dropped), names only for those kills,
   highlights only for those kills, at most 1000 remembered systems (systems that left over 30 minutes ago are
   forgotten). Tooltips are detached before rows are replaced (jBox keeps every attached element otherwise).
 - **Rows** reuse the System Kill Feed's renderer: `systemKillFeed.rowHtml(row, now, extra)` takes an optional extra
   class and cell (the system), and `systemKillFeed.defaultPosition()` an optional panel size; both default to the old
-  behaviour. A kill that arrives live (less than 15 minutes old, not from a back-fill) is highlighted for 8 s. Header:
-  number of kills, "loading N" while back-fills run (tooltip: which systems), "feed behind by …" note. Narrow panels
-  drop the value, ship line, hole label, corp logo and time; the system name stays.
+  behaviour. A kill that arrives live (less than 15 minutes old, not from a back-fill: none during 90 s and 3 live
+  rounds after a system joins or its back-fill ends) is highlighted for 8 s; re-renders resume the highlight instead
+  of restarting it. Header: number of kills, "loading N" while back-fills run (tooltip: which systems), "feed behind
+  by …" note. Narrow panels drop the value, ship line, hole label, corp logo and finally the pilot count; the system
+  name and the time (the sort key) stay. The panel's CSS is scoped under `#chainKillFeedWidget`.
 - **Server** (small addition to the pooled module): `zk_backfill_request()` now reports a back-fill that is already
   queued or running as `pending` also for read-only requests (`queue=0`), so the live poll can show which systems are
-  still loading (new pure helper `zk_backfill_in_progress()`, tested in `zkill/tests/zkill_test.php`). The System Kill
+  still loading (new pure helper `zk_backfill_in_progress()`, tested in `zkill/tests/zkill_test.php`); not while
+  `ZKILL_FEED_ENABLED=false` (the worker doesn't drain the queue then, so leftover rows would never finish). The System Kill
   Feed's read-only first request now says "loading" instead of "no kills" in that case. Docs in `docker/README.md`.
 - **Tests**: `app/js-test/fork/chain-killfeed.test.js` (classification, chain extraction, merge order/dedupe/bounds,
   names, cursor, back-fill bookkeeping, highlights, renderer).
