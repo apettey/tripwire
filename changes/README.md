@@ -6,6 +6,10 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 | Date | Feature | Summary |
 | --- | --- | --- |
 | 2026-10-10 | [Saved destinations](2026-10-10-route-destinations/README.md) | Destinations window with jumps from the chain to saved k-space systems, optionally drawn on the chain map |
+| 2026-10-10 | [Jump return bookmark](2026-10-10-jump-return/README.md) | After jumping out through a named hole, a panel offers the return bookmark (`<AB`) to copy |
+| 2026-10-10 | [Hole naming](2026-10-10-hole-naming/README.md) | Auto-suggested hierarchical wormhole names; bookmark string copied on Add/Save |
+| 2026-10-10 | [Rally point](2026-10-10-rally/README.md) | Mark a chain map system as the rally point for everyone on the mask, with the wormhole route to it highlighted |
+| 2026-10-10 | [Agent context](2026-10-10-agent-context/README.md) | EVE wormhole primer for agents, `tripwire-domain` and `tripwire-feature` Claude Code skills |
 | 2026-10-10 | [Release versioning](2026-10-10-release-versioning/README.md) | Every merge to `main` gets a SemVer tag, GitHub Release and versioned image; version shown in What's New |
 | 2026-10-10 | [Wormhole type quick picks show statics](2026-10-10-sig-quickpicks/README.md) | Signature dialog type quick picks show the system's statics, statics first, no more stale buttons |
 | 2026-10-10 | [What's New](2026-10-10-whats-new/README.md) | "What's New in Tripwire" window announcing new fork features, reopenable from Settings |
