@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 10,
+      "date": "2026-10-10",
+      "title": "Hole size tags on the chain map",
+      "description": "Each wormhole on the chain map now has a small tag next to its type showing the biggest ship that fits through: S (frigates), M, L, VL (freighters) or XL (capitals, in orange). A dimmed tag with a ? (like XL?) means the wormhole type isn't known yet and the size is a guess from the system classes; hover a tag for details.",
+      "images": [
+        { "src": "whats-new/img/pr-10-size-tags.jpg", "caption": "Size tags on chain map nodes" }
+      ]
+    },
+    {
       "pr": 2,
       "date": "2026-10-10",
       "title": "Statics in the signature Type quick picks",
