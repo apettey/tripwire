@@ -23,10 +23,10 @@ feature itself is turned off.
 
 ## Change
 
-- `app/js/fork/intel-scans.js`: `looksLikeDscan(text)` (every non-blank line a modern d-scan row: numeric type ID +
-  name + type + distance; sig pastes, local lists, legacy 3-column rows, mixed or oversize pastes don't count) and a
-  capture-phase `paste` listener that only acts on upstream's hidden `#clipboard` box, so upstream's sig-paste handler
-  never sees a d-scan. Pastes into real text boxes and every other paste behave as before. Local member lists are not
+- `app/js/fork/intel-scans.js`: `looksLikeDscan(text)` (the first 50 non-blank lines are all modern d-scan rows:
+  numeric type ID + name + type + distance; sig pastes, local lists, legacy 3-column rows and mixed pastes don't count;
+  a d-scan too big to share still counts and the dialog shows the size error) and a capture-phase `paste` listener
+  (`onPaste`) that only acts on upstream's hidden `#clipboard` box, so upstream's sig-paste handler never sees a d-scan. Pastes into real text boxes and every other paste behave as before. Local member lists are not
   auto-detected (they look like any text).
 - Tests in `app/js-test/fork/intel-scans.test.js`.
 - No upstream files touched.
