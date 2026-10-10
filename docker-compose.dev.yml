@@ -35,6 +35,10 @@ services:
       KILL_REPORT_FRIENDLY_CORPORATIONS: ${KILL_REPORT_FRIENDLY_CORPORATIONS:-}
       ZKILL_RETENTION_HOURS: ${ZKILL_RETENTION_HOURS:-}
       ZKILL_API_INTERVAL: ${ZKILL_API_INTERVAL:-}
+      # Discord notifications: dev key for encrypting webhook URLs, and the fake Discord below (dev only;
+      # only local hosts are accepted, see docker/README.md#discord-notifications)
+      DISCORD_SECRET_KEY: ${DISCORD_SECRET_KEY:-dev-only-discord-secret-key}
+      DISCORD_API_BASE: ${DISCORD_API_BASE:-http://discord-mock:8080/api}
       TZ: ${TZ:-}
       # Upstream's settings.php, mounted outside /opt/app (a mount point inside it would leave an empty
       # file in the repo); docker/settings.php reads upstream's version from it
@@ -86,6 +90,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  # Fake Discord webhook API (docker/dev/discord-mock.php): GET http://127.0.0.1:9095/messages shows what was sent
+  discord-mock:
+    image: php:8.3-cli-alpine
+    command: php -S 0.0.0.0:8080 /mock/discord-mock.php
+    ports:
+      - "127.0.0.1:${DEV_DISCORD_MOCK_PORT:-9095}:8080"
+    volumes:
+      - ./docker/dev:/mock:ro
 
   adminer:
     image: adminer
