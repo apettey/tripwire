@@ -234,8 +234,17 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf("data-kind='rally'") > 0);
 			assert.ok(html.indexOf('Set or moved:') > 0);
 			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>Cleared by {who} &lt;script&gt;</textarea>") > 0);
-			assert.ok(html.indexOf('only <code>{pings}</code> <code>{mask}</code> <code>{who}</code> are filled') > 0);
+			assert.ok(html.indexOf('otherwise only <code>{pings}</code> <code>{mask}</code> <code>{who}</code> are filled') > 0);
+			assert.ok(html.indexOf('<code>{labelSystem}</code>, <code>{was}</code>') > 0);
 			assert.ok(html.indexOf('DISCORD_WEB_HOOK') < 0);
+		});
+		it('lists the chain label placeholders the server names, with escaped descriptions', function() {
+			const st = Object.assign({}, state, { placeholders: Object.assign({}, state.placeholders, {
+				rally: { label: 'chain label, e.g. AABCA', labelSystem: 'e.g. "AABCA · J123456" <b>', was: 'cleared text' } }) });
+			const html = dn.pageHtml(st, settings);
+			assert.ok(html.indexOf("<code title='chain label, e.g. AABCA'>{label}</code>") > 0);
+			assert.ok(html.indexOf("<code title='e.g. &quot;AABCA · J123456&quot; &lt;b&gt;'>{labelSystem}</code>") > 0);
+			assert.ok(html.indexOf("<code title='cleared text'>{was}</code>") > 0);
 		});
 		it('says where rally changes go while the type is off and the server has a legacy webhook', function() {
 			const s = JSON.parse(JSON.stringify(settings));

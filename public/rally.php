@@ -119,14 +119,15 @@ echo json_encode($output);
 // Discord: after the response is sent, so neither the outbox nor a slow legacy webhook holds up the map
 if ($discordAction && $route && isset($_POST['discord']) && $_POST['discord'] === '1') {
 	$who = isset($_SESSION['characterName']) ? $_SESSION['characterName'] : (isset($_SESSION['username']) ? $_SESSION['username'] : null);
+	$previousSystemID = $discordAction === 'clear' && $previous ? $previous['systemID'] : 0;	// the cleared message names it
 	session_write_close();
 	if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 	try {
 		if ($route['via'] === 'settings') {
 			// Mask Admin > Discord: the sender (discord_notify.worker.php) posts or edits the message
-			discord_rally_enqueue($mysql, $mask, $route['type'], $discordAction, $who);
+			discord_rally_enqueue($mysql, $mask, $route['type'], $discordAction, $who, $previousSystemID);
 		} else {
-			rally_discord_notify($mysql, $mask, $route['hook'], $discordAction, $who);
+			rally_discord_notify($mysql, $mask, $route['hook'], $discordAction, $who, $previousSystemID);
 		}
 	} catch (Throwable $e) {
 		error_log('rally discord: ' . rally_discord_redact($e->getMessage()));

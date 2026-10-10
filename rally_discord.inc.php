@@ -74,14 +74,23 @@ function rally_discord_system_label($system, $region) {
 	return $system['name'] . ($parts ? ' (' . implode(', ', $parts) . ')' : '');
 }
 
+/** "AABCA · J152820" / "J152820": the system's chain label (discord_chain_label) before it, when it has one */
+function rally_discord_with_label($chainLabel, $text) {
+	$chainLabel = trim((string)$chainLabel);
+	return $chainLabel !== '' ? $chainLabel . ' · ' . $text : (string)$text;
+}
+
 /** Webhook payload. $action 'set' or 'clear'. All text is cleaned here; allowed_mentions blocks pings
-	even if something slipped through. Format follows upstream's ping message. */
-function rally_discord_payload($action, $who, $systemLabel = null, $systemName = null, $urlBase = null) {
+	even if something slipped through. Format follows upstream's ping message.
+	$chainLabel: the system's chain label (e.g. AABCA), shown before the system; a clear with $systemName
+	names the system the rally was on. Same text as the Mask Admin > Discord default templates. */
+function rally_discord_payload($action, $who, $systemLabel = null, $systemName = null, $urlBase = null, $chainLabel = '') {
 	$who = rally_discord_clean($who !== null && $who !== '' ? $who : 'someone');
 	if ($action === 'clear') {
 		$content = 'Tripwire rally point cleared by *' . $who . '*';
+		if ($systemName !== null && $systemName !== '') $content .= ' (was on ' . rally_discord_clean(rally_discord_with_label($chainLabel, $systemName), 260) . ')';
 	} else {
-		$content = 'Tripwire rally point from *' . $who . '*: **' . rally_discord_clean($systemLabel, 150) . '**';
+		$content = 'Tripwire rally point from *' . $who . '*: **' . rally_discord_clean(rally_discord_with_label($chainLabel, $systemLabel), 260) . '**';
 		$urlBase = preg_replace('/[<>\s]+/', '', (string)$urlBase);	// can't break out of the <autolink>
 		if ($urlBase !== '' && $systemName !== null && $systemName !== '') {
 			$content .= "\n<" . $urlBase . '/?system=' . rawurlencode($systemName) . '>';
@@ -170,6 +179,16 @@ function rally_discord_url_base($redirect, $scriptName) {
 	return $scheme . '://' . $url['host'] . $port . rtrim($path, '/.');
 }
 
+/** The chain label of a system (discord_chain_label in discord/rally.php), '' when there is none or it can't be read */
+function rally_discord_chain_label($mysql, $mask, $systemID) {
+	if (!function_exists('discord_chain_label')) return '';
+	try {
+		return discord_chain_label($mysql, $mask, $systemID);
+	} catch (Throwable $e) {
+		return '';
+	}
+}
+
 /** Rally of $mask as stored right now: array('systemID', 'setBy') or null */
 function rally_discord_current_rally($mysql, $mask) {
 	$stmt = $mysql->prepare('SELECT systemID, setBy FROM fork_rally WHERE maskID = :mask');
@@ -185,8 +204,9 @@ function rally_discord_current_rally($mysql, $mask) {
 	@param $hook the mask's legacy webhook (rally_discord_route()'s 'hook')
 	@param $action the change that triggered this, 'set' or 'clear' (only used to name who cleared)
 	@param $who the character that made the change
+	@param $previousSystemID a clear: the system the rally was on (0 = unknown), named in the cleared message
 	@return 'post' | 'edit' | 'failed' */
-function rally_discord_notify($mysql, $mask, $hook, $action, $who) {
+function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSystemID = 0) {
 	$created = $mysql->exec('CREATE TABLE IF NOT EXISTS fork_rally_discord (
 		maskID decimal(12,1) NOT NULL,
 		messageID varchar(32) DEFAULT NULL,
@@ -215,10 +235,15 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who) {
 			$systemLabel = rally_discord_system_label($system, $region);
 			if ($systemLabel === null) $systemLabel = (string)$systemID;
 			$urlBase = rally_discord_url_base(defined('EVE_SSO_REDIRECT') ? EVE_SSO_REDIRECT : null, isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '');
-			$payload = rally_discord_payload('set', $rally['setBy'], $systemLabel, $system ? $system['name'] : null, $urlBase);
+			$payload = rally_discord_payload('set', $rally['setBy'], $systemLabel, $system ? $system['name'] : null, $urlBase, rally_discord_chain_label($mysql, $mask, $systemID));
+		} else if ($action === 'clear') {
+			// This request cleared it: name the clearer and the system it was on, when known
+			$appData = $previousSystemID > 0 ? rally_discord_app_data() : array();
+			$previousName = isset($appData['systems'][$previousSystemID]['name']) ? $appData['systems'][$previousSystemID]['name'] : null;
+			$payload = rally_discord_payload('clear', $who, null, $previousName, null, $previousName !== null ? rally_discord_chain_label($mysql, $mask, $previousSystemID) : '');
 		} else {
-			// Only name the clearer if it was this request (someone else's clear is named by their own send)
-			$payload = rally_discord_payload('clear', $action === 'clear' ? $who : 'someone');
+			// Someone else cleared it: named by their own send
+			$payload = rally_discord_payload('clear', 'someone');
 		}
 
 		if ($decision === 'edit') {

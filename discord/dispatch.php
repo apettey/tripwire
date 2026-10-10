@@ -207,7 +207,10 @@ function discord_row_context(PDO $db, array $row) {
         if ($pending > 0 && (int) $row['age'] < DISCORD_NAMES_WAIT) return null;
         return discord_kill_context($data, $names);
     }
-    if ($row['kind'] === 'rally') return discord_rally_context($data, discord_rally_current($db, $row['maskID'])) ?? [];
+    if ($row['kind'] === 'rally') {
+        $labelOf = function ($systemID) use ($db, $row) { return discord_chain_label($db, $row['maskID'], $systemID); };
+        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf) ?? [];
+    }
     return $data;
 }
 

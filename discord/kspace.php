@@ -23,7 +23,8 @@ function discord_sig_text($signatureID) {
 
 /**
  * Candidates in one wormhole row: one per side whose system is k-space. $row: wormholeID, type, parent, a.../b... columns
- * (ID, Sys, Sig, By). @return array [[systemID, sigID (k-space side), via (other side system), viaSig, hole, mapper], ...]
+ * (ID, Sys, Sig, By, Name). @return array [[systemID, sigID (k-space side), via (other side system), viaSig, hole, mapper,
+ * label (name of the other side's signature)], ...]
  */
 function discord_kspace_candidates(array $row) {
     $out = [];
@@ -41,6 +42,8 @@ function discord_kspace_candidates(array $row) {
             'viaSig' => discord_sig_text($row[$other . 'Sig']),
             'hole' => $hole,
             'mapper' => (string) ($row[$side . 'By'] ?: $row[$other . 'By']),
+            // The chain label (as discord_chain_label): the name of the hole leading in, i.e. the other side's signature
+            'label' => discord_chain_label_clean($row[$other . 'Name'] ?? ''),
         ];
     }
     return $out;
@@ -58,6 +61,7 @@ function discord_kspace_context(array $candidate, array $hubs, array $type, $mas
         'hubs' => array_map(function ($h) { return [$h[0], $h[1]]; }, $hubs),
         'sig' => $candidate['viaSig'], 'hole' => $candidate['hole'],
         'from' => $via ? $via[0] : 'unknown system', 'mapper' => $candidate['mapper'] !== '' ? $candidate['mapper'] : 'someone',
+        'label' => $candidate['label'] ?? '',
         'time' => time(),
     ];
 }
@@ -93,8 +97,8 @@ function discord_kspace_poll(PDO $db, array $masks, &$highWater) {
     }
     $ids = array_map('strval', array_keys($masks));
     $base = 'SELECT w.id AS wormholeID, w.type, w.parent, w.maskID,
-            a.id AS aID, a.systemID AS aSys, a.signatureID AS aSig, a.modifiedByName AS aBy,
-            b.id AS bID, b.systemID AS bSys, b.signatureID AS bSig, b.modifiedByName AS bBy,
+            a.id AS aID, a.systemID AS aSys, a.signatureID AS aSig, a.modifiedByName AS aBy, a.name AS aName,
+            b.id AS bID, b.systemID AS bSys, b.signatureID AS bSig, b.modifiedByName AS bBy, b.name AS bName,
             GREATEST(a.modifiedTime, b.modifiedTime) AS changed
         FROM wormholes w
         INNER JOIN signatures a ON a.id = w.initialID
