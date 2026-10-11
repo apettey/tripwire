@@ -167,7 +167,12 @@ function discord_structure_timer_poll(PDO $db, array $masks, $now = null) {
             $context = discord_structure_timer_context($row, $type, $lead, discord_mask_name($db, $maskID), $chainText, $now);
             $claim = function () use ($db, $maskID, $ref) { return discord_dedupe_once($db, $maskID, DISCORD_STIMER_KIND, $ref); };
             if (discord_enqueue_once($db, $maskID, $type['webhookID'], 'structureTimer', $context, $claim, DISCORD_PRIORITY_STIMER) === null) {
-                // Not queued although it was new: the mask's outbox is full (the claim is rolled back, so the next poll tries again). Stop for this mask.
+                // No dedupe row afterwards: the claim was rolled back because the mask's outbox is full; stop for this mask, the next poll
+                // tries again. A row: another worker claimed it between the check and now, nothing is wrong, go on.
+                if (discord_structure_timer_sent($db, $maskID, $ref)) {
+                    discord_log(sprintf('structure timers: %s was queued by another process, mask %s', $ref, $maskID));
+                    continue;
+                }
                 discord_log(sprintf('structure timers: outbox of mask %s is full, %s waits for the next poll', $maskID, $ref));
                 break;
             }
