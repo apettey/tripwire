@@ -41,6 +41,7 @@
 #dialog-admin .dn-form th { width: 90px; text-align: right; vertical-align: top; padding: 3px 6px 3px 0; color: #aaa; font-weight: normal; white-space: nowrap; }
 #dialog-admin .dn-form td { padding: 2px 0; }
 #dialog-admin .dn-home-warning { font-weight: bold; }
+#dialog-admin .dn-home-notice { font-weight: normal; color: #ccc; }
 #dialog-admin .dn-form textarea { width: 98%; font-family: inherit; font-size: 12px; }
 #dialog-admin .dn-form input[type=number] {
 	width: 48px;

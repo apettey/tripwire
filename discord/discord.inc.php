@@ -14,6 +14,7 @@
 //   discord/outbox.php      outbox + dedupe tables: enqueue, claim, prune
 //   discord/chain.php       the chain of a mask: systems connected to its home system through live wormholes
 //   discord/chain_label.php chain labels: the name of the hole leading into a system (A, AB, AABCA...)
+//   discord/chain_notice.php one notice to the chain kill channel while chain kills are paused (no home system set)
 //   discord/kspace.php      type 1: new k-space systems near the ping systems (polls signatures/wormholes)
 //   discord/kills.php       types 2-4: kills in the chain / by the corporation / losses, fed by zkill_feed.worker.php
 //   discord/rally.php       type 5: the chain map's rally point ("Fight here", with the fleet comp of fight/fight.inc.php),
@@ -37,6 +38,7 @@ require_once(__DIR__ . '/chain.php');
 require_once(__DIR__ . '/chain_label.php');
 require_once(__DIR__ . '/kspace.php');
 require_once(__DIR__ . '/kills.php');
+require_once(__DIR__ . '/chain_notice.php');
 require_once(__DIR__ . '/../fight/fight.inc.php');
 require_once(__DIR__ . '/rally.php');
 require_once(__DIR__ . '/../watchlist/watchlist.inc.php');

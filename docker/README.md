@@ -377,6 +377,24 @@ wormhole signatures counted, so fragments of an old chain (holes collapsed or ro
 `wormholeClean` only deletes them at `lifeLeft` + 10 % of their life) kept posting
 (`changes/2026-10-10-chain-kills-connected/`).
 
+**Chain kills paused notice** (`discord/chain_notice.php`, no setting). While chain kills are on and the mask has no
+home system, `discord_notify.worker.php` posts one message to the chain kill channel (checked every 15 s with the
+k-space poll): "Chain kills are paused: no home system is set for the **Corp** mask. An admin can set it in Tripwire >
+Mask Admin > Discord." Once per episode and channel: the episode is a `discord_sent` row (kind `nohome`, ref
+`wh:<webhookID>`) that is also the notice's dedupe, so later passes post nothing; it is kept by the 7-day prune for as
+long as the episode lasts. The episode ends (row deleted) when the mask gets a home, chain kills are turned off or
+moved to another channel, the webhook's URL is replaced (it may be another channel: the next pass posts a new notice
+there), or the mask or its webhook can no longer send; if chain kills still go to that channel, now with a home, and
+the notice did not fail (sent, still queued, or its outbox row already pruned: sent rows go after 7 days; a failed
+notice gets no "resumed", unless the episode outlasts the 14 days failed rows are kept), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
+new episode. Same rule as the chain: only "no home" pauses chain kills (a home without live holes is a chain of one
+system, and an unknown home ID is dropped when the settings load). Both messages are fixed text with empty
+`allowed_mentions` (no pings, whatever the type's ping field says) and the mask name escaped. Mask Admin > Discord adds
+to its "Set a home system" warning when the notice was posted ("A notice was posted to the chain kills channel on
+2026-10-11 00:59 EVE time.", or "Chain kills paused since ..." once the notice's outbox row is pruned; `homeNotice` in
+`discord.php`'s answer). Test: `discord/tests/chain_notice_flow_test.php`
+(against the dev stack's MySQL, worker and `discord-mock`).
+
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
 change time and wormhole ID; it starts at the newest existing change and keeps moving with it while no mask has the type
@@ -467,7 +485,8 @@ twice; `PATCH .../messages/<id>` edits (rally point), `GET /delete/<id>` makes l
 Unknown Message; `http://127.0.0.1:9095/messages` lists what was received and `/channel` shows the channel as a reader sees it (each message as last edited). Any 18-digit ID and 68-character token works, e.g.
 `https://discord.com/api/webhooks/111111111111111111/<68 characters>`. Fake a kill through the same path as the worker:
 `docker compose -f docker-compose.dev.yml exec -T app php docker/dev/discord-fake-kill.php <systemID> <loss|kill|neutral>`.
-Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` (`discord/tests/` and
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` and, against the
+running dev stack (worker + mock), `php discord/tests/chain_notice_flow_test.php` (`discord/tests/` and
 `discord/tools/` are not in the image).
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
