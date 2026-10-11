@@ -36,7 +36,8 @@ describe('jumpPlanner', () => {
 		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
-				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, fuel: true, hull: null, fuelSkills: { 21610: 5 }, open: false, mode: 'exit', origin: null });
+				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, fuel: true, hull: null, fuelSkills: { 21610: 5 }, open: false, mode: 'exit', origin: null,
+				prefer: 'jumps', preferStations: true, avoidKills: true, avoidIncursions: true, avoid: [] });
 			assert.strictEqual(jumpPlanner.settings({ jumpRange: { search: false } }).search, false);
 			assert.strictEqual(jumpPlanner.enabled({}), true);
 			assert.strictEqual(jumpPlanner.enabled({ jumpRange: { enabled: false } }), false);
@@ -624,7 +625,7 @@ describe('jumpPlanner', () => {
 			const b = model(ids, { cache: cache });
 			assert.strictEqual(cache.routes, routes);
 			assert.deepStrictEqual(b.rows.map(r => r.id), a.rows.map(r => r.id));
-			assert.ok(!('name' in routes[0]) && !('fuel' in routes[0]), 'cached rows stay plain routes');
+			assert.ok(!('name' in routes[0]) && routes[0].fuel === null && !('warnings' in routes[0]), 'cached rows stay plain routes (no panel fields, no fuel)');
 			model(ids, { cache: cache }, { cap: 5 });
 			assert.notStrictEqual(cache.routes, routes);
 			const key = cache.key;

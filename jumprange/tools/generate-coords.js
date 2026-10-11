@@ -4,7 +4,7 @@
 //   node jumprange/tools/generate-coords.js <sde-dir> [out-dir] [--zip <the downloaded SDE zip>]
 //
 // <sde-dir> holds the unzipped SDE files this reads: _sde.jsonl, mapSolarSystems.jsonl, mapStargates.jsonl,
-// types.jsonl, groups.jsonl, typeDogma.jsonl, dogmaEffects.jsonl, typeBonus.jsonl (download: https://developers.eveonline.com/static-data, the
+// types.jsonl, groups.jsonl, typeDogma.jsonl, dogmaEffects.jsonl, typeBonus.jsonl, npcStations.jsonl (download: https://developers.eveonline.com/static-data, the
 // "JSON Lines" zip). [out-dir] defaults to public/jumprange. --zip records the zip's file name and SHA-256 in meta. Writes:
 //
 // systems.json  Every k-space solar system that can be reached by stargates from Jita, plus Pochven (cut off
@@ -27,6 +27,10 @@
 //               percentage must match); fuelRole = fixed role bonus as a fraction (a role trait about jump fuel;
 //               0 when none). meta.fuelSkill is the skill every hull can train: the one whose dogma effect
 //               modifies 868 (Jump Fuel Conservation, 21610): {skillID, skill, perLevel}.
+//
+// stations.json The systems that have at least one NPC station (npcStations.jsonl, solarSystemID), among the systems of
+//               systems.json: {meta, systems: [first system ID, +d, +d, ...] (sorted), counts: [stations in each]}.
+//               Used by the Jump planner to prefer midpoints a ship can dock at.
 //
 // The output only changes when the SDE does, so re-run it after a game update and commit both files.
 'use strict';
@@ -211,11 +215,31 @@ async function main() {
 		ships: ships
 	};
 
+	// ---- NPC stations ----
+	const stationCount = {};
+	await eachLine(sde, 'npcStations.jsonl', (st) => { stationCount[st.solarSystemID] = (stationCount[st.solarSystemID] || 0) + 1; });
+	const stationIds = ids.filter((id) => stationCount[id] > 0);
+	const stationData = {
+		meta: {
+			version: build.buildNumber,
+			source: 'EVE Online Static Data Export (developers.eveonline.com), npcStations (solarSystemID)',
+			sdeBuild: build.buildNumber,
+			sdeReleaseDate: build.releaseDate,
+			...zipInfo,
+			encoding: 'systems: system IDs of systems.json with at least one NPC station, first value, then differences to the previous entry; counts: NPC stations in each, same order',
+			count: stationIds.length
+		},
+		systems: deltas(stationIds),
+		counts: stationIds.map((id) => stationCount[id])
+	};
+
 	fs.mkdirSync(out, { recursive: true });
+	fs.writeFileSync(path.join(out, 'stations.json'), JSON.stringify(stationData) + '\n');
 	fs.writeFileSync(path.join(out, 'systems.json'), JSON.stringify(data) + '\n');
 	fs.writeFileSync(path.join(out, 'ships.json'), JSON.stringify(shipData, null, '\t') + '\n');
 	console.log('systems:', kept.length, 'kept,', left.length, 'left out', JSON.stringify(leftRegions));
 	console.log('ships:', ships.length);
+	console.log('stations.json:', stationIds.length, 'systems with an NPC station,', Object.values(stationCount).reduce((a, b) => a + b, 0), 'stations in total');
 	console.log('systems.json', fs.statSync(path.join(out, 'systems.json')).size, 'bytes');
 }
 

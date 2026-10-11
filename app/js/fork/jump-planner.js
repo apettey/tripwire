@@ -4,7 +4,10 @@ const jumpPlanner = {
 	// distance band), gate jumps, trade-hub reach and a destination button. The range maths is in jumpRange
 	// (app/js/fork/jump-range.js); static data in public/jumprange/ (jumprange/tools/generate-coords.js); cyno-jammed
 	// marks per mask in public/jump_jammed.php. Jump fuel (isotopes per jump from the hull's SDE data and the skill
-	// levels set in the panel / Settings) is calculated by jumpRange. Get home routes take up to HOME_MAX_JUMPS jumps.
+	// levels set in the panel / Settings) is calculated by jumpRange. Get home routes take up to HOME_MAX_JUMPS jumps;
+	// which systems they jump through is chosen by jumpRange.routePlan (NPC stations from public/jumprange/stations.json,
+	// kills in the last hour from the chain map's ESI system_kills data, Sansha incursions from ESI /incursions/, the
+	// user's avoided systems), and a midpoint can be swapped for another in range of both its neighbours.
 	// Settings: options.jumpRange (a missing key means the default).
 	// Pure HTML builders and helpers first (tested), browser code at the bottom.
 	// Keep `const jumpPlanner` on the first line: the test helper strips it to define a global.
@@ -14,6 +17,11 @@ const jumpPlanner = {
 	COL_PX: 60,				// gridster widget_base_dimensions 50 + 2 * margin 5
 	DATA_VERSION: 3586130,	// meta.version of public/jumprange/*.json (SDE build): busts the browser cache
 	SHIPS_REV: 2,			// bump when ships.json changes without a new SDE build (2: jump fuel fields)
+	STATIONS_REV: 1,		// the same for stations.json (1: first version)
+	LIVE_REFRESH_MS: 10 * 60000,	// ESI incursions are fetched at most this often (kills come with the chain map's own refresh)
+	LIVE_CHECK_MS: 30000,	// the panel looks for new kills / incursions this often
+	AVOID_MAX: 100,			// avoided systems kept in the settings
+	ALT_SHOWN: 14,			// "Other systems to jump to": rows shown
 	HOME_MAX_JUMPS: 5,		// Get home: at most this many jumps from the start to an exit
 	DATA_URL: "jumprange/",
 	JAMMED_URL: "jump_jammed.php",
@@ -28,7 +36,8 @@ const jumpPlanner = {
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
 		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
-		fuel: true, hull: null
+		fuel: true, hull: null,
+		prefer: "jumps", preferStations: true, avoidKills: true, avoidIncursions: true
 	},
 
 	escape: function(text) {
@@ -67,12 +76,90 @@ const jumpPlanner = {
 			fuel: raw.fuel !== false,
 			hull: Number(raw.hull) > 0 && Number.isInteger(Number(raw.hull)) ? Number(raw.hull) : null,
 			fuelSkills: jumpPlanner.cleanSkills(raw.fuelSkills),
+			prefer: pick(raw.prefer, ["jumps", "fuel"], d.prefer),
+			preferStations: raw.preferStations !== false,
+			avoidKills: raw.avoidKills !== false,
+			avoidIncursions: raw.avoidIncursions !== false,
+			avoid: jumpPlanner.cleanAvoid(raw.avoid),
 			open: raw.open === true,
 			mode: pick(raw.mode, ["exit", "home"], "exit"),
 			origin: Number(raw.origin) > 0 && Number.isInteger(Number(raw.origin)) ? Number(raw.origin) : null
 		};
 		if (raw.position && typeof raw.position === "object") { s.position = raw.position; }
 		return s;
+	},
+
+	// ---- Live data for scoring midpoints (pure parts) ----
+
+	/** stations.json -> {systemID: NPC stations} */
+	decodeStations: function(data) {
+		const out = {};
+		if (!data || !Array.isArray(data.systems)) { return out; }
+		let id = 0;
+		data.systems.forEach(function(d, i) {
+			id += Number(d) || 0;
+			out[id] = Number(data.counts && data.counts[i]) || 1;
+		});
+		return out;
+	},
+
+	/**
+	 * Kills in the last hour by system from the chain map's ESI activity ({systemID: {shipKills, podKills, ...}}, chain.data.activity):
+	 * ship + pod kills (NPC kills do not count). null when the activity has no kill data (not loaded, the request failed).
+	 */
+	killsFrom: function(activity) {
+		if (!activity || typeof activity !== "object") { return null; }
+		const out = {};
+		let any = false;
+		Object.keys(activity).forEach(function(key) {
+			const a = activity[key];
+			if (!a || typeof a !== "object" || !/^[0-9]+$/.test(key)) { return; }
+			if (a.shipKills === undefined && a.podKills === undefined) { return; }
+			any = true;
+			const n = (Number(a.shipKills) || 0) + (Number(a.podKills) || 0);
+			if (n > 0) { out[key] = n; }
+		});
+		return any ? out : null;
+	},
+
+	/** ESI /incursions/ -> {systemID: true} for every infested system (CCP's list; the cyno jammer is constellation-wide), or null when it is not a list */
+	incursionMap: function(list) {
+		if (!Array.isArray(list)) { return null; }
+		const out = {};
+		list.forEach(function(inc) {
+			((inc && Array.isArray(inc.infested_solar_systems)) ? inc.infested_solar_systems : []).forEach(function(id) {
+				if (Number.isInteger(id) && id > 0) { out[id] = true; }
+			});
+		});
+		return out;
+	},
+
+	/** Avoided systems: a list of distinct positive integer system ids (anything else dropped), at most AVOID_MAX */
+	cleanAvoid: function(raw) {
+		const out = [];
+		(Array.isArray(raw) ? raw : []).forEach(function(v) {
+			const n = typeof v === "number" || (typeof v === "string" && /^[0-9]+$/.test(v)) ? Number(v) : NaN;
+			if (Number.isInteger(n) && n > 0 && out.indexOf(n) < 0 && out.length < jumpPlanner.AVOID_MAX) { out.push(n); }
+		});
+		return out;
+	},
+
+	/**
+	 * The scoring part of jumpRange options (routePlan / reach / alternatives): the user's preferences and the data
+	 * that is there (a part that has not loaded is left out: no penalty, never an error).
+	 * @param live {stations: {id: count}, kills: {id: n}, incursion: {id: true}} (parts may be missing)
+	 */
+	scoringOpts: function(settings, live) {
+		const s = settings || {};
+		const l = live || {};
+		const avoid = {};
+		(s.avoid || []).forEach(function(id) { avoid[id] = true; });
+		const o = { prefer: s.prefer === "fuel" ? "fuel" : "jumps", preferStations: s.preferStations !== false, avoidKills: s.avoidKills !== false,
+			avoidIncursions: s.avoidIncursions !== false, avoid: avoid };
+		if (l.stations) { o.stations = l.stations; }
+		if (l.kills) { o.kills = l.kills; }
+		if (l.incursion) { o.incursion = l.incursion; }
+		return o;
 	},
 
 	/** Skill levels for the fuel: {skillID: 0-5} from options.jumpRange.fuelSkills (bad entries dropped); Jump Fuel Conservation always there (5 unless set) */
@@ -552,14 +639,14 @@ const jumpPlanner = {
 			let to;
 			const r = h.to;
 			if (r && r.reason === "target") {
-				to = "<span class='jp-hub-no'>exit is cyno-jammed (normal cyno)</span>";
+				to = "<span class='jp-hub-no'>" + (r.cause === "incursion" ? "exit is in an incursion (cynos jammed)" : "exit is cyno-jammed (normal cyno)") + "</span>";
 			} else if (!r || r.jumps === null) {
 				to = "<span class='jp-hub-no'>not within 2 jumps</span>" + (r && isFinite(r.direct) ? " <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY)</span>" : "");
 			} else if (r.jumps === 1) {
 				to = "<span class='jp-hub-ok'>1 jump</span> <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY" + esc(fuelOf([r.direct])) + ")</span>";
 			} else {
 				const v = r.via[0];
-				to = "<span class='jp-hub-ok2'>2 jumps</span> via " + esc(name(v.id)) + " <span class='jp-dim'>(" + v.ly1.toFixed(1) + " + " + v.ly2.toFixed(1) + " LY" + esc(fuelOf([v.ly1, v.ly2]))
+				to = "<span class='jp-hub-ok2'>2 jumps</span> via " + esc(name(v.id)) + jumpPlanner.midTags(v) + " <span class='jp-dim'>(" + v.ly1.toFixed(1) + " + " + v.ly2.toFixed(1) + " LY" + esc(fuelOf([v.ly1, v.ly2]))
 					+ (r.via.length > 1 ? ", " + (r.via.length - 1) + " other midpoint" + (r.via.length === 2 ? "" : "s") : "") + ")</span>";
 			}
 			let back;
@@ -567,7 +654,7 @@ const jumpPlanner = {
 				back = "<span class='jp-hub-no'>no low/null-sec near " + hub + " in 2 jumps</span>";
 			} else {
 				const b = h.back.reach;
-				back = esc(name(h.back.systemID)) + " <span class='jp-dim'>(" + (b.jumps === 1 ? "1 jump" : "2 jumps via " + esc(name(b.via[0].id)))
+				back = esc(name(h.back.systemID)) + " <span class='jp-dim'>(" + (b.jumps === 1 ? "1 jump" : "2 jumps via " + esc(name(b.via[0].id)) + jumpPlanner.midTags(b.via[0]))
 					+ esc(fuelOf(b.jumps === 1 ? [b.direct] : [b.via[0].ly1, b.via[0].ly2])) + ", then "
 					+ h.back.gates + (h.back.gates === 1 ? " gate" : " gates") + " to " + hub + ")</span>";
 			}
@@ -826,10 +913,12 @@ const jumpPlanner = {
 	/**
 	 * Get home: from a start system, the routes to each exit on the chain (up to HOME_MAX_JUMPS jumps), and the holes from there home.
 	 * @param ctx {startID, exits: [systemID], paths (homePaths().paths, holes annotated), index, systems, settings, presets, jammed,
+	 *   live: {stations, kills, incursion, rev} (the data scoring the midpoints; parts may be missing, rev changes when it does),
+	 *   pins: {exitID: [midpoint ids]} (midpoints the user chose, in order; the rest of the route is planned from the last),
 	 *   cache: an object the caller keeps between calls, so the same search isn't run again (optional)}
-	 * @return {range, preset, covert, need, fuel, problem (jumpRange.startProblem), rows: [jumpRange.routesFrom row + {name, sec, secText,
-	 *   cyno (the first jump's target), home, holes, warnings, fuel (whole route, null when unknown), legFuel ([per jump])}],
-	 *   counts: {reachable, total}}
+	 * @return {range, preset, covert, need, fuel, problem (jumpRange.startProblem), plan (the jumpRange options the routes were
+	 *   planned with), rows: [jumpRange.routePlan row + {name, sec, secText, cyno (the first jump's target), home, holes,
+	 *   warnings, fuel (whole route, null when unknown), legFuel ([per jump]), pinned}], counts: {reachable, total}}
 	 */
 	homeModel: function(ctx) {
 		const s = ctx.settings;
@@ -837,23 +926,32 @@ const jumpPlanner = {
 		const covert = !!(r.preset && r.preset.covert);
 		const jammedIDs = {};
 		Object.keys(ctx.jammed || {}).forEach(function(id) { jammedIDs[id] = true; });
-		const opts = { lowsec: s.lowsec, nullsec: s.nullsec, covert: covert, jammed: s.jammed === "ignore" ? {} : jammedIDs };
+		const opts = Object.assign({ lowsec: s.lowsec, nullsec: s.nullsec, covert: covert, jammed: s.jammed === "ignore" ? {} : jammedIDs },
+			jumpPlanner.scoringOpts(s, ctx.live));
+		opts.reduction = r.preset ? jumpRange.fatigueReduction(r.preset.key.replace(/^group-(\d+).*$/, "$1")) : 0;
 		const need = r.preset ? jumpRange.shipNeeds(r.preset.key.replace(/^group-(\d+).*$/, "$1")) : null;
 		// Supercarriers and titans can't take the wormholes home: nothing to list
 		const problem = need === "none" ? "supercap" : ctx.startID ? jumpRange.startProblem(ctx.startID, ctx.systems[ctx.startID], ctx.index) : "none";
 		const exits = (ctx.exits || []).filter(function(id) { return ctx.paths && ctx.paths[id]; });
 		let routes = [];
 		if (!problem) {
-			const key = JSON.stringify([ctx.startID, r.range, exits, opts.lowsec, opts.nullsec, opts.covert, Object.keys(opts.jammed).sort(), jumpPlanner.HOME_MAX_JUMPS]);
+			const key = JSON.stringify([ctx.startID, r.range, exits, opts.lowsec, opts.nullsec, opts.covert, Object.keys(opts.jammed).sort(), jumpPlanner.HOME_MAX_JUMPS,
+				opts.prefer, opts.preferStations, opts.avoidKills, opts.avoidIncursions, Object.keys(opts.avoid).sort(), opts.reduction, ctx.live ? ctx.live.rev : ""]);
 			if (ctx.cache && ctx.cache.key === key) { routes = ctx.cache.routes; }
 			else {
-				routes = jumpRange.routesFrom(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts, jumpPlanner.HOME_MAX_JUMPS);
+				routes = jumpRange.routePlan(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts, jumpPlanner.HOME_MAX_JUMPS);
 				if (ctx.cache) { ctx.cache.key = key; ctx.cache.routes = routes; }
 			}
 		}
 		const fuel = jumpPlanner.fuelSetup(r.preset, s);
 		const rows = routes.map(function(cached) {
-			const route = Object.assign({}, cached);		// the cached rows stay as they are
+			let route = Object.assign({}, cached);		// the cached rows stay as they are
+			const pin = ctx.pins && ctx.pins[route.id];
+			if (pin && pin.length && route.jumps) {
+				// A midpoint the user chose: keep the jumps up to it, plan the rest from there
+				const via = jumpRange.routeVia([ctx.startID].concat(pin), route.id, r.range, ctx.index, ctx.systems, opts, jumpPlanner.HOME_MAX_JUMPS);
+				if (via.jumps) { route = Object.assign(route, via, { pinned: true }); }
+			}
 			const sys = ctx.systems[route.id] || {};
 			const path = ctx.paths[route.id];
 			return Object.assign(route, {
@@ -865,7 +963,7 @@ const jumpPlanner = {
 			});
 		});
 		return {
-			range: r.range, max: r.max, preset: r.preset, covert: covert, need: need, fuel: fuel, opts: opts, problem: problem, rows: rows,
+			range: r.range, max: r.max, preset: r.preset, covert: covert, need: need, fuel: fuel, opts: opts, plan: opts, problem: problem, rows: rows,
 			counts: { reachable: rows.filter(function(x) { return x.jumps !== null; }).length, total: rows.length }
 		};
 	},
@@ -883,10 +981,82 @@ const jumpPlanner = {
 		switch (row.reason) {
 			case "range": return "out of range within " + jumpPlanner.HOME_MAX_JUMPS + " jumps" + direct;
 			case "jammed": return "cyno-jammed (normal cyno)";
+			case "incursion": return "in an incursion (cynos jammed)";
 			case "target": return (jumpRange.kind(row.id, { security: row.sec }) === "ls" ? "low-sec" : "null-sec") + " targets are off in Settings";
 			case "nopos": return "no position known";
 			default: return "not reachable";
 		}
+	},
+
+	/** Small tags after a midpoint's name (HTML, escaped): a house for an NPC station, the kills of the last hour, "avoided".
+	 * m: {station (true / false / null), kills (n / null), avoided} */
+	midTags: function(m) {
+		if (!m) { return ""; }
+		let html = "";
+		if (m.station === true) { html += " <span class='jp-st' title='NPC station in this system: you can dock'>&#8962;</span>"; }
+		if (m.kills > 0) { html += " <span class='jp-kl' title='" + jumpPlanner.escape(m.kills + (m.kills === 1 ? " ship or pod kill" : " ship and pod kills") + " in the last hour (ESI)") + "'>" + jumpPlanner.escape(m.kills) + (m.kills === 1 ? " kill" : " kills") + "</span>"; }
+		if (m.avoided) { html += " <span class='jp-av' title='You avoid this system (Settings > Jump Planner)'>avoided</span>"; }
+		return html;
+	},
+
+	/**
+	 * The route text as HTML (escaped): "3 jumps via A (house) -> B 3 kills (5.8 + 5.6 + 4.0 LY)", each midpoint name a link that
+	 * opens the other systems to jump to (data-jp-mid = its number in the route, from 0). Without midpoints, or when not
+	 * reachable, it is routeText.
+	 */
+	routeHtml: function(row, name, settings) {
+		const esc = jumpPlanner.escape;
+		if (!(row.jumps > 1)) { return esc(jumpPlanner.routeText(row, name, settings)); }
+		const mids = Array.isArray(row.path) ? row.path : row.via ? [row.via] : [];
+		return esc(row.jumps + " jumps via ") + mids.map(function(id, i) {
+			const facts = (row.mids && row.mids[i]) || null;
+			return "<a href='#' class='jp-mid' data-jp-mid='" + i + "' title='" + esc("Other systems to jump to instead of " + name(id)) + "'>" + esc(name(id)) + "</a>" + jumpPlanner.midTags(facts);
+		}).join(esc(" → ")) + esc(" (" + row.legs.map(function(ly) { return ly.toFixed(1); }).join(" + ") + " LY)") + (row.pinned ? " <span class='jp-pin' title='You chose a midpoint on this route'>pinned</span>" : "");
+	},
+
+	/** "Waits: 7 min, 7 min · fatigue on arrival 1 h 12 min" (plain text) from jumpRange.fatigue(); "" without one */
+	fatigueText: function(f) {
+		if (!f) { return ""; }
+		const waits = f.cooldowns.length ? "Waits: " + f.cooldowns.map(jumpRange.formatMinutes).join(", ") + " · " : "";
+		return waits + (waits ? "fatigue" : "Fatigue") + " on arrival " + jumpRange.formatMinutes(f.fatigueEnd);
+	},
+
+	/**
+	 * "Other systems to jump to" under a Get home route (a table row, HTML, escaped)
+	 * @param alt {routeID, index (the midpoint's number in the route), id (the one in use), prev, next, list: [jumpRange.alternatives rows], more (rows not shown)}
+	 * @param name function(id); info function(id) -> {sec, secText, region}
+	 */
+	altListHtml: function(alt, name, info, colspan) {
+		const esc = jumpPlanner.escape;
+		let html = "<tr class='jp-alt' data-jp-alt='" + (parseInt(alt.routeID, 10) || 0) + "'><td colspan='" + (colspan || 4) + "'><div class='jp-alt-box'>"
+			+ "<div class='jp-alt-head'>Other systems to jump to instead of " + esc(name(alt.id)) + " <span class='jp-dim'>(between " + esc(name(alt.prev)) + " and " + esc(name(alt.next)) + ")</span>"
+			+ " <a href='#' class='jp-alt-close'>close</a></div>";
+		if (!alt.list.length) { return html + "<div class='jp-dim'>No other system is in range of both.</div></div></td></tr>"; }
+		html += "<table class='jp-alt-table'><thead><tr><th>System</th><th>Sec</th><th>Region</th><th title='NPC station'>Stn</th><th title='Ship and pod kills in the last hour'>Kills 1h</th><th title='Light-years in / out'>LY in / out</th><th></th></tr></thead><tbody>";
+		alt.list.forEach(function(a) {
+			const i = info(a.id) || {};
+			const current = a.id === alt.id;
+			html += "<tr class='" + (current ? "jp-alt-cur" : "") + "' data-jp-alt-id='" + (parseInt(a.id, 10) || 0) + "'>"
+				+ "<td>" + esc(name(a.id)) + (current ? " <span class='jp-dim'>(in use)</span>" : "") + (a.avoided ? " <span class='jp-av'>avoided</span>" : "") + "</td>"
+				+ "<td><span class='" + jumpPlanner.secClass(i.sec) + "'>" + esc(i.secText || "") + "</span></td>"
+				+ "<td class='jp-alt-region'>" + esc(i.region || "") + "</td>"
+				+ "<td>" + (a.station === true ? "<span class='jp-st' title='NPC station'>&#8962;</span>" : "<span class='jp-dim'>" + (a.station === false ? "-" : "?") + "</span>") + "</td>"
+				+ "<td>" + (a.kills === null || a.kills === undefined ? "<span class='jp-dim'>?</span>" : a.kills > 0 ? "<span class='jp-kl'>" + esc(a.kills) + "</span>" : "<span class='jp-dim'>0</span>") + "</td>"
+				+ "<td>" + esc(a.ly1.toFixed(1) + " / " + a.ly2.toFixed(1)) + "</td>"
+				+ "<td class='jp-col-act'>" + (current ? "" : "<a href='#' class='jp-alt-use' title='Jump through this system instead (this route only, not saved)'>Use</a> ")
+				+ "<a href='#' class='jp-alt-avoid' title='" + (a.avoided ? "Stop avoiding this system" : "Avoid this system in every route") + "'>" + (a.avoided ? "Allow" : "Avoid") + "</a></td></tr>";
+		});
+		html += "</tbody></table>" + (alt.more > 0 ? "<div class='jp-dim'>+ " + esc(alt.more) + " more in range</div>" : "");
+		return html + "</div></td></tr>";
+	},
+
+	/** The avoided systems for Settings (HTML, escaped): a chip with a remove button each */
+	avoidListHtml: function(ids, name) {
+		const esc = jumpPlanner.escape;
+		if (!ids || !ids.length) { return "<span class='jp-dim'>none (in Get home, click a midpoint and choose Avoid)</span>"; }
+		return ids.map(function(id) {
+			return "<span class='jp-chip' data-jp-avoid-id='" + (parseInt(id, 10) || 0) + "'>" + esc(name(id)) + " <a href='#' class='jp-chip-x' title='Allow this system again'>&times;</a></span>";
+		}).join(" ");
 	},
 
 	/** Why a start can't be used, for the panel */
@@ -934,7 +1104,7 @@ const jumpPlanner = {
 	},
 
 	/** The Get home list: reachable exits first (ranked), then the rest greyed with the reason; warnings under each row */
-	homeListHtml: function(model, name, settings, homes) {
+	homeListHtml: function(model, name, settings, homes, alt, info) {
 		const esc = jumpPlanner.escape;
 		let html = "<table class='jp-list jp-home-list'><thead><tr><th>Exit</th><th>Jump route</th><th>Wormholes</th><th></th></tr></thead><tbody>";
 		if (!model.rows.length) { html += "<tr><td colspan='4' class='jp-empty'>No low-sec or null-sec exits on this chain.</td></tr>"; }
@@ -946,7 +1116,7 @@ const jumpPlanner = {
 			const fuelText = model.fuel && ok && r.jumps && r.fuel !== null ? jumpRange.formatFuel(r.fuel, model.fuel.hull) : "";
 			html += "<tr data-jp-id='" + r.id + "' class='jp-home-row" + (ok ? "" : " jp-row-out") + "'>"
 				+ "<td class='jp-col-name'>" + esc(r.name) + " <span class='" + jumpPlanner.secClass(r.sec) + "'>" + esc(r.secText) + "</span></td>"
-				+ "<td class='jp-col-route" + (ok ? "" : " jp-dim") + "'>" + esc(jumpPlanner.routeText(r, name, settings))
+				+ "<td class='jp-col-route" + (ok ? "" : " jp-dim") + "'" + (ok && r.jumps ? jumpPlanner.routeTitle(r, model) : "") + ">" + jumpPlanner.routeHtml(r, name, settings)
 				+ (fuelText ? "<div class='jp-route-fuel' title='" + esc("Isotopes per jump: " + jumpPlanner.fuelDetail(model.fuel, r.legs) + " (" + jumpPlanner.fuelBasis(model.fuel) + ")") + "'>" + esc(fuelText) + "</div>" : "") + "</td>"
 				+ "<td class='jp-col-holes' title='" + esc(r.holes.map(jumpPlanner.holeLabel).join(" → ") + " → " + name(r.home)) + "'>" + esc(holes) + "</td>"
 				+ "<td class='jp-col-act'>" + dest + "</td></tr>";
@@ -955,8 +1125,21 @@ const jumpPlanner = {
 					return "<span class='jp-w-" + w.level + "'>" + (w.level === "warn" ? "⚠ " : "") + esc(w.text) + "</span>";
 				}).join("") + "</td></tr>";
 			}
+			if (alt && alt.routeID === r.id && ok) { html += jumpPlanner.altListHtml(alt, name, info || function() { return {}; }, 4); }
 		});
 		return html + "</tbody></table>";
+	},
+
+	/** The title attribute (with a leading space, escaped; or "") of a route's cell: isotopes per jump and the fatigue line */
+	routeTitle: function(row, model) {
+		const lines = [];
+		if (model && model.fuel && row.jumps) {
+			const detail = jumpPlanner.fuelDetail(model.fuel, row.legs);
+			if (detail) { lines.push("Isotopes per jump: " + detail); }
+		}
+		const fat = jumpPlanner.fatigueText(row.fatigue);
+		if (fat) { lines.push(fat); }
+		return lines.length ? " title='" + jumpPlanner.escape(lines.join("\n")) + "'" : "";
 	},
 
 	/** Footer for Get home: "2 of 4 exits reachable" */
@@ -1118,6 +1301,19 @@ const jumpPlanner = {
 			+ " <span class='jp-dim'>(your skill level; ship skills are set in the panel)</span></td></tr>";
 	},
 
+	/** Settings > Jump Planner rows for choosing the midpoints (a third block): Route, the three Prefer/Avoid switches, avoided systems */
+	midpointSettingsHtml: function() {
+		const radios = function(name, list) {
+			return list.map(function(o) { return "<label><input type='radio' name='" + name + "' value='" + jumpPlanner.escape(o[0]) + "' /> " + jumpPlanner.escape(o[1]) + "</label>"; }).join(" ");
+		};
+		return "<tr class='jp-sep'><td colspan='2'></td></tr>"
+			+ "<tr><th>Route:</th><td>" + radios("jumpPlanner-prefer", [["jumps", "Fewer jumps"], ["fuel", "Less fuel"]]) + " <span class='jp-dim'>(Get home: an extra midpoint when it saves fuel)</span></td></tr>"
+			+ "<tr><th>Midpoints:</th><td><label><input type='checkbox' id='jumpPlanner-preferStations' /> Prefer a system with an NPC station</label><br />"
+			+ "<label><input type='checkbox' id='jumpPlanner-avoidKills' /> Avoid systems with kills in the last hour</label><br />"
+			+ "<label><input type='checkbox' id='jumpPlanner-avoidIncursions' /> Avoid incursions <span class='jp-dim'>(their cyno jammer stops a normal cyno)</span></label></td></tr>"
+			+ "<tr><th>Avoided systems:</th><td><span id='jumpPlanner-avoid-list' class='jp-avoid-list'></span></td></tr>";
+	},
+
 	/** Settings section rows (HTML) */
 	settingsHtml: function(presets) {
 		const esc = jumpPlanner.escape;
@@ -1175,6 +1371,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			start: null,			// the system to jump from (options.jumpRange.origin once a valid one is picked)
 			from: { matches: [], active: -1, refocusing: false },
 			homeCache: {},			// the last Get home search (homeModel's ctx.cache)
+			pins: { key: "", map: {} },	// midpoints the user chose, {exitID: [ids]} (this page only; reset with the start, ship or range)
+			alt: null,				// the open "Other systems to jump to": {routeID, index}
+			stations: null,			// {systemID: NPC stations} once stations.json is loaded
+			killsCache: { src: null, size: -1, map: null, rev: 0 },
+			inc: { map: null, at: 0, busy: false, rev: 0 },	// ESI incursions
+			liveRev: "",			// the live data the last render used
+			liveTimer: null,
 			$from: null				// the "Jump from" row, kept across renders like the search row
 		};
 
@@ -1218,12 +1421,65 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return presetsLoading;
 		}
 
+		/** NPC stations per system (stations.json, small). Optional: without it midpoints are not preferred for stations, nothing fails. */
+		function loadStations() {
+			return $.getJSON(jp.DATA_URL + "stations.json?v=" + jp.DATA_VERSION + "." + jp.STATIONS_REV).then(function(data) {
+				return jp.decodeStations(data);
+			}, function() {
+				return $.Deferred().resolve(null).promise();
+			});
+		}
+
+		/** Kills of the last hour: what the chain map already fetched from ESI (chain.data.activity, refreshed by the chain map), or null */
+		function killsLive() {
+			const a = typeof chain !== "undefined" && chain && chain.data ? chain.data.activity : null;
+			const c = state.killsCache;
+			const size = a ? Object.keys(a).length : -1;
+			if (a !== c.src || size !== c.size) {
+				c.src = a;
+				c.size = size;
+				c.map = jp.killsFrom(a);
+				c.rev++;
+			}
+			return c.map;
+		}
+
+		/** Sansha incursions from ESI /incursions/ (CCP's public API, like the chain map's own ESI calls), at most every LIVE_REFRESH_MS */
+		function loadIncursions() {
+			const inc = state.inc;
+			if (inc.busy || Date.now() - inc.at < jp.LIVE_REFRESH_MS) { return; }
+			if (typeof esiLimits !== "undefined" && esiLimits.pausedFor(null) > 0) { return; }
+			inc.busy = true;
+			$.ajax({ url: "https://esi.evetech.net/incursions/?" + $.param({ user_agent: "Tripwire Jump planner (" + window.location.hostname + ")" }),
+				type: "GET", dataType: "JSON", timeout: 15000 }).done(function(list) {
+				const map = jp.incursionMap(list);
+				if (map && (!inc.map || JSON.stringify(Object.keys(map).sort()) !== JSON.stringify(Object.keys(inc.map).sort()))) { inc.map = map; inc.rev++; }
+			}).always(function() {
+				inc.busy = false;
+				inc.at = Date.now();		// a failed fetch is tried again after the same wait; no data means no penalty
+			});
+		}
+
+		/** The data scoring the midpoints: {stations, kills, incursion, rev}; a part that is not there is null */
+		function liveData() {
+			const kills = killsLive();
+			return { stations: state.stations, kills: kills, incursion: state.inc.map, rev: [state.stations ? 1 : 0, kills ? state.killsCache.rev : 0, state.inc.rev].join(".") };
+		}
+
+		/** Every LIVE_CHECK_MS while the panel is open: new incursions / kills redraw it */
+		function checkLive() {
+			if (!$widget().length) { return; }
+			loadIncursions();
+			if (state.data && liveData().rev !== state.liveRev) { render(); }
+		}
+
 		/** Everything the panel needs: positions (systems.json, only fetched when the panel is first shown) and presets */
 		function load() {
 			if (state.data) { return $.Deferred().resolve(state.data).promise(); }
 			if (state.loading) { return state.loading; }
-			state.loading = $.when($.getJSON(jp.DATA_URL + "systems.json?v=" + jp.DATA_VERSION), loadShips()).then(function(sys, list) {
+			state.loading = $.when($.getJSON(jp.DATA_URL + "systems.json?v=" + jp.DATA_VERSION), loadShips(), loadStations()).then(function(sys, list, stations) {
 				const coords = jumpRange.decode(sys[0]);
+				state.stations = stations;
 				state.data = { coords: coords, index: jumpRange.buildIndex(coords, 7), presets: list };
 				state.error = "";
 				return state.data;
@@ -1346,6 +1602,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$w.stop(true, true);
 			$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
 			loadJammed();
+			loadIncursions();
+			clearInterval(state.liveTimer);
+			state.liveTimer = setInterval(checkLive, jp.LIVE_CHECK_MS);
 			return $w;
 		}
 
@@ -1353,6 +1612,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const api = gridApi();
 			const $w = $widget();
 			clearTimeout(state.jammedTimer);
+			clearInterval(state.liveTimer);
 			resetSearch();	// the search lasts while the panel is open
 			if (!api || !$w.length) { return; }
 			// Remember where it was, so opening it again puts it back there (not when Settings > Reset removes it)
@@ -1431,6 +1691,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				return;
 			}
 			const s = current();
+			state.liveRev = liveData().rev;
 			const exits = state.exits.slice();
 			if (state.selected && exits.indexOf(state.selected) < 0 && !jp.isRangeExit(state.selected, systems()[state.selected])) { state.selected = null; }
 			// The selected exit stays while it is a LS/NS system, even when it isn't on the chain any more (opened from elsewhere)
@@ -1465,7 +1726,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!s.search) { resetSearch(); }
 			let hubs = "";
 			if (s.hubs) {
-				const hubOpts = { covert: model.covert, jammed: s.jammed === "ignore" ? {} : model.opts.jammed };
+				const hubOpts = Object.assign({ covert: model.covert, jammed: s.jammed === "ignore" ? {} : model.opts.jammed }, jp.scoringOpts(s, liveData()));
 				hubs = "<div class='jp-hubs'>" + jp.hubsHtml(jp.HUBS.map(function(hubID) {
 					return {
 						hubID: hubID,
@@ -1577,8 +1838,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!$from.find(".jp-from-input").is(":focus")) { $from.find(".jp-from-input").val(start ? name(start) : ""); }
 			const scroll = $body.find(".jp-list-wrap").scrollTop();
 			const ctx = context(start && state.data.index.pos[start] ? start : null);
+			const pinKey = JSON.stringify([start, s.ship, s.jdc, s.cap, s.lowsec, s.nullsec]);
+			if (state.pins.key !== pinKey) { state.pins = { key: pinKey, map: {} }; state.alt = null; }
+			const live = liveData();
+			state.liveRev = live.rev;
 			const home = jp.homeModel({ startID: start, exits: state.allExits, paths: hp.paths, index: state.data.index, systems: systems(),
-				settings: s, presets: state.data.presets, jammed: ctx.jammed, cache: state.homeCache });
+				settings: s, presets: state.data.presets, jammed: ctx.jammed, live: live, pins: state.pins.map, cache: state.homeCache });
 			let html;
 			if (!hp.homes.length) {
 				html = "<div class='jp-state'>No chain on this tab. Get home needs a chain map with a home system (the system the chain starts from).</div>";
@@ -1598,7 +1863,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				state.last = { ctx: ctx, model: model, mapModel: mapModel, home: home };
 				html = "<div class='jp-map'>" + mapHtml() + "<div class='jp-tip hidden'></div>"
 					+ "<span class='jp-map-note'>top-down, true scale · centred on " + jp.escape(name(start)) + "</span></div>"
-					+ "<div class='jp-list-wrap'>" + jp.homeListHtml(home, name, s, hp.homes) + "</div>"
+					+ "<div class='jp-list-wrap'>" + jp.homeListHtml(home, name, s, hp.homes, altFor(home, start), altInfo) + "</div>"
 					+ "<div class='jp-foot'><span class='jp-foot-text'>" + jp.escape(jp.homeFooterText(home)) + "</span>"
 					+ "<a href='#' class='jp-copy-list'>Copy list</a></div>";
 			}
@@ -1612,6 +1877,45 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				refreshMap();
 				if (state.pinnedID) { showTip(state.pinnedID); }
 			}
+		}
+
+		/** The open "Other systems to jump to" list for a Get home route: {routeID, index, id, prev, next, list, more}, or null */
+		function altFor(home, start) {
+			const a = state.alt;
+			if (!a) { return null; }
+			const row = home.rows.filter(function(r) { return r.id === a.routeID && r.jumps > 1; })[0];
+			if (!row || a.index >= row.path.length) { state.alt = null; return null; }
+			const prev = a.index === 0 ? start : row.path[a.index - 1];
+			const next = a.index === row.path.length - 1 ? row.id : row.path[a.index + 1];
+			const list = jumpRange.alternatives(prev, next, home.range, state.data.index, systems(), home.plan);
+			return { routeID: row.id, index: a.index, id: row.path[a.index], prev: prev, next: next, list: list.slice(0, jp.ALT_SHOWN), more: Math.max(0, list.length - jp.ALT_SHOWN) };
+		}
+
+		function altInfo(id) {
+			const sys = systems()[id] || {};
+			const region = regions() && regions()[sys.regionID] ? regions()[sys.regionID].name : "";
+			return { sec: sys.security, secText: jp.secText(sys.security), region: region };
+		}
+
+		/** Choose a system for midpoint `index` of a route: that and the midpoints before it are kept, the rest is planned again */
+		function useMidpoint(routeID, index, systemID) {
+			const l = state.last;
+			const row = l && l.home ? l.home.rows.filter(function(r) { return r.id === routeID; })[0] : null;
+			if (!row || index >= row.path.length) { return; }
+			state.pins.map[routeID] = row.path.slice(0, index).concat([systemID]);
+			state.alt = null;
+			render();
+		}
+
+		/** Avoid (or allow again) a system in every route; options.jumpRange.avoid */
+		function toggleAvoid(systemID) {
+			const s = current();
+			const list = s.avoid.indexOf(systemID) >= 0 ? s.avoid.filter(function(id) { return id !== systemID; }) : s.avoid.concat([systemID]);
+			store({ avoid: jp.cleanAvoid(list) }, true);
+			Object.keys(state.pins.map).forEach(function(key) {		// a route kept through it is planned again
+				if (state.pins.map[key].indexOf(systemID) >= 0) { delete state.pins.map[key]; }
+			});
+			render();
 		}
 
 		/** The "Jump from" row (built once; renderHome moves it into the new body) */
@@ -1906,6 +2210,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			};
 		}
 
+		let avoidDraft = null;		// the avoided systems while Settings is open (Save writes them)
+		function drawAvoidList() {
+			$("#jumpPlanner-avoid-list").html(jp.avoidListHtml(avoidDraft || current().avoid, name));
+		}
+
 		function setupSettings() {
 			// Its own Settings section after Routes & Navigation, built right away (so the feature can always be turned
 			// off); the ship list fills in from ships.json when Settings opens. Every open re-reads the stored values.
@@ -1939,6 +2248,39 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					store({ fuel: $("#jumpPlanner-section input[name='jumpPlanner-fuel']:checked").val() !== "0", fuelSkills: skills });
 				},
 				reset: function() { /* nothing of its own: the Jump Planner row's reset deletes options.jumpRange, these keys included */ }
+			});
+			// Choosing the midpoints (Get home and the trade-hub lines): Route, Prefer stations, Avoid kills / incursions, and the
+			// avoided systems (added in the panel; removed here). Keys of options.jumpRange; Reset deletes the whole object.
+			forkSettings.register({
+				section: "jumpPlanner", order: 1200, id: "jumpPlanner-midpoints", type: "custom", rows: jp.midpointSettingsHtml(),
+				keywords: "jump midpoints route fuel station kills incursion avoid cyno",
+				load: function() {
+					const s = current();
+					const $s = $("#jumpPlanner-section");
+					$s.find("input[name='jumpPlanner-prefer'][value='" + s.prefer + "']").prop("checked", true);
+					$("#jumpPlanner-preferStations").prop("checked", s.preferStations);
+					$("#jumpPlanner-avoidKills").prop("checked", s.avoidKills);
+					$("#jumpPlanner-avoidIncursions").prop("checked", s.avoidIncursions);
+					avoidDraft = s.avoid.slice();
+					drawAvoidList();
+				},
+				save: function() {
+					const prefer = $("#jumpPlanner-section input[name='jumpPlanner-prefer']:checked").val();
+					store({
+						prefer: prefer === "fuel" ? "fuel" : "jumps",
+						preferStations: $("#jumpPlanner-preferStations").prop("checked"),
+						avoidKills: $("#jumpPlanner-avoidKills").prop("checked"),
+						avoidIncursions: $("#jumpPlanner-avoidIncursions").prop("checked"),
+						avoid: jp.cleanAvoid(avoidDraft || current().avoid)
+					});
+				},
+				reset: function() { avoidDraft = null; /* options.jumpRange is deleted by the Jump Planner row's reset */ }
+			});
+			$(document).on("click", "#jumpPlanner-avoid-list .jp-chip-x", function(e) {
+				e.preventDefault();
+				const id = parseInt($(this).closest(".jp-chip").attr("data-jp-avoid-id"), 10);
+				avoidDraft = (avoidDraft || current().avoid).filter(function(x) { return x !== id; });
+				drawAvoidList();
 			});
 			// Settings > Routes & Navigation: the same on/off as the section's first row (one key), kept in sync both
 			// ways; the section's row is what Save reads
@@ -2100,6 +2442,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				}
 			});
 			$doc.on("mousedown", sel + " .jp-from-menu li[data-jp-find]", function(e) { e.preventDefault(); pickStart(parseInt($(this).attr("data-jp-find"), 10)); });
+			// Get home: a midpoint's name opens the other systems to jump to; Use pins one for this route, Avoid keeps it out of every route
+			$doc.on("click", sel + " .jp-mid", function(e) {
+				e.preventDefault();
+				const routeID = parseInt($(this).closest("tr").attr("data-jp-id"), 10);
+				const index = parseInt($(this).attr("data-jp-mid"), 10);
+				state.alt = state.alt && state.alt.routeID === routeID && state.alt.index === index ? null : { routeID: routeID, index: index };
+				state.pinnedID = routeID;
+				render();
+			});
+			$doc.on("click", sel + " .jp-alt-close", function(e) { e.preventDefault(); state.alt = null; render(); });
+			$doc.on("click", sel + " .jp-alt-use", function(e) {
+				e.preventDefault();
+				if (state.alt) { useMidpoint(state.alt.routeID, state.alt.index, parseInt($(this).closest("tr").attr("data-jp-alt-id"), 10)); }
+			});
+			$doc.on("click", sel + " .jp-alt-avoid", function(e) { e.preventDefault(); toggleAvoid(parseInt($(this).closest("tr").attr("data-jp-alt-id"), 10)); });
 			$doc.on("click", sel + " .jp-home-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).attr("data-jp-cyno"), 10)); });
 			$doc.on("click", sel + " .jp-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).closest("tr").attr("data-jp-id"), 10)); });
 			$doc.on("click", sel + " .jp-tip-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).closest(".jp-tip").attr("data-jp-id"), 10)); });
