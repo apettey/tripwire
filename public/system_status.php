@@ -84,7 +84,8 @@ try {
 	try {
 		$systems = system_status_list($mysql, $mask);
 	} catch (PDOException $e) {
-		if ($e->getCode() !== '42S02' && stripos($e->getMessage(), "doesn't exist") === false) throw $e;
+		// Exception or silent error mode (the connection is shared, so its mode is not changed): either way a failed
+		// first read is retried once after creating the table; a second failure is a real error and propagates
 		system_status_ensure_table($mysql);	// first read ever: nothing set yet
 		$systems = system_status_list($mysql, $mask);
 	}

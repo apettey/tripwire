@@ -65,8 +65,7 @@
 
 /* System info panel line */
 .sysstatus-info {
-	clear: both;
-	margin: 3px 0 2px;
+	margin: 3px 0 2px;	/* in the info panel's left column, under the faction line */
 	padding-left: 6px;
 	font-size: 11px;
 	line-height: 15px;

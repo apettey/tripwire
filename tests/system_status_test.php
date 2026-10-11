@@ -101,6 +101,16 @@ ss_test_sig($mysql, $maskA, 'tst003', 31000003);
 ss_test_sig($mysql, $maskA, 'tst004', 31000004);
 check('full and all on the chain: refused', system_status_update($mysql, $maskA, 31000005, array('status' => 'hostile'), 'A'), false);
 $mysql->exec("DELETE FROM signatures WHERE maskID = '$maskA'");
+// A signature with a NULL systemID (NOT IN would match nothing then) must not stop eviction
+$nullable = $mysql->query("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'signatures' AND column_name = 'systemID'")->fetchColumn();
+if ($nullable === 'YES') {
+	$mysql->exec("INSERT INTO signatures (signatureID, systemID, type, name, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
+		VALUES ('tstnul', NULL, 'wormhole', '', 86400, 1, 'test', 1, 'test', '$maskA')");
+	check('NULL-systemID signature: still evicts', system_status_update($mysql, $maskA, 31000006, array('status' => 'hostile'), 'A')['systemID'], 31000006);
+	$mysql->exec("DELETE FROM signatures WHERE maskID = '$maskA'");
+} else {
+	check('signatures.systemID is NOT NULL here (NULL case not reachable)', true, true);
+}
 // Poll hash: same rows, same hash; any change, other hash
 $rowsNow = system_status_list($mysql, $maskA);
 check('hash stable', system_status_hash($rowsNow), system_status_hash(system_status_list($mysql, $maskA)));

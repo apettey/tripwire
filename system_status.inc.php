@@ -26,7 +26,7 @@ function system_status_hash(array $rows) {
 /** Drop the mask's oldest row (by setAt) of a system with no signature of the mask in it. True when one was dropped. */
 function system_status_evict($mysql, $mask) {
 	$stmt = $mysql->prepare('DELETE FROM fork_system_status WHERE maskID = :mask
-		AND systemID NOT IN (SELECT systemID FROM signatures WHERE maskID = :mask2)
+		AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.maskID = :mask2 AND s.systemID = fork_system_status.systemID)
 		ORDER BY setAt, systemID LIMIT 1');
 	if (!$stmt) throw new PDOException('Could not prepare system status evict');
 	$stmt->bindValue(':mask', $mask);

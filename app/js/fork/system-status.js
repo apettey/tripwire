@@ -209,14 +209,14 @@ const systemStatus = {
 		$("#chainMap .node[data-nodeid]").each(function() { systemStatus.patchNode(this, on); });
 	},
 
-	/** The system info panel line for the viewed system: before the activity graph, re-rendered from systemChange and the
+	/** The system info panel line for the viewed system: under the faction line, re-rendered from systemChange and the
 	poll tick. Hidden when the setting is off. */
 	renderInfo: function() {
 		let $el = $("#systemStatusInfo");
-		const $anchor = $("#infoWidget #activityGraph");
+		const $anchor = $("#infoWidget #infoFaction");	// static markup in the left column, away from the threat section
 		if (!$anchor.length || !systemStatus.enabled(systemStatus.options())) { $el.remove(); return; }
 		if (!$el.length) { $el = $("<div id='systemStatusInfo' class='sysstatus-info'></div>"); }
-		if ($el.next()[0] !== $anchor[0]) { $anchor.before($el.detach()); }
+		if ($anchor.next()[0] !== $el[0]) { $anchor.after($el.detach()); }
 		const id = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
 		const row = id ? systemStatus.rows[String(id)] : null;
 		const line = systemStatus.infoLine(row);
