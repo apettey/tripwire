@@ -99,9 +99,16 @@ function dn_run() {
                 if ($leader) $totals['kspace'] += discord_kspace_poll($db, dn_kspace_masks($db), $highWater);
                 else $highWater = discord_kspace_start($db);   // take over from about now (the poll re-reads an overlap)
                 // Watchlist matches: same leader, same cadence (dedupe rows make a second poller harmless anyway)
-                if ($leader) $totals['watchlist'] += discord_watchlist_poll($db, dn_type_masks($db, 'watchlist'));
+                // (each poll in its own try: a failure is logged and must not stop the chain notice, structure timers or the sender below)
+                if ($leader) {
+                    try { $totals['watchlist'] += discord_watchlist_poll($db, dn_type_masks($db, 'watchlist')); }
+                    catch (Throwable $error) { dn_log('watchlist poll failed: ' . $error->getMessage()); }
+                }
                 // Structure timer reminders (24 h / 1 h / 15 m / at the end): same leader, same cadence; the dedupe rows make a second poller harmless
-                if ($leader) $totals['stimer'] = ($totals['stimer'] ?? 0) + discord_structure_timer_poll($db, dn_type_masks($db, 'structureTimer'));
+                if ($leader) {
+                    try { $totals['stimer'] = ($totals['stimer'] ?? 0) + discord_structure_timer_poll($db, dn_type_masks($db, 'structureTimer')); }
+                    catch (Throwable $error) { dn_log('structure timer poll failed: ' . $error->getMessage()); }
+                }
                 // Chain kills on without a home system: one notice to their channel (same leader, same cadence)
                 if ($leader) discord_chain_notice_poll($db, dn_type_masks($db, 'chainKill'));
             }

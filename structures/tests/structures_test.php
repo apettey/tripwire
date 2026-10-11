@@ -164,6 +164,8 @@ check('markers: no systems', structures_markers($mysql, MASK_A, [], $friendly, $
 $mine = function ($rows) use ($ms) { return array_values(array_filter($rows, function ($r) use ($ms) { return $r['systemID'] >= $ms; })); };	// the earlier tests left a timer in SYSTEM
 $timers = structures_timers($mysql, MASK_A, $friendly, $t);
 check('timers: soonest first, elapsed under 2 h included', array_map(function ($r) { return $r['timerKind']; }, $mine($timers)), ['hull', 'other', 'armor']);
+check('timers: rows say when the timer was set (the alerts skip leads before it)', is_int($mine($timers)[0]['timerSetAt']), true);
+check('timers: the alerts list (2 min grace) leaves out a timer that ended 30 minutes ago', array_map(function ($r) { return $r['timerKind']; }, $mine(structures_timers($mysql, MASK_A, $friendly, $t, STRUCTURES_NEXT, STRUCTURES_NEXT_GRACE))), ['other', 'armor']);
 check('timers: limit', count(structures_timers($mysql, MASK_A, $friendly, $t, 2)), 2);
 check('timers: ended more than 2 h ago drop off', count($mine(structures_timers($mysql, MASK_A, $friendly, $t + 4 * 3600))), 0);
 structures_set_gone($mysql, MASK_A, $byType['Astrahus'][0], 'destroyed', 'Scout');

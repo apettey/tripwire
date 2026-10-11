@@ -191,7 +191,8 @@ const structureTimers = {
 			if (!r || !r.timerAt || !r.timerKind || nowSec >= r.timerAt + structureTimers.ALERT_GRACE_S) { return; }
 			let lead = null;
 			structureTimers.ALERT_LEADS.forEach(function(l) {
-				if (r.timerAt - l <= nowSec && (lead === null || l < lead)) { lead = l; }
+				// Due, and not one that fell due before the timer was entered (the same rule as the Discord reminders)
+				if (r.timerAt - l <= nowSec && r.timerAt - l >= (r.timerSetAt || 0) && (lead === null || l < lead)) { lead = l; }
 			});
 			if (lead === null) { return; }
 			const key = r.id + ":" + r.timerAt + ":" + lead;
@@ -201,18 +202,20 @@ const structureTimers = {
 		return out.sort(function(a, z) { return a.row.timerAt - z.row.timerAt; });
 	},
 
-	/** "Hull timer in 15 m: Fortizar in J163701" */
-	alertText: function(alert, systemName) {
+	/** "Hull timer in 9 m: Fortizar "Fort Knox" in J163701" (the real minutes left when it is shown, "ended" from the end on) */
+	alertText: function(alert, systemName, nowSec) {
 		const r = alert.row;
 		const kind = (structureTimers.KIND_SHORT[r.timerKind] || "Timer") + " timer";
-		return kind + (alert.lead > 0 ? " in 15 m" : " ended") + ": " + r.typeName + (r.name ? " \"" + structures.splitName(r.name).rest + "\"" : "") + " in " + systemName;
+		const left = nowSec === undefined ? alert.lead : r.timerAt - nowSec;
+		const when = left <= 0 ? " ended" : left < 60 ? " in under a minute" : " in " + Math.ceil(left / 60) + " m";
+		return kind + when + ": " + r.typeName + (r.name ? " \"" + structures.splitName(r.name).rest + "\"" : "") + " in " + systemName;
 	},
 
-	alertHtml: function(alert, systemName) {
+	alertHtml: function(alert, systemName, nowSec) {
 		const esc = structures.escape;
 		return "<div class='kill-toast kill-toast-timer" + (alert.lead === 0 ? " kill-toast-timer-end" : "") + "' data-key='" + esc(alert.key) + "' title='Open the Timers board'>"
 			+ "<span class='kill-toast-close' title='Dismiss'>&#10005;</span>"
-			+ "<div class='kill-toast-text'><span class='str-alert-ico'>" + structures.icon("clock") + "</span> " + esc(structureTimers.alertText(alert, systemName)) + "</div></div>";
+			+ "<div class='kill-toast-text'><span class='str-alert-ico'>" + structures.icon("clock") + "</span> " + esc(structureTimers.alertText(alert, systemName, nowSec)) + "</div></div>";
 	},
 
 	// ---- Browser state ----
@@ -345,7 +348,7 @@ const structureTimers = {
 		let sound = null;
 		due.forEach(function(a) {
 			structureTimers.alerted[a.key] = true;
-			const $toast = $(structureTimers.alertHtml(a, structures.systemName(a.row.systemID)));
+			const $toast = $(structureTimers.alertHtml(a, structures.systemName(a.row.systemID), structureTimers.nowSec()));
 			$toast.on("click", function() { structureTimers.showPanel("timers"); $toast.remove(); });
 			$box.append($toast);
 			setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, 20000);

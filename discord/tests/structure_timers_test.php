@@ -158,6 +158,16 @@ cleanup($db);
 $ins(31001880, $now + 3600, $now - 86400, ['maskID' => OTHER]);
 $ins(31001880, $now + 3 * 86400, $now - 86400);
 check('other masks and timers beyond 24 h are not posted for this mask', discord_structure_timer_poll($db, [MASK => $settings()], $now), 0);
+// A full outbox: nothing is claimed (the dedupe rows are rolled back), the mask's loop stops, the next poll tries again
+cleanup($db);
+$ins(31001880, $now + 3600, $now - 86400);
+$ins(31001880, $now + 3600, $now - 86400, ['name' => 'J152820 - Second']);
+$fill = $db->prepare("INSERT INTO discord_outbox (maskID, webhookID, kind, priority, data, status, nextAttemptAt, createdAt) VALUES (?, 7, 'kspace', 10, '{}', 'queued', UTC_TIMESTAMP() + INTERVAL 1 HOUR, UTC_TIMESTAMP())");
+for ($i = 0; $i < DISCORD_OUTBOX_MASK_CAP; $i++) $fill->execute([MASK]);
+check('full outbox: nothing queued, nothing claimed', [discord_structure_timer_poll($db, [MASK => $settings()], $now), (int) $db->query("SELECT COUNT(*) FROM discord_sent WHERE maskID = '" . MASK . "' AND kind = 'stimer'")->fetchColumn()], [0, 0]);
+$db->exec("DELETE FROM discord_outbox WHERE maskID = '" . MASK . "' AND kind = 'kspace'");
+check('full outbox: after room is made both reminders go out', discord_structure_timer_poll($db, [MASK => $settings()], $now), 2);
+check('already sent: no second message, no context built (the dedupe row is looked at first)', [discord_structure_timer_poll($db, [MASK => $settings()], $now + 1), discord_structure_timer_sent($db, MASK, $db->query("SELECT ref FROM discord_sent WHERE maskID = '" . MASK . "' AND kind = 'stimer' LIMIT 1")->fetchColumn())], [0, true]);
 cleanup($db);
 $ins(31001880, $now + 3600, $now - 86400);
 check('without a webhook nothing is queued', discord_structure_timer_poll($db, [MASK => $settings(['webhookID' => 0])], $now), 0);

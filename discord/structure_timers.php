@@ -50,6 +50,13 @@ function discord_structure_timer_due_lead($timerAt, $timerSetAt, array $leads, $
     return $best;
 }
 
+/** Whether a reminder was already queued (its dedupe row exists): checked before any message is built, every poll */
+function discord_structure_timer_sent(PDO $db, $maskID, $ref) {
+    $stmt = $db->prepare('SELECT 1 FROM discord_sent WHERE maskID = ? AND kind = ? AND ref = ?');
+    $stmt->execute([(string) $maskID, DISCORD_STIMER_KIND, substr((string) $ref, 0, 64)]);
+    return (bool) $stmt->fetchColumn();
+}
+
 /** Unix time of a UTC 'Y-m-d H:i:s' column, or null */
 function discord_structure_timer_unix($value) {
     if ($value === null || $value === '') return null;
@@ -154,11 +161,16 @@ function discord_structure_timer_poll(PDO $db, array $masks, $now = null) {
             $lead = discord_structure_timer_due_lead($row['timerAt'], $row['timerSetAt'], $type['leads'], $now, $type['enabledAt'] ?? 0);
             if ($lead === null) continue;
             $ref = $row['id'] . ':' . $row['timerAt'] . ':' . $lead;
+            if (discord_structure_timer_sent($db, $maskID, $ref)) continue;   // nothing is built for what was already sent
             $chain = $chain ?? ($homeID > 0 ? discord_chain_systems_cached($db, $maskID, $homeID, $now) : []);
             $chainText = discord_structure_timer_chain_text($row['systemID'], $homeID, $chain, discord_chain_label($db, $maskID, $row['systemID']));
             $context = discord_structure_timer_context($row, $type, $lead, discord_mask_name($db, $maskID), $chainText, $now);
             $claim = function () use ($db, $maskID, $ref) { return discord_dedupe_once($db, $maskID, DISCORD_STIMER_KIND, $ref); };
-            if (discord_enqueue_once($db, $maskID, $type['webhookID'], 'structureTimer', $context, $claim, DISCORD_PRIORITY_STIMER) === null) continue;
+            if (discord_enqueue_once($db, $maskID, $type['webhookID'], 'structureTimer', $context, $claim, DISCORD_PRIORITY_STIMER) === null) {
+                // Not queued although it was new: the mask's outbox is full (the claim is rolled back, so the next poll tries again). Stop for this mask.
+                discord_log(sprintf('structure timers: outbox of mask %s is full, %s waits for the next poll', $maskID, $ref));
+                break;
+            }
             $queued++;
             discord_log(sprintf('queued structure timer %s: %s in %s for mask %s', $ref, $row['typeName'], $context['system'], $maskID));
         }
