@@ -363,6 +363,7 @@ describe('jumpPlanner', () => {
 			assert.strictEqual(jumpPlanner.beyondText(8.049, 8), '8.05 LY');
 			assert.strictEqual(jumpPlanner.beyondText(8.06, 8), '8.1 LY');
 			assert.strictEqual(jumpPlanner.beyondText(9.34, 8), '9.3 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.004, 8), '8.004 LY');
 			const html = jumpPlanner.searchResultHtml({ id: 1, name: 'X', status: 'range', ly: 8.03, range: 8, total: 0 }, sort);
 			assert.ok(/out of range: 8.03 LY <span class='jp-dim'>\(range 8.0\)/.test(html), html);
 		});

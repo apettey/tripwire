@@ -554,10 +554,11 @@ const jumpPlanner = {
 		return Math.max(0, Math.round(rowTop - headHeight - Math.max(0, (visible - rowHeight) / 2)));
 	},
 
-	/** "8.03 LY" next to a range of 8.0: two decimals when one would not show that it is beyond the range */
+	/** "8.03 LY" next to a range of 8.0: more decimals (up to 3, the data's precision) until it shows it is beyond the range */
 	beyondText: function(ly, range) {
-		const one = Number(ly).toFixed(1);
-		return (Number(one) <= Number(range) ? Number(ly).toFixed(2) : one) + " LY";
+		let text = Number(ly).toFixed(1);
+		for (let d = 2; d <= 3 && Number(text) <= Number(range); d++) { text = Number(ly).toFixed(d); }
+		return text + " LY";
 	},
 
 	/** The one-line search result (HTML, escaped). result searchStatus() output; sort {key, dir} */
