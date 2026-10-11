@@ -33,7 +33,7 @@ Keep entries short. They are a log, not documentation.
 ## 2. Announce user-facing features in What's New
 
 Users learn about new features from the What's New window, which opens once after each update and can be
-reopened from Settings > General Preferences > What's new. Its content is
+reopened from Settings > General > What's new. Its content is
 [public/whats-new/features.json](public/whats-new/features.json).
 
 - Every PR that adds or changes something users can see adds an entry to `features.json`, newest first.
@@ -58,10 +58,37 @@ Every user-facing feature must answer this question before it is built, and the 
   (visual additions, pop-ups, automatic behaviour). Bug fixes and pure improvements usually don't need one;
   say why in the PR.
 - **On by default**, so users see the feature exists; the toggle lets them turn it off.
-- Store it per user in `options.<feature>.enabled` (a missing key means on), add a row to the matching
-  Settings section (Chain Map Settings, General Preferences, ...) from the feature's own JS, apply it on
-  Save like the neighbouring settings, and make sure it survives Settings > Reset.
-- Mention the toggle in the feature's What's New description ("turn it off in Settings > ...").
+- Store it per user in `options.<feature>.enabled`; a missing key means on (with the defaults).
+- Mention it in the feature's What's New description ("turn it off in Settings > Map Markers").
+- Settings shared by everyone on a mask (channels, filters, mask-wide switches) go in **Mask Admin**, not Settings.
+
+**How:** call `forkSettings.register({...})` from the feature's own JS file (the fields are documented in
+[app/js/fork/settings-sections.js](app/js/fork/settings-sections.js)). It builds the row, fills it when Settings
+opens, writes it on Save (so it takes effect like its neighbours) and handles Settings > Reset (deletes `key`,
+or runs your `reset(options)`). Never find a section by position (`#optionsAccordion > div`) and never add your
+own Save/open/Reset hooks. Give the row an `order` so its place doesn't depend on script load order.
+
+**Where:** the section that matches what the user is doing when they'd want to change it.
+
+| Section (`section` key) | What belongs there | Examples |
+| --- | --- | --- |
+| Chain Map (`chain`) | How the map itself is laid out and drawn (upstream rows) | renderer, gridlines, node spacing, sig name on map |
+| Map Markers (`markers`) | Things drawn on the map's nodes and connections | hole size tags, high-sec region, preserve mass, threat badges, rally point |
+| Wormhole Jumps & Mass (`jumps`) | Jumping through holes: mass logging, rolling, after-jump prompts | jump mass, rolling guidance, return bookmark pop-up |
+| Signatures (`signatures`) | The signature list: adding, pasting, copying sigs | Add dialog type, paste life, copy separator, colour by age |
+| Routes & Navigation (`routes`) | Routes, destinations, getting somewhere | route blobs, K-space route, Thera/Turnur routes, Destinations, Favourites panel |
+| Jump Planner (`jumpPlanner`) | One feature's own cluster: jump ship, range, mini-map | jump planner |
+| Kills & Intel (`intel`) | Kill feeds, threat info, intel panels | system/chain kill feed, threat & residents, d-scan & local, Watchlist |
+| Kill Reporting (`killReporting`) | One feature's own cluster: kill sounds and pop-ups | kill reporting |
+| General (`general`) | The whole app rather than one area | background, UI scale, What's new |
+
+Drawn on the map means Map Markers, even when it is about mass or kills; a panel or pop-up goes with its
+topic. Account Settings and Personal Statistics stay as upstream has them.
+
+**New section:** only when 3 or more related settings fit no description above (or one feature has its own
+cluster of 3+); never a one-row section. Add it with `forkSettings.section(key, title, {after: <key>})` from
+the feature's JS, choose its position, and add it to this table in the same PR. Aim for 3-10 rows per section.
+Don't move settings between sections casually (users learn where things are); if you do, say so in What's New.
 
 ## 3. Stay easy to sync with upstream
 

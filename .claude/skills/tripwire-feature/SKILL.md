@@ -13,8 +13,10 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] Start the dev stack: `docker compose -f docker-compose.dev.yml up --build` (http://127.0.0.1:8080).
 - [ ] Take the **before** screenshot now, before editing (see step 5).
 - [ ] Answer **"does it need a Settings toggle?"** (AGENTS.md section 2). Default yes for user-facing
-      features: on by default, `options.<feature>.enabled` (missing = on), a row in the matching Settings
-      section injected from your JS, applied on Save, surviving Reset. Write the answer in the PR.
+      features: on by default, `options.<feature>.enabled` (missing = on). Pick the section from the
+      table in AGENTS.md section 2 and add the row with `forkSettings.register({section, id, type, ...})`
+      from your JS (`app/js/fork/settings-sections.js`); it handles open, Save and Reset. No positional
+      selectors, no own Save/Reset hooks. Write the answer in the PR.
 
 ## 2. Code in fork-owned files
 - [ ] JS in `app/js/fork/<feature>.js`, CSS in `app/css/fork/<feature>.css`. Gulp bundles
@@ -81,8 +83,8 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
 - [ ] The reviewer checks, and reports each finding with file:line, what's wrong and why:
   - correctness and edge cases against the spec (unknown/missing data, empty chain, several tracked
     characters, other users' changes arriving via sync);
-  - AGENTS.md rules: change-log entry and row, Settings toggle decision (on by default, applied on
-    Save, survives Reset), fork-owned files, small upstream edits listed in the entry, no reformatting
+  - AGENTS.md rules: change-log entry and row, Settings toggle decision (on by default, added with
+    `forkSettings.register` in the right section per the AGENTS.md table, survives Reset), fork-owned files, small upstream edits listed in the entry, no reformatting
     or line-ending changes, no committed bundles;
   - security: pasted/user text escaped when rendered, no new CSRF/XSS, no secrets, no new third-party
     hosts unless logged; all zKillboard access only through the pooled worker;
