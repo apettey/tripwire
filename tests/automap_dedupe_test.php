@@ -98,6 +98,12 @@ try {
 	// Jump direction for the mass log: the client's from/to win over the signature order (re-jump linked to a hole
 	// whose initial signature is in the destination), fallback to initial -> secondary
 	check('jump ends from the payload', automapJumpEnds(array('character' => 1, 'from' => '31000102', 'to' => '31000101'), $A, $B), array($B, $A));
+	check('jump ends spoofed to another system', automapJumpEnds(array('from' => '31000102', 'to' => '30000142'), $A, $B), array($A, $B));
+	check('jump ends spoofed pair', automapJumpEnds(array('from' => '1', 'to' => '2'), $A, $B), array($A, $B));
+	check('jump ends reject exponent notation', automapJumpEnds(array('from' => '3.1000102e7', 'to' => $A), $A, $B), array($A, $B));
+	check('jump ends reject padded/signed/float', automapJumpEnds(array('from' => ' 31000102', 'to' => '+31000101'), $A, $B), array($A, $B));
+	check('jump ends reject array values', automapJumpEnds(array('from' => array($B), 'to' => $A), $A, $B), array($A, $B));
+	check('jump ends accept int values', automapJumpEnds(array('from' => $B, 'to' => $A), $A, $B), array($B, $A));
 	check('jump ends fallback without from/to', automapJumpEnds(array('character' => 1), $A, $B), array($A, $B));
 	check('jump ends fallback with junk', automapJumpEnds(array('from' => 'x', 'to' => 5), $A, $B), array($A, $B));
 	check('jump ends fallback without payload', automapJumpEnds(null, $A, $B), array($A, $B));

@@ -2,7 +2,7 @@
 // ToDo: Use native JS
 tripwire.editSig = function(edit, disabled) {
     var disabled = disabled || false;
-    var wormhole = {};
+    var wormhole;
 
     if (edit.type == "wormhole") {
 		const sigInfo = tripwire.makeSigInfo(edit);	// see addSignature.js
@@ -39,7 +39,7 @@ tripwire.editSig = function(edit, disabled) {
 
     $("#sigTable").trigger("update");
     // Update counter
-    if (wormhole.life == "critical") {
+    if (wormhole && wormhole.life != "stable") {
         $(tr).find('span[data-age]').countdown({until: moment.utc(edit.lifeLeft).toDate(), onExpiry: this.pastEOL, alwaysExpire: true, compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime})
             .addClass('critical');
     } else {

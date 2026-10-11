@@ -425,9 +425,12 @@ function removeWormhole($wormhole, $mysql) {
 // From/to of the automapped jump: the ones the client sent in the payload (a re-jump can link a hole whose initial
 // signature is in the destination, so initial/secondary order is not the jump direction), else initial to secondary.
 function automapJumpEnds($automap, $fromSystemID, $toSystemID) {
-    $from = is_array($automap) && isset($automap['from']) && is_numeric($automap['from']) ? (int)$automap['from'] : 0;
-    $to = is_array($automap) && isset($automap['to']) && is_numeric($automap['to']) ? (int)$automap['to'] : 0;
-    return $from && $to ? array($from, $to) : array($fromSystemID, $toSystemID);
+    // Only a plain integer pair that is the same two systems as the signatures (either order) is trusted
+    $strict = function($v) { return (is_int($v) || (is_string($v) && ctype_digit($v))) && (string)(int)$v === (string)$v ? (int)$v : 0; };
+    $from = is_array($automap) && isset($automap['from']) ? $strict($automap['from']) : 0;
+    $to = is_array($automap) && isset($automap['to']) ? $strict($automap['to']) : 0;
+    $sameSet = ($from == $fromSystemID && $to == $toSystemID) || ($from == $toSystemID && $to == $fromSystemID);
+    return $from && $to && $sameSet ? array($from, $to) : array($fromSystemID, $toSystemID);
 }
 
 function addAutomapMass($wormhole, $sig1, $sig2, $automap, $mysql) {
