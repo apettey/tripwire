@@ -70,7 +70,7 @@ Fork features that need their own tables create them on first use with `CREATE T
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
 `fork_rally` / `fork_rally_discord_message` (chain map rally point per mask and its live legacy Discord message, created by `public/rally.php`; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
-`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
+`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
 and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
@@ -203,7 +203,7 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
+tables and at most add rows to bounded queues the worker drains (single-kill lookups, back-fills, names, system stats). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
@@ -213,11 +213,12 @@ tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add 
 | `zkill/schema.php` | DDL of the tables below (`docker/sql/zkill.sql` is the reference copy) |
 | `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage and high-water mark, pruning |
 | `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
+| `zkill/lookup.php` | Single-kill lookup queue for [Smart notes](#smart-notes) kill cards: request (web), fetch one kill (worker) |
 | `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
 | `zkill/stats.php`, `zkill/threat.php` | Per-system zKillboard stats cache + queue, and the read side of System Threat behind `public/system_threat.php` (see [System stats](#system-stats-system-threat)) |
 | `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
-| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image) |
+| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image); also `lookup_test.php` (lookup queue and worker step on SQLite with a fake zKillboard / ESI) and `zkill_kill_endpoint_test.php` (`public/zkill_kill.php` against the dev database) |
 
 Data flow:
 
@@ -251,9 +252,11 @@ Data flow:
    stored as unresolvable. At most one rejection per pass, then name passes pause for 10 seconds: an invalid ID
    costs about three ESI errors and never blocks the queue. Names are re-resolved after 30 days (unresolvable ones
    after a day).
-4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
-   older than the retention, stale names.
+4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention (kills fetched for a note,
+   `source = 'lookup'`, are kept 7 days after they arrived), finished back-fill rows older than the retention, finished
+   lookups older than 7 days, stale names.
 5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
+6. **Single-kill lookups.** First in each idle pass, before back-fills: see [Smart notes](#smart-notes).
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -304,6 +307,22 @@ entry or `null`), `fetchedAt`, `statsStatus`, `pending`, `queueFull`, `local` (`
 `systemID` a `detail` object. Poll again while `pending` is true. Browser consumer: `app/js/fork/system-threat.js`
 (badges every 5 minutes and when the chain changes, the viewed system after 1 s; 6 s while pending, paused while the
 tab is hidden). Tests: `php zkill/tests/stats_test.php`.
+
+#### Smart notes
+
+System notes render zKillboard kill links as kill cards (`app/js/fork/smart-notes.js`, render time only: the stored
+note HTML is never changed). The card data comes from `public/zkill_kill.php` (logged-in users with a mask, GET only):
+`ids=<killID,...>` (at most 20) and/or `names=<id,...>` (at most 20 character / corporation / alliance IDs for chips).
+A kill in `zkill_killmails` is answered from there (names from `zkill_names`, unknown names queued, the card's
+red / green edge from the session's corporation and alliance, `KILL_REPORT_FRIENDLY_CORPORATIONS` and the active
+corporation / alliance mask). Any other kill is queued in `zkill_kill_lookup` (`zkill/lookup.php`) and answered
+`queued`; the browser asks again after 3, 10 and 30 seconds, then shows the plain link. Caps: 200 queued / running
+lookups per user, 2000 overall (above them: `full`, plain link). With `ZKILL_FEED_ENABLED=false` nothing is queued
+(`unavailable`). The worker runs `zk_lookup_run_one()` first in each idle pass, within the same `ZKILL_API_INTERVAL`
+budget: `https://zkillboard.com/api/killID/<id>/` for the hash, then ESI `/killmails/<id>/<hash>/`, stored with
+`source = 'lookup'` regardless of the retention and kept 7 days after it arrived. A failed lookup is retried after 10
+minutes, at most 3 attempts; a `running` lookup older than 5 minutes is queued again. The browser never calls
+zKillboard, Dotlan or EveWho; it only links to them and loads images from `images.evetech.net`.
 
 ### Discord notifications
 
