@@ -1,0 +1,77 @@
+/* "Rolling" mark on chain map connections (fork feature: hole-rolling, see app/js/fork/rolling.js) */
+
+/* Marker: same size as the hole size tags and the preserve-mass marker, amber so it reads as "mass going out"
+   and stays distinct from the violet preserve-mass marker */
+.hole-rolling-marker {
+	display: inline-block;
+	padding: 0 2px;
+	min-width: 9px;
+	font-size: 11px;
+	font-weight: bold;
+	line-height: 9px;
+	text-align: center;
+	color: #241400;
+	background: #ffb020;
+	border: 1px solid #ffd27a;
+	border-radius: 2px;
+	white-space: nowrap;
+	cursor: help;
+}
+
+/* On the line (radial, new org charts): absolutely positioned in the map's inner container, like the size tags */
+#chainMap .hole-rolling-marker.size-tag-connector {
+	position: absolute;
+	z-index: 2;
+	margin: 0;
+	box-shadow: 0 0 4px rgba(255, 176, 32, 0.9);
+}
+/* Centred on the point worked out in rolling.js: next to the size tag (and preserve-mass marker), or on the line */
+#chainMap .hole-rolling-marker.hr-centred { transform: translate(-50%, -50%); }
+
+/* Old org chart: in the vertical connector cell, bottom-aligned like the size tag; an inline transform moves it
+   right of the tag and the preserve-mass marker */
+#chainMap .hole-rolling-marker.hr-orgchart { top: auto; bottom: 0; transform: translate(-50%, 0); }
+#chainMap .hole-rolling-marker.hr-orgchart.hr-on-left { left: 0; }
+#chainMap .hole-rolling-marker.hr-orgchart.hr-on-right { left: 100%; }
+
+/* Chain legend */
+#guide .hole-rolling-marker { margin-right: 3px; }
+
+/* Mass dialog: above the preserve-mass panel */
+#hole-rolling-panel {
+	margin: 4px 0 2px;
+}
+#hole-rolling-panel .hr-mark {
+	color: #d8b878;
+	font-size: 11px;
+}
+#hole-rolling-panel .hr-mark:hover { color: #ffd27a; }
+
+#hole-rolling-panel .hr-line {
+	padding: 4px 8px;
+	color: #241400;
+	font-weight: bold;
+	background: #ffb020;
+	border: 1px solid #ffd27a;
+	border-radius: 3px;
+}
+#hole-rolling-panel .hr-line .hr-glyph { font-size: 13px; }
+#hole-rolling-panel .hr-line .hr-clear {
+	float: right;
+	font-weight: normal;
+	font-size: 11px;
+	color: #3a2200;
+	text-decoration: underline;
+}
+#hole-rolling-panel .hr-meta {
+	margin: 2px 0 0 2px;
+	color: #e0c890;
+	word-wrap: break-word;
+}
+#hole-rolling-panel .hr-note { font-style: italic; }
+
+/* Note dialog */
+#dialog-hole-rolling .hr-dialog-hole { font-weight: bold; }
+#dialog-hole-rolling .hr-dialog-help { color: #9aa6ae; }
+#dialog-hole-rolling .hr-dialog-note { width: 95%; }
+#dialog-hole-rolling p { margin: 0 0 6px; }

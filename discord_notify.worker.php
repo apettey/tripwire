@@ -122,6 +122,10 @@ function dn_run() {
                 $gone = discord_preserve_clear_gone($db);
                 if ($gone) dn_log("preserve mass: queued $gone clears of holes gone from the map");
                 discord_preserve_prune($db);
+                // Rolling: the same (a rolled hole is gone from the map: "Hole collapsed")
+                $gone = discord_rolling_clear_gone($db);
+                if ($gone) dn_log("rolling: queued $gone clears of holes gone from the map");
+                discord_rolling_prune($db);
             }
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();

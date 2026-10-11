@@ -374,7 +374,7 @@ describe('Discord notifications', function() {
 
 	describe('Preserve mass type', function() {
 		it('is a type of its own, after the others', function() {
-			assert.strictEqual(dn.KINDS[dn.KINDS.length - 1], 'preserveMass');
+			assert.strictEqual(dn.KINDS[dn.KINDS.length - 2], 'preserveMass');
 			assert.strictEqual(dn.LABELS.preserveMass, 'Preserve mass');
 			assert.ok(/strikes through the message/.test(dn.HELP.preserveMass) && /Every member's change is posted/.test(dn.HELP.preserveMass));
 		});

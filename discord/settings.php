@@ -9,6 +9,7 @@
 //     rally:     {enabled, webhookID, template (set / moved), templateClear (cleared), ping}   (discord/rally.php)
 //     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
 //     preserveMass: {enabled, webhookID, template (marked / changed), templateClear (cleared), ping, chainOnly}   (discord/preserve_mass.php)
+//     rolling:   {enabled, webhookID, template (marked / changed), templateClear (done / hole gone), ping, chainOnly}   (discord/rolling.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
 //   homeSystemID: systemID or 0   (where the chain starts: chainKill and watchlist count only systems connected to it, discord/chain.php)
@@ -38,6 +39,8 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
                 'ping' => '', 'enabledAt' => 0],
             'watchlist' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['watchlist'], 'ping' => '', 'enabledAt' => 0],
             'preserveMass' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['preserveMass'], 'templateClear' => $templates['preserveMassClear'],
+                'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
+            'rolling' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['rolling'], 'templateClear' => $templates['rollingClear'],
                 'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
@@ -139,7 +142,7 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if (array_key_exists('maxJumps', $in)) $type['maxJumps'] = max(1, min(50, (int) $in['maxJumps']));
             if (array_key_exists('cooldownHours', $in)) $type['cooldownHours'] = max(1, min(48, (int) $in['cooldownHours']));
             if ($type['enabled'] && !$type['pingSystems']) { $errors[] = 'kspace: add at least one ping system'; $type['enabled'] = false; }
-        } elseif ($kind === 'preserveMass') {
+        } elseif ($kind === 'preserveMass' || $kind === 'rolling') {
             // Only connections of the chain (connected to home, discord/chain.php) unless unticked
             if (array_key_exists('chainOnly', $in)) $type['chainOnly'] = $in['chainOnly'] === true || $in['chainOnly'] === 1 || $in['chainOnly'] === '1' || $in['chainOnly'] === 'true';
         } elseif ($kind === 'rally' || $kind === 'watchlist') {

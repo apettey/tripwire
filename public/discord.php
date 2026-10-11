@@ -124,6 +124,13 @@ function discord_sample_context($kind, $template, $ping, $maskName, $comp = null
 		return discord_preserve_context(array('action' => 'set', 'who' => 'Example Pilot', 'wormholeID' => 1) + $base,
 			array('setBy' => 'Example Pilot', 'reason' => 'home static, fleet still out'), $ends);
 	}
+	if ($kind === 'rolling') {
+		// The hole AB from A · J163701 to J152820 (C5), rolling since five minutes ago
+		$ends = discord_preserve_ends(array('wormholeID' => 1, 'type' => 'H296', 'parent' => 'initial', 'life' => 'stable', 'mass' => 'destab',
+			'a' => 31002012, 'b' => 31001880, 'aSig' => 'ABC123', 'bSig' => 'XYZ789'), function ($systemID) { return $systemID === 31002012 ? 'A' : 'AB'; });
+		return discord_rolling_context(array('action' => 'set', 'who' => 'Example Pilot', 'wormholeID' => 1) + $base,
+			array('setBy' => 'Example Pilot', 'note' => 'rolling it closed', 'setAt' => time() - 300), $ends);
+	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
 			'effect' => 'Wolf-Rayet', 'region' => 'E-R00028', 'map' => discord_map_url(31001882), 'dotlan' => discord_dotlan_url(31001882),
@@ -207,6 +214,7 @@ try {
 					// A new URL may be another channel: the next rally change posts instead of editing the old message
 					discord_rally_forget_webhook($mysql, $webhook['id']);
 					discord_preserve_forget_webhook($mysql, $webhook['id']);
+					discord_rolling_forget_webhook($mysql, $webhook['id']);
 					// ... and chain kills still paused get a new notice there (discord/chain_notice.php)
 					discord_chain_notice_forget_webhook($mysql, $mask, $webhook['id']);
 				} else {
@@ -277,6 +285,15 @@ try {
 				if ($templateClear === '') $templateClear = $defaults['types']['preserveMass']['templateClear'];
 				$preview['previewClear'] = discord_payload(array('previous' => $preview['preview']['content'], 'cleared' => true, 'who' => 'Other Pilot',
 					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context);
+				$preview['previewChanged'] = discord_payload(array('previous' => $preview['preview']['content'], 'changed' => true, 'who' => 'Other Pilot') + $context);
+			} else if ($kind === 'rolling') {
+				// Done: the edit of the rolling message; the hole gone from the map; changed after 30 s (fixed text)
+				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
+				if ($templateClear === '') $templateClear = $defaults['types']['rolling']['templateClear'];
+				$clear = array('previous' => $preview['preview']['content'], 'cleared' => true, 'who' => 'Other Pilot',
+					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context;
+				$preview['previewClear'] = discord_payload($clear);
+				$preview['previewGone'] = discord_payload(array('gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO) + $clear);
 				$preview['previewChanged'] = discord_payload(array('previous' => $preview['preview']['content'], 'changed' => true, 'who' => 'Other Pilot') + $context);
 			}
 			echo json_encode($preview);

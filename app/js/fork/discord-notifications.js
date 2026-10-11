@@ -4,7 +4,7 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass", "rolling"],
 	LABELS: {
 		kspace: "New k-space near a ping system",
 		chainKill: "Any kill in our chain",
@@ -12,7 +12,8 @@ const discordNotifications = {
 		corpLoss: "Losses of our corporation",
 		rally: "Fight here",
 		watchlist: "Watchlist match",
-		preserveMass: "Preserve mass"
+		preserveMass: "Preserve mass",
+		rolling: "Rolling"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
@@ -21,12 +22,13 @@ const discordNotifications = {
 		corpLoss: "The victim is in one of the corporations/alliances below.",
 		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Map Markers > Fight here).",
 		watchlist: "A system connected to your home system (above) through live wormholes matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. Old chain fragments no longer connected to home are not posted; a system there is posted if it gets connected again while it still matches. What is already on the chain when you turn this on (or save or turn on a filter, or change the home system) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
-		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing."
+		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing.",
+		rolling: "Someone marks a connection \"rolling\" on the chain map (right-click a system > Rolling, or the Mass dialog): we are rolling this hole. Pick your hole-roll channel. The message is short: the hole's name, the system it is in and the EVE time. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. When rolling is done (Stop rolling), the message is struck through with the time it was done; when the hole is gone from the map, it says the hole collapsed (checked every 10 minutes). Neither posts a new message or pings. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing."
 	},
-	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" (and \"Preserve mass\", unless you untick its chain option) only count systems connected to it through live wormholes (not expired, not deleted).",
-	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass marks, while they are limited to the chain).",
+	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" (and \"Preserve mass\" and \"Rolling\", unless you untick their chain option) only count systems connected to it through live wormholes (not expired, not deleted).",
+	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass or rolling marks, while they are limited to the chain).",
 	NO_HOME_WATCHLIST: "Set a home system so Tripwire knows which chain is yours. Until then no watchlist matches are posted.",
-	NO_HOME_BOTH: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills or watchlist matches are posted (nor preserve mass marks, while they are limited to the chain).",
+	NO_HOME_BOTH: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills or watchlist matches are posted (nor preserve mass or rolling marks, while they are limited to the chain).",
 	// The one notice the worker posts to the chain kill channel while there is no home (discord/chain_notice.php)
 	NOTICE_LABELS: { chainPaused: "Chain kills paused notice", chainResumed: "Chain kills resumed notice" },
 	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
@@ -102,8 +104,8 @@ const discordNotifications = {
 	/** Warning for settings with chain kills or watchlist matches on and no home system ("" when fine) */
 	homeWarning: function(settings) {
 		const types = (settings && settings.types) || {};
-		const preserve = types.preserveMass;
-		const chain = !!(types.chainKill && types.chainKill.enabled) || !!(preserve && preserve.enabled && preserve.chainOnly !== false);
+		const limited = function(t) { return !!(t && t.enabled && t.chainOnly !== false); };	// preserve mass, rolling
+		const chain = !!(types.chainKill && types.chainKill.enabled) || limited(types.preserveMass) || limited(types.rolling);
 		const watchlist = !!(types.watchlist && types.watchlist.enabled);
 		if (Number(settings && settings.homeSystemID) > 0 || !(chain || watchlist)) { return ""; }
 		const dn = discordNotifications;
@@ -201,7 +203,7 @@ const discordNotifications = {
 			if (type.enabled && !type.webhookID) { errors.push(dn.LABELS[kind] + ": choose a webhook to turn it on"); }
 			if (kind === "rally") {
 				type.templateClear = String(v.templateClear || "").trim();
-			} else if (kind === "preserveMass") {
+			} else if (kind === "preserveMass" || kind === "rolling") {
 				type.templateClear = String(v.templateClear || "").trim();
 				type.chainOnly = v.chainOnly !== false;
 			} else if (kind === "watchlist") {
@@ -276,7 +278,8 @@ const discordNotifications = {
 			return payload ? "<div class='dn-small'>" + dn.escape(title) + "</div>" + dn.previewHtml(payload) : "";
 		};
 		return dn.previewHtml(data.preview)
-			+ titled("When it is cleared, the message becomes:", data.previewClear)
+			+ titled(data.previewGone ? "When rolling is done (Stop rolling), the message becomes:" : "When it is cleared, the message becomes:", data.previewClear)
+			+ titled("When the hole is gone from the map, the message becomes:", data.previewGone)
 			+ titled("When it moves after 30 seconds, a new message is posted and the old one becomes:", data.previewMoved)
 			+ titled("When it is changed after 30 seconds, a new message is posted and the old one becomes:", data.previewChanged);
 	},
@@ -366,6 +369,12 @@ const discordNotifications = {
 						+ "<div class='dn-small'>Replaces the mark message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. Nothing is sent when there is no mark message to edit.</div></td></tr>";
 				extra = "<tr><th>Connections:</th><td><label title='Off: every marked connection of the mask is posted, also old fragments that no longer connect to home'><input type='checkbox' class='dn-chainOnly'"
 					+ (t.chainOnly !== false ? " checked" : "") + " /> only connections in our chain (connected to the home system above)</label></td></tr>";
+			} else if (kind === "rolling") {
+				templateLabel = "Rolling:";
+				after = "<tr><th>Done:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
+						+ "<div class='dn-small'>Replaces the rolling message when rolling is done or the hole is gone from the map (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{outcome}</code> is \"Done\" or \"Hole collapsed\", <code>{time}</code> the EVE time it happened. Nothing is sent when there is no rolling message to edit.</div></td></tr>";
+				extra = "<tr><th>Connections:</th><td><label title='Off: every connection of the mask marked rolling is posted, also old fragments that no longer connect to home'><input type='checkbox' class='dn-chainOnly'"
+					+ (t.chainOnly !== false ? " checked" : "") + " /> only connections in our chain (connected to the home system above)</label></td></tr>";
 			} else if (kind === "watchlist") {
 				extra = "";
 			} else if (kind === "kspace") {
@@ -405,7 +414,7 @@ const discordNotifications = {
 		};
 		const outbox = state.outbox || {};
 		const failures = (outbox.failures || []).map(function(f) {
-			return "<li>" + esc(dn.LABELS[f.kind] || dn.NOTICE_LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind === "preserveMassEdit" ? dn.LABELS.preserveMass + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
+			return "<li>" + esc(dn.LABELS[f.kind] || dn.NOTICE_LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind === "preserveMassEdit" ? dn.LABELS.preserveMass + " (old message)" : f.kind === "rollingEdit" ? dn.LABELS.rolling + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
 		}).join("");
 
 		return "<div class='dn-page'>"
