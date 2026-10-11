@@ -13,7 +13,10 @@ const SYSTEMS = {
 	30000001: { name: 'Tanoo' },
 	30045349: { name: 'New Caldari' },	// two words: never matched in text
 	30001000: { name: 'Exit' },	// everyday words: never matched in text
-	30001001: { name: 'Jan' }
+	30001001: { name: 'Jan' },
+	30001002: { name: 'Access' },
+	30001003: { name: 'Perimeter' },
+	30001004: { name: 'Reset' }
 };
 const INFO = {
 	31002012: { name: 'J163701', cls: 'wh class-5', type: 'C5' },
@@ -112,6 +115,10 @@ describe('Smart notes', () => {
 				{ kind: 'evewho', type: 'corporation', id: 98388312, url: 'https://evewho.com/corporation/98388312' });
 			assert.strictEqual(smartNotes.classify('https://www.evewho.com/character/1/').type, 'character');
 			assert.strictEqual(smartNotes.classify('https://evewho.com/pilot/Bob').kind, 'link');
+			// character / corporation / alliance IDs are 32-bit; larger ones are ordinary links (never a name request)
+			assert.strictEqual(smartNotes.classify('https://evewho.com/character/2147483648').kind, 'link');
+			assert.strictEqual(smartNotes.classify('https://zkillboard.com/corporation/99999999999/').kind, 'link');
+			assert.strictEqual(smartNotes.classify('https://zkillboard.com/character/2147483647/').kind, 'zkill');
 		});
 		it('short labels: domain and first path segment', () => {
 			assert.strictEqual(smartNotes.classify('https://www.reddit.com/r/Eve/comments/1abcd23/wormhole_eviction/').label, 'reddit.com/r/Eve…');
@@ -150,6 +157,10 @@ describe('Smart notes', () => {
 			assert.strictEqual(index['New Caldari'], undefined);
 			assert.strictEqual(index.Exit, undefined);
 			assert.deepStrictEqual(names('Exit via Jita on Jan 5'), ['Jita']);
+			assert.deepStrictEqual(names('Access is via Perimeter. Reset at DT.'), []);
+			// the real list covers the reviewed words
+			['Access', 'Perimeter', 'Reset', 'Arena', 'Equity', 'Gateway', 'Parts', 'Prism', 'Triumph', 'Utopia', 'Polaris', 'Repute', 'Lenity',
+				'Mettle', 'Rigor', 'Solemn', 'Adroit', 'Erudite', 'Lustre', 'Martha', 'Janus'].forEach(w => assert.ok(smartNotes.NOT_SYSTEM_WORDS.indexOf(w) >= 0, w));
 		});
 		it('matches whole words', () => {
 			assert.deepStrictEqual(names('Home is J163701, staging in Jita. Then 1DQ1-A!'), ['J163701', 'Jita', '1DQ1-A']);
@@ -364,7 +375,7 @@ describe('Smart notes', () => {
 			assert.deepStrictEqual(card.childNodes.map(c => c.getAttribute('class')),
 				['sn-icon sn-ship-icon', 'sn-ship', 'sn-victim', 'sn-corp', 'sn-sys wh class-5', 'sn-isk', 'sn-time', 'sn-att', 'sn-icon sn-fb-icon']);
 			assert.deepStrictEqual(card.childNodes.slice(1, 8).map(c => c.textContent),
-				['Loki', '</span><b>x</b>', 'Deep Static Holdings', 'J163701', '1.2b', '09:41 · 1 d ago', '12']);
+				['Loki', '</span><b>x</b>', 'Deep Static Holdings', 'J163701', '1.2b', '1 d ago', '12']);
 			assert.ok(card.innerHTML.includes('&lt;/span&gt;&lt;b&gt;x&lt;/b&gt;'));
 			assert.ok(card.getAttribute('title').includes('Our loss'));
 			assert.strictEqual(body.childNodes[1].outerHTML,
@@ -473,6 +484,18 @@ describe('Smart notes', () => {
 				requests[requests.length - 1].done({ kills: { [100 + i]: { status } }, names: {} });
 				assert.strictEqual(smartNotes.kills[100 + i].state, 'failed', status);
 			});
+			assert.deepStrictEqual(timers, []);
+		});
+
+		it('a failed request asks for its names again on the backoff', () => {
+			smartNotes.wantName(77);
+			runTimers();
+			requests[0].fail();
+			assert.deepStrictEqual(runTimers(), [3000]);
+			runTimers();
+			assert.deepStrictEqual(requests[1].req.data, { ids: '', names: '77' });
+			requests[1].done({ kills: {}, names: { 77: 'Bob' }, namesPending: false });
+			assert.strictEqual(smartNotes.names[77], 'Bob');
 			assert.deepStrictEqual(timers, []);
 		});
 

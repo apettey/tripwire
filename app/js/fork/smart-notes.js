@@ -23,10 +23,21 @@ const smartNotes = {
 		"evewho.com": "evewho", "www.evewho.com": "evewho"
 	},
 	ENTITY_LABELS: { character: "Character", corporation: "Corporation", alliance: "Alliance", system: "System" },
-	/** System names that are also everyday words (or dates): never turned into chips when written in text */
-	NOT_SYSTEM_WORDS: ["Alf", "Bar", "Cat", "Col", "Dal", "Dour", "Exit", "Fade", "Forte", "Fortitude", "Gallant", "Genesis", "Gens",
-		"Half", "Ham", "Hare", "Hier", "Ides", "Jan", "Lang", "Lor", "Mai", "Mod", "Ned", "Nein", "Odin", "ORE", "Pain", "Pout", "Rand",
-		"Tar", "Toon", "Vale", "Van", "Weld"],
+	/**
+	 * System names that are also everyday words, first names or dates: never turned into chips when written in text.
+	 * From a review of every capitalised single-word name in the static data (names match case-sensitively, so only
+	 * the capitalised word is affected, e.g. at the start of a sentence).
+	 */
+	NOT_SYSTEM_WORDS: ["Abstention", "Access", "Adroit", "Alf", "Ami", "Ana", "Arena", "Ation", "Bar", "Berta", "Branch", "Cache",
+		"Canard", "Cat", "Catch", "Celerity", "Chivalric", "Col", "Couth", "Curse", "Dal", "Decon", "Decorum", "Delve", "Devoid",
+		"Domain", "Dour", "Drifters", "Equity", "Erudite", "Essence", "Esteban", "Exit", "Exordium", "Fade", "Forte", "Fortitude",
+		"Fountain", "Gallant", "Gateway", "Geminate", "Genesis", "Gens", "Half", "Halle", "Ham", "Hare", "Hier", "Ides", "Impass",
+		"Inoue", "Jan", "Janus", "Kari", "Lang", "Lari", "Lazer", "Lenity", "Lor", "Luminaire", "Lustre", "Mai", "Manifest", "Mara",
+		"Martha", "Metropolis", "Mettle", "Misha", "Mod", "Ned", "Nein", "Odette", "Odin", "ORE", "Pain", "Parses", "Parts", "Pasha",
+		"Perimeter", "Placid", "Polaris", "Pout", "Prism", "Providence", "Rand", "Ratiocinate", "Repute", "Reset", "Rigor",
+		"Sagacity", "Slays", "Solemn", "Solitude", "Stain", "Steadfast", "Syndicate", "Tar", "Tenacity", "Toon", "Tribute",
+		"Triumph", "Unknown", "Utopia", "Vale", "Valiance", "Van", "Venal", "Venerate", "Weld"],
+	MAX_ENTITY_ID: 2147483647,	// character / corporation / alliance IDs are 32-bit
 
 	// ---- Settings ----
 
@@ -89,7 +100,7 @@ const smartNotes = {
 			if ((m = /^\/kill\/(\d{1,12})\/?$/.exec(path)) && parseInt(m[1], 10) > 0) {
 				return { kind: "kill", id: parseInt(m[1], 10), url: "https://zkillboard.com/kill/" + parseInt(m[1], 10) + "/" };
 			}
-			if ((m = /^\/(character|corporation|alliance|system)\/(\d{1,12})(?:\/.*)?$/.exec(path)) && parseInt(m[2], 10) > 0) {
+			if ((m = /^\/(character|corporation|alliance|system)\/(\d{1,12})(?:\/.*)?$/.exec(path)) && smartNotes.validEntity(m[1], m[2])) {
 				return { kind: "zkill", type: m[1], id: parseInt(m[2], 10), url: url.href };
 			}
 		} else if (site === "dotlan") {
@@ -103,11 +114,17 @@ const smartNotes = {
 				if (region) { return { kind: "dotlan", label: region + (system ? " › " + system : ""), system: system || null, url: url.href }; }
 			}
 		} else if (site === "evewho") {
-			if ((m = /^\/(character|corporation|alliance)\/(\d{1,12})\/?$/.exec(path)) && parseInt(m[2], 10) > 0) {
+			if ((m = /^\/(character|corporation|alliance)\/(\d{1,12})\/?$/.exec(path)) && smartNotes.validEntity(m[1], m[2])) {
 				return { kind: "evewho", type: m[1], id: parseInt(m[2], 10), url: url.href };
 			}
 		}
 		return { kind: "link", label: smartNotes.shortLabel(url), url: url.href };
+	},
+
+	/** A plausible entity ID: positive, and 32-bit for characters / corporations / alliances (the server skips others) */
+	validEntity: function(type, id) {
+		const n = parseInt(id, 10);
+		return n > 0 && (type === "system" || n <= smartNotes.MAX_ENTITY_ID);
 	},
 
 	/** Whether a link's text is just its URL (as the editor's autolink writes it), so replacing it loses nothing */
@@ -311,7 +328,7 @@ const smartNotes = {
 			if (model.victimCorp) { card.appendChild(el(doc, "span", { "class": "sn-corp" }, [model.victimCorp])); }
 			if (model.systemName) { card.appendChild(el(doc, "span", { "class": "sn-sys " + (model.systemClass || "") }, [model.systemName])); }
 			if (model.value) { card.appendChild(el(doc, "span", { "class": "sn-isk" }, [model.value])); }
-			if (model.time) { card.appendChild(el(doc, "span", { "class": "sn-time" }, [model.time + " · " + model.age])); }
+			if (model.age) { card.appendChild(el(doc, "span", { "class": "sn-time" }, [model.age])); }	// EVE time is in the tooltip
 			card.appendChild(el(doc, "span", { "class": "sn-att" }, [String(model.attackers)]));
 			if (model.finalBlowIcon) { card.appendChild(el(doc, "img", { "class": "sn-icon sn-fb-icon", src: model.finalBlowIcon, alt: "", loading: "lazy" })); }
 			const title = [
@@ -597,10 +614,10 @@ const smartNotes = {
 				entry.state = "failed";	// failed / full / unavailable: the plain link
 			}
 		});
-		// Names the worker is still resolving: ask again (with the kills whose names are missing) on the same backoff,
-		// at most RETRY_MS.length rounds in a row
+		// Names the worker is still resolving, or names of a request that failed: ask again (with the kills whose names
+		// are missing) on the same backoff, at most RETRY_MS.length rounds in a row
 		if (response && !response.namesPending) { smartNotes.nameTries = 0; }
-		if (response && response.namesPending && smartNotes.nameTries < smartNotes.RETRY_MS.length) {
+		if ((response ? response.namesPending : names.length > 0) && smartNotes.nameTries < smartNotes.RETRY_MS.length) {
 			const delay = smartNotes.RETRY_MS[smartNotes.nameTries++];
 			const again = names.filter(function(id) { return !Object.prototype.hasOwnProperty.call(smartNotes.names, String(id)); });
 			const okKills = ids.filter(function(id) { return smartNotes.kills[id] && smartNotes.kills[id].state === "ok"; });

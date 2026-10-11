@@ -65,9 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $killIDs = zkill_kill_ids('ids', ZK_LOOKUP_MAX_IDS);
 $nameIDs = zkill_kill_ids('names', ZKILL_KILL_MAX_NAMES);
 if (!$killIDs && !$nameIDs) zkill_kill_fail(400, 'ids or names is required');
-foreach ($nameIDs as $id) {
-	if ($id > ZKILL_KILL_MAX_ENTITY_ID) zkill_kill_fail(400, 'names must be character, corporation or alliance IDs');
-}
+// Character / corporation / alliance IDs are 32-bit: larger ones are skipped (not an error, so the kills still load)
+$nameIDs = array_values(array_filter($nameIDs, function ($id) { return $id <= ZKILL_KILL_MAX_ENTITY_ID; }));
 
 // "Our" side for the card colour: the character's corporation and alliance, the server's friendly corporations
 // (as Kill Reporting) and the owner of the active corporation / alliance mask

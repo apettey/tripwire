@@ -256,7 +256,7 @@ Data flow:
    `source = 'lookup'`, are kept 7 days after they arrived), finished back-fill rows older than the retention, finished
    lookups older than 7 days, stale names.
 5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
-6. **Single-kill lookups.** First in each idle pass, before back-fills: see [Smart notes](#smart-notes).
+6. **Single-kill lookups.** Interleaved with back-fills and stats (at most every other API slot while they wait): see [Smart notes](#smart-notes).
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -318,8 +318,10 @@ red / green edge from the session's corporation and alliance, `KILL_REPORT_FRIEN
 corporation / alliance mask). Any other kill is queued in `zkill_kill_lookup` (`zkill/lookup.php`) and answered
 `queued`; the browser asks again after 3, 10 and 30 seconds, then shows the plain link. Caps: 200 queued / running
 lookups per user, 2000 overall (above them: `full`, plain link). With `ZKILL_FEED_ENABLED=false` nothing is queued
-(`unavailable`). The worker runs `zk_lookup_run_one()` first in each idle pass, within the same `ZKILL_API_INTERVAL`
-budget: `https://zkillboard.com/api/killID/<id>/` for the hash, then ESI `/killmails/<id>/<hash>/`, stored with
+(`unavailable`). Name IDs above 32 bits are skipped; asked-for names are queued only while fewer than 200 names are
+pending. The worker's `zk_queues_run_one()` interleaves `zk_lookup_run_one()` with back-fills and stats (lookups first,
+but never twice in a row while other work waits), within the same `ZKILL_API_INTERVAL` budget and only while both
+zKillboard and ESI may be called: `https://zkillboard.com/api/killID/<id>/` for the hash, then ESI `/killmails/<id>/<hash>/`, stored with
 `source = 'lookup'` regardless of the retention and kept 7 days after it arrived. A failed lookup is retried after 10
 minutes, at most 3 attempts; a `running` lookup older than 5 minutes is queued again. The browser never calls
 zKillboard, Dotlan or EveWho; it only links to them and loads images from `images.evetech.net`.

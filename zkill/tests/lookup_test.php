@@ -219,6 +219,63 @@ for ($i = 0; $i < 4; $i++) { $ready(); zk_lookup_run_one($db); }
 check('run: oldest request first, failed rows skipped', $calls, [
     'https://zkillboard.com/api/killID/2/', 'https://zkillboard.com/api/killID/3/', 'https://zkillboard.com/api/killID/1/']);
 
+// ESI paused (error limit, rate limit, block): no zKillboard call either, the lookup waits
+$db = lookup_db();
+lookup_add($db, 131234567);
+$replies = [$zkillURL => [200, json_encode([['killmail_id' => 131234567, 'zkb' => $zkb]]), []], $esiURL => [200, json_encode($esi), []]];
+$ready();
+$calls = [];
+zk_http_pause('esi.evetech.net', microtime(true) + 600);
+check('run: nothing while ESI is paused', [zk_lookup_run_one($db), $calls, lookup_row($db, 131234567)['status'], (int) lookup_row($db, 131234567)['attempts']],
+    [null, [], 'queued', 0]);
+$ready();
+check('run: goes ahead once ESI is free', [zk_lookup_run_one($db) !== null, count($calls), lookup_row($db, 131234567)['status']], [true, 2, 'done']);
+
+// Race: another request queues the same kill between our read and our insert: no error, still queued
+class RacyPDO extends PDO {
+    public $race = null;
+    #[\ReturnTypeWillChange]
+    public function prepare($query, $options = []) {
+        if ($this->race && strpos($query, 'SELECT COUNT(*) FROM zkill_kill_lookup WHERE requestedBy') === 0) {
+            $race = $this->race;
+            $this->race = null;
+            $race($this);
+        }
+        return parent::prepare($query, $options);
+    }
+}
+$racy = new RacyPDO('sqlite::memory:');
+$racy->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$racy->exec("CREATE TABLE zkill_kill_lookup (killID INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
+    requestedBy INTEGER NOT NULL DEFAULT 0, requestedAt TEXT NOT NULL, attemptedAt TEXT NULL, error TEXT NOT NULL DEFAULT '')");
+$racy->exec('CREATE TABLE zkill_killmails (killID INTEGER, systemID INTEGER, killTime TEXT, victimCharacterID INTEGER, victimCorporationID INTEGER,
+    victimAllianceID INTEGER, victimShipTypeID INTEGER, finalBlowCharacterID INTEGER, finalBlowCorporationID INTEGER, finalBlowAllianceID INTEGER,
+    finalBlowShipTypeID INTEGER, attackerCount INTEGER, attackerTotal INTEGER, totalValue REAL, npc INTEGER, solo INTEGER, awox INTEGER)');
+$racy->race = function ($db) { lookup_add($db, 4242, ['requestedBy' => 99]); };
+check('race: duplicate insert is not an error', zk_lookup_request($racy, [4242], 7, true)[4242], ['status' => 'queued']);
+check('race: the other request keeps its row', [(int) lookup_row($racy, 4242)['requestedBy'], (int) $racy->query('SELECT COUNT(*) FROM zkill_kill_lookup')->fetchColumn()], [99, 1]);
+
+// --- zk_queues_run_one: lookups take at most every other slot while back-fills / stats wait ---
+$ran = [];
+$work = ['lookup' => 100, 'backfill' => 2, 'stats' => 2];
+$steps = [];
+foreach (array_keys($work) as $name) {
+    $steps[$name] = function () use ($name, &$work, &$ran) {
+        if ($work[$name] <= 0) return null;
+        $work[$name]--;
+        $ran[] = $name;
+        return $name;
+    };
+}
+zk_queues_run_one($db, ['lookup' => function () { return null; }, 'backfill' => function () { return null; }, 'stats' => function () { return null; }]);   // reset the turn
+for ($i = 0; $i < 10; $i++) zk_queues_run_one($db, $steps);
+check('queues: lookups alternate with back-fills and stats while they wait, then run back to back', $ran,
+    ['lookup', 'backfill', 'lookup', 'backfill', 'lookup', 'stats', 'lookup', 'stats', 'lookup', 'lookup']);
+$ran = [];
+$work = ['lookup' => 0, 'backfill' => 3, 'stats' => 1];
+for ($i = 0; $i < 5; $i++) zk_queues_run_one($db, $steps);
+check('queues: without lookups, back-fills then stats as before', $ran, ['backfill', 'backfill', 'backfill', 'stats']);
+
 // Housekeeping: abandoned running rows go back in the queue
 $db = lookup_db();
 lookup_add($db, 1, ['status' => 'running', 'attemptedAt' => gmdate('Y-m-d H:i:s', time() - 600)]);

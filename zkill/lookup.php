@@ -4,7 +4,8 @@
 // A note can link any kill, also one the stream never saw or that was pruned. Endpoints (public/zkill_kill.php) call
 // zk_lookup_request(): kills already in zkill_killmails are answered from there, the rest are queued in
 // zkill_kill_lookup (bounded: ZK_LOOKUP_MAX_PER_USER per user, ZK_LOOKUP_MAX_QUEUED overall). The worker drains the
-// queue with zk_lookup_run_one() after the stream and before back-fills, within the same zKillboard API budget
+// queue with zk_lookup_run_one() after the stream, interleaved with back-fills and stats (zk_queues_run_one(): at
+// most every other API slot while they have work), only while both zKillboard and ESI may be called, within the same budget
 // (ZKILL_API_INTERVAL): zKillboard /api/killID/<id>/ for the hash, ESI /killmails/<id>/<hash>/ for the killmail,
 // stored with source 'lookup'. A failed lookup is retried after ZK_LOOKUP_RETRY seconds, at most ZK_LOOKUP_MAX_ATTEMPTS
 // times. Looked-up kills are kept ZK_LOOKUP_KEEP_DAYS days after they were fetched (zk_prune()), then fetched again
@@ -100,8 +101,13 @@ function zk_lookup_request(PDO $db, array $killIDs, $userID, $feedEnabled = null
             $queued++;
             $queuedByUser++;
             if ($decision['action'] === 'insert') {
-                $db->prepare("INSERT INTO zkill_kill_lookup (killID, status, attempts, requestedBy, requestedAt) VALUES (?, 'queued', 0, ?, ?)")
-                    ->execute([$killID, $userID, $nowSql]);
+                try {
+                    $db->prepare("INSERT INTO zkill_kill_lookup (killID, status, attempts, requestedBy, requestedAt) VALUES (?, 'queued', 0, ?, ?)")
+                        ->execute([$killID, $userID, $nowSql]);
+                } catch (PDOException $error) {
+                    // Another request queued it a moment ago (portable instead of INSERT IGNORE, for the SQLite tests)
+                    if ($error->getCode() !== '23000') throw $error;
+                }
             } else {
                 // attempts first: MySQL evaluates SET left to right (a done row starts over, a failed one keeps counting)
                 $db->prepare("UPDATE zkill_kill_lookup SET attempts = CASE WHEN status = 'done' THEN 0 ELSE attempts END,
@@ -151,7 +157,8 @@ function zk_lookup_run_one(PDO $db) {
         $staleChecked = $now;
         zk_lookup_housekeeping($db, $now);
     }
-    if (!zk_http_ready('zkillboard.com')) return null;
+    // Both hosts must be free: with ESI paused, asking zKillboard for the hash would only be wasted and repeated
+    if (!zk_http_ready('zkillboard.com') || !zk_http_ready('esi.evetech.net')) return null;
     $killID = $db->query("SELECT killID FROM zkill_kill_lookup WHERE status = 'queued' ORDER BY requestedAt, killID LIMIT 1")->fetchColumn();
     if ($killID === false) return null;
     $killID = (int) $killID;
@@ -206,4 +213,27 @@ function zk_lookup_run_one(PDO $db) {
         if ($error instanceof PDOException) throw $error;
         return "kill lookup $killID failed: " . $error->getMessage();
     }
+}
+
+/**
+ * Worker: one step of the zKillboard API queues. Lookups (a note is open and waiting) go first, but after a lookup
+ * the next step lets back-fills and stats go first, so a stream of lookups can at most take every other API slot
+ * from the System Kill Feed and System Threat. With nothing else waiting, lookups run back to back.
+ * @param array|null $steps test hook: ['lookup' => callable, 'backfill' => callable, 'stats' => callable], each
+ *                          callable($db) returning a log line or null (nothing done)
+ * @return string|null log line of the step that ran
+ */
+function zk_queues_run_one(PDO $db, ?array $steps = null) {
+    static $lookupNext = true;
+    $steps = $steps ?? ['lookup' => 'zk_lookup_run_one', 'backfill' => 'zk_backfill_run_one', 'stats' => 'zk_stats_run_one'];
+    $order = $lookupNext ? ['lookup', 'backfill', 'stats'] : ['backfill', 'stats', 'lookup'];
+    foreach ($order as $name) {
+        $line = $steps[$name]($db);
+        if ($line !== null) {
+            $lookupNext = $name !== 'lookup';
+            return $line;
+        }
+    }
+    $lookupNext = true;   // nothing to do anywhere: lookups first again
+    return null;
 }

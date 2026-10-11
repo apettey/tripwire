@@ -5,7 +5,7 @@
 ## Description
 
 Links in system notes now render as compact cards and chips: a zKillboard kill link becomes a one-line kill card
-(victim ship, pilot and corporation, system with class colour, ISK value, EVE time and age, attackers, final blow ship;
+(victim ship, pilot and corporation, system with class colour, ISK value, age (EVE time in the tooltip), attackers, final blow ship;
 red edge for our loss, green for our kill), zKillboard character / corporation / alliance / system links, Dotlan and
 EveWho links become chips, other long links are shortened, bare https URLs in plain text become links (or cards), and
 system names written in the text (`J163701`, `Jita`) become system chips. The stored note is never changed: editing
@@ -35,15 +35,17 @@ notes as chips" (`options.smartNotes.systemNames`). Applied on Save, back on aft
   host allow-list (`zkillboard.com`, `evemaps.dotlan.net`, `evewho.com`, with or without `www.` where it exists) are
   recognised; image URLs only from numeric IDs. Long links elsewhere: domain + first path segment, full URL in the
   tooltip. System names: single-word names from the static data (J-codes in any case, other names exactly), whole words
-  only, not inside links, code or URLs, minus a few everyday words (`Exit`, `Jan`, `Half` ...); a click views the
+  only, not inside links, code or URLs, minus everyday words and first names found by reviewing every single-word name (`Exit`, `Access`, `Perimeter`,
+  `Reset`, `Jan` ...); a click views the
   system in Tripwire. A zKillboard system chip views the system in Tripwire when it is on the chain map, else opens
   zKillboard.
 - `public/zkill_kill.php` (new): `?ids=` (max 20) and `?names=` (max 20), session + mask required, GET only. Reads
   `zkill_killmails` / `zkill_names`; kills that are not stored are queued in the new `zkill_kill_lookup` table
   (`zkill/lookup.php`, caps 200 per user / 2000 overall) and answered `queued`. The browser asks again after 3 s, 10 s
   and 30 s, then shows the plain link. With `ZKILL_FEED_ENABLED=false` nothing is queued.
-- Worker (`zkill_feed.worker.php`): `zk_lookup_run_one()` runs first in each idle pass (before back-fills), within the
-  same `ZKILL_API_INTERVAL` budget: zKillboard `/api/killID/<id>/` for the hash, ESI `/killmails/<id>/<hash>/`, stored
+- Worker (`zkill_feed.worker.php`): `zk_queues_run_one()` interleaves `zk_lookup_run_one()` with back-fills and stats
+  (lookups first, but at most every other API slot while other work waits), only while both zKillboard and ESI may be
+  called, within the same `ZKILL_API_INTERVAL` budget: zKillboard `/api/killID/<id>/` for the hash, ESI `/killmails/<id>/<hash>/`, stored
   with source `lookup`. Retried after 10 minutes, at most 3 attempts. `zk_prune()` keeps looked-up kills 7 days after
   they arrived (they are usually older than the retention) and prunes finished lookups after 7 days.
 - Tests: `app/js-test/fork/smart-notes.test.js` (URL recognition incl. look-alike hosts, DOM replacement, escaping,

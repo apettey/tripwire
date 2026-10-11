@@ -85,7 +85,9 @@ check('zero: 400', call(['ids' => '0'])[0], 400);
 check('array parameter: 400', call(['ids' => ['1']])[0], 400);
 check('21 IDs: 400', call(['ids' => implode(',', range(BASE + 1, BASE + 21))])[0], 400);
 check('21 names: 400', call(['names' => implode(',', range(ENTITY + 1, ENTITY + 21))])[0], 400);
-check('names above 32 bits: 400', call(['names' => '2147483648'])[0], 400);
+[$status, $body] = call(['ids' => (string) KILL, 'names' => '2147483648,' . (ENTITY + 1)]);
+check('a name above 32 bits is skipped, the rest still answers', [$status, $body['kills'][(string) KILL]['status'], $body['names'][(string) (ENTITY + 1)] ?? null,
+    isset($body['names']['2147483648']), (int) $mysql->query('SELECT COUNT(*) FROM zkill_names WHERE id = 2147483648')->fetchColumn()], [200, 'ok', 'Some Corp', false, 0]);
 check('20 IDs (and duplicates, spaces, empty parts): 200', call(['ids' => implode(', ', range(BASE + 1, BASE + 20)) . ',,' . (BASE + 1)])[0], 200);
 cleanup($mysql);
 seed($mysql);
