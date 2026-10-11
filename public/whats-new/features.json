@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 87,
+      "date": "2026-10-11",
+      "title": "Mask admins, blocking and mask defaults",
+      "description": "Mask owners and corporation admins can now make other members mask admins (Mask Admin > Admins & members). Admins can block a member from the mask with a reason, or remove their own access entry, and see who changed what.\n\nAdmins can also save their own Settings as the mask's defaults. Members who haven't set a setting themselves get the mask default (shown as \"mask default\" in Settings); anything you change yourself wins.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-87-mask-admins.png",
+          "caption": "Mask Admin > Admins & members"
+        }
+      ]
+    },
+    {
       "pr": 82,
       "date": "2026-10-11",
       "title": "Smarter structure input",
