@@ -27,6 +27,7 @@ describe('Command palette', () => {
 			assert.ok(commandPalette.isToggleKey({ key: 'K', metaKey: true }));
 			assert.ok(!commandPalette.isToggleKey({ key: 'k' }));
 			assert.ok(!commandPalette.isToggleKey({ key: '/' }));
+			assert.ok(commandPalette.isToggleKey({ key: 'л', code: 'KeyK', ctrlKey: true }));	// non-Latin layout
 			assert.ok(!commandPalette.isToggleKey({ key: 'k', ctrlKey: true, shiftKey: true }));
 			assert.ok(!commandPalette.isToggleKey({ key: 'k', ctrlKey: true, altKey: true }));
 			assert.ok(!commandPalette.isToggleKey({ key: 'z', ctrlKey: true }));
@@ -201,6 +202,8 @@ describe('Command palette', () => {
 			assert.deepEqual(commandPalette.loadFrecency(), { a: { n: 1, t: 2 } });
 			store[commandPalette.STORAGE_KEY] = '{oops';
 			assert.deepEqual(commandPalette.loadFrecency(), {});
+			store[commandPalette.STORAGE_KEY] = JSON.stringify({ ok: { n: 2, t: 5 }, bad1: 3, bad2: null, bad3: 'x', bad4: { n: 'a', t: 1 }, bad5: [1] });
+			assert.deepEqual(commandPalette.loadFrecency(), { ok: { n: 2, t: 5 } });
 			store[commandPalette.STORAGE_KEY] = '[1]';
 			assert.deepEqual(commandPalette.loadFrecency(), {});
 			global.localStorage = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };

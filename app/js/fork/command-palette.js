@@ -19,7 +19,7 @@ const commandPalette = {
 
 	/** Is this keydown the palette shortcut: Ctrl+K or Cmd+K, no other modifier */
 	isToggleKey: function(e) {
-		return !!e && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key || "").toLowerCase() === "k";
+		return !!e && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (String(e.key || "").toLowerCase() === "k" || e.code === "KeyK");
 	},
 
 	/** Whether the shortcut may open the palette. state: {enabled, editable (focus in CKEditor / contenteditable), modal (a modal dialog is open)} */
@@ -175,7 +175,14 @@ const commandPalette = {
 	loadFrecency: function() {
 		try {
 			const data = JSON.parse(localStorage.getItem(commandPalette.STORAGE_KEY) || "{}");
-			return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+			const out = {};
+			if (data && typeof data === "object" && !Array.isArray(data)) {
+				Object.keys(data).forEach(function(k) {
+					const r = data[k];
+					if (r && typeof r === "object" && isFinite(r.n) && isFinite(r.t)) { out[k] = { n: Number(r.n), t: Number(r.t) }; }
+				});
+			}
+			return out;
 		} catch (e) { return {}; }
 	},
 
@@ -293,6 +300,7 @@ const commandPalette = {
 
 	onGlobalKey: function(e) {
 		if (!commandPalette.isToggleKey(e)) { return; }
+		if (e.repeat) { e.preventDefault(); return; }
 		if (commandPalette.state.open) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -437,6 +445,7 @@ const commandPalette = {
 		const go = function() {
 			const visible = $("#dialog-options").is(":visible");
 			if (!visible && tries++ < 20) { setTimeout(go, 50); return; }
+			if (typeof forkSettings !== "undefined" && forkSettings.filter) { forkSettings.filter(""); }	// a filter would hide the row
 			const $acc = $("#optionsAccordion");
 			const $div = $(tr).closest("#optionsAccordion > div");
 			if ($acc.hasClass("ui-accordion") && $div.length) {
@@ -475,10 +484,12 @@ const commandPalette = {
 		const nodeOf = function(ctx) { return $("#chainMap [data-nodeid='" + ctx.viewingSystemID + "']").first(); };
 		const onChain = function(ctx) { return commandPalette.onChain(ctx.viewingSystemID) ? true : "Not on the chain map"; };
 		const flare = function(color) {
-			return function(args, ctx) {
-				const menu = $("#chainParent");
-				if (nodeOf(ctx).hasClass(color + "Node")) { menu.contextmenu("removeFlare", ctx.viewingSystemID, {}); }
-				else { menu.contextmenu("setFlare", ctx.viewingSystemID, color, {}); }
+			return function(args, ctx) { $("#chainParent").contextmenu("setFlare", ctx.viewingSystemID, color, {}); };
+		};
+		const flareEnabled = function(color) {
+			return function(ctx) {
+				if (!commandPalette.onChain(ctx.viewingSystemID)) { return "Not on the chain map"; }
+				return nodeOf(ctx).hasClass(color + "Node") ? "Already " + color : true;
 			};
 		};
 
@@ -511,12 +522,9 @@ const commandPalette = {
 		add({ id: "sig.redo", title: "Redo", group: "Signatures", icon: "redo", shortcut: "Ctrl+Y",
 			enabled: click("#redo", "Nothing to redo"), run: function() { $("#redo").trigger("click"); } });
 
-		add({ id: "chain.flareRed", title: "Flare: battle (red)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: onChain, run: flare("red") });
-		add({ id: "chain.flareYellow", title: "Flare: hold (yellow)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: onChain, run: flare("yellow") });
-		add({ id: "chain.flareGreen", title: "Flare: fleet op (green)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: onChain, run: flare("green") });
-		add({ id: "chain.flareClear", title: "Clear flare", group: "Fleet", icon: "alert", keywords: ["remove", "mark"],
-			enabled: function(ctx) { return nodeOf(ctx).is(".redNode, .yellowNode, .greenNode") ? true : "No flare on this system"; },
-			run: function(args, ctx) { $("#chainParent").contextmenu("removeFlare", ctx.viewingSystemID, {}); } });
+		add({ id: "chain.flareRed", title: "Flare: battle (red)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: flareEnabled("red"), run: flare("red") });
+		add({ id: "chain.flareYellow", title: "Flare: hold (yellow)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: flareEnabled("yellow"), run: flare("yellow") });
+		add({ id: "chain.flareGreen", title: "Flare: fleet op (green)", group: "Fleet", icon: "alert", keywords: ["mark", "colour"], enabled: flareEnabled("green"), run: flare("green") });
 		add({ id: "chain.ping", title: "Ping", group: "Fleet", icon: "alert", keywords: ["discord", "alert", "message"], enabled: onChain,
 			run: function(args, ctx) { $("#dialog-ping").data("id", nodeOf(ctx).data("sigid") || null).data("systemID", ctx.viewingSystemID).dialog("open"); } });
 		add({ id: "chain.mass", title: "Mass dialog", group: "Holes", icon: "prop-mod", keywords: ["jumped", "recorded", "mass used"], enabled: onChain,
@@ -574,7 +582,11 @@ const commandPalette = {
 		});
 		list.addEventListener("click", function(e) {
 			const li = e.target.closest ? e.target.closest("li[data-i]") : null;
-			if (li) { commandPalette.select(Number(li.getAttribute("data-i")), false); commandPalette.runSelected(e.ctrlKey || e.metaKey); }
+			if (li) {
+				e.stopPropagation();	// upstream's document click handler would unselect the signature row we just selected
+				commandPalette.select(Number(li.getAttribute("data-i")), false);
+				commandPalette.runSelected(e.ctrlKey || e.metaKey);
+			}
 		});
 		// Focus trap: anything that takes focus outside the panel while open gives it back to the input
 		// (not while a modal dialog has the focus: its own trap and ours would fight)
@@ -588,6 +600,16 @@ const commandPalette = {
 	},
 
 	open: function() {
+		try { commandPalette.doOpen(); }
+		catch (e) {
+			console.error("palette: open failed", e);
+			commandPalette.state.open = false;
+			const el = document.getElementById("cp-overlay");
+			if (el) { el.className = "cp-hidden"; }
+		}
+	},
+
+	doOpen: function() {
 		const st = commandPalette.state;
 		commandPalette.build();
 		st.previousFocus = document.activeElement;
@@ -752,7 +774,7 @@ const commandPalette = {
 			case "PageUp": e.preventDefault(); page(-1); break;
 			case "Home": if (!input.value) { e.preventDefault(); const i = commandPalette.moveSelection(st.rows, -1, 1); if (i >= 0) { commandPalette.select(i); } } break;
 			case "End": if (!input.value) { e.preventDefault(); const i = commandPalette.moveSelection(st.rows, 0, -1); if (i >= 0) { commandPalette.select(i); } } break;
-			case "Enter": e.preventDefault(); commandPalette.runSelected(e.ctrlKey || e.metaKey); break;
+			case "Enter": if (e.isComposing) { break; } e.preventDefault(); commandPalette.runSelected(e.ctrlKey || e.metaKey); break;
 			case "Tab": {
 				e.preventDefault();
 				const row = st.rows[st.sel];
