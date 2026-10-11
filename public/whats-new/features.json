@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 79,
+      "date": "2026-10-11",
+      "title": "Nearest loot buyers",
+      "description": "The Destinations window now lists the three nearest NPC stations that buy blue loot (Sleeper components), with security, station, gate jumps from your chain's exits and a Set route in game button. Tick Red loot to include the buyers of Triglavian Survey Databases. Turn it off in Settings > Routes & Navigation > Loot buyers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-79-loot-buyers.png",
+          "caption": "Nearest blue and red loot buyers in the Destinations window"
+        }
+      ]
+    },
+    {
       "pr": 77,
       "date": "2026-10-11",
       "title": "Hide cosmic anomalies",
