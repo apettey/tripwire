@@ -34,6 +34,7 @@ function getMasks($characterID, $corporationID, $isAdmin, $activeMask) {
 	$textMap = array(1373 => 'Character', 2 => 'Corporation', 3 => 'Alliance');
 
 	while ($row = $stmt->fetchObject()) {
+		if (function_exists('maskadmin_session_blocked') && maskadmin_session_blocked($row->maskID)) { continue; } // fork: blocked masks are hidden
 		$owned = $_SESSION['admin'] && $row->ownerID == $_SESSION['corporationID'] || $row->ownerID == $_SESSION['characterID'] ? true : false;
 		$type = $owned ? 'owned' : 'invited';
 		$ownerType = $typeMap[$row->ownerType];

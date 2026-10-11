@@ -1,0 +1,32 @@
+/* Mask Admin > Admins & members (app/js/fork/mask-admin-tab.js) and "mask default" badges in Settings (mask-defaults.js) */
+.ui-dialog.ma-admin-active .ui-dialog-traypane { display: none; }
+
+#dialog-admin [data-window='maskadmins'] { padding: 0 8px 12px 10px; font-size: 12px; line-height: 1.4; text-align: left; overflow-y: auto; }
+#dialog-admin [data-window='maskadmins'] h3 { font-size: 13px; margin: 12px 0 4px; color: #ccc; border-bottom: 1px solid #444; }
+#dialog-admin [data-window='maskadmins'] p { margin: 2px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-dim { font-size: 11px; color: #999; }
+#dialog-admin [data-window='maskadmins'] .ma-good { color: #6c6; }
+#dialog-admin [data-window='maskadmins'] .ma-bad { color: #e66; }
+#dialog-admin [data-window='maskadmins'] .ma-blocked { color: #e66; font-weight: bold; }
+#dialog-admin [data-window='maskadmins'] .ma-message { min-height: 16px; margin-top: 2px; }
+#dialog-admin [data-window='maskadmins'] .ma-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-table th { text-align: left; color: #aaa; font-weight: normal; border-bottom: 1px solid #333; padding: 2px 6px 2px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-table td { padding: 2px 6px 2px 0; vertical-align: top; border-bottom: 1px solid #2b2b2b; }
+#dialog-admin [data-window='maskadmins'] .ma-table td:nth-child(-n+2) { white-space: nowrap; }
+/* Upstream draws a line under every other row of Mask Admin tables: not in these */
+div.ui-dialog[aria-describedby='dialog-admin'] .window [data-window='maskadmins'] table tbody tr:nth-child(even) td { border-bottom: 1px solid #2b2b2b; }
+#dialog-admin [data-window='maskadmins'] .ma-buttons { white-space: nowrap; text-align: right; }
+#dialog-admin [data-window='maskadmins'] button { font-size: 11px; margin-left: 3px; }
+#dialog-admin [data-window='maskadmins'] .ma-row-blocked td { background: rgba(230, 102, 102, 0.08); }
+#dialog-admin [data-window='maskadmins'] .ma-block-form td { background: rgba(255, 255, 255, 0.05); }
+#dialog-admin [data-window='maskadmins'] .ma-reason { width: 55%; }
+#dialog-admin [data-window='maskadmins'] .ma-search { margin: 2px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-q { width: 220px; }
+#dialog-admin [data-window='maskadmins'] .ma-add { margin: 4px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-grant-select { max-width: 340px; }
+#dialog-admin [data-window='maskadmins'] .ma-picks { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0; }
+#dialog-admin [data-window='maskadmins'] .ma-pick { white-space: nowrap; }
+#dialog-admin [data-window='maskadmins'] .ma-audit td { font-size: 11px; }
+
+#dialog-options .md-badge { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 10px; border-radius: 3px; background: #2d4a2d; color: #9d9; white-space: nowrap; cursor: help; }
+#dialog-options .md-badge.md-own { background: #3a3a3a; color: #aaa; }

@@ -30,7 +30,7 @@ function checkAdmin($mask) {
 	$stmt->bindValue(':mask', $mask);
 	$stmt->execute();
 
-	return $stmt->rowCount() == 0 ? false : true;
+	return $stmt->rowCount() == 0 ? (function_exists('maskadmin_session_granted') && maskadmin_session_granted($mask)) : true; // fork: granted mask admins (maskadmin/maskadmin.inc.php)
 }
 
 function verifyMask($mask) {
