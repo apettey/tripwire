@@ -362,13 +362,15 @@ k-space poll): "Chain kills are paused: no home system is set for the **Corp** m
 Mask Admin > Discord." Once per episode and channel: the episode is a `discord_sent` row (kind `nohome`, ref
 `wh:<webhookID>`) that is also the notice's dedupe, so later passes post nothing; it is kept by the 7-day prune for as
 long as the episode lasts. The episode ends (row deleted) when the mask gets a home, chain kills are turned off or
-moved to another channel, or the mask or its webhook can no longer send; if chain kills still go to that channel, now
-with a home, one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
+moved to another channel, the webhook's URL is replaced (it may be another channel: the next pass posts a new notice
+there), or the mask or its webhook can no longer send; if chain kills still go to that channel, now with a home, and
+the notice was sent (or is still queued), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
 new episode. Same rule as the chain: only "no home" pauses chain kills (a home without live holes is a chain of one
 system, and an unknown home ID is dropped when the settings load). Both messages are fixed text with empty
 `allowed_mentions` (no pings, whatever the type's ping field says) and the mask name escaped. Mask Admin > Discord adds
 to its "Set a home system" warning when the notice was posted ("A notice was posted to the chain kills channel on
-2026-10-11 00:59 EVE time.", `homeNotice` in `discord.php`'s answer). Test: `discord/tests/chain_notice_flow_test.php`
+2026-10-11 00:59 EVE time.", or "Chain kills paused since ..." once the notice's outbox row is pruned; `homeNotice` in
+`discord.php`'s answer). Test: `discord/tests/chain_notice_flow_test.php`
 (against the dev stack's MySQL, worker and `discord-mock`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s

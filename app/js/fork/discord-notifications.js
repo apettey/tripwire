@@ -107,6 +107,7 @@ const discordNotifications = {
 		const when = String(notice.at).replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, "") + " EVE time";
 		if (notice.status === "queued") { return "A notice to the chain kills channel is waiting to be sent."; }
 		if (notice.status === "failed") { return "The notice to the chain kills channel could not be sent (see Delivery below)."; }
+		if (notice.status === "old") { return "Chain kills paused since " + when + "."; }	// its outbox row is pruned: unknown whether it arrived
 		return "A notice was posted to the chain kills channel on " + when + ".";
 	},
 

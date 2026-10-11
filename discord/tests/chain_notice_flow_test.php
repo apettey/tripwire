@@ -30,6 +30,7 @@ const CN_MASK = '98000081.2';    // chain kills on
 const CN_OTHER = '98000082.2';   // chain kills off (corp losses on), no home: never a notice
 const CN_CORP = 98000081;
 const CN_HOOKS = ['a' => '1200000000000081001', 'b' => '1200000000000081002', 'c' => '1200000000000082001'];
+const CN_NEW_URL = '1200000000000081003';   // the channel webhook 'b' is moved to (URL replaced), see step 7
 $token = str_repeat('noHomeTest_', 6);
 
 // Corporations with a Tripwire admin, three webhooks to the mock
@@ -83,7 +84,7 @@ function cn_channel($key) {
     $messages = json_decode((string) @file_get_contents("$mock/messages"), true) ?: [];
     $out = [];
     foreach (array_reverse($messages) as $m) {
-        if ($m['webhook'] === CN_HOOKS[$key] && $m['status'] === 200) $out[] = [$m['body']['content'] ?? '', $m['body']['allowed_mentions'] ?? null];
+        if ($m['webhook'] === ($key === 'd' ? CN_NEW_URL : CN_HOOKS[$key]) && $m['status'] === 200) $out[] = [$m['body']['content'] ?? '', $m['body']['allowed_mentions'] ?? null];
     }
     return $out;
 }
@@ -142,20 +143,41 @@ cn_tick(); cn_tick();
 check('other channel: notice there, nothing more on the first', [cn_contents('a'), cn_contents('b'), cn_episodes()],
     [[$paused, $resumed, $paused, $paused], [$paused], [CN_MASK . ' wh:' . $rows['b']]]);
 
-// 7. A long episode is not pruned (a weekly repeat would be noise), other old dedupe rows are
+// 7. Webhook 'b' gets a new URL (maybe another channel; public/discord.php keeps the row ID, status 'pending'): the
+// episode is forgotten, the new channel gets the notice, and later the "resumed" line
+$db->prepare("UPDATE discord_webhooks SET url = ?, status = 'pending' WHERE id = ?")->execute([discord_seal('https://discord.com/api/webhooks/' . CN_NEW_URL . "/$token"), $rows['b']]);
+discord_chain_notice_forget_webhook($db, CN_MASK, $rows['b']);
+cn_tick(); cn_tick();
+check('new URL: the new channel gets the notice', [cn_contents('b'), cn_contents('d')], [[$paused], [$paused]]);
+cn_settings(CN_MASK, true, $rows['b'], $home);
+cn_tick();
+check('new URL: resumed there', cn_contents('d'), [$paused, $resumed]);
+
+// 8. A notice that never arrived (failed): no "resumed" either, the episode just ends
+cn_settings(CN_MASK, true, $rows['b'], 0);
+cn_tick();
+$db->exec("UPDATE discord_outbox SET status = 'failed' WHERE maskID = '" . CN_MASK . "' AND kind = 'chainPaused'");
+cn_settings(CN_MASK, true, $rows['b'], $home);
+cn_tick();
+check('failed notice: no resumed, episode over', [cn_contents('d'), cn_episodes()], [[$paused, $resumed, $paused], []]);
+cn_settings(CN_MASK, true, $rows['b'], 0);
+cn_tick();
+check('failed notice: the next episode notifies again', cn_contents('d'), [$paused, $resumed, $paused, $paused]);
+
+// 9. A long episode is not pruned (a weekly repeat would be noise), other old dedupe rows are
 $db->exec("UPDATE discord_sent SET createdAt = UTC_TIMESTAMP() - INTERVAL 30 DAY WHERE maskID = '" . CN_MASK . "'");
 $db->prepare("INSERT INTO discord_sent (maskID, kind, ref, createdAt) VALUES (?, 'kill:chainKill', '1', UTC_TIMESTAMP() - INTERVAL 30 DAY)")->execute([CN_MASK]);
 discord_outbox_prune($db);
 check('prune: episode kept, old kill dedupe gone', $db->query("SELECT kind FROM discord_sent WHERE maskID = '" . CN_MASK . "' ORDER BY kind")->fetchAll(PDO::FETCH_COLUMN), ['nohome']);
 cn_tick();
-check('prune: still no repeat after a month', cn_contents('b'), [$paused]);
+check('prune: still no repeat after a month', cn_contents('d'), [$paused, $resumed, $paused, $paused]);
 $db->exec("DELETE FROM discord_outbox WHERE maskID = '" . CN_MASK . "'");   // sent rows are pruned after 7 days
 check('prune: Mask Admin falls back to the episode start once the message row is gone', discord_chain_notice_status($db, CN_MASK)['status'] ?? null, 'old');
 
-// 8. The mask can no longer send (its corporation lost its last admin): the episode ends quietly
+// 10. The mask can no longer send (its corporation lost its last admin): the episode ends quietly
 $db->exec('UPDATE characters SET admin = 0 WHERE userID = 990081');
 cn_tick();
-check('no admin left: episode over, nothing posted', [cn_episodes(), cn_contents('b')], [[], [$paused]]);
+check('no admin left: episode over, nothing posted', [cn_episodes(), cn_contents('d')], [[], [$paused, $resumed, $paused, $paused]]);
 
 // Clean up
 foreach ([CN_MASK, CN_OTHER] as $mask) {

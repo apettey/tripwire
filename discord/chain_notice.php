@@ -8,8 +8,10 @@
 //     (kind 'nohome', ref 'wh:<webhookID>'): it is the dedupe of the notice, is not pruned while the episode lasts
 //     (discord_outbox_prune) and its time is shown in Mask Admin > Discord (discord_chain_notice_status).
 //   - the episode ends when the mask gets a home, chain kills are turned off or moved to another channel, or the mask
-//     or its webhook can no longer send: the row is deleted. When chain kills still go to that channel, now with a
-//     home, one 'chainResumed' message says so. Removing the home again later starts a new episode (a new notice).
+//     or its webhook can no longer send, or the webhook's URL is replaced (it may be another channel:
+//     discord_chain_notice_forget_webhook, public/discord.php): the row is deleted. When chain kills still go to that
+//     channel, now with a home, and its notice was sent (or is still queued), one 'chainResumed' message says so.
+//     Removing the home again later starts a new episode (a new notice).
 // Same rule as discord_chain_systems(): only "no home" (0) pauses chain kills. A home that has no live holes on the map
 // is still a chain of one system (kills there are posted), and a home ID that isn't a known system is dropped when the
 // settings are loaded (discord_settings_normalise), so it counts as no home.
@@ -34,7 +36,7 @@ function discord_chain_notice_poll(PDO $db, array $masks) {
     }
     $queued = 0;
     // Episodes that are over: delete the row; if chain kills still go to that channel, with a home now, say so
-    $stmt = $db->prepare('SELECT maskID, ref FROM discord_sent WHERE kind = ?');
+    $stmt = $db->prepare('SELECT maskID, ref, createdAt FROM discord_sent WHERE kind = ?');
     $stmt->execute([DISCORD_NOTICE_KIND]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $maskID = (string) $row['maskID'];
@@ -47,7 +49,7 @@ function discord_chain_notice_poll(PDO $db, array $masks) {
         };
         $settings = $masks[$maskID] ?? null;
         $home = $settings ? (int) $settings['homeSystemID'] : 0;
-        if ($home > 0 && (int) $settings['types']['chainKill']['webhookID'] === $webhookID) {
+        if ($home > 0 && (int) $settings['types']['chainKill']['webhookID'] === $webhookID && discord_chain_notice_delivered($db, $maskID, $webhookID, $row['createdAt'])) {
             $system = discord_system($home);
             $data = ['kind' => 'chainResumed', 'mask' => discord_mask_name($db, $maskID), 'home' => $system ? $system[0] : (string) $home];
             if (discord_enqueue_once($db, $maskID, $webhookID, 'chainResumed', $data, $end) !== null) {
@@ -70,6 +72,19 @@ function discord_chain_notice_poll(PDO $db, array $masks) {
     return $queued;
 }
 
+/** Whether an episode's 'chainPaused' notice reached the channel or still will (sent / queued): only then is "resumed"
+    posted (not after a notice that failed, expired or was never queued) */
+function discord_chain_notice_delivered(PDO $db, $maskID, $webhookID, $since) {
+    $stmt = $db->prepare("SELECT status FROM discord_outbox WHERE maskID = ? AND webhookID = ? AND kind = 'chainPaused' AND createdAt >= ? ORDER BY id DESC LIMIT 1");
+    $stmt->execute([$maskID, (int) $webhookID, $since]);
+    return in_array($stmt->fetchColumn(), ['sent', 'queued'], true);
+}
+
+/** A webhook's URL was replaced (maybe another channel): forget its episode, the next pass posts a new notice there */
+function discord_chain_notice_forget_webhook(PDO $db, $maskID, $webhookID) {
+    $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ? AND ref = ?')->execute([$maskID, DISCORD_NOTICE_KIND, discord_chain_notice_ref($webhookID)]);
+}
+
 /** The webhook payload of a notice ($ctx: kind 'chainPaused' / 'chainResumed', mask, home) */
 function discord_chain_notice_payload(array $ctx) {
     $mask = discord_escape($ctx['mask'] ?? '');
@@ -81,7 +96,7 @@ function discord_chain_notice_payload(array $ctx) {
 
 /**
  * For Mask Admin > Discord: the notice of the current "no home" episode, or null when there is none:
- * ['status' => 'queued'|'sent'|'failed'|'old' (outbox row already pruned), 'at' => ISO time it was sent, else queued].
+ * ['status' => 'queued'|'sent'|'failed'|'old' (outbox row already pruned), 'at' => ISO time it was sent, else queued ('old': when the episode started)].
  */
 function discord_chain_notice_status(PDO $db, $maskID) {
     $stmt = $db->prepare('SELECT createdAt FROM discord_sent WHERE maskID = ? AND kind = ? ORDER BY createdAt DESC LIMIT 1');

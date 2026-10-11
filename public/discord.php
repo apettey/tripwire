@@ -199,6 +199,8 @@ try {
 					$stmt->execute(array($name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), $webhook['id']));
 					// A new URL may be another channel: the next rally change posts instead of editing the old message
 					discord_rally_forget_webhook($mysql, $webhook['id']);
+					// ... and chain kills still paused get a new notice there (discord/chain_notice.php)
+					discord_chain_notice_forget_webhook($mysql, $mask, $webhook['id']);
 				} else {
 					$stmt = $mysql->prepare('UPDATE discord_webhooks SET name = ?, updatedAt = UTC_TIMESTAMP() WHERE id = ?');
 					$stmt->execute(array($name, $webhook['id']));

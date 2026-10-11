@@ -103,7 +103,7 @@ describe('Discord notifications', function() {
 			assert.strictEqual(dn.homeNoticeText(null), '');
 			assert.strictEqual(dn.homeNoticeText(undefined), '');
 			assert.strictEqual(dn.homeNoticeText({ status: 'sent', at: '2026-10-11T12:34:56Z' }), 'A notice was posted to the chain kills channel on 2026-10-11 12:34 EVE time.');
-			assert.strictEqual(dn.homeNoticeText({ status: 'old', at: '2026-09-01T08:00:00Z' }), 'A notice was posted to the chain kills channel on 2026-09-01 08:00 EVE time.');
+			assert.strictEqual(dn.homeNoticeText({ status: 'old', at: '2026-09-01T08:00:00Z' }), 'Chain kills paused since 2026-09-01 08:00 EVE time.');
 			assert.strictEqual(dn.homeNoticeText({ status: 'queued', at: '2026-10-11T12:34:56Z' }), 'A notice to the chain kills channel is waiting to be sent.');
 			assert.ok(/could not be sent/.test(dn.homeNoticeText({ status: 'failed', at: '2026-10-11T12:34:56Z' })));
 		});
