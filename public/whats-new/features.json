@@ -1,6 +1,22 @@
 {
   "features": [
     {
+      "pr": 90,
+      "date": "2026-10-11",
+      "title": "Command palette (Ctrl+K)",
+      "description": "Press Ctrl+K (Cmd+K on Mac) to search from anywhere. Type a system name, J-code, hole name like B2, a signature ID, a mask, a setting or a command, then press Enter. Picking a setting opens Settings right at that row. Start with > for commands only, @ for systems, # for signatures or , for settings. Turn it off in Settings > General > Command palette.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-90-command-palette.png",
+          "caption": "Search the chain by hole name, system, signature or setting"
+        },
+        {
+          "src": "whats-new/img/pr-90-command-palette-settings.png",
+          "caption": "Picking a setting opens Settings at that row"
+        }
+      ]
+    },
+    {
       "pr": 89,
       "date": "2026-10-11",
       "title": "Edit life and mass in place",
