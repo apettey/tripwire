@@ -7,6 +7,18 @@
       "description": "Settings are now grouped by what you are doing: Chain Map, Map Markers, Wormhole Jumps & Mass, Signatures, Routes & Navigation, Kills & Intel and General, plus the Jump Planner and Kill Reporting sections. Each section is short, and nothing was reset: your choices are kept.\n\nCan't find something? Type in the new Find a setting box at the top of Settings to see only the matching settings."
     },
     {
+      "pr": 61,
+      "date": "2026-10-11",
+      "title": "Who is in local: corporations, alliances and threat",
+      "description": "Open a shared local scan in the Intel panel to see its pilots grouped by alliance and corporation, with tickers, a zKillboard link and your own corp or alliance marked as friendly. Pilots in NPC corporations and unknown names are listed separately.\n\nThe panel also shows a zKillboard threat badge per pilot and group (danger %, a skull for dangerous pilots, solo hunters and cyno-capable ships). Lookups take a moment after a scan is shared. Turn either part off in Settings > General Preferences > D-scan & local intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-61-local-affiliation.png",
+          "caption": "A local scan grouped by alliance and corporation, with threat badges"
+        }
+      ]
+    },
+    {
       "pr": 60,
       "date": "2026-10-11",
       "title": "Discord: preserve mass marks",

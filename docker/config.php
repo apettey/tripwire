@@ -56,6 +56,9 @@ define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORA
 // spacing of zKillboard API requests made by the worker for back-fills (seconds, 1-60)
 define('ZKILL_RETENTION_HOURS', tw_env('ZKILL_RETENTION_HOURS', 48));
 define('ZKILL_API_INTERVAL', tw_env('ZKILL_API_INTERVAL', 2));
+// Local scans (fork, intel/pilots.inc.php): false = the worker never asks zKillboard for the stats of pilots in shared
+// local scans (corporations / alliances from ESI still work)
+define('INTEL_ZKILL_THREAT_ENABLED', tw_env_bool('INTEL_ZKILL_THREAT_ENABLED', true));
 
 // Discord notifications (fork, discord/, docker/README.md#discord-notifications). Read straight from the
 // environment by discord/ (no constants, so the key never shows up in defined constants):
