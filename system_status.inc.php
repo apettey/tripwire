@@ -14,7 +14,26 @@
 
 if (!defined('SYSTEM_STATUS_ALIAS_MAX')) define('SYSTEM_STATUS_ALIAS_MAX', 24);
 if (!defined('SYSTEM_STATUS_OCCUPIER_MAX')) define('SYSTEM_STATUS_OCCUPIER_MAX', 60);
-if (!defined('SYSTEM_STATUS_MAX_ROWS')) define('SYSTEM_STATUS_MAX_ROWS', 500);	// per mask: bounds the poll answer
+// Per mask: bounds the poll answer. When full, the oldest row of a system that is not on the mask's current chain
+// (no signature of the mask in it) is dropped to make room; when every row is on the chain, the new one is refused.
+if (!defined('SYSTEM_STATUS_MAX_ROWS')) define('SYSTEM_STATUS_MAX_ROWS', 2000);
+
+/** Version of a list as system_status_list returns it: changes whenever anything a viewer sees changes */
+function system_status_hash(array $rows) {
+	return md5(json_encode($rows));
+}
+
+/** Drop the mask's oldest row (by setAt) of a system with no signature of the mask in it. True when one was dropped. */
+function system_status_evict($mysql, $mask) {
+	$stmt = $mysql->prepare('DELETE FROM fork_system_status WHERE maskID = :mask
+		AND systemID NOT IN (SELECT systemID FROM signatures WHERE maskID = :mask2)
+		ORDER BY setAt, systemID LIMIT 1');
+	if (!$stmt) throw new PDOException('Could not prepare system status evict');
+	$stmt->bindValue(':mask', $mask);
+	$stmt->bindValue(':mask2', $mask);
+	if (!$stmt->execute()) throw new PDOException('Could not evict system status: ' . implode(' ', $stmt->errorInfo()));
+	return $stmt->rowCount() > 0;
+}
 
 function system_status_values() {
 	return array('friendly', 'hostile', 'active', 'empty', 'unscanned');
@@ -105,7 +124,7 @@ function system_status_update($mysql, $mask, $systemID, array $changes, $setBy) 
 		if (!$count) throw new PDOException('Could not count fork_system_status');
 		$count->bindValue(':mask', $mask);
 		if (!$count->execute()) throw new PDOException('Could not count fork_system_status');
-		if ((int)$count->fetchColumn() >= SYSTEM_STATUS_MAX_ROWS) return false;
+		if ((int)$count->fetchColumn() >= SYSTEM_STATUS_MAX_ROWS && !system_status_evict($mysql, $mask)) return false;
 	}
 	$stmt = $mysql->prepare('INSERT INTO fork_system_status (maskID, systemID, status, alias, occupier, setBy, setAt)
 		VALUES (:mask, :systemID, :status, :alias, :occupier, :setBy, CURRENT_TIMESTAMP)

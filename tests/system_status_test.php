@@ -5,6 +5,7 @@
 // The HTTP part logs in as the dev user (docker/dev-seed.sh) and removes the rows it set for the dev mask again.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
+define('SYSTEM_STATUS_MAX_ROWS', 3);	// small cap for the eviction checks (the HTTP part below talks to the server, which has its own)
 require_once(__DIR__ . '/../system_status.inc.php');
 
 $failures = 0;
@@ -78,6 +79,34 @@ check('emptied row is gone', system_status_update($mysql, $maskA, 31000003, arra
 check('emptied row is deleted', system_status_get($mysql, $maskA, 31000003), null);
 check('clearing nothing is fine', system_status_update($mysql, $maskA, 31000009, array('status' => null), 'A'), null);
 
+// Cap (3 in this test): when full, the oldest row of a system NOT on the mask's chain is dropped; never one on the chain
+function ss_test_sig($mysql, $mask, $sig, $systemID) {
+	$mysql->prepare("INSERT INTO signatures (signatureID, systemID, type, name, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
+		VALUES (:sig, :sid, 'wormhole', '', 86400, 1, 'test', 1, 'test', :mask)")->execute(array(':sig' => $sig, ':sid' => $systemID, ':mask' => $mask));
+}
+$cleanup();
+check('cap is the test value', SYSTEM_STATUS_MAX_ROWS, 3);
+$mysql->exec("DELETE FROM signatures WHERE maskID = '$maskA'");
+ss_test_sig($mysql, $maskA, 'tst002', 31000001);
+foreach (array(31000001, 31000002, 31000003) as $i => $sid) {
+	system_status_update($mysql, $maskA, $sid, array('status' => 'active'), 'A');
+	$mysql->exec("UPDATE fork_system_status SET setAt = FROM_UNIXTIME(" . (1700000000 + $i * 100) . ") WHERE maskID = '$maskA' AND systemID = $sid");
+}
+check('full: new system evicts the oldest off-chain row', system_status_update($mysql, $maskA, 31000004, array('status' => 'hostile'), 'A')['systemID'], 31000004);
+check('chain system (oldest) kept', system_status_get($mysql, $maskA, 31000001) !== null, true);
+check('oldest off-chain row dropped', system_status_get($mysql, $maskA, 31000002), null);
+check('still at the cap', count(system_status_list($mysql, $maskA)), 3);
+check('updating an existing row at the cap needs no room', system_status_update($mysql, $maskA, 31000003, array('alias' => 'x'), 'A')['alias'], 'x');
+ss_test_sig($mysql, $maskA, 'tst003', 31000003);
+ss_test_sig($mysql, $maskA, 'tst004', 31000004);
+check('full and all on the chain: refused', system_status_update($mysql, $maskA, 31000005, array('status' => 'hostile'), 'A'), false);
+$mysql->exec("DELETE FROM signatures WHERE maskID = '$maskA'");
+// Poll hash: same rows, same hash; any change, other hash
+$rowsNow = system_status_list($mysql, $maskA);
+check('hash stable', system_status_hash($rowsNow), system_status_hash(system_status_list($mysql, $maskA)));
+system_status_update($mysql, $maskA, 31000003, array('alias' => 'y'), 'A');
+check('hash changes with the data', system_status_hash($rowsNow) !== system_status_hash(system_status_list($mysql, $maskA)), true);
+
 // Survives the system leaving the chain: nothing in this table refers to signatures or wormholes
 $cleanup();
 
@@ -112,7 +141,11 @@ $mysql->exec("DELETE FROM fork_system_status WHERE maskID = '" . $devMask . "' A
 $mysql->exec("DELETE FROM fork_system_status WHERE maskID = '$maskB'");
 system_status_update($mysql, $maskB, 31999991, array('status' => 'friendly', 'alias' => 'Other mask'), 'Carol');	// must never show up
 
-check('GET ok', http('GET', 'system_status.php', $jar)[0], 200);
+list($s, $first) = http('GET', 'system_status.php', $jar);
+check('GET ok', $s, 200);
+check('GET has a hash and the systems', isset($first['hash'], $first['systems']), true);
+check('GET with the current hash: unchanged', http('GET', 'system_status.php?have=' . $first['hash'], $jar)[1], array('unchanged' => true, 'hash' => $first['hash']));
+check('GET with an old hash: full answer', isset(http('GET', 'system_status.php?have=0123', $jar)[1]['systems']), true);
 check('POST without header', http('POST', 'system_status.php', $jar, 'mode=set&systemID=31999991&status=hostile')[0], 400);
 check('POST bad system', http('POST', 'system_status.php', $jar, 'mode=set&systemID=1&status=hostile', $xhr)[0], 400);
 check('POST abyssal system', http('POST', 'system_status.php', $jar, 'mode=set&systemID=32000001&status=hostile', $xhr)[0], 400);

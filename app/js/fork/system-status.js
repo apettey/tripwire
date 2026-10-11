@@ -11,6 +11,7 @@ const systemStatus = {
 	CMD: "sysStatus-",
 	CMD_ALIAS: "sysAlias",
 	CMD_OCCUPIER: "sysOccupier",
+	CMD_CLEAR: "sysClearAll",
 
 	STATUSES: [
 		{ key: "friendly", label: "Friendly", letter: "F" },
@@ -204,14 +205,16 @@ const systemStatus = {
 	/** Decorate every drawn node of the chain map (all renderers draw div.node[data-nodeid]) */
 	patchChain: function() {
 		const on = systemStatus.enabled(systemStatus.options());
+		if (on && !systemStatus.requested) { systemStatus.requested = true; systemStatus.fetch(); }	// switched on after load: nothing read yet
 		$("#chainMap .node[data-nodeid]").each(function() { systemStatus.patchNode(this, on); });
 	},
 
-	/** The system info panel line for the viewed system */
+	/** The system info panel line for the viewed system: before the activity graph, re-rendered from systemChange and the
+	poll tick. Hidden when the setting is off. */
 	renderInfo: function() {
 		let $el = $("#systemStatusInfo");
-		const $anchor = $("#infoWidget #infoExtra").next("br");
-		if (!$anchor.length) { $el.remove(); return; }
+		const $anchor = $("#infoWidget #activityGraph");
+		if (!$anchor.length || !systemStatus.enabled(systemStatus.options())) { $el.remove(); return; }
 		if (!$el.length) { $el = $("<div id='systemStatusInfo' class='sysstatus-info'></div>"); }
 		if ($el.next()[0] !== $anchor[0]) { $anchor.before($el.detach()); }
 		const id = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
@@ -222,7 +225,12 @@ const systemStatus = {
 		$el.text(line).toggle(!!line);
 	},
 
-	apply: function(list) {
+	hash: "",	// of the last full answer: the poll sends it back and gets { unchanged: true } when nothing changed
+	pending: 0,	// POSTs in flight: poll answers that arrive meanwhile may predate them and are ignored
+	postSeq: 0,
+
+	apply: function(list, hash) {
+		if (hash) { systemStatus.hash = hash; }
 		const next = systemStatus.toMap(list);
 		if (!systemStatus.changed(systemStatus.rows, next)) { return; }
 		systemStatus.rows = next;
@@ -230,39 +238,66 @@ const systemStatus = {
 		systemStatus.renderInfo();
 	},
 
+	/** Read the mask's rows (the poll, and on demand when the menu opens). Skipped while the tab is hidden. */
 	fetch: function() {
 		if (typeof document !== "undefined" && document.hidden) { return; }
-		return $.ajax({ url: systemStatus.URL, type: "GET", dataType: "JSON", cache: false })
+		systemStatus.requested = true;
+		const seq = systemStatus.postSeq;
+		return $.ajax({ url: systemStatus.URL, type: "GET", dataType: "JSON", cache: false, data: systemStatus.hash ? { have: systemStatus.hash } : {} })
 			.done(function(data) {
-				if (data && data.systems) { systemStatus.apply(data.systems); }
-				systemStatus.renderInfo();	// idempotent: the info panel may have been rebuilt since (and the age text moves on)
+				// A change of ours is on its way, or was answered since this read began: this answer may predate it
+				if (systemStatus.pending > 0 || seq !== systemStatus.postSeq) { return; }
+				if (data && data.systems) { systemStatus.apply(data.systems, data.hash); }
 			});
 	},
 
+	/** The 10 s tick: nothing at all while the setting is off (the menu reads on demand); else the age text and a poll */
+	tick: function() {
+		if (!systemStatus.enabled(systemStatus.options()) || document.hidden) { return; }
+		systemStatus.renderInfo();
+		systemStatus.fetch();
+	},
+
 	post: function(body) {
+		systemStatus.pending++;
+		systemStatus.postSeq++;
 		return $.ajax({
 			url: systemStatus.URL, type: "POST", dataType: "JSON", data: body,
 			headers: { "X-Requested-With": "XMLHttpRequest" }
 		}).done(function(data) {
-			if (data && data.systems) { systemStatus.apply(data.systems); }
+			if (data && data.systems) { systemStatus.apply(data.systems, data.hash); }
 		}).fail(function(x) {
 			const msg = x && x.responseJSON && x.responseJSON.error ? x.responseJSON.error : "Couldn't update the system";
 			if (typeof Notify !== "undefined") { Notify.trigger(msg, "red"); }
-			systemStatus.fetch();
-		});
+			systemStatus.hash = "";
+		}).always(function() {
+			systemStatus.pending--;
+			systemStatus.postSeq++;
+		}).fail(function() { systemStatus.fetch(); });
 	},
 
-	/** Change fields of a system: shown at once, the server's answer replaces it */
-	change: function(systemID, fields) {
-		if (!systemStatus.isSystemID(systemID)) { return; }
-		const by = tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.characterName : null;
+	/** Show a local change at once (row, or null for none); the server's answer replaces it */
+	show: function(systemID, row) {
 		const next = Object.assign({}, systemStatus.rows);
-		const row = systemStatus.applyFields(next[String(systemID)], systemID, fields, by, Math.floor(Date.now() / 1000));
 		if (row) { next[String(systemID)] = row; } else { delete next[String(systemID)]; }
 		systemStatus.rows = next;
 		systemStatus.patchChain();
 		systemStatus.renderInfo();
+	},
+
+	/** Change fields of a system */
+	change: function(systemID, fields) {
+		if (!systemStatus.isSystemID(systemID)) { return; }
+		const by = tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.characterName : null;
+		systemStatus.show(systemID, systemStatus.applyFields(systemStatus.rows[String(systemID)], systemID, fields, by, Math.floor(Date.now() / 1000)));
 		return systemStatus.post(systemStatus.payload("set", systemID, fields));
+	},
+
+	/** Remove status, alias and occupier at once */
+	clearAll: function(systemID) {
+		if (!systemStatus.isSystemID(systemID)) { return; }
+		systemStatus.show(systemID, null);
+		return systemStatus.post(systemStatus.payload("clear", systemID));
 	},
 
 	systemName: function(systemID) {
@@ -333,7 +368,7 @@ const systemStatus = {
 		// Settings > Map Markers; takes effect on Save like its neighbours (upstream Save redraws the chain), Reset = on
 		forkSettings.register({
 			section: "markers", order: 60, id: "systemStatus-enabled", type: "checkbox", key: "systemStatus",
-			label: "System status:", text: "Show system status colours and aliases on the map",
+			label: "System status:", text: "Show system status colours and aliases on the map and in the system info panel",
 			get: function(o) { return systemStatus.enabled(o); },
 			set: function(o, on) { o.systemStatus = { enabled: on }; }
 		});
@@ -360,7 +395,8 @@ const systemStatus = {
 			}).join("") +
 			"<li>-</li><li data-command='" + systemStatus.CMD + "clear'><a>Clear status</a></li></ul></li>" +
 			"<li data-command='" + systemStatus.CMD_ALIAS + "'><a>Alias&hellip;</a></li>" +
-			"<li data-command='" + systemStatus.CMD_OCCUPIER + "'><a>Occupier&hellip;</a></li>";
+			"<li data-command='" + systemStatus.CMD_OCCUPIER + "'><a>Occupier&hellip;</a></li>" +
+			"<li data-command='" + systemStatus.CMD_CLEAR + "'><a title='Remove status, alias and occupier'>Clear all status</a></li>";
 	},
 
 	setupMenu: function() {
@@ -377,10 +413,11 @@ const systemStatus = {
 		const originalSelect = chainParent.contextmenu("option", "select");
 		chainParent.contextmenu("option", "select", function(e, ui) {
 			const cmd = String(ui.cmd || "");
-			if (cmd.indexOf(systemStatus.CMD) === 0 || cmd === systemStatus.CMD_ALIAS || cmd === systemStatus.CMD_OCCUPIER) {
+			if (cmd.indexOf(systemStatus.CMD) === 0 || cmd === systemStatus.CMD_ALIAS || cmd === systemStatus.CMD_OCCUPIER || cmd === systemStatus.CMD_CLEAR) {
 				const id = systemOf(ui.target[0]);
 				if (id === null) { return; }
-				if (cmd === systemStatus.CMD_ALIAS) { systemStatus.openDialog("alias", id); }
+				if (cmd === systemStatus.CMD_CLEAR) { systemStatus.clearAll(id); }
+				else if (cmd === systemStatus.CMD_ALIAS) { systemStatus.openDialog("alias", id); }
 				else if (cmd === systemStatus.CMD_OCCUPIER) { systemStatus.openDialog("occupier", id); }
 				else {
 					const key = cmd.substring(systemStatus.CMD.length);
@@ -396,7 +433,8 @@ const systemStatus = {
 			try {
 				const id = systemOf(ui.target[0]);
 				const menu = $(this);
-				["sysStatusMenu", systemStatus.CMD_ALIAS, systemStatus.CMD_OCCUPIER].forEach(function(c) { menu.contextmenu("showEntry", c, id !== null); });
+				systemStatus.fetch();	// on demand: current the next time it opens, also while polling is off
+				["sysStatusMenu", systemStatus.CMD_ALIAS, systemStatus.CMD_OCCUPIER, systemStatus.CMD_CLEAR].forEach(function(c) { menu.contextmenu("showEntry", c, id !== null); });
 				const row = id !== null ? systemStatus.rows[String(id)] : null;
 				systemStatus.STATUSES.forEach(function(s) {
 					$("#chainMenu li[data-command='" + systemStatus.CMD + s.key + "'] > a").text((row && row.status === s.key ? "✓ " : "") + s.label);
@@ -422,18 +460,9 @@ const systemStatus = {
 			};
 			tripwire.systemChange.systemStatusWrapped = true;
 		}
-		systemStatus.fetch();
-		// Other code rebuilds parts of the info panel (the line was seen removed right after load): put it back when it vanishes
-		const panel = document.getElementById("infoWidget");
-		if (panel && typeof MutationObserver !== "undefined") {
-			let timer = null;
-			new MutationObserver(function() {
-				if (timer || document.getElementById("systemStatusInfo") || !Object.keys(systemStatus.rows).length) { return; }
-				timer = setTimeout(function() { timer = null; systemStatus.renderInfo(); }, 200);
-			}).observe(panel, { childList: true, subtree: true });
-		}
-		setInterval(systemStatus.fetch, systemStatus.POLL_MS);
-		document.addEventListener("visibilitychange", function() { if (!document.hidden) { systemStatus.fetch(); } });
+		if (systemStatus.enabled(systemStatus.options())) { systemStatus.fetch(); }	// off: read on demand (menu), never polled
+		setInterval(systemStatus.tick, systemStatus.POLL_MS);
+		document.addEventListener("visibilitychange", function() { if (!document.hidden && systemStatus.enabled(systemStatus.options())) { systemStatus.fetch(); } });
 	}
 };
 

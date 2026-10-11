@@ -12,11 +12,11 @@
 	outline: 2px solid var(--ss-color);
 	outline-offset: 1px;
 	border-radius: 3px;
-	box-shadow: 0 0 7px 1px var(--ss-color);
+	/* Outline only, no box-shadow: the Watchlist uses box-shadow on nodes, so both show together */
 }
 .node.sysstatus-hostile { outline-width: 3px; }
-.node.sysstatus-empty { outline-style: dashed; box-shadow: none; }
-.node.sysstatus-unscanned { outline-style: dotted; outline-width: 3px; box-shadow: none; }
+.node.sysstatus-empty { outline-style: dashed; }
+.node.sysstatus-unscanned { outline-style: dotted; outline-width: 3px; }
 
 /* Status letter, top centre (the threat badge is top-left, jump planner / skyhook icons top-right) */
 .node .sysstatus-letter {

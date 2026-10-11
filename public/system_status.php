@@ -4,7 +4,8 @@
 //	Author: 	Tripwire fork
 //
 //	Purpose:	System status colour, occupier and alias of the current mask (chain map right-click menu).
-//				GET                                                         -> the mask's systems
+//				GET [?have=<hash>]                                          -> the mask's systems; with a matching have=<hash>
+//				                                                            only { unchanged: true, hash } (the poll)
 //				POST mode=set&systemID=<id>[&status=<value|''>][&alias=<text>][&occupier=<text>]
 //				                                                            -> change the given fields (others keep their value)
 //				POST mode=clear&systemID=<id>                               -> remove status, alias and occupier
@@ -42,7 +43,8 @@ function system_status_fail($code, $message) {
 if (!isset($mysql) || !$mysql) system_status_fail(500, 'Database error');
 
 try {
-	system_status_ensure_table($mysql);
+	// The table is created on a change, or on a read that finds it missing (not on every poll)
+	if ($_SERVER['REQUEST_METHOD'] === 'POST') system_status_ensure_table($mysql);
 
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		$requestedWith = isset($_SERVER['HTTP_X_REQUESTED_WITH']) ? $_SERVER['HTTP_X_REQUESTED_WITH'] : '';
@@ -79,7 +81,20 @@ try {
 		system_status_fail(405, 'Method not allowed');
 	}
 
-	echo json_encode(array('systems' => system_status_list($mysql, $mask)));
+	try {
+		$systems = system_status_list($mysql, $mask);
+	} catch (PDOException $e) {
+		if ($e->getCode() !== '42S02' && stripos($e->getMessage(), "doesn't exist") === false) throw $e;
+		system_status_ensure_table($mysql);	// first read ever: nothing set yet
+		$systems = system_status_list($mysql, $mask);
+	}
+	$hash = system_status_hash($systems);
+	$have = $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['have']) ? $_GET['have'] : '';
+	if (is_string($have) && $have !== '' && hash_equals($hash, $have)) {
+		echo json_encode(array('unchanged' => true, 'hash' => $hash));
+	} else {
+		echo json_encode(array('systems' => $systems, 'hash' => $hash));
+	}
 } catch (Throwable $e) {	// PDO may throw (ERRMODE_EXCEPTION) or return false (checked, thrown as PDOException)
 	error_log('system_status.php: ' . $e->getMessage());
 	system_status_fail(500, 'Database error');
