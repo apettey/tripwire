@@ -6,14 +6,22 @@
 //	Purpose:	Structures (Upwell, POS, deployables) of a system, shared with the current mask (structures/structures.inc.php).
 //				GET  action=list&systemID=<id>[&have=<hash>]  -> the system's live and recently gone structures; with a
 //				                                                matching have=<hash> only {unchanged: true, serverTime}
-//				POST action=scan&systemID=<id>&text=<d-scan>[&keep=[0,2]][&systemName=J123456]
+//				POST action=scan&systemID=<id>&text=<d-scan>[&keep=[0,2]][&systemName=J123456][&format=overview]
 //				                                              -> save the structures of a d-scan (keep = indexes of the
-//				                                                 structure rows to save, default all)
+//				                                                 structure rows to save, default all); format=overview reads
+//				                                                 text as a copied overview selection (structures_parse_overview)
 //				POST action=add&systemID=<id>&typeName=<name>[&typeID=][&name=][&owner=][&state=][&timerKind=&timerAt=][&note=]
 //				POST action=update&id=<id>[&owner= | &ownerID=&ownerType=][&state=][&timerKind=&timerAt=][&note=][&seenNow=1]
 //				POST action=gone&id=<id>&state=destroyed|removed|restore
+//				POST action=dismiss&id=<id>&kind=owner|destroyed&key=<corporation ID | kill ID>   -> hide that hint of the structure for the mask
+//				GET  action=markers&systemIDs=<id,id,...>[&have=<hash>]
+//				                                              -> per system on the map {count, hostile, types, owners, lastSeen, nextTimer}
+//				                                                 and the mask's next 20 timers (chain map markers, in-app alerts)
+//				GET  action=timers                            -> every active timer of the mask (the Structures panel's Timers view)
 //				Every write needs X-Requested-With: XMLHttpRequest (like intel_scans.php) and returns the system's list. Anyone with access to the mask may write. Every query filters on the session's mask.
-//				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups).
+//				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups; an owner text the cache does not
+//				know is queued in fork_structure_owner_lookups for the zKillboard worker, structures/owners.inc.php). A list also
+//				carries `suggestions`: hints per structure from the kills the pooled feed stored (possible owner, destroyed?).
 //***********************************************************
 $startTime = microtime(true);
 
@@ -27,6 +35,7 @@ if (!isset($_SESSION['userID']) || !isset($_SESSION['mask'])) {
 require_once('../config.php');
 require_once('../db.inc.php');
 require_once('../structures/structures.inc.php');
+require_once('../structures/owners.inc.php');
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -64,7 +73,7 @@ try {
 			structures_fail(400, 'Missing X-Requested-With header');
 		}
 		$action = isset($_POST['action']) ? $_POST['action'] : '';
-		if (!in_array($action, array('scan', 'add', 'update', 'gone'), true)) structures_fail(400, 'Unknown action');
+		if (!in_array($action, array('scan', 'add', 'update', 'gone', 'dismiss'), true)) structures_fail(400, 'Unknown action');
 		$systemID = null;
 
 		if ($action === 'scan' || $action === 'add') {
@@ -82,7 +91,8 @@ try {
 		if ($action === 'scan') {
 			$text = isset($_POST['text']) ? $_POST['text'] : '';
 			if (!is_string($text) || strlen($text) > INTEL_MAX_BYTES) structures_fail(400, 'Invalid scan');
-			$parsed = structures_parse_scan($text, isset($_POST['systemName']) && is_string($_POST['systemName']) ? $_POST['systemName'] : null);
+			$systemName = isset($_POST['systemName']) && is_string($_POST['systemName']) ? $_POST['systemName'] : null;
+			$parsed = isset($_POST['format']) && $_POST['format'] === 'overview' ? structures_parse_overview($text, $systemName) : structures_parse_scan($text, $systemName);
 			$rows = $parsed['structures'];
 			$keep = null;
 			if (isset($_POST['keep'])) {
@@ -122,6 +132,7 @@ try {
 				$id = structures_insert($mysql, $mask, $systemID, $typeID, $typeName, $kind, $changes, $by);
 				structures_update($mysql, $mask, $id, array_diff_key($changes, array('name' => 1, 'state' => 1, 'note' => 1)), $by);
 				$output['added'] = $id;
+				structures_queue_owner_text($mysql, $changes, $mask);
 			}
 		} else if ($action === 'update') {
 			[$changes, $error, $choices] = structures_changes($mysql, $_POST, $now, $existing);
@@ -135,20 +146,57 @@ try {
 				}
 				$seen = isset($_POST['seenNow']) && $_POST['seenNow'] === '1';
 				if (!structures_update($mysql, $mask, $existing['id'], $changes, $by, $seen)) structures_fail(404, 'Not found');
+				structures_queue_owner_text($mysql, $changes, $mask);
 			}
+		} else if ($action === 'dismiss') {
+			// Hide a hint (owner / destroyed?) of this structure for the whole mask
+			if (!structures_hint_dismiss($mysql, $existing['id'], isset($_POST['kind']) ? $_POST['kind'] : '', isset($_POST['key']) ? $_POST['key'] : '', $by)) structures_fail(400, 'Invalid hint');
 		} else {
 			$state = isset($_POST['state']) ? $_POST['state'] : '';
 			if (!in_array($state, array('destroyed', 'removed', 'restore'), true)) structures_fail(400, 'Invalid state');
 			if (!structures_set_gone($mysql, $mask, $existing['id'], $state, $by)) structures_fail(404, 'Not found');
 		}
 	} else if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-		if ((isset($_GET['action']) ? $_GET['action'] : '') !== 'list') structures_fail(400, 'Unknown action');
+		$action = isset($_GET['action']) ? $_GET['action'] : '';
+		if ($action === 'markers' || $action === 'timers') {
+			$output['serverTime'] = $now;
+			if ($action === 'timers') {
+				$timers = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_BOARD_MAX + 1);
+				$output['capped'] = count($timers) > STRUCTURES_BOARD_MAX;	// the panel says "showing the first 200"
+				$output['timers'] = array_slice($timers, 0, STRUCTURES_BOARD_MAX);
+			} else {
+				$raw = isset($_GET['systemIDs']) ? $_GET['systemIDs'] : '';
+				$ids = is_array($raw) ? $raw : explode(',', is_string($raw) ? $raw : '');
+				if (count($ids) > STRUCTURES_MARKERS_MAX) structures_fail(400, 'Too many systems');
+				$systemIDs = array();
+				foreach ($ids as $id) {
+					if (trim((string) $id) !== '') $systemIDs[] = structures_system_param(trim((string) $id));
+				}
+				$output['systems'] = (object) structures_markers($mysql, $mask, $systemIDs, $friendly, $now);
+				// For the in-app alerts: upcoming timers and ones that ended in the last 2 minutes (not the 2 h an "elapsed" timer stays listed)
+				$output['next'] = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_NEXT, STRUCTURES_NEXT_GRACE);
+			}
+			$hash = md5(json_encode(array($output['systems'] ?? null, $output['next'] ?? null, $output['timers'] ?? null, $output['capped'] ?? null)));
+			$have = isset($_GET['have']) ? $_GET['have'] : '';
+			if ($have !== '' && is_string($have) && hash_equals($hash, $have)) {
+				$output = array('unchanged' => true, 'serverTime' => $now);
+			} else {
+				$output['hash'] = $hash;
+			}
+			$output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
+			echo json_encode($output);
+			exit();
+		}
+		if ($action !== 'list') structures_fail(400, 'Unknown action');
 		$systemID = structures_system_param(isset($_GET['systemID']) ? $_GET['systemID'] : '');
 	} else {
 		structures_fail(405, 'Method not allowed');
 	}
 
 	$list = structures_list($mysql, $mask, $systemID, $friendly);
+	// Hints from the stored kills (only the database is read); part of the hash, so a poll sees them change
+	$list['suggestions'] = (object) structures_suggestions($mysql, $systemID, $list['structures'], $now);
+	$list['hash'] = md5(json_encode(array($list['structures'], $list['gone'], $list['suggestions'])));
 	$output['systemID'] = $systemID;
 	$output['serverTime'] = time();
 	$have = $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['have']) ? $_GET['have'] : '';

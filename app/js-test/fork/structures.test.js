@@ -47,6 +47,13 @@ describe('Structures', () => {
 				assert.deepEqual([r.modules, r.notRecognised, r.invalid], [c.modules, c.notRecognised, c.invalid]);
 			});
 		});
+		fixtures.overview.forEach((c) => {
+			it('overview: ' + c.name, () => {
+				const r = structures.parseOverview(c.lines.join('\r\n'), types, c.systemName);
+				assert.deepEqual(r.structures.map((s) => [s.typeID, s.typeName, s.kind, s.name, s.km, s.prefix, s.rest, s.wrong]), c.structures);
+				assert.deepEqual([r.modules, r.notRecognised, r.invalid, r.overview], [c.modules, c.notRecognised, 0, true]);
+			});
+		});
 		it('an Upwell named for another system is flagged wrong only for J-codes', () => {
 			const r = structures.parseScan('35832\tJ999999 - X\tAstrahus\t1 km\n35832\tJita - X\tAstrahus\t1 km', types, 'J163701');
 			assert.deepEqual(r.structures.map((s) => s.wrong), [true, false]);
@@ -184,11 +191,58 @@ describe('Structures', () => {
 			assert.deepEqual(r.filter((c) => c.side === 'seen').map((c) => c.ticker), ['A', 'B', 'C']);
 			assert.equal(r.filter((c) => c.ticker === 'BAD').length, 1);
 		});
+		it('residents set by hand come first, deduped with owners and kill-seen corporations', () => {
+			const set = { setBy: 'Chribba', entities: [{ kind: 'alliance', id: 900, name: 'Big Alliance', ticker: 'BIG' }, { kind: 'corporation', id: 22, name: 'Bad Guys', ticker: 'BAD' },
+				{ kind: 'corporation', id: 31, name: 'A', ticker: 'A' }] };
+			const extra = [{ id: 31, name: 'A', ticker: 'A' }, { id: 32, name: 'B', ticker: 'B' }];
+			const r = structures.residents(rows, extra, undefined, set);
+			assert.deepEqual(r.map((c) => [c.ticker, c.side, c.count, !!c.set]),
+				[['BIG', 'set', 0, true], ['BAD', 'hostile', 2, true], ['A', 'set', 0, true], ['HOME', 'ours', 1, false], ['Mystery Inc', 'unknown', 1, false], ['B', 'seen', 0, false]]);
+			assert.equal(r[0].key, 'alliance:900');
+			assert.equal(r[1].setBy, 'Chribba');
+		});
+		it('a set chip says who set it, is not a highlight target, and is escaped', () => {
+			const html = structures.chipHtml({ key: 'corporation:5', side: 'set', set: true, setBy: '<Eve>', id: 5, type: 'corporation', ticker: 'X', name: 'Xs', count: 0 }, null);
+			assert.ok(html.includes('str-chip-set') && html.includes('str-chip-isset'));
+			assert.ok(html.includes('set as a resident by &lt;Eve&gt;'));
+			assert.ok(!html.includes('structure'));
+		});
 		it('a chip links to zKillboard only when resolved, and is escaped', () => {
 			const html = structures.chipHtml({ key: 'corporation:22', side: 'hostile', id: 22, type: 'corporation', ticker: '<b>', name: 'x', count: 2 }, null);
 			assert.ok(html.includes('zkillboard.com/corporation/22/'));
 			assert.ok(html.includes('&lt;b&gt;'));
 			assert.ok(!structures.chipHtml({ key: 'text:x', side: 'unknown', id: null, type: null, ticker: 'x', name: 'x', count: 1 }, null).includes('zkillboard'));
+		});
+	});
+
+	describe('hints from stored kills', () => {
+		const sugg = { owner: [[22, 'corporation', 'Bad Guys', 'BAD', 3], [23, 'corporation', 'Worse <b>', '', 1]], destroyed: [777, NOW_S - 7200] };
+		it('an ownerless structure shows the likeliest owner as a dashed chip with a tooltip; escaped', () => {
+			const html = structures.rowHtml(row(), NOW_S, null, sugg);
+			assert.ok(html.includes("class='str-sugg str-sugg-owner'") && html.includes("data-owner='22'") && html.includes('>BAD?</a>'));
+			assert.ok(html.includes('Possible owner: Bad Guys [BAD] lost 3 Astrahuss here (from kills)') && html.includes('(also: Worse &lt;b&gt;)'));
+			assert.ok(!html.includes('<b>'));
+		});
+		it('no chip when the owner is known or typed', () => {
+			assert.ok(!structures.rowHtml(row({ ownerID: 5, ownerType: 'corporation', ownerTicker: 'X', side: 'ours' }), NOW_S, null, sugg).includes('str-sugg-owner'));
+			assert.ok(!structures.rowHtml(row({ ownerText: 'Typed Corp' }), NOW_S, null, sugg).includes('str-sugg-owner'));
+		});
+		it('"destroyed?" icon says how long ago and asks; the kill link is under More', () => {
+			const html = structures.rowHtml(row(), NOW_S, null, sugg);
+			assert.ok(html.includes('str-sugg-dead') && html.includes('Destroyed? A Astrahus was killed here 2h ago (kill 777, see More)'));
+			const panel = structures.panelHtml({ rows: [row()], gone: [], nowSec: NOW_S, highlight: null, editing: null, moreID: 1, showGone: false, extraCorps: [], types: types, error: '', loaded: true, suggestions: { 1: sugg } });
+			assert.ok(panel.includes('https://zkillboard.com/kill/777/'));
+		});
+		it('both hints have a dismiss x that names the hint (corporation ID / kill ID)', () => {
+			const html = structures.rowHtml(row({ id: 4 }), NOW_S, null, sugg);
+			assert.ok(html.includes("class='str-sugg-x' data-id='4' data-kind='owner' data-key='22'"));
+			assert.ok(html.includes("class='str-sugg-x' data-id='4' data-kind='destroyed' data-key='777'"));
+			assert.ok(structures.rowHtml(row(), NOW_S, null, { destroyed: [777, NOW_S - 60] }).indexOf("data-kind='owner'") < 0);
+		});
+		it('nothing without hints', () => {
+			const html = structures.rowHtml(row(), NOW_S, null, undefined);
+			assert.ok(!html.includes('str-sugg'));
+			assert.equal(structures.rowHtml(row(), NOW_S, null, {}), html);
 		});
 	});
 
