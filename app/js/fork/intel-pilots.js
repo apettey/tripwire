@@ -165,7 +165,7 @@ const intelPilots = {
 		}
 		if (t === "f") { return "<span class='intel-threat intel-threat-na' title='The zKillboard lookup failed'>?</span>"; }
 		if (!pilot.id) { return ""; }
-		return "<span class='intel-threat intel-threat-na' title='Not looked up: zKillboard stats are fetched for at most 20 pilots per scan'>–</span>";
+		return "<span class='intel-threat intel-threat-na' title='Not looked up: zKillboard stats are fetched for at most 20 pilots per scan, and pilots friendly to whoever shared the scan are skipped'>–</span>";
 	},
 
 	pilotHtml: function(pilot, view, types, showThreat) {
