@@ -5,7 +5,7 @@
 // server keeps, refreshed from ESI at most every 5 minutes for everyone.
 //
 //   GET skyhooks.php
-// Response: {skyhooks: [{planetID, systemID, start, end}], fetched, now, stale, error}   (times: unix seconds)
+// Response: {skyhooks: [{planetID, systemID, start, end}], fetched, now, stale, unavailable, error}   (times: unix seconds)
 
 if (!session_id()) session_start();
 

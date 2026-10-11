@@ -156,6 +156,17 @@ describe('Skyhooks panel', () => {
 			assert.equal(r[2 + O].jumps, 1);
 		});
 
+		it('map costs count like guidance (1 + map cost)', () => {
+			const m = { 1: { 2: 5, 3: 0 }, 2: { 1: 5, 4: 0 }, 3: { 1: 0, 4: 9 }, 4: { 2: 0, 3: 9 } };
+			const r = skyhooksPanel.distances(m, [1 + O], 200, (a, b, base) => base);
+			// 1-2-4 costs (1+5)+(1+0)=7, 1-3-4 costs 1+(1+9)=11
+			assert.equal(r[4 + O].jumps, 2);
+			assert.equal(r[4 + O].exitID, 1 + O);
+			const seen = [];
+			skyhooksPanel.distances(m, [1 + O], 200, (a, b, base) => { seen.push([a, b, base]); return base; });
+			assert.deepEqual(seen.filter(x => x[0] === 1), [[1, 2, 6], [1, 3, 1]]);
+		});
+
 		describe('same answers as guidance.findShortestPath', () => {
 			let savedOptions;
 			before(() => { savedOptions = global.options; });
@@ -167,7 +178,7 @@ describe('Skyhooks panel', () => {
 				guidance.clearCache();
 				const exits = ['Jita', 'Tama'].map(sid);
 				const limit = 25;
-				const costFn = (from, to) => 1 + skyhooksPanel.entryPenalty(systemAnalysis.analyse(O + to), options.chain);
+				const costFn = (from, to, base) => base + skyhooksPanel.entryPenalty(systemAnalysis.analyse(O + to), options.chain);
 				const r = skyhooksPanel.distances(appData.map.shortest, exits, limit, costFn);
 				names.map(sid).forEach(target => {
 					let best = null;
@@ -206,6 +217,15 @@ describe('Skyhooks panel', () => {
 				assert.equal(skyhooksPanel.entryPenalty(ls, undefined), 0);
 			});
 		});
+	});
+
+	describe('unavailable data', () => {
+		it('is not "no raidable skyhooks"', () => {
+			const e = skyhooksPanel.emptyState(0, [{}], S({}), true);
+			assert.equal(e.kind, 'unavailable');
+			assert.ok(/unavailable/.test(e.text));
+		});
+		it('without the flag, an empty list is "none"', () => assert.equal(skyhooksPanel.emptyState(0, [{}], S({}), false).kind, 'none'));
 	});
 
 	describe('default placement', () => {

@@ -76,7 +76,7 @@ mkdir($dirFile);
 $before = $calls;
 $r = skyhooks_get($ok, $t + 9000, $dirFile);
 check('unwritable: first request asks ESI', $calls, $before + 1);
-check('unwritable: this request still gets the list', count($r['skyhooks']), 1);
+check('unwritable: this request still gets the list', array(count($r['skyhooks']), $r['unavailable']), array(1, false));
 skyhooks_get($ok, $t + 9030, $dirFile);
 check('unwritable: no second call within 60 s', $calls, $before + 1);
 skyhooks_get($ok, $t + 9060, $dirFile);
@@ -85,6 +85,14 @@ check('unwritable: no temp file left', glob($dirFile . '.*.tmp.json'), array());
 check('write failure is false', skyhooks_write_cache($dirFile, array()), false);
 @unlink(skyhooks_lock_file($dirFile));
 rmdir($dirFile);
+
+// No list at all (ESI down, nothing cached): flagged as unavailable, not as an empty list
+$none = sys_get_temp_dir() . '/skyhooks-test-none-' . getmypid() . '.json';
+$r = skyhooks_get($fail, $t + 20000, $none);
+check('unavailable: flag, empty list, error', array($r['unavailable'], $r['skyhooks'], $r['error']), array(true, array(), 'ESI answered 500'));
+$r = skyhooks_get($ok, $t + 20100, $none);
+check('available once fetched', array($r['unavailable'], count($r['skyhooks'])), array(false, 1));
+@unlink($none); @unlink(skyhooks_lock_file($none));
 
 // A paused ESI (esi/esi.inc.php limits) is an error, and the copy survives
 esi_limit_state_file(tempnam(sys_get_temp_dir(), 'esi-test-'));

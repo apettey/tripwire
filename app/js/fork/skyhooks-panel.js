@@ -10,6 +10,7 @@ const skyhooksPanel = {
 	WIDGET_ID: "skyhooksWidget",
 	URL: "skyhooks.php",
 	REFRESH_MS: 5 * 60 * 1000,
+	NEAR_TTL_MS: 5 * 60 * 1000,   // how long a routing search is kept
 	TICK_MS: 5000,
 	REDRAW_MS: 30000,
 	DEFAULT_SIZE: { x: 12, y: 8 },
@@ -141,7 +142,8 @@ const skyhooksPanel = {
 	@param map gate adjacency keyed by systemID - 30000000 (appData.map.shortest); values are the neighbours
 	@param exitIDs real system IDs
 	@param limit guidance's cost limit: systems are not expanded from a cost of `limit` on
-	@param costFn (fromKey, toKey) => cost of the hop (1 + penalties), <= 0 when closed (keys are offset IDs)
+	@param costFn (fromKey, toKey, base) => cost of the hop, <= 0 when closed; base is guidance's 1 + the map's cost
+	(keys are offset IDs). The caller adds the entry penalty, as guidance does.
 	@return {<real systemID>: {jumps, exitID}} (exits themselves: 0 jumps) */
 	distances: function(map, exitIDs, limit, costFn) {
 		const OFFSET = 30000000;
@@ -165,7 +167,7 @@ const skyhooksPanel = {
 			for (const k in next) {
 				if (next[k] === undefined) { continue; }
 				const to = Number(k);
-				const step = costFn(node, to);
+				const step = costFn(node, to, 1 + (Number(next[k]) || 0));
 				if (!(step > 0)) { continue; }
 				const total = c + step;
 				if (cost[to] === undefined || total < cost[to]) {
@@ -217,7 +219,8 @@ const skyhooksPanel = {
 	},
 
 	/** Text for an empty list: {kind, text}. `count` is the number of skyhooks the server knows, `exits` the chain's exits. */
-	emptyState: function(count, exits, settings) {
+	emptyState: function(count, exits, settings, unavailable) {
+		if (unavailable) { return { kind: "unavailable", text: "Skyhook data unavailable." }; }
 		if (!count) { return { kind: "none", text: "No raidable skyhooks right now." }; }
 		if (!exits || !exits.length) { return { kind: "noexits", text: "No k-space exit on your chain yet: jumps are counted from the chain's k-space systems." }; }
 		return { kind: "filtered", text: "No raidable skyhook matches your options (" + (settings.maxJumps > 0 ? "within " + settings.maxJumps + " jumps" : "any distance") + "). Widen them above." };
@@ -242,7 +245,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function exitsKey() { return exits().map(function(e) { return e.systemID; }).join(","); }
 		// One multi-source search per (exits, limit, route preferences, gate map), kept until one of them changes.
 		// The route itself is only worked out when "Set route in game" is clicked.
-		let nearCache = { key: null, map: null, value: null };
+		let nearCache = { key: null, map: null, value: null, at: 0 };
+		// Gate changes (faction warfare) reach the map through guidance.clearCache: forget the search then too, and after 5 min
+		if (typeof guidance !== "undefined" && typeof guidance.clearCache === "function" && !guidance.clearCache.skyhooksWrapped) {
+			const clear = guidance.clearCache;
+			guidance.clearCache = function() { nearCache = { key: null, map: null, value: null, at: 0 }; return clear.apply(this, arguments); };
+			guidance.clearCache.skyhooksWrapped = true;
+		}
 		function prefsKey() {
 			const c = options.chain || {}, r = c.routeIgnore || {};
 			return (c.routeSecurity || "") + "|" + (r.enabled ? (r.systems || []).join(",") : "");
@@ -250,13 +259,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function nearest(limit) {
 			const map = routeDestinations.routeMap();
 			const key = exitsKey() + "|" + limit + "|" + prefsKey();
-			if (nearCache.key !== key || nearCache.map !== map) {
+			if (nearCache.key !== key || nearCache.map !== map || Date.now() - nearCache.at > sp.NEAR_TTL_MS) {
 				const mods = (typeof guidance !== "undefined" && guidance.jumpCostModifiers) || [];
-				const costFn = function(from, to) {
-					const base = 1 + sp.entryPenalty(typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(30000000 + to) : null, options.chain);
+				const costFn = function(from, to, mapCost) {
+					const base = mapCost + sp.entryPenalty(typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(30000000 + to) : null, options.chain);
 					return mods.reduce(function(c, m) { return c > 0 ? m(from, to, c) : c; }, base) > 0 ? base : 0;
 				};
-				nearCache = { key: key, map: map, value: sp.distances(map, exits().map(function(e) { return e.systemID; }), limit, costFn) };
+				nearCache = { key: key, map: map, value: sp.distances(map, exits().map(function(e) { return e.systemID; }), limit, costFn), at: Date.now() };
 			}
 			return nearCache.value;
 		}
@@ -362,9 +371,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$w.find(".sky-count").text(rows.length ? "(" + rows.length + ")" : "");
 			const notes = [];
 			if (loadError) { notes.push(loadError + " Showing the last list."); }
-			else if (data.error && data.stale) { notes.push("ESI is not answering: this list is from " + sp.duration(t - data.fetched) + " ago."); }
-			if (!rows.length) { const empty = sp.emptyState(data.skyhooks.length, e, s); notes.push(empty.text); }
-			$status.html(notes.map(sp.escape).join("<br/>")).toggleClass("sky-error", !!(loadError || (data.error && data.stale)));
+			else if (data.error && data.stale && !data.unavailable) { notes.push("ESI is not answering: this list is from " + sp.duration(t - data.fetched) + " ago."); }
+			else if (data.unavailable && data.error) { notes.push(data.error); }
+			if (!rows.length) { const empty = sp.emptyState(data.skyhooks.length, e, s, data.unavailable); notes.push(empty.text); }
+			$status.html(notes.map(sp.escape).join("<br/>")).toggleClass("sky-error", !!(loadError || data.unavailable || (data.error && data.stale)));
 			$list.html(rows.map(function(r) { return rowHtml(r, t); }).join(""));
 		}
 

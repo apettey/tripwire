@@ -102,7 +102,7 @@ function skyhooks_fetch_esi() {
 /**
  * The cached list, refreshed when due.
  * @param callable|null $fetch () => [list|null, error|null]; default: ESI
- * @return array {skyhooks[], fetched (unix seconds, 0 = never), stale (bool), error (string|null)}
+ * @return array {skyhooks[], fetched (unix seconds, 0 = never), stale (bool), unavailable (bool: no list yet), error (string|null)}
  */
 function skyhooks_get(?callable $fetch = null, $now = null, ?string $file = null) {
 	$fetch = $fetch ?: 'skyhooks_fetch_esi';
@@ -158,6 +158,8 @@ function skyhooks_get(?callable $fetch = null, $now = null, ?string $file = null
 		'skyhooks' => $cache['skyhooks'],
 		'fetched'  => $cache['fetched'],
 		'stale'    => $now - $cache['fetched'] >= 2 * SKYHOOKS_TTL,
+		// No list at all (ESI failed or the cache can't be written): "no skyhooks" would be wrong
+		'unavailable' => $cache['fetched'] === 0,
 		'error'    => $cache['error'],
 	);
 }
