@@ -32,6 +32,8 @@ header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
 const ZKILL_KILL_MAX_NAMES = 20;
+const ZKILL_KILL_MAX_ENTITY_ID = 2147483647;   // character / corporation / alliance IDs are 32-bit
+const ZKILL_KILL_NAMES_BACKLOG = 200;          // asked-for names are only queued while fewer names than this are pending
 
 function zkill_kill_fail($status, $message) {
 	http_response_code($status);
@@ -63,6 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $killIDs = zkill_kill_ids('ids', ZK_LOOKUP_MAX_IDS);
 $nameIDs = zkill_kill_ids('names', ZKILL_KILL_MAX_NAMES);
 if (!$killIDs && !$nameIDs) zkill_kill_fail(400, 'ids or names is required');
+foreach ($nameIDs as $id) {
+	if ($id > ZKILL_KILL_MAX_ENTITY_ID) zkill_kill_fail(400, 'names must be character, corporation or alliance IDs');
+}
 
 // "Our" side for the card colour: the character's corporation and alliance, the server's friendly corporations
 // (as Kill Reporting) and the owner of the active corporation / alliance mask
@@ -84,7 +89,7 @@ try {
 	$mysql->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 	$int = function ($value) { return $value === null ? null : (int) $value; };
 	$kills = array();
-	$wanted = $nameIDs;
+	$wanted = array();   // IDs from stored killmails: always queued when unknown
 	$lookup = $killIDs ? zk_with_schema($mysql, function ($db) use ($killIDs, $sessionUserID) {
 		return zk_lookup_request($db, $killIDs, $sessionUserID);
 	}) : array();
@@ -129,7 +134,19 @@ try {
 			if ($id !== null) $wanted[] = (int) $id;
 		}
 	}
-	[$names, $namesPending] = zk_with_schema($mysql, function ($db) use ($wanted) { return zk_names_lookup($db, $wanted); });
+	[$names, $namesPending] = zk_with_schema($mysql, function ($db) use ($wanted, $nameIDs) {
+		[$names, $pending] = zk_names_lookup($db, $wanted);
+		// IDs from the browser (entity links in notes) can be anything: queue them only while the name queue is short,
+		// so invalid IDs can't keep the worker's ESI name passes busy
+		$asked = array_values(array_diff($nameIDs, array_keys($names)));
+		if ($asked) {
+			$backlog = (int) $db->query('SELECT COUNT(*) FROM zkill_names WHERE name IS NULL')->fetchColumn();
+			[$more, $morePending] = zk_names_lookup($db, $asked, $backlog < ZKILL_KILL_NAMES_BACKLOG);
+			$names += $more;
+			$pending += $backlog < ZKILL_KILL_NAMES_BACKLOG ? $morePending : 0;
+		}
+		return [$names, $pending];
+	});
 	echo json_encode(array(
 		'kills' => (object) $kills,
 		'names' => (object) $names,

@@ -436,6 +436,7 @@ const smartNotes = {
 			});
 		};
 		visit(root);
+		created.forEach(function(n) { smartNotes.ours.add(n); });
 		return created;
 	},
 
@@ -485,6 +486,8 @@ const smartNotes = {
 
 	bodies: (typeof WeakMap !== "undefined") ? new WeakMap() : null,	// body -> {backup: [nodes], nodes: [created]}
 	plainText: (typeof WeakMap !== "undefined") ? new WeakMap() : null,	// kill card -> the text it replaced
+	// Nodes this script created: only these are re-rendered later (a note can't dress up its own link as a card)
+	ours: (typeof WeakSet !== "undefined") ? new WeakSet() : null,
 
 	/** Whether the body still shows cards / chips from an earlier pass (upstream replaces the content on a change) */
 	isEnhanced: function(body) {
@@ -616,6 +619,7 @@ const smartNotes = {
 		if (typeof document === "undefined" || !document.querySelectorAll) { return; }
 		const ctx = smartNotes.context();
 		Array.prototype.forEach.call(document.querySelectorAll("a.sn-kill[data-kill-id]"), function(card) {
+			if (!smartNotes.ours.has(card)) { return; }
 			const id = parseInt(card.getAttribute("data-kill-id"), 10);
 			const model = smartNotes.cardModel(id, smartNotes.kills[id], smartNotes.names, ctx.systemInfo, ctx.now());
 			if (model.state === "failed") {
@@ -627,6 +631,7 @@ const smartNotes = {
 			}
 		});
 		Array.prototype.forEach.call(document.querySelectorAll("a.sn-entity[data-entity-id]"), function(chip) {
+			if (!smartNotes.ours.has(chip)) { return; }
 			const name = chip.querySelector(".sn-name");
 			const desc = { id: chip.getAttribute("data-entity-id"), type: chip.getAttribute("data-entity-type") };
 			if (name && smartNotes.ENTITY_LABELS[desc.type]) { name.textContent = smartNotes.entityName(desc, smartNotes.names); }
@@ -637,6 +642,7 @@ const smartNotes = {
 	swapCreated: function(oldNode, newNode) {
 		const body = oldNode.closest ? oldNode.closest(".commentBody") : null;
 		oldNode.parentNode.replaceChild(newNode, oldNode);
+		smartNotes.ours.add(newNode);
 		const state = body ? smartNotes.bodies.get(body) : null;
 		if (state) { state.nodes = state.nodes.map(function(n) { return n === oldNode ? newNode : n; }); }
 	},
@@ -720,6 +726,7 @@ const smartNotes = {
 		}
 		// A zKillboard system chip whose system is on the chain map views it in Tripwire instead of opening zKillboard
 		$(document).on("click", "a.sn-system[target]", function(e) {
+			if (!smartNotes.ours.has(this)) { return; }
 			if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { return; }
 			const id = parseInt($(this).attr("data-system-id"), 10);
 			if (smartNotes.onMap(id) && typeof tripwire !== "undefined" && tripwire.systemChange) {

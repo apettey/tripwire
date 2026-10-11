@@ -241,6 +241,9 @@ describe('Smart notes', () => {
 			const { ctx, wanted } = context({ names: { 98388312: 'Deep Static Holdings' } });
 			assert.strictEqual(smartNotes.enhance(doc, body, ctx), true);
 			const html = body.innerHTML;
+			// only nodes created here are re-rendered later (a note's own link with our class names is not)
+			assert.strictEqual(smartNotes.ours.has(body.childNodes[0].childNodes[1]), true);
+			assert.strictEqual(smartNotes.ours.has(body.childNodes[0]), false);
 			// kill cards (loading) for the link and the bare URL; both kills asked for
 			assert.deepStrictEqual(wanted.kills, [131234567, 131234999]);
 			assert.ok(html.includes('<a class="sn sn-kill sn-loading" href="https://zkillboard.com/kill/131234567/" target="_blank" rel="noopener noreferrer" data-kill-id="131234567" title="Loading kill 131234567 (zKillboard)"><span class="sn-kill-label">Kill 131234567 · loading…</span></a>'), html);
