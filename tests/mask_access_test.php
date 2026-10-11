@@ -2,10 +2,9 @@
 // Fork-owned: mask access end to end against the dev stack (its MySQL and nginx/PHP in the app container, the dev
 // login from docker/dev-seed.sh).
 //   docker compose -f docker-compose.dev.yml exec -T app php tests/mask_access_test.php
-// A character without access to a custom mask sets masks.active to non-canonical spellings of that mask (and of
-// other characters' / corporations' masks) through options.php, then reads (refresh.php) and writes (comments.php):
-// it must only ever see and write its own corporation mask. A member of the custom mask still gets it (also from a
-// non-canonical spelling, which is canonicalised), and the dev character's own corporation / personal masks still work.
+// A character without access to a custom mask selects malformed or foreign mask ids (generated) through options.php,
+// then reads (refresh.php) and writes (comments.php): it must only ever see and write its own masks. A member of the
+// custom mask still gets it, and the Public mask and the dev character's own corporation / personal masks still work.
 // Also: notes of another mask can't be changed by id through comments.php, and the REST API (public/api.php) mask check. Everything it creates is deleted at the end and the dev
 // user's preferences are put back.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
@@ -93,7 +92,7 @@ $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?,
 $db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, 991003, 2)')->execute([$victimCustom]);
 $sigIDs = [];
 $commentIDs = [];
-$sigStmt = $db->prepare("INSERT INTO signatures (signatureID, systemID, type, name, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES ('ABC123', ?, 'combat', ?, 72, 1, 'test', 1, 'test', ?)");
+$sigStmt = $db->prepare("INSERT INTO signatures (signatureID, systemID, type, name, lifeLeft, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES ('ABC123', ?, 'combat', ?, NOW() + INTERVAL 1 DAY, 72, 1, 'test', 1, 'test', ?)");
 $commentStmt = $db->prepare("INSERT INTO comments (systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES (?, ?, NOW(), 1, 'test', 1, 'test', ?)");
 foreach ([$victimCustom, $victimPersonal, $victimCorp] as $mask) {
     $sigStmt->execute([$system, $marker, $mask]);
@@ -120,13 +119,17 @@ check('login: default mask is the corporation mask', $session['mask'], $ownCorp)
 $ownMasks = [$ownCorp, $ownChar];
 if (!empty($session['allianceID'])) $ownMasks[] = $session['allianceID'] . '.3';
 
-// 1. No access: every spelling of someone else's mask ends up on the own corporation mask.
-$bad = [
-    '991001.0abc', '991001.00', '0991001.0', '00991001.0', ' 991001.0', '991001.0 ', "991001.0\n", '991001.0.0', '991001.0e0',
-    '9910010e-1', '+991001.0', '991001.', '.0', '991001', 'abc', '',
-    '991002.1x', '0991002.1', '991002.10', '991003.2x', '0991003.2', '991003.20', '991003.3', '991003.3x',
-    '991001.0' . str_repeat('0', 40),
-];
+// 1. No access: malformed and foreign mask ids (generated from each foreign mask id with junk around it) all end up
+// on one of the own masks.
+$prefixes = ['', '0', '00', ' ', "\t", '+'];
+$suffixes = ['', '0', '00', 'x', 'abc', ' ', "\n", '.0', 'e0', str_repeat('0', 40)];
+$bad = ['', 'abc', '.', '.0'];
+foreach ([$victimCustom, $victimPersonal, $victimCorp, '991005.3'] as $foreign) {
+    [$id, $type] = explode('.', $foreign);
+    foreach ($prefixes as $p) foreach ($suffixes as $s) $bad[] = "$p$id.$type$s";
+    foreach ($suffixes as $s) { $bad[] = "$id.$s"; $bad[] = "$id$s"; $bad[] = "$id" . ($s === '' ? '' : "0$s") . ".$type"; }
+}
+$bad = array_values(array_unique($bad));
 foreach ($bad as $spelling) {
     $label = json_encode($spelling);
     [$status, $stored] = set_mask($jar, $spelling);
@@ -156,7 +159,7 @@ foreach ([991001.0, 991001, ['991001.0'], ['a' => '991001.0'], true, null] as $v
 
 // 2. A session that already holds a bad mask (e.g. stored before the fix, or in the preferences at login) is reset.
 $db->prepare('DELETE FROM comments WHERE createdByID = ? AND comment LIKE ?')->execute([$me['characterID'], "%$marker write%"]);
-$db->prepare('UPDATE preferences SET options = ? WHERE userID = ?')->execute([json_encode(['masks' => ['active' => '991001.0abc']]), $me['id']]);
+$db->prepare('UPDATE preferences SET options = ? WHERE userID = ?')->execute([json_encode(['masks' => ['active' => $victimCustom . $suffixes[4]]]), $me['id']]);
 $session = login($jar);
 check('login with a bad stored mask: session gets the corporation mask', $session['mask'], $ownCorp);
 [, $sigs] = read_mask($jar, $system);
@@ -174,6 +177,13 @@ check('personal mask: not the corporation signature', in_array($sigIDs[$ownCorp]
 check('corporation mask: stored', $stored, $ownCorp);
 [, $sigs] = read_mask($jar, $system);
 check('corporation mask: sees its signature', in_array($sigIDs[$ownCorp], $sigs, true), true);
+$db->prepare("INSERT INTO comments (systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES (?, ?, NOW(), 1, 'test', 1, 'test', '0.0')")->execute([$system, "$marker public note"]);
+foreach (['0.0', '00.0'] as $spelling) {
+    [, $stored] = set_mask($jar, $spelling);
+    check("Public mask $spelling: stored", $stored, '0.0');
+    [, , $comments] = read_mask($jar, $system);
+    check("Public mask $spelling: sees its note", in_array("$marker public note", $comments, true), true);
+}
 if (!empty($session['allianceID'])) {
     [, $stored] = set_mask($jar, $session['allianceID'] . '.3');
     check('alliance mask: stored', $stored, $session['allianceID'] . '.3');
@@ -219,6 +229,16 @@ foreach ([$victimCustom, $victimPersonal, $victimCorp] as $victim) {
     check("note of $victim: unchanged by sticky", $noteRow($id), $afterSave);
     http('POST', 'comments.php', $jar, http_build_query(['mode' => 'delete', 'commentID' => $id]));
     check("note of $victim: not deleted", $noteRow($id), $afterSave);
+}
+// The save's upsert itself (taken from comments.php) leaves a row of another mask alone, also without the check first.
+preg_match("/'(INSERT INTO comments \\(id,.*?ON DUPLICATE KEY UPDATE.*?)';/s", file_get_contents(__DIR__ . '/../public/comments.php'), $m);
+check('upsert found in comments.php', isset($m[1]), true);
+if (isset($m[1])) {
+    $id = $commentIDs[$victimCustom];
+    $original = $noteRow($id);
+    $db->prepare($m[1])->execute([':commentID' => $id, ':systemID' => 30000142, ':comment' => "$marker upsert", ':createdByID' => 7, ':createdByName' => 'x',
+        ':modifiedByID' => 7, ':modifiedByName' => 'x', ':maskID' => $ownCorp]);
+    check('upsert with another mask: row unchanged', $noteRow($id), $original);
 }
 [$status, $out] = http('POST', 'comments.php', $jar, http_build_query(['mode' => 'save', 'systemID' => $system, 'comment' => "$marker own note"]));
 $ownID = (int) ($out['comment']['id'] ?? 0);

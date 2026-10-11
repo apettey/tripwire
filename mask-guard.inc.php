@@ -15,7 +15,7 @@ if (!function_exists('tripwire_mask_canonical')) {
 function tripwire_mask_canonical($mask) {
 	if (!is_string($mask) || !preg_match('/^(\d{1,10})\.([0-3])$/D', $mask, $m)) return null;
 	$id = ltrim($m[1], '0');
-	if ($id === '') return null;
+	if ($id === '') return $m[2] === '0' ? '0.0' : null; // "0.0" is the Public mask (masks.inc.php)
 	return $id . '.' . $m[2];
 }
 
@@ -53,6 +53,9 @@ function tripwire_mask_allowed($mask, array $session, $mysql) {
 		return $id === $allianceID ? $canonical : $allianceID . '.3';
 	}
 
+	// Public mask: everyone, as upstream verifyMask
+	if ($canonical === '0.0') return $canonical;
+
 	// Custom mask: same access rule as upstream verifyMask
 	if (!$mysql) return $default;
 	$query = 'SELECT masks.maskID FROM masks INNER JOIN `groups` ON masks.maskID = `groups`.maskID WHERE masks.maskID = :maskID AND ((ownerID = :characterID AND ownerType = 1373) OR (ownerID = :corporationID AND ownerType = 2) OR (ownerID = :allianceID AND ownerType = 3) OR (eveID = :characterID AND eveType = 1373) OR (eveID = :corporationID AND eveType = 2) OR (eveID = :allianceID AND eveType = 3)) LIMIT 1';
@@ -60,7 +63,7 @@ function tripwire_mask_allowed($mask, array $session, $mysql) {
 	$stmt->bindValue(':maskID', $canonical);
 	$stmt->bindValue(':characterID', $characterID ?? 0);
 	$stmt->bindValue(':corporationID', $corporationID ?? 0);
-	$stmt->bindValue(':allianceID', $allianceID ?? 0);
+	$stmt->bindValue(':allianceID', $allianceID, $allianceID === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
 	if (!$stmt->execute()) return $default;
 	$found = $stmt->fetchColumn(0);
 	return ($found !== false && tripwire_mask_canonical((string) $found) === $canonical) ? $canonical : $default;

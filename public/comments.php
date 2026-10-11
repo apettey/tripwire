@@ -53,7 +53,7 @@ if ($mode == 'save') {
 	$query = 'INSERT INTO comments (id, systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
 				VALUES (:commentID, :systemID, :comment, NOW(), :createdByID, :createdByName, :modifiedByID, :modifiedByName, :maskID)
 				ON DUPLICATE KEY UPDATE
-				systemID = :systemID, comment = :comment, modifiedByID = :modifiedByID, modifiedByName = :modifiedByName, modified = NOW()';
+				systemID = IF(maskID = VALUES(maskID), VALUES(systemID), systemID), comment = IF(maskID = VALUES(maskID), VALUES(comment), comment), modifiedByID = IF(maskID = VALUES(maskID), VALUES(modifiedByID), modifiedByID), modifiedByName = IF(maskID = VALUES(maskID), VALUES(modifiedByName), modifiedByName), modified = IF(maskID = VALUES(maskID), NOW(), modified)';
 	$stmt = $mysql->prepare($query);
 	$stmt->bindValue(':commentID', $commentID);
 	$stmt->bindValue(':systemID', $systemID);
