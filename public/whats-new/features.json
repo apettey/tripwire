@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 84,
+      "date": "2026-10-11",
+      "title": "Jump planner: longer Get home routes and jump fuel",
+      "description": "Get home in the Jump planner now finds routes of up to 5 jumps to the chain's exits, instead of 2, and draws the whole route on the map.\n\nThe planner also shows how many isotopes each jump and route takes for your hull. Pick the hull and your Jump Fuel Conservation (and Jump Freighters) level in the fuel bar under the ship controls. Turn fuel off in Settings > Jump Planner.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-84-jump-fuel.png",
+          "caption": "Get home with 4- and 5-jump routes and fuel per route"
+        }
+      ]
+    },
+    {
       "pr": 82,
       "date": "2026-10-11",
       "title": "Smarter structure input",
