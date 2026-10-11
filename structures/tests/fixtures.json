@@ -1,0 +1,85 @@
+{
+	"comment": "Shared by app/js-test/fork/structures.test.js and structures/tests/structures_test.php: the same input must give the same output in JavaScript and PHP. Parsed rows: [typeID, typeName, kind, name, km, prefix, rest, wrong].",
+	"parse": [
+		{
+			"name": "d-scan with Upwell, POS (modules folded), a deployable, ships and a broken line",
+			"systemName": "J163701",
+			"lines": [
+				"35832\tJ163701 - Home Base\tAstrahus\t4,200,000 km",
+				"35833\tJ123456 - Elsewhere\tFortizar\t1,000 km",
+				"35835\tAthanor Of Doom\tAthanor\t30 km",
+				"16213\t\tCaldari Control Tower\t5,000 km",
+				"17182\tWarp Scrambling Battery\tWarp Scrambling Battery\t5,100 km",
+				"16103\t\tForce Field\t5,000 km",
+				"33474\t\tMobile Depot\t12 km",
+				"22456\tBob's Sabre\tSabre\t1,234 km",
+				"35834\tThera - Keep Star - Main\tKeepstar\t900 km",
+				"broken line"
+			],
+			"structures": [
+				[35832, "Astrahus", "upwell", "J163701 - Home Base", 4200000, "J163701", "Home Base", false],
+				[35833, "Fortizar", "upwell", "J123456 - Elsewhere", 1000, "J123456", "Elsewhere", true],
+				[35835, "Athanor", "upwell", "Athanor Of Doom", 30, "", "Athanor Of Doom", false],
+				[16213, "Caldari Control Tower", "starbase", "", 5000, "", "", false],
+				[33474, "Mobile Depot", "deployable", "", 12, "", "", false],
+				[35834, "Keepstar", "upwell", "Thera - Keep Star - Main", 900, "Thera", "Keep Star - Main", false]
+			],
+			"modules": 2,
+			"notRecognised": 1,
+			"invalid": 1
+		},
+		{
+			"name": "legacy rows without type ID match by type name, unknown types are skipped",
+			"systemName": "Jita",
+			"lines": [
+				"Jita - Trade Hub\tAstrahus\t10 km",
+				"Mystery\tNot A Real Type\t10 km"
+			],
+			"structures": [
+				[35832, "Astrahus", "upwell", "Jita - Trade Hub", 10, "Jita", "Trade Hub", false]
+			],
+			"modules": 0,
+			"notRecognised": 1,
+			"invalid": 0
+		}
+	],
+	"merge": [
+		{
+			"name": "same type and full name, case-insensitive",
+			"existing": [{ "id": 1, "typeID": 35832, "name": "J163701 - Home Base", "removed": false }],
+			"incoming": [{ "typeID": 35832, "name": "J163701 - HOME BASE" }],
+			"expected": [{ "id": 1, "restore": false }]
+		},
+		{
+			"name": "same type and name without the system prefix",
+			"existing": [{ "id": 1, "typeID": 35832, "name": "J163701 - Home Base", "removed": false }],
+			"incoming": [{ "typeID": 35832, "name": "Thera - Home Base" }],
+			"expected": [{ "id": 1, "restore": false }]
+		},
+		{
+			"name": "unnamed towers match by count",
+			"existing": [
+				{ "id": 5, "typeID": 16213, "name": "", "removed": false },
+				{ "id": 6, "typeID": 16213, "name": "", "removed": false }
+			],
+			"incoming": [{ "typeID": 16213, "name": "" }, { "typeID": 16213, "name": "" }, { "typeID": 16213, "name": "" }],
+			"expected": [{ "id": 5, "restore": false }, { "id": 6, "restore": false }, { "id": null, "restore": false }]
+		},
+		{
+			"name": "a removed row is restored, a live one is preferred",
+			"existing": [
+				{ "id": 7, "typeID": 35832, "name": "J163701 - Old", "removed": true },
+				{ "id": 8, "typeID": 35832, "name": "J163701 - Twin", "removed": true },
+				{ "id": 9, "typeID": 35832, "name": "J163701 - Twin", "removed": false }
+			],
+			"incoming": [{ "typeID": 35832, "name": "J163701 - Old" }, { "typeID": 35832, "name": "J163701 - Twin" }],
+			"expected": [{ "id": 7, "restore": true }, { "id": 9, "restore": false }]
+		},
+		{
+			"name": "another type or another name is a new row",
+			"existing": [{ "id": 1, "typeID": 35832, "name": "J163701 - Home Base", "removed": false }],
+			"incoming": [{ "typeID": 35833, "name": "J163701 - Home Base" }, { "typeID": 35832, "name": "J163701 - Renamed" }],
+			"expected": [{ "id": null, "restore": false }, { "id": null, "restore": false }]
+		}
+	]
+}

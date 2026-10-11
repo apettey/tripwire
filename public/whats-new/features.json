@@ -1,6 +1,30 @@
 {
   "features": [
     {
+      "pr": 70,
+      "date": "2026-10-11",
+      "title": "Structures panel",
+      "description": "A new small Structures panel lists the structures in the system you are viewing (Upwell structures, POS towers, deployables), one line each with the type icon, owner ticker, state icon, timer countdown and how long ago it was seen. The strip at the top shows who lives here: one chip per owner (ours green, hostile orange, unresolved grey, with a structure count); click a chip to highlight their structures.\n\nTo record structures, paste a d-scan and tick Save structures to the system (or use Save structures only), or add one with the + button and set the owner, state, timer and note from the pencil on a row. Everyone on your mask sees the same structures, and they stay with the system when it leaves your chain. Turn the panel off in Settings > Kills & Intel > Structures panel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-70-structures.png",
+          "caption": "The Structures panel in a C5"
+        }
+      ]
+    },
+    {
+      "pr": 68,
+      "date": "2026-10-11",
+      "title": "Skyhook raids: lava or ice, and what they're worth",
+      "description": "The Raidable skyhooks box now shows whether each planet is lava (Magmatic Gas) or ice (Superionic Ice), its number in the system, and a value rating from $ to $$$$$ (hover it for the estimated raidable ISK per hour). Ice hooks are always $, because lava hooks produce about 25 times more reagent; lava gets $$ to $$$$$ by how rich the planet is. Use the Planet checkboxes to show only lava or only ice, and sort by Value to put the richest raids first. Open the box from the skyhook icon on a low-sec or null-sec system.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-68-skyhooks-planet-value.png",
+          "caption": "Lava and ice badges and raidable value in the skyhooks box"
+        }
+      ]
+    },
+    {
       "pr": 67,
       "date": "2026-10-11",
       "title": "How to roll this hole",
