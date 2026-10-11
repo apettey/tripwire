@@ -226,6 +226,11 @@ function addSignature($signature, $mysql) {
     $success = $stmt->execute();
 
     if ($success) {
+        // Take the new row's id before the statistics upsert below: INSERT ... ON DUPLICATE KEY UPDATE
+        // resets lastInsertId(), so dialog-added signatures came back with id 0 and undo failed
+        // (adapted from mogglemoss/tripwire 09bcb40, MIT)
+        $signature->id = $mysql->lastInsertId();
+
         // Log the user stats
         if ($signature->type != 'wormhole') {
             $query = 'INSERT INTO statistics (userID, characterID, maskID, signatures_added) VALUES (:userID, :characterID, :maskID, 1)
@@ -237,7 +242,6 @@ function addSignature($signature, $mysql) {
             $success = $stmt->execute();
         }
 
-        $signature->id = $mysql->lastInsertId();
         return array(true, $signature, null);
     }
 
