@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 70,
+      "date": "2026-10-11",
+      "title": "Structures panel",
+      "description": "A new small Structures panel lists the structures in the system you are viewing (Upwell structures, POS towers, deployables), one line each with the type icon, owner ticker, state icon, timer countdown and how long ago it was seen. The strip at the top shows who lives here: one chip per owner (ours green, hostile orange, unresolved grey, with a structure count); click a chip to highlight their structures.\n\nTo record structures, paste a d-scan and tick Save structures to the system (or use Save structures only), or add one with the + button and set the owner, state, timer and note from the pencil on a row. Everyone on your mask sees the same structures, and they stay with the system when it leaves your chain. Turn the panel off in Settings > Kills & Intel > Structures panel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-70-structures.png",
+          "caption": "The Structures panel in a C5"
+        }
+      ]
+    },
+    {
       "pr": 68,
       "date": "2026-10-11",
       "title": "Skyhook raids: lava or ice, and what they're worth",
