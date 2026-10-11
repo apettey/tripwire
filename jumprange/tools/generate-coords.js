@@ -56,9 +56,10 @@ async function main() {
 	const args = process.argv.slice(2);
 	const zipAt = args.indexOf('--zip');
 	const zip = zipAt >= 0 ? args.splice(zipAt, 2)[1] : null;
+	if (zipAt >= 0 && !zip) { console.error('--zip needs the SDE zip file'); process.exit(2); }
 	const sde = args[0];
 	const out = args[1] || path.join(__dirname, '..', '..', 'public', 'jumprange');
-	if (!sde) { console.error('usage: generate-coords.js <sde-dir> [out-dir]'); process.exit(2); }
+	if (!sde) { console.error('usage: generate-coords.js <sde-dir> [out-dir] [--zip <sde-zip>]'); process.exit(2); }
 
 	const zipInfo = zip ? { sdeZip: path.basename(zip), sdeZipSha256: await sha256(zip) } : {};
 	let build = null;
