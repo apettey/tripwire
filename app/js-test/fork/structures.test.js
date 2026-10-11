@@ -184,6 +184,22 @@ describe('Structures', () => {
 			assert.deepEqual(r.filter((c) => c.side === 'seen').map((c) => c.ticker), ['A', 'B', 'C']);
 			assert.equal(r.filter((c) => c.ticker === 'BAD').length, 1);
 		});
+		it('residents set by hand come first, deduped with owners and kill-seen corporations', () => {
+			const set = { setBy: 'Chribba', entities: [{ kind: 'alliance', id: 900, name: 'Big Alliance', ticker: 'BIG' }, { kind: 'corporation', id: 22, name: 'Bad Guys', ticker: 'BAD' },
+				{ kind: 'corporation', id: 31, name: 'A', ticker: 'A' }] };
+			const extra = [{ id: 31, name: 'A', ticker: 'A' }, { id: 32, name: 'B', ticker: 'B' }];
+			const r = structures.residents(rows, extra, undefined, set);
+			assert.deepEqual(r.map((c) => [c.ticker, c.side, c.count, !!c.set]),
+				[['BIG', 'set', 0, true], ['BAD', 'hostile', 2, true], ['A', 'set', 0, true], ['HOME', 'ours', 1, false], ['Mystery Inc', 'unknown', 1, false], ['B', 'seen', 0, false]]);
+			assert.equal(r[0].key, 'alliance:900');
+			assert.equal(r[1].setBy, 'Chribba');
+		});
+		it('a set chip says who set it, is not a highlight target, and is escaped', () => {
+			const html = structures.chipHtml({ key: 'corporation:5', side: 'set', set: true, setBy: '<Eve>', id: 5, type: 'corporation', ticker: 'X', name: 'Xs', count: 0 }, null);
+			assert.ok(html.includes('str-chip-set') && html.includes('str-chip-isset'));
+			assert.ok(html.includes('set as a resident by &lt;Eve&gt;'));
+			assert.ok(!html.includes('structure'));
+		});
 		it('a chip links to zKillboard only when resolved, and is escaped', () => {
 			const html = structures.chipHtml({ key: 'corporation:22', side: 'hostile', id: 22, type: 'corporation', ticker: '<b>', name: 'x', count: 2 }, null);
 			assert.ok(html.includes('zkillboard.com/corporation/22/'));

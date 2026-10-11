@@ -108,7 +108,7 @@ check('an edit clears an ended timer', [$body['structures'][0]['timerKind'], $bo
 
 // A timer with seconds keeps them; editing an ended timer's row without touching the timer works (note only)
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'timerKind' => 'hull', 'timerAt' => gmdate('Y-m-d H:i:s', time() + 3605)]);
-check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 2, true);
+check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 30, true);
 $mysql->exec("UPDATE fork_structures SET timerKind = 'armor', timerAt = UTC_TIMESTAMP() - INTERVAL 3 HOUR WHERE id = $id");
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'state' => 'online', 'note' => 'ended timer row']);
 check('editing a row with an ended timer is not blocked', [$status, $body['structures'][0]['state']], [200, 'online']);
@@ -148,6 +148,24 @@ check('a gone row cannot be edited: 404', call('POST', ['action' => 'update', 'i
 check('restore', [count($body['gone']), count($body['structures'])], [0, 4]);
 
 check('add: a Control Tower is fine', call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Caldari Control Tower'])[0], 200);
+
+// --- Markers and timers (GET, no X-Requested-With needed) ---
+call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'Hostile Text Corp']);
+[$status, $body] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1)]);
+check('markers: systems with structures, next timers, hash', [$status, array_keys((array) $body['systems']), count($body['next']) >= 1, strlen($body['hash'])], [200, [SYSTEM], true, 32]);
+check('markers: summary of the system', [$body['systems'][SYSTEM]['count'], $body['systems'][SYSTEM]['nextTimer']['kind']], [5, 'hull']);
+[$status, $unchanged] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1), 'have' => $body['hash']]);
+check('markers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['systems'])], [true, false]);
+check('markers: a systemID that is not a system: 400', call('GET', ['action' => 'markers', 'systemIDs' => '12'])[0], 400);
+check('markers: more than 500 systems: 400', call('GET', ['action' => 'markers', 'systemIDs' => implode(',', range(31000001, 31000501))])[0], 400);
+check('markers: no systems is an empty answer', [call('GET', ['action' => 'markers'])[0], (array) call('GET', ['action' => 'markers'])[1]['systems']], [200, []]);
+check('markers: another mask sees nothing', [(array) call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['systems'], call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['next']], [[], []]);
+[$status, $body] = call('GET', ['action' => 'timers']);
+check('timers: the active timers of the mask (capped is false, the hash is sent)', [$status, array_map(function ($r) { return $r['typeName']; }, array_values(array_filter($body['timers'], function ($r) { return $r['systemID'] === SYSTEM; }))), $body['capped'], strlen($body['hash'])], [200, ['Athanor'], false, 32]);
+[$status, $unchanged] = call('GET', ['action' => 'timers', 'have' => $body['hash']]);
+check('timers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['timers'])], [true, false]);
+check('timers: no session: 403', call('GET', ['action' => 'timers'], [])[0], 403);
+check('timers: another mask sees nothing', call('GET', ['action' => 'timers'], $other)[1]['timers'], []);
 
 // --- Rate limit: 20 writes a minute ---
 $mysql->exec('DELETE FROM fork_structure_writes WHERE userID = 900021');

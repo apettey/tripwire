@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 83,
+      "date": "2026-10-11",
+      "title": "Structure timers on the map and in one list",
+      "description": "The Structures panel has a new clock button that lists every structure timer of your mask, soonest first, with Hostile only and Hide ended filters. Systems with structures or a timer in the next 48 hours get small icons on the chain map, the system info shows a one-line summary, and residents set by hand now appear first in the panel's residents strip. Turn the map icons off in Settings > Map Markers > Structure & timer icons; the panel itself is under Settings > Kills & Intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-83-structure-timers.png",
+          "caption": "The Timers view of the Structures panel"
+        }
+      ]
+    },
+    {
       "pr": 79,
       "date": "2026-10-11",
       "title": "Nearest loot buyers",
