@@ -14,8 +14,8 @@ const routeHoleFilters = {
 	//              size, mods}; wormholeID is the Tripwire wormhole id (look your flag up with it)
 	//   opts       {own: true} gives the flag its own "Avoid ..." row in Settings (settings key = `key`) and counts it
 	//              under `short` (default: label); without own the flag follows the "flagged by other features" row
-	// Registering the same key again replaces it. preserve mass registers itself from this file; rolling too once
-	// holeRolling exists (see the bottom of the file).
+	// Registering the same key again replaces it. preserve mass and rolling are registered from this file (they look
+	// their feature up when a hole is judged, so load order doesn't matter); rolling.js may register itself instead.
 	SIZE_ORDER: ["S", "M", "L", "VL", "XL"],	// same classes as sizeTags.classes / theraRoute.SIZE_ORDER
 	DEFAULTS: { eol: true, crit: true, small: true, preserve: true, flagged: true },
 	SHIP_DEFAULT: "S",
@@ -90,10 +90,64 @@ const routeHoleFilters = {
 		return typeof rally !== "undefined" ? rally.routeTo(connections, start, target) : null;
 	},
 
-	/** A route through chain connections that avoids the filtered holes, or else the best one anyway.
+	/** Reasons for one connection, worked out once per context: {all, avoid} (all: every filter that applies, also the
+	EOL / crit ones one-way allows; avoid: those the route must avoid) */
+	entryFor: function(ctx, c) {
+		const hf = routeHoleFilters;
+		const memo = ctx._table || (ctx._table = {});
+		if (!(c[3] in memo)) {
+			const hole = ctx.holeOf(c);
+			const avoid = ctx.oneWay ? Object.assign({}, ctx.settings, { eol: false, crit: false }) : ctx.settings;
+			memo[c[3]] = { all: hf.reasons(hole, ctx.settings), avoid: hf.reasons(hole, avoid) };
+		}
+		return memo[c[3]];
+	},
+
+	/** Cheapest path where a hop that breaks a filter costs BIG and any other hop 1: fewest bad hops first, then fewest
+	jumps (Dijkstra). Same arguments and result as rally.routeTo; cost(connection) -> 1 | BIG + 1 */
+	weightedRoute: function(connections, start, target, cost) {
+		if (start === null || start === undefined || target === null || target === undefined) { return null; }
+		const s = String(start), t = String(target);
+		if (s === t) { return []; }
+		const adjacency = {};
+		(connections || []).forEach(function(c) {
+			if (!c) { return; }
+			const a = String(c[0]), b = String(c[1]);
+			if (a === b) { return; }
+			const w = cost(c);
+			(adjacency[a] = adjacency[a] || []).push({ to: b, id: c[3], w: w });
+			(adjacency[b] = adjacency[b] || []).push({ to: a, id: c[3], w: w });
+		});
+		const dist = {}, previous = {}, done = {};
+		dist[s] = 0;
+		previous[s] = null;
+		for (;;) {
+			let current = null;
+			Object.keys(dist).forEach(function(k) { if (!done[k] && (current === null || dist[k] < dist[current])) { current = k; } });
+			if (current === null) { return null; }
+			if (current === t) { break; }
+			done[current] = true;
+			(adjacency[current] || []).forEach(function(e) {
+				if (!done[e.to] && (dist[e.to] === undefined || dist[current] + e.w < dist[e.to])) {
+					dist[e.to] = dist[current] + e.w;
+					previous[e.to] = { from: current, id: e.id };
+				}
+			});
+		}
+		const path = [];
+		for (let step = previous[t]; step; step = previous[step.from]) { path.unshift(step.id); }
+		return path;
+	},
+
+	BIG: 1000,
+
+	/** A route through chain connections that avoids the filtered holes, or else the one with the fewest filtered
+	holes (then fewest jumps), so it is never a dead end.
 	@param connections [a, b, modifiers, lineIndex] (rally.systemConnections)
 	@param start, target system ids (as rally.routeTo)
-	@param ctx {holeOf(connection) -> hole info | null, settings, oneWay, routeFn (optional, default rally.routeTo)}
+	@param ctx {holeOf(connection) -> hole info | null, settings, oneWay, routeFn (optional, default rally.routeTo; the
+		search among the usable holes), routeWeighted (optional, default routeHoleFilters.weightedRoute; the fallback)}.
+		The reasons per connection are remembered on ctx, so every route() of one redraw shares them.
 	@return null when no route exists at all, else {path: [lineIndex], marks: {lineIndex: [reason]}, bad: number of hops
 		that break an active filter, fallback: bad > 0, note: "" | "No route avoiding EOL/crit — this one uses 1 EOL hole"}.
 		marks holds every hop with a reason, also the EOL/crit ones that one-way allows. */
@@ -105,17 +159,17 @@ const routeHoleFilters = {
 			const plain = routeFn(connections, start, target);
 			return plain ? { path: plain, marks: {}, bad: 0, fallback: false, note: "" } : null;
 		}
-		const avoid = ctx.oneWay ? Object.assign({}, cfg, { eol: false, crit: false }) : cfg;
-		const byLine = {};
-		(connections || []).forEach(function(c) {
-			if (!c) { return; }
-			const hole = ctx.holeOf(c);
-			byLine[c[3]] = { all: hf.reasons(hole, cfg), avoid: hf.reasons(hole, avoid) };
-		});
-		const clean = (connections || []).filter(function(c) { return c && !byLine[c[3]].avoid.length; });
+		const entry = function(c) { return hf.entryFor(ctx, c); };
+		const clean = (connections || []).filter(function(c) { return c && !entry(c).avoid.length; });
 		let path = routeFn(clean, start, target);
-		if (!path) { path = routeFn(connections, start, target); }
+		if (!path) {
+			const weighted = ctx.routeWeighted || hf.weightedRoute;
+			path = weighted((connections || []).filter(Boolean), start, target, function(c) { return entry(c).avoid.length ? hf.BIG + 1 : 1; })
+				|| routeFn(connections, start, target);
+		}
 		if (!path) { return null; }
+		const byLine = {};
+		(connections || []).forEach(function(c) { if (c) { byLine[c[3]] = entry(c); } });
 		return hf.describe(path, byLine);
 	},
 
@@ -166,23 +220,61 @@ const routeHoleFilters = {
 		const hf = routeHoleFilters;
 		const rated = (routes || []).map(function(r) {
 			const d = hf.describe((r.exit && r.exit.holes) || [], byLine || {});
-			return Object.assign({}, r, { marks: d.marks, bad: d.bad, fallback: d.fallback, note: d.note });
+			// No route from your location (not on the map): the exit was judged by its way to the chain's root
+			const note = d.note && r.exit && r.exit.fromRoot ? d.note + " (judged from the chain root: your location isn't on the map)" : d.note;
+			return Object.assign({}, r, { marks: d.marks, bad: d.bad, fallback: d.fallback, note: note });
 		});
 		const clean = rated.filter(function(r) { return !r.bad; });
 		return (clean.length ? clean : rated).sort(function(a, b) { return a.jumps - b.jumps || a.index - b.index; });
 	},
 
-	/** Reasons for every connection: {lineIndex: {all, avoid}} (see route) */
+	/** Reasons for every connection: {lineIndex: {all, avoid}} (see route; shares the context's memo) */
 	reasonTable: function(connections, ctx) {
 		const hf = routeHoleFilters, cfg = ctx && ctx.settings, table = {};
 		if (!ctx || !cfg || !hf.anyOn(cfg) || typeof ctx.holeOf !== "function") { return table; }
-		const avoid = ctx.oneWay ? Object.assign({}, cfg, { eol: false, crit: false }) : cfg;
-		(connections || []).forEach(function(c) {
-			if (!c) { return; }
-			const hole = ctx.holeOf(c);
-			table[c[3]] = { all: hf.reasons(hole, cfg), avoid: hf.reasons(hole, avoid) };
-		});
+		(connections || []).forEach(function(c) { if (c) { table[c[3]] = hf.entryFor(ctx, c); } });
 		return table;
+	},
+
+	/** The chain hole a connection is: from the line's modifiers and the wormhole record (null for EVE-Scout links,
+	'ES-<id>', which only have their modifiers). size: the size class when it is certain, else null (guesses pass). */
+	holeInfo: function(c, line, wormholes, size) {
+		const mods = line && Array.isArray(line[2]) ? line[2] : [];
+		const id = line ? line[3] : null;
+		const wh = wormholes ? wormholes[id] : null;
+		return {
+			wormholeID: id, lineIndex: c[3], mods: mods, size: size || null,
+			eol: mods.indexOf("eol") >= 0 || !!(wh && wh.life === "critical"),
+			crit: mods.indexOf("critical") >= 0 || !!(wh && wh.mass === "critical")
+		};
+	},
+
+	/** Size class of a sizeTags.tagFor result, only when certain (a guess from the system classes is not a reason to avoid) */
+	certainSize: function(tag) {
+		return tag && tag.certain && tag.size ? tag.size : null;
+	},
+
+	/** Routing context for these chain lines, or null when every filter is off.
+	@param env {wormholes: tripwire.client.wormholes, sizeOf(connection, wormholeID) -> tag | null, oneWay} */
+	makeContext: function(lines, opts, env) {
+		const hf = routeHoleFilters;
+		const settings = hf.settings(opts);
+		if (!hf.anyOn(settings)) { return null; }
+		const cache = {};
+		return {
+			settings: settings,
+			oneWay: !!env.oneWay,
+			holeOf: function(c) {
+				const index = c[3];
+				if (!(index in cache)) {
+					const line = (lines || [])[index];
+					let tag = null;
+					try { tag = env.sizeOf ? env.sizeOf(c, line ? line[3] : null) : null; } catch (e) { tag = null; }
+					cache[index] = hf.holeInfo(c, line, env.wormholes, hf.certainSize(tag));
+				}
+				return cache[index];
+			}
+		};
 	},
 
 	/** The holes from a chain node back to the chain's root: [lineIndex] (each line is [child, parent, ...])
@@ -227,56 +319,39 @@ const routeHoleFilters = {
 	}
 };
 
-// Preserve mass (preserve-mass.js) has its own "Avoid ..." row in Settings
-routeHoleFilters.registerFlag("preserve", "preserve mass hole", function(hole) {
-	return typeof preserveMass !== "undefined" && !!preserveMass.flags && !!preserveMass.flags[String(hole.wormholeID)];
-}, { own: true, short: "preserve mass" });
+// Built-in flags. Both look their feature up when a hole is judged, not at load, so file load order doesn't matter.
+// Preserve mass has its own "Avoid ..." row in Settings; rolling follows "flagged by other features" (until rolling.js
+// registers itself, which replaces this).
+routeHoleFilters.registerBuiltIns = function() {
+	routeHoleFilters.registerFlag("preserve", "preserve mass hole", function(hole) {
+		return typeof preserveMass !== "undefined" && !!preserveMass.flags && !!preserveMass.flags[String(hole.wormholeID)];
+	}, { own: true, short: "preserve mass" });
+	routeHoleFilters.registerFlag("rolling", "hole being rolled", function(hole) {
+		return typeof holeRolling !== "undefined" && !!holeRolling.flags && !!holeRolling.flags[String(hole.wormholeID)];
+	});
+};
+routeHoleFilters.registerBuiltIns();
 
 if (typeof window !== "undefined" && typeof document !== "undefined" && typeof jQuery !== "undefined") {
 	(function() {
 		const rhf = routeHoleFilters;
 
-		// Rolling (rolling.js) follows "flagged by other features"; registered here while it is not registering itself
-		if (typeof holeRolling !== "undefined") {
-			rhf.registerFlag("rolling", "hole being rolled", function(hole) {
-				return !!holeRolling.flags && !!holeRolling.flags[String(hole.wormholeID)];
-			});
-		}
-
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
 
-		/** Size class of a chain connection [a, b, mods, lineIndex]: sizeTags' own lookup, null when unknown */
-		function sizeOf(connection, wormholeID) {
+		/** The sizeTags tag of a chain connection [a, b, mods, lineIndex] (its own lookup), or null */
+		function sizeTag(connection, wormholeID) {
 			if (typeof sizeTags === "undefined") { return null; }
 			const type = sizeTags.wormholeTypeFor(wormholeID);
-			const tag = sizeTags.tagFor(type || "K162", "K162", connection[0], connection[1]);
-			return tag && tag.size ? tag.size : null;
+			return sizeTags.tagFor(type || "K162", "K162", connection[0], connection[1]);
 		}
 
 		/** Routing context for these chain lines: {holeOf, settings, oneWay}, or null when the filters are all off */
 		rhf.contextFor = function(lines) {
-			const settings = rhf.settings(options);
-			if (!rhf.anyOn(settings)) { return null; }
-			const cache = {};
-			return {
-				settings: settings,
+			return rhf.makeContext(lines, options, {
 				oneWay: rhf.oneWay(),
-				holeOf: function(c) {
-					const index = c[3];
-					if (index in cache) { return cache[index]; }
-					const line = (lines || [])[index];
-					const mods = line && Array.isArray(line[2]) ? line[2] : [];
-					const id = line ? line[3] : null;
-					const wh = tripwire.client && tripwire.client.wormholes ? tripwire.client.wormholes[id] : null;
-					let size = null;
-					try { size = sizeOf(c, id); } catch (e) { size = null; }
-					return (cache[index] = {
-						wormholeID: id, lineIndex: index, mods: mods, size: size,
-						eol: mods.indexOf("eol") >= 0 || !!(wh && wh.life === "critical"),
-						crit: mods.indexOf("critical") >= 0 || !!(wh && wh.mass === "critical")
-					});
-				}
-			};
+				wormholes: tripwire.client && tripwire.client.wormholes,
+				sizeOf: sizeTag
+			});
 		};
 
 		// ---- One-way checkbox: Favourites panel (placed by favourites-panel.js) and Destinations ----

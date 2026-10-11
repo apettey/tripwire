@@ -4,7 +4,7 @@
 
 ## Description
 
-Routes through the chain's wormholes (Favourites panel, Destinations, Fight here) now avoid holes that are EOL, at critical mass, too small for your ship, preserve-mass flagged, or flagged by another feature. They never dead-end: with no way round, the best route is used anyway, its offending hops are marked and a one-line note says so. A per-session "One-way" switch allows EOL and critical holes (still marked).
+Routes through the chain's wormholes (Favourites panel, Destinations, Fight here) now avoid holes that are EOL, at critical mass, too small for your ship, preserve-mass flagged, or flagged by another feature. They never dead-end: with no way round, the route with the fewest offending hops (then fewest jumps) is used anyway, its offending hops are marked and a one-line note says so. A per-session "One-way" switch allows EOL and critical holes (still marked).
 
 ## Before / After
 
@@ -35,8 +35,9 @@ Toggle: Settings > Routes & Navigation > "Routes avoid" (on by default): EOL hol
 ## Change
 
 - New `app/js/fork/route-hole-filters.js` (global `routeHoleFilters`, pure logic + Settings row + One-way handler) and `app/css/fork/route-hole-filters.css`; tests in `app/js-test/fork/route-hole-filters.test.js`.
-- `routeHoleFilters.registerFlag(key, label, isFlagged(hole), {own, short})` lets other features add a hole flag (documented at the top of the file). Preserve mass registers with its own row; rolling (`holeRolling.flags`, already on main) registers under "flagged by other features" from the same file while it does not register itself.
-- Applied to: Favourites panel plans (also the strip's hop markers and the note line; a clean route beats a dirty one, then fewest jumps), Fight here (route, banner text, dashed line), Destinations (exits whose way home through the chain avoids the holes come first; the note shows in the table).
+- Hole reasons are worked out once per redraw and shared by all routes; only certain hole sizes count for "too small" (a size guessed from system classes passes).
+- `routeHoleFilters.registerFlag(key, label, isFlagged(hole), {own, short})` lets other features add a hole flag (documented at the top of the file). Preserve mass registers with its own row; rolling (`holeRolling.flags`, already on main) is registered lazily from the same file under "flagged by other features" (it looks `holeRolling` up when a hole is judged, so load order doesn't matter).
+- Applied to: Favourites panel plans (also the strip's hop markers and the note line; a clean route beats a dirty one, then fewest jumps), Fight here (route, banner text, dashed line), Destinations (exits whose way from your location, as Fight here picks it, avoids the holes come first; with no location on the map they are judged from the chain root and the note says so).
 - Fork-owned files touched, no upstream files: `favourites-panel.js`, `favourites-route-strip.js`, `rally.js`, `route-destinations.js`.
 - Not changed: Jump planner Get home (the way home is the chain's one path, with no alternative to choose; it already warns about EOL, critical, too-small and preserve-mass holes) and the Thera/Turnur route (it already filters EVE-Scout links itself; its legs through chain holes are not filtered). Upstream gate routing (`guidance.js`) is gates only and untouched.
 - Not included: a "bubbled" flag. Tripwire has no such hole state, so there is nothing to filter on.

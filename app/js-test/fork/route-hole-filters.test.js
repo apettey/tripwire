@@ -18,6 +18,7 @@ describe('routeHoleFilters', function() {
 	beforeEach(function() {
 		routeHoleFilters.clearFlags();
 		routeHoleFilters.registerFlag('preserve', 'preserve mass hole', function(h) { return h.preserve === true; }, { own: true, short: 'preserve mass' });
+		delete global.holeRolling;
 	});
 
 	describe('settings', function() {
@@ -182,6 +183,108 @@ describe('routeHoleFilters', function() {
 		});
 	});
 
+	describe('fallback minimises bad hops', function() {
+		it('1 EOL hole on 4 jumps beats 2 EOL holes on 3 jumps', function() {
+			const conns = [['A', 'B', [], 1], ['B', 'C', [], 2], ['C', 'D', [], 3], ['A', 'E', [], 4], ['E', 'F', [], 5], ['F', 'G', [], 6], ['G', 'D', [], 7]];
+			const r = routeHoleFilters.route(conns, 'A', 'D', ctx({ 1: { eol: true }, 2: { eol: true }, 4: { eol: true } }));
+			assert.deepStrictEqual(r.path, [4, 5, 6, 7]);
+			assert.strictEqual(r.bad, 1);
+		});
+		it('equal bad hops: fewest jumps', function() {
+			const conns = [['A', 'B', [], 1], ['B', 'D', [], 2], ['A', 'C', [], 3], ['C', 'E', [], 4], ['E', 'D', [], 5]];
+			const r = routeHoleFilters.route(conns, 'A', 'D', ctx({ 1: { eol: true }, 3: { eol: true } }));
+			assert.deepStrictEqual(r.path, [1, 2]);
+		});
+		it('uses an injected routeWeighted', function() {
+			const r = routeHoleFilters.route(CONNECTIONS, 'A', 'D', ctx({ 2: { eol: true }, 4: { eol: true } }, { routeWeighted: function() { return [3, 4]; } }));
+			assert.deepStrictEqual(r.path, [3, 4]);
+		});
+		it('weightedRoute: unreachable is null, same node is empty', function() {
+			const cost = function() { return 1; };
+			assert.strictEqual(routeHoleFilters.weightedRoute(CONNECTIONS, 'A', 'Z', cost), null);
+			assert.deepStrictEqual(routeHoleFilters.weightedRoute(CONNECTIONS, 'A', 'A', cost), []);
+		});
+	});
+
+	describe('reasons are worked out once per context', function() {
+		it('holeOf runs once per connection however many routes are asked', function() {
+			let calls = 0;
+			const c = ctx({}, { holeOf: function() { calls++; return { eol: false }; } });
+			routeHoleFilters.route(CONNECTIONS, 'A', 'D', c);
+			routeHoleFilters.route(CONNECTIONS, 'B', 'C', c);
+			routeHoleFilters.reasonTable(CONNECTIONS, c);
+			assert.strictEqual(calls, CONNECTIONS.length);
+		});
+	});
+
+	describe('makeContext / holeOf', function() {
+		const lines = [null, [1, 2, ['eol'], 11], [2, 3, [], 12], [3, 4, ['critical'], 'ES-77'], [4, 5, [], 14]];
+		const conn = function(i) { return ['a', 'b', [], i]; };
+		const env = function(extra) {
+			return Object.assign({ oneWay: false, wormholes: { 12: { life: 'critical', mass: 'stable' }, 14: { life: 'stable', mass: 'critical' } }, sizeOf: null }, extra || {});
+		};
+		it('null when every filter is off', function() {
+			const off = { routeHoleFilters: { eol: false, crit: false, small: false, flagged: false, preserve: false } };
+			assert.strictEqual(routeHoleFilters.makeContext(lines, off, env()), null);
+		});
+		it('detects EOL and crit from the line classes or the wormhole record', function() {
+			const c = routeHoleFilters.makeContext(lines, {}, env());
+			assert.strictEqual(c.holeOf(conn(1)).eol, true);	// class
+			assert.strictEqual(c.holeOf(conn(2)).eol, true);	// record life
+			assert.strictEqual(c.holeOf(conn(4)).crit, true);	// record mass
+			assert.strictEqual(c.holeOf(conn(4)).eol, false);
+		});
+		it('EVE-Scout ids have no record: only the line classes count', function() {
+			const h = routeHoleFilters.makeContext(lines, {}, env()).holeOf(conn(3));
+			assert.strictEqual(h.wormholeID, 'ES-77');
+			assert.strictEqual(h.crit, true);
+			assert.strictEqual(h.eol, false);
+		});
+		it('a missing line or record is not a problem', function() {
+			const h = routeHoleFilters.makeContext(lines, {}, env({ wormholes: null })).holeOf(conn(9));
+			assert.deepStrictEqual([h.eol, h.crit, h.size], [false, false, null]);
+		});
+		it('only a certain size counts; a guess passes', function() {
+			const certain = routeHoleFilters.makeContext(lines, {}, env({ sizeOf: function() { return { size: 'M', certain: true }; } }));
+			const guess = routeHoleFilters.makeContext(lines, {}, env({ sizeOf: function() { return { size: 'M', certain: false }; } }));
+			assert.strictEqual(certain.holeOf(conn(1)).size, 'M');
+			assert.strictEqual(guess.holeOf(conn(1)).size, null);
+			assert.strictEqual(routeHoleFilters.certainSize(null), null);
+		});
+		it('a throwing size lookup is no size', function() {
+			const c = routeHoleFilters.makeContext(lines, {}, env({ sizeOf: function() { throw new Error('x'); } }));
+			assert.strictEqual(c.holeOf(conn(1)).size, null);
+		});
+		it('remembers one-way and caches holes', function() {
+			let calls = 0;
+			const c = routeHoleFilters.makeContext(lines, {}, env({ oneWay: true, sizeOf: function() { calls++; return null; } }));
+			c.holeOf(conn(1)); c.holeOf(conn(1));
+			assert.strictEqual(c.oneWay, true);
+			assert.strictEqual(calls, 1);
+		});
+	});
+
+	describe('built-in flags look their feature up when judging', function() {
+		it('rolling follows "flagged by other features", whenever holeRolling appears', function() {
+			routeHoleFilters.clearFlags();
+			routeHoleFilters.registerBuiltIns();
+			const s = routeHoleFilters.settings({});
+			assert.deepStrictEqual(routeHoleFilters.reasons({ wormholeID: 5 }, s), []);	// holeRolling not loaded yet
+			global.holeRolling = { flags: { 5: { setBy: 'x' } } };
+			assert.deepStrictEqual(routeHoleFilters.reasons({ wormholeID: 5 }, s).map(r => r.key), ['rolling']);
+			assert.deepStrictEqual(routeHoleFilters.reasons({ wormholeID: 6 }, s), []);
+			assert.deepStrictEqual(routeHoleFilters.reasons({ wormholeID: 5 }, routeHoleFilters.settings({ routeHoleFilters: { flagged: false } })), []);
+		});
+		it('preserve mass reads preserveMass.flags', function() {
+			routeHoleFilters.clearFlags();
+			routeHoleFilters.registerBuiltIns();
+			global.preserveMass = { flags: { 8: {} } };
+			try {
+				assert.deepStrictEqual(routeHoleFilters.reasons({ wormholeID: 8 }, routeHoleFilters.settings({})).map(r => r.key), ['preserve']);
+			} finally { delete global.preserveMass; }
+		});
+	});
+
 	describe('one-way', function() {
 		it('allows EOL and critical holes: the short way is taken', function() {
 			const r = routeHoleFilters.route(CONNECTIONS, 'A', 'D', ctx({ 2: { eol: true }, 1: { crit: true } }, { oneWay: true }));
@@ -230,6 +333,13 @@ describe('routeHoleFilters', function() {
 			assert.deepStrictEqual(picked.map(r => r.index), [0, 1]);
 			assert.deepStrictEqual(Object.keys(picked[0].marks), ['2']);
 			assert.strictEqual(picked[0].note, '');
+		});
+		it('an exit judged from the chain root says so in its note', function() {
+			const r = [{ exit: { holes: [2], fromRoot: true }, jumps: 1, index: 0 }];
+			const picked = routeHoleFilters.pickRoutes(r, table({ 2: { eol: true } }));
+			assert.ok(/judged from the chain root/.test(picked[0].note));
+			const from = routeHoleFilters.pickRoutes([{ exit: { holes: [2] }, jumps: 1, index: 0 }], table({ 2: { eol: true } }));
+			assert.ok(!/root/.test(from[0].note));
 		});
 		it('no filters: untouched order', function() {
 			assert.deepStrictEqual(routeHoleFilters.pickRoutes(routes, {}).map(r => r.index), [0, 1]);

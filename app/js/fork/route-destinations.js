@@ -249,8 +249,17 @@ const routeDestinations = {
 		if (typeof routeHoleFilters !== "undefined" && routeHoleFilters.contextFor) {
 			const hf = routeHoleFilters.contextFor(result.lines);
 			if (hf) {
-				exits.forEach(function(e) { e.holes = routeHoleFilters.holesHome(result.lines, e.nodeID); });
-				routeDestinations.holeFilters = routeHoleFilters.reasonTable(rally.systemConnections(result.map.rows, result.lines), hf);
+				// Each exit is judged by the holes from where you are (as Fight here / Favourites: tracked, else viewing, else
+				// the chain root) to it; with no way from there, by its way to the chain's root
+				const connections = rally.systemConnections(result.map.rows, result.lines);
+				const here = typeof rally.currentLocations === "function" ? rally.currentLocations() : {};
+				const start = rally.pickStart(rally.systemsOnMap(result.map.rows), here.tracked, here.viewing, rally.rootSystem(result.map.rows));
+				exits.forEach(function(e) {
+					const found = start !== null && start !== undefined ? routeHoleFilters.route(connections, start, e.systemID, hf) : null;
+					e.fromRoot = !found;
+					e.holes = found ? found.path : routeHoleFilters.holesHome(result.lines, e.nodeID);
+				});
+				routeDestinations.holeFilters = routeHoleFilters.reasonTable(connections, hf);
 			}
 		}
 		routeDestinations.lastChainSystems = routeDestinations.chainSystems(result.map.rows, scoutLines);
