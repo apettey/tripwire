@@ -17,24 +17,26 @@
 //   intel_affiliation_run()   ESI: POST /universe/ids (names -> IDs, 500 per call), POST /characters/affiliation
 //                             (up to 1000 IDs per call), GET /corporations/<id> and /alliances/<id> (name, ticker)
 //   intel_lookups_run()       no HTTP: queue threat lookups for scans whose names are resolved
-//   intel_threat_run_one()    zKillboard GET /api/stats/characterID/<id>/, lowest priority of the zKillboard API
+//   intel_threat_run_one()    zKillboard GET /api/stats/characterID/<id>/kills/, lowest priority of the zKillboard API
 //                             queues (after back-fills and system stats), within the same ZKILL_API_INTERVAL budget
 // INTEL_ZKILL_THREAT_ENABLED=false turns the zKillboard step off for the instance (nothing is queued or requested).
 
 require_once(__DIR__ . '/../zkill/zkill.inc.php');
 
 const INTEL_AFF_TTL           = 3600;     // seconds an affiliation stays fresh (ESI caches it for an hour)
-const INTEL_AFF_UNKNOWN_TTL   = 86400;    // names ESI didn't know are asked again after a day
+const INTEL_AFF_UNKNOWN_TTL   = 3600;     // names ESI didn't know are deleted (asked again when seen) after an hour
+const INTEL_AFF_RESOLVE_TTL   = 86400;    // name -> character ID is checked again after a day (renamed characters)
 const INTEL_AFF_RETRY         = 600;      // seconds before a failed name is queued again
 const INTEL_AFF_GIVE_UP       = 3600;     // queued names still unresolved after this long are marked failed
 const INTEL_AFF_MAX_TIER      = 3;        // rejections before a name / ID counts as failed
 const INTEL_AFF_MAX_QUEUED    = 20000;    // queued names overall above which nothing new is queued
-const INTEL_AFF_MAX_PER_USER  = 6000;     // queued names one user may have added (3 full local lists)
+const INTEL_AFF_MAX_PER_USER  = 6000;     // names one user may queue per hour (3 full local lists), well below the overall cap
 const INTEL_AFF_IDS_BATCH     = 500;      // names per POST /universe/ids (ESI's limit)
 const INTEL_AFF_BATCH         = 1000;     // IDs per POST /characters/affiliation (ESI's limit)
 const INTEL_AFF_SUSPECT_BATCH = 25;       // IDs per request from a rejected batch
 const INTEL_AFF_REQUESTS      = 8;        // ESI requests per worker pass
-const INTEL_AFF_TIMEOUT       = 10;       // seconds per request
+const INTEL_AFF_TIMEOUT       = 5;        // seconds per request
+const INTEL_AFF_PASS_SECONDS  = 3;        // no new ESI request after this long in one pass (keeps the R2Z2 poll on time)
 const INTEL_ENTITY_TTL        = 604800;   // corporation / alliance names and tickers are refreshed after a week
 const INTEL_THREAT_TTL        = 86400;    // seconds a pilot's zKillboard stats stay fresh
 const INTEL_THREAT_RETRY      = 3600;     // seconds before a failed stats lookup is queued again
@@ -50,10 +52,13 @@ const INTEL_NPC_CORP_MIN      = 1000000;  // NPC corporations: 1000000-1999999
 const INTEL_NPC_CORP_MAX      = 1999999;
 
 const INTEL_PILOTS_DDL = [
-    // Names use an accent-sensitive, case-insensitive collation: EVE names are unique ignoring case, not accents
+    // Only names in EVE's character-name charset (ASCII, intel_lookup_name) are stored, so the case-insensitive
+    // collation and PHP's strtolower() agree on what is the same name. resolvedAt: when name -> characterID was last
+    // checked (NULL = to be checked by the next ID step)
     "CREATE TABLE IF NOT EXISTS `fork_pilot_affiliation` (
-      `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci NOT NULL,
+      `name` varchar(40) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
       `characterID` bigint unsigned DEFAULT NULL,
+      `resolvedAt` datetime DEFAULT NULL,
       `corporationID` bigint unsigned DEFAULT NULL,
       `allianceID` bigint unsigned DEFAULT NULL,
       `status` varchar(8) NOT NULL DEFAULT 'queued',
@@ -66,7 +71,7 @@ const INTEL_PILOTS_DDL = [
       `error` varchar(255) NOT NULL DEFAULT '',
       PRIMARY KEY (`name`),
       KEY `queue` (`status`, `requestedAt`),
-      KEY `requested_by` (`requestedBy`, `status`),
+      KEY `requested_by` (`requestedBy`, `requestedAt`),
       KEY `character` (`characterID`),
       KEY `wanted` (`wantedAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
@@ -137,9 +142,19 @@ function intel_is_npc_corp($corporationID) {
     return $corporationID !== null && $corporationID >= INTEL_NPC_CORP_MIN && $corporationID <= INTEL_NPC_CORP_MAX;
 }
 
-/** Lower-case key of a name (the table compares names ignoring case) */
+/**
+ * Whether a name can be an EVE character name worth looking up: 3-37 characters of ASCII letters, digits, space and
+ * ' . - _ (EVE's charset; older names have . and _). Anything else (full-width or accented letters, ...) can't be a
+ * character, so it counts as unknown without a lookup. Keeping the table ASCII-only also makes the column's
+ * case-insensitive collation and intel_name_key() agree.
+ */
+function intel_lookup_name($name) {
+    return is_string($name) && preg_match("/^[A-Za-z0-9][A-Za-z0-9 '._-]{2,36}(?<! )$/D", $name) === 1;
+}
+
+/** Lower-case key of a name (the table compares names ignoring case; only ASCII names are stored) */
 function intel_name_key($name) {
-    return mb_strtolower((string) $name, 'UTF-8');
+    return intel_lookup_name($name) ? strtolower($name) : mb_strtolower((string) $name, 'UTF-8');
 }
 
 /**
@@ -172,28 +187,35 @@ function intel_affiliation_decision($row, $now) {
         $retry = $row['attemptedAt'] === null || $row['attemptedAt'] <= $now - INTEL_AFF_RETRY;
         return ['queue' => $retry, 'pending' => $retry && !$known];
     }
-    // done: unknown names are asked again after a day, affiliations after an hour (kept on show meanwhile)
+    // done: affiliations are refreshed after an hour (kept on show meanwhile); unknown names are pruned after
+    // INTEL_AFF_UNKNOWN_TTL and asked again the next time they are seen
     $ttl = $row['characterID'] === 0 ? INTEL_AFF_UNKNOWN_TTL : INTEL_AFF_TTL;
     $stale = $row['fetchedAt'] === null || $row['fetchedAt'] <= $now - $ttl;
     return ['queue' => $stale, 'pending' => false];
 }
 
-/** Whether $count more names may be queued: how many of them (overall and per-user caps) */
-function intel_affiliation_room($queued, $queuedByUser, $userID, $count) {
+/**
+ * How many of $count names may be queued now. $queued: queued names overall; $recentByUser: names this user queued in
+ * the last hour (any status), so a user can't fill the table with names that resolve within seconds. The per-user
+ * cap is far below the overall one, so one user can't keep the queue full for everyone else.
+ */
+function intel_affiliation_room($queued, $recentByUser, $userID, $count) {
     $room = INTEL_AFF_MAX_QUEUED - $queued;
-    if ($userID > 0) $room = min($room, INTEL_AFF_MAX_PER_USER - $queuedByUser);
+    if ($userID > 0) $room = min($room, INTEL_AFF_MAX_PER_USER - $recentByUser);
     return max(0, min($count, $room));
 }
 
 /**
  * Cached affiliations of the names (scan order kept), queueing missing and stale names for the worker unless
- * $queue is false. @return array ['rows' => key => row|null, 'pending' => names without data the worker is on,
+ * $queue is false. Names outside EVE's charset (intel_lookup_name) are unknown without a lookup.
+ * @return array ['rows' => key => row|null, 'pending' => names without data the worker is on,
  * 'queued' => names queued now, 'queueFull' => some names could not be queued]
  */
 function intel_affiliation_request(PDO $db, array $names, $userID, $queue = true) {
     $now = time();
     $rows = [];
-    foreach (array_chunk(array_values($names), 500) as $chunk) {
+    $lookup = array_values(array_filter($names, 'intel_lookup_name'));
+    foreach (array_chunk($lookup, 500) as $chunk) {
         $stmt = $db->prepare('SELECT name, characterID, corporationID, allianceID, status, fetchedAt, attemptedAt
             FROM fork_pilot_affiliation WHERE name IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')');
         $stmt->execute($chunk);
@@ -210,32 +232,36 @@ function intel_affiliation_request(PDO $db, array $names, $userID, $queue = true
     }
     $out = [];
     $toQueue = [];
-    $pending = 0;
+    $pendingKeys = [];
     foreach ($names as $name) {
         $key = intel_name_key($name);
+        if (!intel_lookup_name($name)) {
+            // Can't be a character name: unknown, never queued
+            $out[$key] = ['status' => 'done', 'characterID' => 0, 'corporationID' => null, 'allianceID' => null, 'fetchedAt' => $now, 'attemptedAt' => null];
+            continue;
+        }
         $row = $rows[$key] ?? null;
         $decision = intel_affiliation_decision($row, $now);
         if ($queue && $decision['queue']) $toQueue[$key] = $name;
         $out[$key] = $row;
         // Read only: pending means the worker already has it queued
         $known = $row && $row['characterID'] !== null && $row['characterID'] > 0 && $row['corporationID'] !== null;
-        if ($queue ? $decision['pending'] : ($row && $row['status'] === 'queued' && !$known)) $pending++;
+        if ($queue ? $decision['pending'] : ($row && $row['status'] === 'queued' && !$known)) $pendingKeys[$key] = true;
     }
     $queueFull = false;
     $queuedNow = 0;
     if ($toQueue) {
         $queued = (int) $db->query("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE status = 'queued'")->fetchColumn();
-        $byUser = $db->prepare("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE requestedBy = ? AND status = 'queued'");
-        $byUser->execute([(int) $userID]);
+        $byUser = $db->prepare('SELECT COUNT(*) FROM fork_pilot_affiliation WHERE requestedBy = ? AND requestedAt > ?');
+        $byUser->execute([(int) $userID, gmdate('Y-m-d H:i:s', $now - 3600)]);
         $room = intel_affiliation_room($queued, (int) $byUser->fetchColumn(), (int) $userID, count($toQueue));
         if ($room < count($toQueue)) {
             $queueFull = true;
-            foreach (array_slice(array_keys($toQueue), $room) as $key) {
-                if (!$out[$key] || $out[$key]['corporationID'] === null) $pending--;   // the worker won't get to these
-            }
+            foreach (array_slice(array_keys($toQueue), $room) as $key) unset($pendingKeys[$key]);   // the worker won't get to these
             $toQueue = array_slice($toQueue, 0, $room, true);
         }
-        // An unknown name is resolved again from scratch; a known character only needs its affiliation again
+        // An unknown name is resolved again from scratch; a known character needs its affiliation again, and its
+        // name -> ID mapping too once that is older than INTEL_AFF_RESOLVE_TTL (renamed characters)
         foreach (array_chunk(array_values($toQueue), 500) as $chunk) {
             $values = implode(',', array_fill(0, count($chunk), "(?, 'queued', ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"));
             $params = [];
@@ -243,6 +269,7 @@ function intel_affiliation_request(PDO $db, array $names, $userID, $queue = true
             $db->prepare("INSERT INTO fork_pilot_affiliation (name, status, requestedBy, requestedAt, wantedAt) VALUES $values
                 ON DUPLICATE KEY UPDATE status = 'queued', attempts = 0, error = '', requestedBy = VALUES(requestedBy),
                     requestedAt = VALUES(requestedAt), wantedAt = VALUES(wantedAt),
+                    resolvedAt = IF(resolvedAt < UTC_TIMESTAMP() - INTERVAL " . INTEL_AFF_RESOLVE_TTL . " SECOND, NULL, resolvedAt),
                     characterID = IF(characterID = 0, NULL, characterID)")->execute($params);
             $queuedNow += count($chunk);
         }
@@ -252,7 +279,7 @@ function intel_affiliation_request(PDO $db, array $names, $userID, $queue = true
     }
     // Remember that someone still wants the rest (pruning keeps rows asked for in the last INTEL_PILOTS_KEEP_DAYS)
     if ($queue) {
-        $known = array_values(array_filter($names, function ($name) use ($rows, $toQueue) {
+        $known = array_values(array_filter($lookup, function ($name) use ($rows, $toQueue) {
             $key = intel_name_key($name);
             return isset($rows[$key]) && !isset($toQueue[$key]);
         }));
@@ -261,7 +288,7 @@ function intel_affiliation_request(PDO $db, array $names, $userID, $queue = true
                 . implode(',', array_fill(0, count($chunk), '?')) . ') AND wantedAt < UTC_TIMESTAMP() - INTERVAL 1 HOUR')->execute($chunk);
         }
     }
-    return ['rows' => $out, 'pending' => max(0, $pending), 'queued' => $queuedNow, 'queueFull' => $queueFull];
+    return ['rows' => $out, 'pending' => count($pendingKeys), 'queued' => $queuedNow, 'queueFull' => $queueFull];
 }
 
 /** Character names of one of the mask's unexpired local scans in the system, or null when there is no such scan */
@@ -382,6 +409,9 @@ function intel_pilots_housekeeping(PDO $db, $now, $prune) {
         ->execute([gmdate('Y-m-d H:i:s', $now - INTEL_AFF_GIVE_UP)]);
     $db->prepare("UPDATE fork_pilot_threat SET status = 'queued' WHERE status = 'running' AND attemptedAt < ?")
         ->execute([gmdate('Y-m-d H:i:s', $now - 300)]);
+    // Names ESI didn't know (typos, random text) go soon: they are asked again if anyone pastes them again
+    $db->prepare("DELETE FROM fork_pilot_affiliation WHERE characterID = 0 AND status = 'done' AND fetchedAt < ?")
+        ->execute([gmdate('Y-m-d H:i:s', $now - INTEL_AFF_UNKNOWN_TTL)]);
     if (!$prune) return;
     $keep = gmdate('Y-m-d H:i:s', $now - INTEL_PILOTS_KEEP_DAYS * 86400);
     $db->prepare('DELETE FROM fork_pilot_affiliation WHERE wantedAt < ?')->execute([$keep]);
@@ -431,7 +461,7 @@ function intel_affiliation_run(PDO $db, $maxRequests = INTEL_AFF_REQUESTS) {
         if ($prune) $pruned = $now;
     }
     if (zk_http_wait('esi.evetech.net') > 1) return null;
-    $budget = ['requests' => 0, 'max' => $maxRequests];
+    $budget = ['requests' => 0, 'max' => $maxRequests, 'until' => microtime(true) + INTEL_AFF_PASS_SECONDS];
     $done = ['ids' => 0, 'unknown' => 0, 'affiliations' => 0, 'entities' => 0];
     $rejected = false;
     intel_ids_step($db, $budget, $done, $rejected);
@@ -442,23 +472,30 @@ function intel_affiliation_run(PDO $db, $maxRequests = INTEL_AFF_REQUESTS) {
         $done['ids'], $done['unknown'], $done['affiliations'], $done['entities'], $budget['requests']);
 }
 
-/** May the pass send another ESI request? Counts it if so. */
+/**
+ * May the pass send another ESI request? Counts it if so. Not after INTEL_AFF_PASS_SECONDS: the pass runs between R2Z2
+ * polls, so it may overrun that by at most one request (INTEL_AFF_TIMEOUT).
+ */
 function intel_esi_take(array &$budget) {
     if ($budget['requests'] >= $budget['max'] || zk_http_wait('esi.evetech.net') > 1) return false;
+    if (isset($budget['until']) && microtime(true) >= $budget['until']) return false;
     $budget['requests']++;
     return true;
 }
 
-/** Names -> character IDs (POST /universe/ids). Names ESI doesn't know become characterID 0 (unknown). */
+/**
+ * Names -> character IDs (POST /universe/ids): new names, and known ones whose mapping is due again (resolvedAt NULL,
+ * see intel_affiliation_request). Names ESI doesn't know (any more: renamed) become characterID 0 (unknown).
+ */
 function intel_ids_step(PDO $db, array &$budget, array &$done, &$rejected) {
     $rows = [];
-    foreach ($db->query("SELECT name, attempts FROM fork_pilot_affiliation WHERE status = 'queued' AND characterID IS NULL
+    foreach ($db->query("SELECT name, attempts FROM fork_pilot_affiliation WHERE status = 'queued' AND (characterID IS NULL OR resolvedAt IS NULL)
         ORDER BY attempts, requestedAt, name LIMIT " . INTEL_AFF_IDS_BATCH) as $row) {
         $rows[] = [$row['name'], (int) $row['attempts']];
     }
     if (!$rows) return;
-    $resolved = $db->prepare("UPDATE fork_pilot_affiliation SET characterID = ?, attempts = 0, attemptedAt = UTC_TIMESTAMP() WHERE name = ?");
-    $unknown = $db->prepare("UPDATE fork_pilot_affiliation SET characterID = 0, corporationID = NULL, allianceID = NULL, status = 'done',
+    $resolved = $db->prepare("UPDATE fork_pilot_affiliation SET characterID = ?, resolvedAt = UTC_TIMESTAMP(), attempts = 0, attemptedAt = UTC_TIMESTAMP() WHERE name = ?");
+    $unknown = $db->prepare("UPDATE fork_pilot_affiliation SET characterID = 0, resolvedAt = UTC_TIMESTAMP(), corporationID = NULL, allianceID = NULL, status = 'done',
         attempts = 0, error = '', attemptedAt = UTC_TIMESTAMP(), fetchedAt = UTC_TIMESTAMP() WHERE name = ?");
     foreach (intel_tier_batches($rows, INTEL_AFF_IDS_BATCH) as $batch) {
         if (!intel_esi_take($budget)) return;
@@ -488,7 +525,7 @@ function intel_affiliation_step(PDO $db, array &$budget, array &$done, &$rejecte
     $rows = [];
     $names = [];
     foreach ($db->query("SELECT name, characterID, attempts FROM fork_pilot_affiliation WHERE status = 'queued' AND characterID > 0
-        ORDER BY attempts, requestedAt, characterID LIMIT " . INTEL_AFF_BATCH) as $row) {
+        AND resolvedAt IS NOT NULL ORDER BY attempts, requestedAt, characterID LIMIT " . INTEL_AFF_BATCH) as $row) {
         $id = (int) $row['characterID'];
         if (!isset($names[$id])) $rows[] = [$id, (int) $row['attempts']];
         $names[$id][] = $row['name'];
@@ -683,7 +720,7 @@ function intel_lookups_run(PDO $db, $maxJobs = 5) {
 }
 
 /**
- * Compact threat summary from a zKillboard character stats answer (https://zkillboard.com/api/stats/characterID/<id>/),
+ * Compact threat summary from a zKillboard character stats answer (intel_threat_url()),
  * or null when it isn't one. A character without any kills or losses comes back with zeros.
  *   danger (dangerRatio, %), gang (gangRatio, %), kills (shipsDestroyed), losses (shipsLost), solo (soloKills),
  *   kills7d (activepvp), lastMonth ('YYYY-MM' of the newest month with kills), ships ([[typeID, name, kills]], the
@@ -724,6 +761,39 @@ function intel_threat_compact($data) {
 }
 
 /**
+ * zKillboard's character stats route. With the sort segment ("kills/"): without it zKillboard answers with a redirect
+ * to this URL (zKillboard source, view/apistats.php).
+ */
+function intel_threat_url($characterID) {
+    return ZK_API_BASE . 'stats/characterID/' . (int) $characterID . '/kills/';
+}
+
+/**
+ * Interpret an answer of the character stats route. @return array [compact stats or null, error text, block the host]
+ *   - JSON stats object: compact stats
+ *   - an empty body, `null`, `[]` or `{}`: no stats, cached as zeros (never a reason to block zKillboard)
+ *   - {"error": "Invalid type or id"}: zKillboard has no record of the character (never killed or lost anything): zeros
+ *   - any other {"error": ...} (e.g. "entity is disqualified"): failed, retried after INTEL_THREAT_RETRY
+ *   - HTTP 200 that is not JSON (Cloudflare challenge, maintenance page): failed and block, like zk_http_get_json()
+ *   - other statuses: failed (the HTTP client has already backed off / blocked as needed)
+ */
+function intel_threat_answer($status, $body) {
+    if ($status !== 200) return [null, "zKillboard: HTTP $status", false];
+    $text = trim((string) $body);
+    if ($text === '' || $text === 'null' || $text === '[]' || $text === '{}') return [intel_threat_compact([]), '', false];
+    $data = json_decode($text, true);
+    if (!is_array($data)) {
+        return [null, 'HTTP 200 without JSON: ' . substr(preg_replace('/\s+/', ' ', strip_tags($text)), 0, 80), true];
+    }
+    if (isset($data['error'])) {
+        if ((string) $data['error'] === 'Invalid type or id') return [intel_threat_compact([]), '', false];
+        return [null, 'zKillboard: ' . substr((string) $data['error'], 0, 200), false];
+    }
+    $threat = intel_threat_compact($data);
+    return $threat === null ? [null, 'zKillboard: unexpected answer', false] : [$threat, '', false];
+}
+
+/**
  * Worker: one pilot's zKillboard stats, the lowest priority of the zKillboard API work: only when the API may be
  * called now (ZKILL_API_INTERVAL, backoff, blocks) and no back-fill or system stats are queued.
  * @return string|null log line, or null when nothing was done
@@ -740,15 +810,16 @@ function intel_threat_run_one(PDO $db) {
     $finish = $db->prepare('UPDATE fork_pilot_threat SET status = ?, error = ?, data = COALESCE(?, data),
         fetchedAt = CASE WHEN ? IS NULL THEN fetchedAt ELSE UTC_TIMESTAMP() END WHERE characterID = ?');
     try {
-        [$status, $data] = zk_http_get_json(ZK_API_BASE . 'stats/characterID/' . $characterID . '/', false, INTEL_THREAT_TIMEOUT);
+        // Not zk_http_get_json(): an empty answer must not block zKillboard (see intel_threat_answer)
+        [$status, $body] = zk_http_get(intel_threat_url($characterID), false, INTEL_THREAT_TIMEOUT);
         if ($status === -1) {
             $finish->execute(['queued', '', null, null, $characterID]);
             return null;
         }
-        $threat = $status === 200 ? intel_threat_compact($data) : null;
+        [$threat, $error, $block] = intel_threat_answer($status, $body);
+        if ($block) zk_http_block('zkillboard.com', 0, $error);
         if ($threat === null) {
-            $error = $status === 200 ? 'zKillboard: unexpected answer' : "zKillboard: HTTP $status";
-            $finish->execute(['failed', $error, null, null, $characterID]);
+            $finish->execute(['failed', substr($error, 0, 255), null, null, $characterID]);
             return "pilot stats $characterID: $error";
         }
         $json = json_encode($threat);

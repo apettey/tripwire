@@ -29,6 +29,7 @@ zk_http_transport(function ($method, $url, $body) use (&$calls, &$handler) {
     $calls[] = [$method, $url, $body];
     return $handler($method, $url, $body);
 });
+zk_log_sink(function ($message) { /* expected blocks are part of the test */ });
 function limiter_reset() {
     $state = &zk_http_state();
     $state = [];
@@ -97,8 +98,8 @@ check('decision: queued, nothing known yet', intel_affiliation_decision($row(['s
 check('decision: queued for a refresh keeps showing the old data', intel_affiliation_decision($row(['status' => 'queued']), $now), ['queue' => false, 'pending' => false]);
 check('decision: fresh affiliation', intel_affiliation_decision($row(['fetchedAt' => $now - 600]), $now), ['queue' => false, 'pending' => false]);
 check('decision: affiliation older than an hour is refreshed', intel_affiliation_decision($row(['fetchedAt' => $now - INTEL_AFF_TTL - 1]), $now), ['queue' => true, 'pending' => false]);
-check('decision: unknown name within a day', intel_affiliation_decision($row(['characterID' => 0, 'corporationID' => null, 'fetchedAt' => $now - 7200]), $now), ['queue' => false, 'pending' => false]);
-check('decision: unknown name after a day', intel_affiliation_decision($row(['characterID' => 0, 'corporationID' => null, 'fetchedAt' => $now - INTEL_AFF_UNKNOWN_TTL - 1]), $now), ['queue' => true, 'pending' => false]);
+check('decision: unknown name within the hour', intel_affiliation_decision($row(['characterID' => 0, 'corporationID' => null, 'fetchedAt' => $now - 600]), $now), ['queue' => false, 'pending' => false]);
+check('decision: unknown name after the hour', intel_affiliation_decision($row(['characterID' => 0, 'corporationID' => null, 'fetchedAt' => $now - INTEL_AFF_UNKNOWN_TTL - 1]), $now), ['queue' => true, 'pending' => false]);
 check('decision: failed waits out the retry period', intel_affiliation_decision($row(['status' => 'failed', 'characterID' => null, 'corporationID' => null, 'attemptedAt' => $now - 60]), $now), ['queue' => false, 'pending' => false]);
 check('decision: failed is retried later', intel_affiliation_decision($row(['status' => 'failed', 'characterID' => null, 'corporationID' => null, 'attemptedAt' => $now - INTEL_AFF_RETRY - 1]), $now), ['queue' => true, 'pending' => true]);
 
@@ -288,7 +289,7 @@ $statsAnswer = ['type' => 'solarSystemID', 'id' => TEST_STATS_SYSTEM, 'shipsDest
 $handler = function ($method, $url, $body) use ($answer, $statsAnswer) {
     if (parse_url($url, PHP_URL_HOST) !== 'zkillboard.com') return [599, 'not zKillboard', []];
     if (strpos($url, '/api/stats/solarSystemID/') !== false) return [200, json_encode($statsAnswer), []];
-    if (preg_match('#/api/stats/characterID/(\d+)/$#', $url, $m)) return [200, json_encode(['id' => (int) $m[1]] + $answer), []];
+    if (preg_match('#/api/stats/characterID/(\d+)/kills/$#', $url, $m)) return [200, json_encode(['id' => (int) $m[1]] + $answer), []];
     return [404, '', []];
 };
 $mysql->exec('INSERT INTO zkill_system_stats (systemID, status, priority, requestedAt, wantedAt) VALUES (' . TEST_STATS_SYSTEM . ", 'queued', 10, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
@@ -300,7 +301,7 @@ check('priority: system stats first', array_map(function ($c) { return $c[1]; },
 check('priority: one zKillboard request per step', [intel_zkill_api_step($mysql), count($calls)], [null, 1]);   // ZKILL_API_INTERVAL not over
 limiter_reset();
 $line = intel_zkill_api_step($mysql);
-check('priority: then pilot stats', [$calls[1][1], $line], ['https://zkillboard.com/api/stats/characterID/2100000101/', 'pilot stats 2100000101: danger 87%, 1234 kills']);
+check('priority: then pilot stats', [$calls[1][1], $line], ['https://zkillboard.com/api/stats/characterID/2100000101/kills/', 'pilot stats 2100000101: danger 87%, 1234 kills']);
 $stored = $mysql->query('SELECT status, data, fetchedAt IS NOT NULL FROM fork_pilot_threat WHERE characterID = 2100000101')->fetch(PDO::FETCH_NUM);
 check('threat: stored compact', [$stored[0], json_decode($stored[1], true), (int) $stored[2]], ['done', json_decode(json_encode($compact), true), 1]);
 // Back-fill waiting: no pilot stats
@@ -356,17 +357,27 @@ for ($i = 0; $i < 4; $i++) {
 check('reject: big batch, then small batch, then alone', $passes, [['[2100000106,2100000107]'], ['[2100000106,2100000107]'], ['[2100000106]', '[2100000107]'], []]);
 check('reject: the bad one failed, the good one done', [$get('Zzt Hostile 07')[3], $get('Zzt Hostile 06')[3]], ['failed', 'done']);
 
-// --- Caps: per-user queue limit ---
+// --- Caps: per user and hour, whatever became of the names (unknown names resolve within seconds) ---
 $fill = [];
 for ($i = 0; $i < INTEL_AFF_MAX_PER_USER - 1; $i++) $fill[] = sprintf('Zzt Cap %05d', $i);
 foreach (array_chunk($fill, 1000) as $chunk) {
-    $mysql->prepare('INSERT INTO fork_pilot_affiliation (name, status, requestedBy, requestedAt, wantedAt) VALUES '
-        . implode(',', array_fill(0, count($chunk), "(?, 'queued', " . CAP_USER . ', UTC_TIMESTAMP(), UTC_TIMESTAMP())')))->execute($chunk);
+    $mysql->prepare('INSERT INTO fork_pilot_affiliation (name, characterID, status, requestedBy, requestedAt, wantedAt, fetchedAt) VALUES '
+        . implode(',', array_fill(0, count($chunk), "(?, 0, 'done', " . CAP_USER . ', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())')))->execute($chunk);
 }
 $capped = intel_affiliation_request($mysql, ['Zzt Over One', 'Zzt Over Two', 'Zzt Over Three'], CAP_USER, true);
 check('cap: one more name fits, the rest is refused', [$capped['queued'], $capped['pending'], $capped['queueFull']], [1, 1, true]);
 check('cap: other users are not affected', intel_affiliation_request($mysql, ['Zzt Other User'], USER, true)['queued'], 1);
+// Pending is only lowered for names that counted as pending: a stale unknown name (not pending) and a name another
+// user already queued (pending, not queued again) next to a refused new one
+$mysql->exec("INSERT INTO fork_pilot_affiliation (name, characterID, status, requestedBy, requestedAt, wantedAt, fetchedAt) VALUES
+    ('Zzt Stale Unknown', 0, 'done', " . USER . ", UTC_TIMESTAMP() - INTERVAL 2 HOUR, UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 2 HOUR)");
+$mysql->exec("INSERT INTO fork_pilot_affiliation (name, status, requestedBy, requestedAt, wantedAt) VALUES ('Zzt Queued Other', 'queued', " . USER . ', UTC_TIMESTAMP(), UTC_TIMESTAMP())');
+$capped = intel_affiliation_request($mysql, ['Zzt Stale Unknown', 'Zzt Queued Other', 'Zzt Over Four'], CAP_USER, true);
+check('cap: pending keeps the queued name, drops the refused one', [$capped['queued'], $capped['pending'], $capped['queueFull']], [0, 1, true]);
+$mysql->exec("DELETE FROM fork_pilot_affiliation WHERE name IN ('Zzt Stale Unknown', 'Zzt Queued Other')");
 $mysql->exec('DELETE FROM fork_pilot_affiliation WHERE requestedBy = ' . CAP_USER);
+check('cap: an hour later the user may queue again', intel_affiliation_room(0, 0, CAP_USER, 3), 3);
+check('cap: one user alone can never fill the queue', INTEL_AFF_MAX_PER_USER < INTEL_AFF_MAX_QUEUED / 2, true);
 
 // --- Housekeeping: names nobody could resolve are given up after an hour ---
 $mysql->exec("UPDATE fork_pilot_affiliation SET status = 'queued', characterID = NULL, requestedAt = UTC_TIMESTAMP() - INTERVAL 2 HOUR WHERE name = 'Zzt Other User'");
@@ -374,6 +385,89 @@ intel_pilots_housekeeping($mysql, time(), false);
 check('housekeeping: gave up', $get('Zzt Other User')[3], 'failed');
 $view = intel_pilots_view($mysql, $scanID, ['Zzt Other User'], 0, ['corporations' => [], 'alliances' => []]);
 check('view: given up counts as unknown', $view['pilots'][0], [0, null, null, null]);
+
+// --- Names outside EVE's charset: unknown, never looked up or queued (full-width letters fold to ASCII in MySQL) ---
+check('charset: plain', intel_lookup_name('Zzt Hostile 03'), true);
+check("charset: ' . - _", intel_lookup_name("O'Neil Mc-Fly_2.0"), true);
+check('charset: full-width', intel_lookup_name('Ｚzt Hostile 03'), false);
+check('charset: accented', intel_lookup_name('Zzt Hóstile'), false);
+check('charset: too short / trailing space', [intel_lookup_name('Ab'), intel_lookup_name('Abc ')], [false, false]);
+$before = $get('Zzt Hostile 03');
+$odd = intel_affiliation_request($mysql, ['Ｚzt Hostile 03', 'Zzt Hóstile'], USER, true);
+check('charset: not queued, not pending', [$odd['queued'], $odd['pending']], [0, 0]);
+check('charset: the real row is left alone', $get('Zzt Hostile 03'), $before);
+check('charset: no rows for them', (int) $mysql->query("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE name LIKE '%stile 03' AND name <> 'Zzt Hostile 03'")->fetchColumn(), 0);
+$view = intel_pilots_view($mysql, $scanID, ['Ｚzt Hostile 03', 'Zzt Hostile 03'], USER, ['corporations' => [], 'alliances' => []]);
+check('charset: shown as unknown', [$view['pilots'][0], $view['pilots'][1][0]], [[0, null, null, null], 2100000103]);
+
+// --- Renamed characters: name -> ID is checked again after a day ---
+$mysql->exec("UPDATE fork_pilot_affiliation SET fetchedAt = UTC_TIMESTAMP() - INTERVAL 2 HOUR, resolvedAt = UTC_TIMESTAMP() - INTERVAL 2 DAY WHERE name = 'Zzt Hostile 08'");
+$mysql->exec("UPDATE fork_pilot_affiliation SET fetchedAt = UTC_TIMESTAMP() - INTERVAL 2 HOUR WHERE name = 'Zzt Hostile 09'");
+intel_affiliation_request($mysql, ['Zzt Hostile 08', 'Zzt Hostile 09'], USER, true);
+check('rename: old mapping kept on show while it is checked', $get('Zzt Hostile 08'), [2100000108, RAIDERS, ALLIANCE, 'queued']);
+$view = intel_pilots_view($mysql, $scanID, ['Zzt Hostile 08'], USER, ['corporations' => [], 'alliances' => []]);
+check('rename: not pending meanwhile', [$view['pending'], $view['pilots'][0][0]], [0, 2100000108]);
+$handler = function ($method, $url, $body) use ($esiHandler) {
+    if (strpos($url, 'universe/ids') !== false) return [200, '{}', []];   // the old name is gone
+    return $esiHandler($method, $url, $body);
+};
+limiter_reset();
+$calls = [];
+intel_affiliation_run($mysql, 8);
+check('rename: only the old mapping is asked again', array_map(function ($c) { return parse_url($c[1], PHP_URL_PATH) . ' ' . $c[2]; }, $calls),
+    ['/universe/ids ["Zzt Hostile 08"]', '/characters/affiliation [2100000109]']);
+check('rename: the old name is now unknown', $get('Zzt Hostile 08'), [0, null, null, 'done']);
+
+// --- Unknown names are deleted after an hour ---
+$mysql->exec("UPDATE fork_pilot_affiliation SET fetchedAt = UTC_TIMESTAMP() - INTERVAL 2 HOUR WHERE name = 'Zzt Hostile 08'");
+intel_pilots_housekeeping($mysql, time(), false);
+check('prune: unknown name gone', (int) $mysql->query("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE name = 'Zzt Hostile 08'")->fetchColumn(), 0);
+check('prune: known names kept', $get('Zzt Hostile 09')[0], 2100000109);
+
+// --- Wall-clock budget: no new ESI request after INTEL_AFF_PASS_SECONDS ---
+$budget = ['requests' => 0, 'max' => 8, 'until' => microtime(true) - 1];
+check('budget: past the deadline', [intel_esi_take($budget), $budget['requests']], [false, 0]);
+$values = [];
+for ($i = 0; $i < 8; $i++) $values[] = '(' . (2100008000 + $i) . ", 'corporation', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())";
+$mysql->exec('INSERT INTO fork_pilot_entities (id, kind, status, requestedAt, wantedAt) VALUES ' . implode(',', $values));
+$handler = function ($method, $url, $body) { usleep(1100000); return [200, '{"name":"Slow Corp","ticker":"SLOW"}', []]; };
+limiter_reset();
+$calls = [];
+$started = microtime(true);
+intel_affiliation_run($mysql, 8);
+check('budget: a slow ESI stops the pass after about 3 s', [count($calls), microtime(true) - $started < 4.5], [3, true]);
+$mysql->exec('DELETE FROM fork_pilot_entities WHERE id BETWEEN 2100008000 AND 2100008007');
+
+// --- zKillboard character stats: answer shapes (no request; the stats route of zKillboard's view/apistats.php) ---
+$zeros = intel_threat_compact([]);
+check('answer: empty body', intel_threat_answer(200, ''), [$zeros, '', false]);
+check('answer: null', intel_threat_answer(200, 'null'), [$zeros, '', false]);
+check('answer: []', intel_threat_answer(200, ' [] '), [$zeros, '', false]);
+check('answer: {}', intel_threat_answer(200, '{}'), [$zeros, '', false]);
+check('answer: no record of the character', intel_threat_answer(200, '{"error":"Invalid type or id"}'), [$zeros, '', false]);
+check('answer: other error', intel_threat_answer(200, '{"error":"entity is disqualified"}'), [null, 'zKillboard: entity is disqualified', false]);
+check('answer: stats', intel_threat_answer(200, json_encode($answer))[0], $compact);
+check('answer: challenge page blocks', array_slice(intel_threat_answer(200, '<html><title>Just a moment...</title></html>'), 1), ['HTTP 200 without JSON: Just a moment...', true]);
+check('answer: HTTP error', intel_threat_answer(503, 'busy'), [null, 'zKillboard: HTTP 503', false]);
+// The worker path with empty answers: zeros stored, zKillboard not blocked
+foreach (['', 'null', '[]'] as $i => $body) {
+    $id = 2100000501 + $i;
+    $mysql->exec("INSERT INTO fork_pilot_threat (characterID, status, requestedAt) VALUES ($id, 'queued', UTC_TIMESTAMP() - INTERVAL 1 DAY)");
+    $handler = function () use ($body) { return [200, $body, []]; };
+    limiter_reset();
+    $calls = [];
+    $line = intel_threat_run_one($mysql);
+    $row = $mysql->query("SELECT status, data FROM fork_pilot_threat WHERE characterID = $id")->fetch(PDO::FETCH_NUM);
+    check("worker: answer '$body' is no stats", [$calls[0][1] ?? null, $row[0], json_decode($row[1], true), zk_http_wait('zkillboard.com') <= zk_api_interval()],
+        [intel_threat_url($id), 'done', json_decode(json_encode($zeros), true), true]);
+}
+$mysql->exec("INSERT INTO fork_pilot_threat (characterID, status, requestedAt) VALUES (2100000504, 'queued', UTC_TIMESTAMP() - INTERVAL 1 DAY)");
+$handler = function () { return [200, '<html>challenge</html>', []]; };
+limiter_reset();
+intel_threat_run_one($mysql);
+check('worker: a challenge page still blocks zKillboard', zk_http_wait('zkillboard.com') > 300, true);
+limiter_reset();
+
 
 // --- Server-wide switch ---
 $off = json_decode(shell_exec('php ' . escapeshellarg(__FILE__) . ' --threat-off'), true);

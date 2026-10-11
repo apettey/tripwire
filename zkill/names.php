@@ -14,6 +14,7 @@ const ZK_NAMES_SUSPECT_BATCH = 10;   // IDs per request from a rejected big batc
 const ZK_NAMES_MAX_REQUESTS  = 6;    // ESI requests per pass
 const ZK_NAMES_TIMEOUT       = 10;   // seconds per request
 const ZK_NAMES_ERROR_PAUSE   = 10;   // seconds without name passes after ESI rejected a batch
+const ZK_NAMES_PASS_SECONDS  = 3;    // no new request after this long in one pass (the worker polls R2Z2 between passes)
 
 /**
  * Cached names for the given IDs; unknown IDs are queued for the worker.
@@ -88,8 +89,9 @@ function zk_names_resolve(PDO $db, $maxRequests = ZK_NAMES_MAX_REQUESTS) {
     $resolve = $db->prepare('UPDATE zkill_names SET name = ?, category = ?, resolvedAt = UTC_TIMESTAMP() WHERE id = ?');
     $resolved = 0;
     $requests = 0;
+    $until = microtime(true) + ZK_NAMES_PASS_SECONDS;
     foreach (zk_names_batches($rows) as $batch) {
-        if ($requests >= $maxRequests || zk_http_wait('esi.evetech.net') > 1) break;   // the rest stays queued
+        if ($requests >= $maxRequests || zk_http_wait('esi.evetech.net') > 1 || microtime(true) >= $until) break;   // the rest stays queued
         $requests++;
         [$status, $body] = zk_http_request('POST', ZK_ESI_BASE . 'universe/names', json_encode($batch), true, ZK_NAMES_TIMEOUT);
         $data = $status === 200 ? json_decode($body, true) : null;

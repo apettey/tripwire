@@ -250,7 +250,7 @@ Data flow:
    A job that throws is marked `failed`; a `running` job older than 5 minutes is queued again. Back-filled kills go
    into `zkill_killmails` only, never into `zkill_kills`, so they never trigger kill sounds.
 3. **Names.** Endpoints return IDs plus the names already in `zkill_names` and queue unknown IDs; while the stream is
-   caught up the worker resolves queued IDs every 2 seconds (at most 3 ESI requests per pass). ESI rejects a whole
+   caught up the worker resolves queued IDs every 2 seconds (at most 3 ESI requests and 3 seconds per pass). ESI rejects a whole
    batch if one ID is invalid, so `attempts` works as a tier: new IDs go in one batch of up to 500, IDs from a
    rejected batch go in batches of 10, IDs from a rejected small batch one by one, and an ID rejected on its own is
    stored as unresolvable. At most one rejection per pass, then name passes pause for 10 seconds: an invalid ID
@@ -515,26 +515,37 @@ stream is caught up. With the feed off nothing is queued and the panel shows the
 
 | Table | Holds |
 | --- | --- |
-| `fork_pilot_affiliation` | One row per character name (case-insensitive): `characterID` (`NULL` = not resolved yet, `0` = no such character), `corporationID`, `allianceID`, fetched time. Also the ESI queue (`status` queued / done / failed, `requestedBy`, `wantedAt`) |
+| `fork_pilot_affiliation` | One row per character name (ASCII, case-insensitive): `characterID` (`NULL` = not resolved yet, `0` = no such character), `resolvedAt` (when name → ID was last checked), `corporationID`, `allianceID`, fetched time. Also the ESI queue (`status` queued / done / failed, `requestedBy`, `requestedAt`, `wantedAt`) |
 | `fork_pilot_entities` | Corporation / alliance name and ticker (also a queue); refreshed after a week |
 | `fork_intel_lookups` | One job per shared local scan with the sharer's friendly corporation / alliance IDs (session plus a corp/alliance mask's owner) |
 | `fork_pilot_threat` | Compact zKillboard character stats per character (`danger`, `gang`, `kills`, `losses`, `solo`, `kills7d`, `lastMonth`, top 3 ship types), fresh for 24 hours, deleted after 48; also that queue |
 
-1. **Share.** `POST mode=add` of a local scan queues its names (at most 2000 per scan; caps: 20,000 queued names
-   overall, 6,000 per user; above them nothing more is queued and the answer says `queueFull`) and creates a lookup job.
-2. **ESI** (every 2 seconds with the name passes, at most 8 requests per pass): `POST /universe/ids` (500 names per
-   call; names ESI doesn't know become unknown and are asked again after a day), `POST /characters/affiliation` (1000
-   IDs per call), then `GET /corporations/<id>` and `GET /alliances/<id>` for names and tickers (NPC corporations,
-   1000000-1999999, are not looked up). A rejected batch is retried in smaller batches, then one by one (like the
-   name cache), one rejection per pass; names still queued after an hour are given up. Affiliations are refreshed
-   when a scan is viewed and its entry is older than an hour (ESI caches them that long).
+1. **Share.** `POST mode=add` of a local scan queues its names (at most 2000 per scan) and creates a lookup job. Only
+   names in EVE's character-name charset (ASCII letters, digits, space, `'` `.` `-` `_`, 3-37 characters) are looked up;
+   anything else (full-width or accented letters) can't be a character and shows as unknown without a lookup. Caps:
+   20,000 queued names overall, and 6,000 names per user per hour whatever became of them (so names that resolve
+   within seconds count too, and one user can't keep the queue full for everyone else); above them nothing more is
+   queued and the answer says `queueFull`.
+2. **ESI** (every 2 seconds with the name passes, at most 8 requests and 3 seconds per pass, 5 s timeout, so the R2Z2
+   poll is never held up for long; the name passes of `zkill/names.php` have the same 3-second budget):
+   `POST /universe/ids` (500 names per call), `POST /characters/affiliation` (1000 IDs per call), then
+   `GET /corporations/<id>` and `GET /alliances/<id>` for names and tickers (NPC corporations, 1000000-1999999, are
+   not looked up). A rejected batch is retried in smaller batches, then one by one (like the name cache), one
+   rejection per pass; names still queued after an hour are given up. When a scan is viewed, affiliations older than
+   an hour are refreshed (ESI caches them that long) and name → ID mappings older than a day are checked again
+   (renamed characters become unknown under their old name); the old data stays on show meanwhile. Names ESI
+   doesn't know are deleted after an hour and looked up again if someone pastes them again.
 3. **Threat selection** (no HTTP): once a scan's names are resolved (or after 15 minutes), the worker queues
-   zKillboard stats for at most **20 new pilots per scan**: never friendly ones, pilots in player corporations before
-   those in NPC corporations, paste order otherwise; pilots with fresh (24 h) or queued stats don't count. Caps: 300
-   queued overall, 100 per user.
-4. **zKillboard** (lowest priority): `https://zkillboard.com/api/stats/characterID/<id>/`, one request per pilot, only
-   when no back-fill or system stats are queued and within `ZKILL_API_INTERVAL` (10 s timeout); a failure is retried
-   after an hour at the earliest. `INTEL_ZKILL_THREAT_ENABLED=false` turns this step off.
+   zKillboard stats for at most **20 new pilots per scan**: never friendly ones (friendly corporation or friendly
+   alliance; the panel uses the same rule), pilots in player corporations before those in NPC corporations, paste
+   order otherwise; pilots with fresh (24 h) or queued stats don't count. Caps: 300 queued overall, 100 per user.
+4. **zKillboard** (lowest priority): `https://zkillboard.com/api/stats/characterID/<id>/kills/` (without `kills/`
+   zKillboard redirects there), one request per pilot, only when no back-fill or system stats are queued and within
+   `ZKILL_API_INTERVAL` (10 s timeout); a failure is retried after an hour at the earliest.
+   `INTEL_ZKILL_THREAT_ENABLED=false` turns this step off. Answers (zKillboard's `view/apistats.php`): a stats object
+   is compacted; `{"error":"Invalid type or id"}` (zKillboard has no record of the character, common in local) and an
+   empty body, `null`, `[]` or `{}` are stored as "no kills" and never block zKillboard; another `error` is a failed
+   lookup; only a 200 that isn't JSON (challenge page) blocks the host, like everywhere else.
 5. Rows nobody asked for in 7 days are pruned (hourly).
 
 `public/intel_scans.php` accepts `pilots=<scanID>` with `systemID` (a local scan of the mask in that system) and then

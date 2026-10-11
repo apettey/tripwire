@@ -100,32 +100,34 @@ const intelPilots = {
 		(Array.isArray(names) ? names : []).forEach(function(name, i) {
 			const row = Array.isArray(rows[i]) ? rows[i] : [];
 			const pilot = { name: String(name), id: intelPilots.id(row[0]), corporationID: intelPilots.id(row[1]), allianceID: intelPilots.id(row[2]),
-				threat: row[3] === undefined ? null : row[3] };
+				threat: row[3] === undefined ? null : row[3], friendly: false };
 			out.total++;
 			if (row[0] === null || row[0] === undefined) {
 				out.pending.push(pilot);
 				return;
 			}
 			if (!pilot.id || !pilot.corporationID || intelPilots.isNpcCorp(pilot.corporationID)) { out.other.push(pilot); return; }
-			const friendly = friendlyCorps.indexOf(pilot.corporationID) >= 0 || (pilot.allianceID !== null && friendlyAlliances.indexOf(pilot.allianceID) >= 0);
-			if (friendly) { out.friendly++; }
+			// Same rule as the server's threat pick (intel_threat_pick): a friendly corporation or a friendly alliance
+			const allianceFriendly = pilot.allianceID !== null && friendlyAlliances.indexOf(pilot.allianceID) >= 0;
+			pilot.friendly = allianceFriendly || friendlyCorps.indexOf(pilot.corporationID) >= 0;
+			if (pilot.friendly) { out.friendly++; }
 			const top = pilot.allianceID ? "a" + pilot.allianceID : "c" + pilot.corporationID;
 			let g = byKey[top];
 			if (!g) {
 				const e = entity(pilot.allianceID || pilot.corporationID);
+				// An alliance group is friendly only when the alliance is; a friendly corporation in it keeps its own flag
 				g = byKey[top] = { key: top, kind: pilot.allianceID ? "alliance" : "corporation", id: pilot.allianceID || pilot.corporationID,
-					name: e.name, ticker: e.ticker, count: 0, friendly: false, pilots: [], corps: [], corpByID: {} };
+					name: e.name, ticker: e.ticker, count: 0, friendly: pilot.allianceID ? allianceFriendly : pilot.friendly, pilots: [], corps: [], corpByID: {} };
 				out.groups.push(g);
 			}
 			g.count++;
-			g.friendly = g.friendly || friendly;
 			g.pilots.push(pilot);
 			if (pilot.allianceID) {
 				let c = g.corpByID[pilot.corporationID];
 				if (!c) {
 					const e = entity(pilot.corporationID);
 					c = g.corpByID[pilot.corporationID] = { key: top + "c" + pilot.corporationID, kind: "corporation", id: pilot.corporationID,
-						name: e.name, ticker: e.ticker, count: 0, friendly: friendly, pilots: [] };
+						name: e.name, ticker: e.ticker, count: 0, friendly: pilot.friendly, pilots: [] };
 					g.corps.push(c);
 				}
 				c.count++;
@@ -140,18 +142,18 @@ const intelPilots = {
 		return out;
 	},
 
-	/** Pilots of a list with threat data, most dangerous first: [{pilot, level}] */
+	/** Pilots of a list with threat data, most dangerous first (friendly pilots left out): [{pilot, level}] */
 	dangerous: function(pilots, types) {
-		return pilots.map(function(p) {
+		return pilots.filter(function(p) { return !p.friendly; }).map(function(p) {
 			return { pilot: p, level: p.threat && typeof p.threat === "object" ? intelPilots.threatLevel(p.threat, types) : null };
 		}).filter(function(x) { return x.level && x.level.level !== "none"; })
 			.sort(function(a, z) { return (z.level.danger || 0) - (a.level.danger || 0) || (Number(z.pilot.threat.kills) || 0) - (Number(a.pilot.threat.kills) || 0); });
 	},
 
-	/** Threat badge markup of a pilot (escaped); friendly pilots get none */
-	badgeHtml: function(pilot, view, types, friendly) {
+	/** Threat badge markup of a pilot (escaped); friendly pilots get none (the server doesn't look them up) */
+	badgeHtml: function(pilot, view, types) {
 		const esc = intelPilots.escape;
-		if (friendly || !view || !view.threat) { return ""; }
+		if (pilot.friendly || !view || !view.threat) { return ""; }
 		const t = pilot.threat;
 		if (t && typeof t === "object") {
 			const level = intelPilots.threatLevel(t, types);
@@ -166,20 +168,20 @@ const intelPilots = {
 		return "<span class='intel-threat intel-threat-na' title='Not looked up: zKillboard stats are fetched for at most 20 pilots per scan'>–</span>";
 	},
 
-	pilotHtml: function(pilot, view, types, friendly, showThreat) {
+	pilotHtml: function(pilot, view, types, showThreat) {
 		const esc = intelPilots.escape;
 		const name = pilot.id ? "<a href='" + intelPilots.ZKILL + "character/" + pilot.id + "/' target='_blank' rel='noopener noreferrer'>" + esc(pilot.name) + "</a>" : esc(pilot.name);
-		const badge = showThreat ? intelPilots.badgeHtml(pilot, view, types, friendly) : "";
+		const badge = showThreat ? intelPilots.badgeHtml(pilot, view, types) : "";
 		return "<li>" + name + (badge ? " " + badge : "") + "</li>";
 	},
 
-	pilotsListHtml: function(pilots, view, types, friendly, showThreat) {
+	pilotsListHtml: function(pilots, view, types, showThreat) {
 		const shown = pilots.slice(0, intelPilots.PILOTS_SHOWN);
-		return "<ul class='intel-pilot-list'>" + shown.map(function(p) { return intelPilots.pilotHtml(p, view, types, friendly, showThreat); }).join("")
+		return "<ul class='intel-pilot-list'>" + shown.map(function(p) { return intelPilots.pilotHtml(p, view, types, showThreat); }).join("")
 			+ (pilots.length > shown.length ? "<li class='intel-muted'>and " + (pilots.length - shown.length) + " more</li>" : "") + "</ul>";
 	},
 
-	/** Summary of a group's threat: badge of its most dangerous pilot plus up to two names, or a loading mark */
+	/** Summary of a group's threat (its pilots that aren't friendly): badge of the most dangerous one plus up to two names, or a loading mark */
 	groupThreatHtml: function(group, view, types) {
 		const esc = intelPilots.escape;
 		if (group.friendly || !view || !view.threat) { return ""; }
@@ -191,34 +193,35 @@ const intelPilots = {
 			return " <span class='intel-threat intel-threat-" + best.level + (best.cyno ? " intel-threat-cyno" : "") + "' title='" + esc(title) + "'>" + esc(best.text) + "</span>"
 				+ " <span class='intel-group-top' title='" + esc(title) + "'>" + esc(names.join(", ")) + "</span>";
 		}
-		const loading = group.pilots.some(function(p) { return p.threat === "q" || (p.threat === null && view.threatPending); });
+		const loading = group.pilots.some(function(p) { return !p.friendly && (p.threat === "q" || (p.threat === null && view.threatPending)); });
 		return loading ? " <span class='intel-threat intel-threat-loading' title='Threat loading…'>…</span>" : "";
 	},
 
 	/** One group row (alliance or corporation) and, when expanded, its corporations or pilots */
-	groupHtml: function(group, ctx, nested) {
+	groupHtml: function(group, ctx, parent) {
 		const esc = intelPilots.escape;
 		const key = ctx.scanID + ":" + group.key;
 		const open = !!ctx.expanded[key];
 		const label = (group.ticker ? "[" + group.ticker + "] " : "") + (group.name || (group.kind === "alliance" ? "Alliance " : "Corporation ") + group.id);
-		let html = "<div class='intel-group" + (nested ? " intel-group-nested" : "") + (group.friendly ? " intel-friendly" : "") + "'>"
+		let html = "<div class='intel-group" + (parent ? " intel-group-nested" : "") + (group.friendly ? " intel-friendly" : "") + "'>"
 			+ "<a href='#' class='intel-group-toggle' data-group='" + esc(key) + "' aria-expanded='" + (open ? "true" : "false") + "'>"
 			+ "<span class='intel-caret'>" + (open ? "▾" : "▸") + "</span><span class='intel-group-count'>" + esc(group.count) + "</span> "
 			+ "<span class='intel-group-name'>" + esc(label) + "</span></a>"
-			+ (group.friendly && !nested ? " <span class='intel-friendly-tag'>friendly</span>" : "")
+			+ (group.friendly && !(parent && parent.friendly) ? " <span class='intel-friendly-tag'>friendly</span>" : "")
 			// Before the threat summary, which may be cut off at the panel's edge
 			+ " <a class='intel-zkill' href='" + intelPilots.ZKILL + (group.kind === "alliance" ? "alliance/" : "corporation/") + esc(group.id) + "/'"
 			+ " target='_blank' rel='noopener noreferrer' title='Open on zKillboard'>zKill</a>"
 			+ (ctx.showThreat ? intelPilots.groupThreatHtml(group, ctx.view, ctx.types) : "");
 		if (open) {
 			if (group.corps && group.corps.length > 1) {
-				html += "<div class='intel-group-body'>" + group.corps.map(function(c) { return intelPilots.groupHtml(c, ctx, true); }).join("") + "</div>";
+				html += "<div class='intel-group-body'>" + group.corps.map(function(c) { return intelPilots.groupHtml(c, ctx, group); }).join("") + "</div>";
 			} else {
-				html += "<div class='intel-group-body'>" + intelPilots.pilotsListHtml(group.pilots, ctx.view, ctx.types, group.friendly, ctx.showThreat) + "</div>";
+				html += "<div class='intel-group-body'>" + intelPilots.pilotsListHtml(group.pilots, ctx.view, ctx.types, ctx.showThreat) + "</div>";
 			}
 		}
 		return html + "</div>";
 	},
+
 
 	/** A plain bucket (NPC corp / unknown, still looking up) */
 	bucketHtml: function(key, label, pilots, ctx, title) {
@@ -229,7 +232,7 @@ const intelPilots = {
 		return "<div class='intel-group intel-group-" + esc(key) + "'><a href='#' class='intel-group-toggle' data-group='" + esc(id) + "' aria-expanded='" + (open ? "true" : "false") + "'"
 			+ (title ? " title='" + esc(title) + "'" : "") + "><span class='intel-caret'>" + (open ? "▾" : "▸") + "</span><span class='intel-group-count'>" + pilots.length + "</span> "
 			+ "<span class='intel-group-name'>" + esc(label) + "</span></a>"
-			+ (open ? "<div class='intel-group-body'>" + intelPilots.pilotsListHtml(pilots, ctx.view, ctx.types, false, ctx.showThreat && key === "other") + "</div>" : "")
+			+ (open ? "<div class='intel-group-body'>" + intelPilots.pilotsListHtml(pilots, ctx.view, ctx.types, ctx.showThreat && key === "other") + "</div>" : "")
 			+ "</div>";
 	},
 
@@ -259,9 +262,9 @@ const intelPilots = {
 			// Threat only: one list, most dangerous first
 			const ranked = intelPilots.dangerous(g.groups.reduce(function(all, x) { return x.friendly ? all : all.concat(x.pilots); }, []).concat(g.other), ctx.types);
 			if (!c.showThreat || !ranked.length) { return html; }
-			return html + "<div class='intel-sub'>Most dangerous</div>" + intelPilots.pilotsListHtml(ranked.map(function(x) { return x.pilot; }), view, ctx.types, false, true);
+			return html + "<div class='intel-sub'>Most dangerous</div>" + intelPilots.pilotsListHtml(ranked.map(function(x) { return x.pilot; }), view, ctx.types, true);
 		}
-		html += g.groups.map(function(x) { return intelPilots.groupHtml(x, c, false); }).join("");
+		html += g.groups.map(function(x) { return intelPilots.groupHtml(x, c, null); }).join("");
 		html += intelPilots.bucketHtml("other", "NPC corp / unknown", g.other, c, "Pilots in NPC corporations and names ESI doesn't know");
 		html += view.lookups ? intelPilots.bucketHtml("pending", "Looking up…", g.pending, c)
 			: intelPilots.bucketHtml("pending", "Not looked up", g.pending, c, "This server doesn't look pilots up (its zKillboard worker is off)");

@@ -53,6 +53,26 @@ describe('Intel pilots (who is in local)', () => {
 			assert.equal(g.friendly, 1);
 			assert.equal(g.groups[g.groups.length - 1].friendly, true);
 		});
+		it('a friendly corporation in another alliance: only that corporation is friendly', () => {
+			// Raiders (in the alliance) is friendly; the alliance and Loners are not
+			const view = Object.assign({}, VIEW, { friendly: { corporations: [RAIDERS], alliances: [] } });
+			const g = intelPilots.group(NAMES, view);
+			const alliance = g.groups.filter(x => x.key === "a" + ALLIANCE)[0];
+			assert.equal(alliance.friendly, false);
+			assert.deepEqual(alliance.corps.map(c => [c.id, c.friendly]), [[LONERS, false], [RAIDERS, true]]);	// friendly last
+			assert.deepEqual(alliance.pilots.map(p => p.friendly), [true, true, false]);
+			assert.equal(g.friendly, 2);
+			// The group's threat summary and badges leave the friendly pilots out (the server doesn't look them up)
+			const html = intelPilots.groupThreatHtml(alliance, view, null);
+			assert.equal(html.indexOf("Raider One"), -1);
+			assert.ok(html.indexOf("Threat loading") >= 0);	// Raider Three (Loners) is still queued
+			const expanded = {};
+			expanded["7:a" + ALLIANCE] = true;
+			expanded["7:a" + ALLIANCE + "c" + RAIDERS] = true;
+			const body = intelPilots.html(ctx({ view: view, expanded: expanded }));
+			assert.ok(body.indexOf("intel-friendly-tag") >= 0);	// on the nested corporation
+			assert.equal(body.indexOf("intel-threat-high"), -1);	// Raider One's badge is gone
+		});
 		it('friendly by alliance too', () => {
 			const view = Object.assign({}, VIEW, { friendly: { corporations: [], alliances: [ALLIANCE] } });
 			assert.deepEqual(intelPilots.group(NAMES, view).groups.filter(x => x.friendly).map(x => x.key), ["a" + ALLIANCE]);
@@ -88,14 +108,14 @@ describe('Intel pilots (who is in local)', () => {
 		});
 		it('badges: data, loading, failed, not looked up, friendly', () => {
 			const p = (threat, id) => ({ name: "X", id: id === undefined ? 1 : id, threat: threat });
-			assert.ok(intelPilots.badgeHtml(p(danger(92, 400)), VIEW, null, false).indexOf("intel-threat-high") >= 0);
-			assert.ok(intelPilots.badgeHtml(p("q"), VIEW, null, false).indexOf("Threat loading") >= 0);
-			assert.ok(intelPilots.badgeHtml(p(null), Object.assign({}, VIEW, { threatPending: true }), null, false).indexOf("Threat loading") >= 0);
-			assert.ok(intelPilots.badgeHtml(p("f"), VIEW, null, false).indexOf("failed") >= 0);
-			assert.ok(intelPilots.badgeHtml(p(null), VIEW, null, false).indexOf("Not looked up") >= 0);
-			assert.equal(intelPilots.badgeHtml(p(null, null), VIEW, null, false), "");
-			assert.equal(intelPilots.badgeHtml(p(danger(92, 400)), VIEW, null, true), "");
-			assert.equal(intelPilots.badgeHtml(p(danger(92, 400)), Object.assign({}, VIEW, { threat: false }), null, false), "");
+			assert.ok(intelPilots.badgeHtml(p(danger(92, 400)), VIEW, null).indexOf("intel-threat-high") >= 0);
+			assert.ok(intelPilots.badgeHtml(p("q"), VIEW, null).indexOf("Threat loading") >= 0);
+			assert.ok(intelPilots.badgeHtml(p(null), Object.assign({}, VIEW, { threatPending: true }), null).indexOf("Threat loading") >= 0);
+			assert.ok(intelPilots.badgeHtml(p("f"), VIEW, null).indexOf("failed") >= 0);
+			assert.ok(intelPilots.badgeHtml(p(null), VIEW, null).indexOf("Not looked up") >= 0);
+			assert.equal(intelPilots.badgeHtml(p(null, null), VIEW, null), "");
+			assert.equal(intelPilots.badgeHtml(Object.assign(p(danger(92, 400)), { friendly: true }), VIEW, null), "");
+			assert.equal(intelPilots.badgeHtml(p(danger(92, 400)), Object.assign({}, VIEW, { threat: false }), null), "");
 		});
 		it('group rows show their most dangerous pilots', () => {
 			const g = intelPilots.group(NAMES, VIEW);
