@@ -1,0 +1,88 @@
+/* System status colour, occupier and alias on chain map nodes (fork feature: system-status, see app/js/fork/system-status.js).
+   Colours are the Okabe-Ito colour-blind-safe set; every status also has its own outline style and a letter, so
+   colour is never the only signal. The EVE security colours stay untouched (the outline is outside the node). */
+.node.sysstatus { --ss-color: #999; }
+.node.sysstatus-friendly { --ss-color: #56b4e9; }
+.node.sysstatus-hostile { --ss-color: #e0601a; }
+.node.sysstatus-active { --ss-color: #f0e442; }
+.node.sysstatus-empty { --ss-color: #a8a8a8; }
+.node.sysstatus-unscanned { --ss-color: #cc79a7; }
+
+.node.sysstatus-friendly, .node.sysstatus-hostile, .node.sysstatus-active, .node.sysstatus-empty, .node.sysstatus-unscanned {
+	outline: 2px solid var(--ss-color);
+	outline-offset: 1px;
+	border-radius: 3px;
+	box-shadow: 0 0 7px 1px var(--ss-color);
+}
+.node.sysstatus-hostile { outline-width: 3px; }
+.node.sysstatus-empty { outline-style: dashed; box-shadow: none; }
+.node.sysstatus-unscanned { outline-style: dotted; outline-width: 3px; box-shadow: none; }
+
+/* Status letter, top centre (the threat badge is top-left, jump planner / skyhook icons top-right) */
+.node .sysstatus-letter {
+	position: absolute;
+	z-index: 1;
+	top: -9px;
+	left: 50%;
+	transform: translateX(-50%);
+	min-width: 11px;
+	padding: 0 2px;
+	font-size: 9px;
+	font-weight: bold;
+	font-style: normal;
+	line-height: 11px;
+	text-align: center;
+	color: #101418;
+	background: var(--ss-color);
+	border-radius: 3px;
+	cursor: help;
+	white-space: nowrap;
+}
+.node .sysstatus-letter.sysstatus-occupier-only { background: #8f9ba3; font-size: 7px; }
+
+/* Alias: a small label under the node (the system name stays as the sig-name-on-map setting draws it) */
+.node .sysstatus-alias {
+	position: absolute;
+	z-index: 1;
+	top: 100%;
+	left: 50%;
+	transform: translateX(-50%);
+	margin-top: 12px;	/* below the nodes own bottom badges (security, intel) */
+	max-width: 140px;
+	padding: 0 4px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	font-style: italic;
+	line-height: 13px;
+	color: #e8eef2;
+	background: rgba(0, 0, 0, 0.72);
+	border: 1px solid var(--ss-color);
+	border-radius: 3px;
+	cursor: help;
+}
+
+/* System info panel line */
+.sysstatus-info {
+	clear: both;
+	margin: 3px 0 2px;
+	padding-left: 6px;
+	font-size: 11px;
+	line-height: 15px;
+	text-align: left;
+	color: #ccc;
+	border-left: 3px solid #666;
+}
+.sysstatus-info-friendly { border-left-color: #56b4e9; }
+.sysstatus-info-hostile { border-left-color: #e0601a; }
+.sysstatus-info-active { border-left-color: #f0e442; }
+.sysstatus-info-empty { border-left-color: #a8a8a8; border-left-style: dashed; }
+.sysstatus-info-unscanned { border-left-color: #cc79a7; border-left-style: dotted; }
+
+/* Alias / occupier dialog */
+#dialog-system-status .ss-dialog-system { font-weight: bold; }
+#dialog-system-status .ss-dialog-help { color: #aaa; font-size: 11px; }
+#dialog-system-status .ss-dialog-text { width: 100%; box-sizing: border-box; }
+#dialog-system-status .ss-dialog-suggest { font-size: 11px; color: #aaa; }
+#dialog-system-status .ss-dialog-suggest a { color: #ffc040; }
