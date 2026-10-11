@@ -510,7 +510,7 @@ $req = discord_rally_request($rx, $rrow, $url, $setCtx, 1000);
 check('rally send: first change posts', [$req['method'], $req['url'], $req['payload']['username']], ['POST', $sendUrl, 'Tripwire']);
 $ok = ['result' => 'sent', 'delay' => 0, 'error' => ''];
 check('rally send: posted message remembered with its text', [discord_rally_after_send($rx, $rrow, $req, 200, '{"id":"1111111111"}', $ok, 1000), discord_rally_last($rx, '98000001.2')],
-    [$ok, ['webhookID' => 5, 'messageID' => '1111111111', 'content' => $setText, 'postedAt' => 1000]]);
+    [$ok, ['webhookID' => 5, 'messageID' => '1111111111', 'content' => $setText, 'postedAt' => 1000, 'systemID' => 31001880]]);   // the system it shows (column added on this first write)
 $moveCtx = discord_rally_context(['action' => 'set', 'ping' => '@here', 'time' => 1020] + $rbase, ['systemID' => 30000142, 'setBy' => 'B']);
 $req = discord_rally_request($rx, $rrow, $url, $moveCtx, 1020);
 check('rally send: a change in the window edits it', [$req['method'], $req['url'], isset($req['payload']['username']), $req['payload']['allowed_mentions']],

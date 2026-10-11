@@ -53,10 +53,9 @@
 	margin-left: 6px;
 	color: rgb(var(--fight-rgb));
 	white-space: nowrap;
-	display: inline-block;
-	max-width: 70%;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	display: inline-flex;
+	align-items: baseline;
+	max-width: calc(100% - 190px);	/* stays on the line of the header's icons (about 165 px) */
 	vertical-align: bottom;
 	cursor: default;
 }
@@ -65,9 +64,18 @@
 	display: none;
 }
 
-#rally-banner > span:first-child {
+#rally-banner .fight-sep {
+	flex: none;
 	color: inherit;
 	margin-right: 4px;
+}
+
+/* The text takes the ellipsis; the clear button after it never shrinks */
+#rally-banner .fight-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 #rally-banner .rally-icon {
@@ -90,9 +98,10 @@
 #rally-banner .fight-comp-name { font-weight: bold; }
 
 #rally-banner .rally-clear {
+	flex: none;
 	font-style: normal;
 	cursor: pointer;
-	margin-left: 4px;
+	margin-left: 6px;
 	color: #bbb;
 }
 

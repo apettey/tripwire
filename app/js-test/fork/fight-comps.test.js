@@ -69,6 +69,11 @@ describe('Fight here: fleet comps', () => {
 			assert.ok(html.indexOf("background-color: #ff4747") > 0, html);
 			assert.ok(html.indexOf('fight-current') > 0 && html.indexOf('&#10003;') > 0, html);
 		});
+		it('no comps: the one-click entry (old rally behaviour)', () => {
+			assert.deepStrictEqual(fightComps.flatEntry(null, 31001882), { text: 'Fight here', clear: false });
+			assert.deepStrictEqual(fightComps.flatEntry({ systemID: 31001882 }, 31001882), { text: 'Clear fight', clear: true });
+			assert.deepStrictEqual(fightComps.flatEntry({ systemID: 31001882 }, 31000702), { text: 'Fight here', clear: false });
+		});
 		it('commands', () => {
 			assert.strictEqual(fightComps.compOfCommand('fightSet:'), '');
 			assert.strictEqual(fightComps.compOfCommand('fightSet:c0123456789'), 'c0123456789');

@@ -89,6 +89,13 @@ const fightComps = {
 		return entries;
 	},
 
+	/** The one-click entry of a mask without comps (the old rally entry): "Clear fight" on the fight's system, else
+	"Fight here" (sets or moves it, no comp). @return {text, clear} */
+	flatEntry: function(fight, systemID) {
+		const here = !!(fight && fight.systemID && String(fight.systemID) === String(systemID));
+		return { text: here ? "Clear fight" : "Fight here", clear: here };
+	},
+
 	/** The submenu's <li>s (escaped) */
 	menuHtml: function(entries) {
 		const esc = fightComps.escape;

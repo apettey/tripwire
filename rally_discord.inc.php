@@ -117,8 +117,10 @@ function rally_discord_payload($action, $who, $systemLabel = null, $systemName =
 function rally_discord_end_payload($previous, $action, $who, $time, $systemName = null, $chainLabel = '', $comp = '') {
 	$who = rally_discord_clean($who !== null && $who !== '' ? $who : 'someone');
 	$comp = str_replace(':', '\\:', rally_discord_clean(trim((string)$comp), 64));
-	$line = $action === 'moved'
-		? 'Moved to **' . rally_discord_with_label($chainLabel, $systemName) . '**' . ($comp !== '' ? ' (' . $comp . ')' : '') . ' by *' . $who . '*'
+	// 'changed': the same system, only the fleet comp changed
+	$line = $action === 'moved' || $action === 'changed'
+		? ($action === 'changed' ? 'Changed to **' : 'Moved to **') . rally_discord_with_label($chainLabel, $systemName) . '**'
+			. ($comp !== '' ? ' (' . $comp . ')' : ($action === 'changed' ? ' (no comp)' : '')) . ' by *' . $who . '*'
 		: 'Cleared by *' . $who . '*';
 	$struck = discord_rally_strike($previous);
 	$content = ($struck !== '' ? $struck . "\n" : '') . $line . ' at ' . discord_timestamp($time);
@@ -235,6 +237,7 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		messageID varchar(32) DEFAULT NULL,
 		content text,
 		postedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		systemID int NOT NULL DEFAULT 0,
 		PRIMARY KEY (maskID)
 	)');
 	if ($created === false) { error_log('rally discord: could not create fork_rally_discord_message'); return 'failed'; }
@@ -244,7 +247,7 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 	if (!rally_discord_lock($mysql, $lockName, 20)) { error_log('rally discord: lock timeout for mask ' . $mask); return 'failed'; }
 
 	try {
-		$stmt = $mysql->prepare('SELECT messageID, content, TIMESTAMPDIFF(SECOND, postedAt, NOW()) AS age FROM fork_rally_discord_message WHERE maskID = :mask');
+		$stmt = $mysql->prepare('SELECT *, TIMESTAMPDIFF(SECOND, postedAt, NOW()) AS age FROM fork_rally_discord_message WHERE maskID = :mask');
 		$stmt->bindValue(':mask', $mask);
 		$last = $stmt->execute() ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
 		// The live message: posted (an id) with its text
@@ -280,10 +283,13 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		if ($live && rally_discord_decision($live) === 'edit') {
 			if ($payload['content'] === $live['content']) return 'none';	// already shows it
 			if (rally_discord_send(rally_discord_message_url($hook, $live['messageID']), $payload, 'PATCH') !== false) {
-				$save = $mysql->prepare('UPDATE fork_rally_discord_message SET content = :content WHERE maskID = :mask');
-				$save->bindValue(':content', $payload['content']);
-				$save->bindValue(':mask', $mask);
-				$save->execute();
+				discord_rally_with_system_column($mysql, 'fork_rally_discord_message', function ($mysql) use ($payload, $mask, $systemID) {
+					$save = $mysql->prepare('UPDATE fork_rally_discord_message SET content = :content, systemID = :systemID WHERE maskID = :mask');
+					$save->bindValue(':content', $payload['content']);
+					$save->bindValue(':systemID', (int)$systemID, PDO::PARAM_INT);
+					$save->bindValue(':mask', $mask);
+					$save->execute();
+				});
 				return 'edit';
 			}
 			// Message gone (deleted, 404) or Discord unreachable: post a new one instead, and still try to end the
@@ -294,19 +300,22 @@ function rally_discord_notify($mysql, $mask, $hook, $action, $who, $previousSyst
 		$response = rally_discord_send(rally_discord_message_url($hook), $payload, 'POST');
 		if ($response === false) return 'failed';
 		if (isset($response['id']) && preg_match('/^\d{1,32}$/', (string)$response['id'])) {
-			$save = $mysql->prepare('INSERT INTO fork_rally_discord_message (maskID, messageID, content, postedAt) VALUES (:mask, :messageID, :content, NOW())
-				ON DUPLICATE KEY UPDATE messageID = VALUES(messageID), content = VALUES(content), postedAt = VALUES(postedAt)');
-			$save->bindValue(':mask', $mask);
-			$save->bindValue(':messageID', (string)$response['id']);
-			$save->bindValue(':content', $payload['content']);
-			$save->execute();
+			discord_rally_with_system_column($mysql, 'fork_rally_discord_message', function ($mysql) use ($payload, $mask, $systemID, $response) {
+				$save = $mysql->prepare('INSERT INTO fork_rally_discord_message (maskID, messageID, content, postedAt, systemID) VALUES (:mask, :messageID, :content, NOW(), :systemID)
+					ON DUPLICATE KEY UPDATE messageID = VALUES(messageID), content = VALUES(content), postedAt = VALUES(postedAt), systemID = VALUES(systemID)');
+				$save->bindValue(':mask', $mask);
+				$save->bindValue(':messageID', (string)$response['id']);
+				$save->bindValue(':content', $payload['content']);
+				$save->bindValue(':systemID', (int)$systemID, PDO::PARAM_INT);
+				$save->execute();
+			});
 		} else {
 			$forget();	// posted without an id: can't be edited
 		}
 		// Moved: end the old message (after the new one is out, so people see the new place first)
 		if ($live) {
 			rally_discord_send(rally_discord_message_url($hook, $live['messageID']),
-				rally_discord_end_payload($live['content'], 'moved', $rally['setBy'], time(), $systemName, $chainLabel, $compName), 'PATCH');
+				rally_discord_end_payload($live['content'], (int)($live['systemID'] ?? 0) === (int)$systemID ? 'changed' : 'moved', $rally['setBy'], time(), $systemName, $chainLabel, $compName), 'PATCH');
 		}
 		return 'post';
 	} finally {

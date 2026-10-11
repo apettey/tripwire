@@ -212,6 +212,23 @@ check('discord: moved within 30 s edits the message with the new comp, nobody pi
 check('discord: clear strikes the message through', [$requests[2]['message'] === $requests[0]['message'],
     preg_replace('/<t:\d+:t>/', '<t:…:t>', $requests[2]['body']['content'] ?? ''), $requests[2]['body']['allowed_mentions'] ?? null],
     [true, "~~Fight here: **$j2** ($c2) — comp: Shield Battleships — set by *" . $session['characterName'] . "*~~\nCleared by *" . $session['characterName'] . '* at <t:…:t>', ['parse' => []]]);
+// "Fight here (no comp)", then Armor HACs a few seconds later: its role is pinged by a new message (an edit wouldn't
+// notify), and the first message is struck through with "Changed to" (same system)
+$last = outbox_last();
+rally_post($jar, ['mode' => 'set', 'systemID' => 31001880, 'discord' => '1']);
+flush_outbox($last);
+$last = outbox_last();
+rally_post($jar, ['mode' => 'set', 'systemID' => 31001880, 'compID' => $armorID, 'discord' => '1']);
+flush_outbox($last);
+for ($i = 0; $i < 50 && count(mock_requests()) < 6; $i++) usleep(200000);   // the strike is queued after the post
+$requests = mock_requests();
+check('discord: no comp, then a comp with a role within 30 s: post, post, strike', array_column(array_slice($requests, 3), 'method'), ['POST', 'POST', 'PATCH']);
+check('discord: the second post pings the role', $requests[4]['body']['allowed_mentions'] ?? null, ['parse' => ['everyone'], 'roles' => ['123456789012345678']]);
+check('discord: the first message is struck "Changed to"', [$requests[5]['message'] === $requests[3]['message'],
+    preg_replace('/<t:\d+:t>/', '<t:…:t>', $requests[5]['body']['content'] ?? '')],
+    [true, "~~Fight here: **$j1** ($c1) — set by *" . $session['characterName'] . "*~~\nChanged to **$j1** (Armor HACs) by *" . $session['characterName'] . '* at <t:…:t>']);
+rally_post($jar, ['mode' => 'clear']);
+
 echo "\n### Captured Discord requests (discord-mock)\n";
 foreach ($requests as $r) echo $r['method'] . ' /api/webhooks/' . $r['webhook'] . '/…' . ($r['method'] === 'PATCH' ? '/messages/' . $r['message'] : '?' . $r['query']) . "\n"
     . json_encode($r['body'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";

@@ -129,7 +129,38 @@ check('moved: struck old message, where to and the new comp, nobody pinged', $pl
     ['content' => "~~Fight here: **AB · J152820** (C5) — comp: Armor HACs — set by *Chribba*~~\nMoved to **AB · " . discord_system(31000003)[0] . "** (Shield BS) by *B* at <t:1100:t>", 'allowed_mentions' => ['parse' => []]]);
 check('moved: the new message pings the new comp (no mention: the type ping only)', $plan['payload']['allowed_mentions'], ['parse' => ['everyone']]);
 $plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $base, ['systemID' => 31001880, 'setBy' => 'B', 'comp' => $shield], $label), $live, 1010);
-check('comp changed within 30 s: the message is edited, nobody pinged', [$plan['op'], $plan['payload']['allowed_mentions'], strpos($plan['payload']['content'], 'comp: Shield BS') !== false], ['edit', ['parse' => []], true]);
+check('comp changed within 30 s, no new mention (role dropped): the message is edited, nobody pinged',
+    [$plan['op'], $plan['payload']['allowed_mentions'], strpos($plan['payload']['content'], 'comp: Shield BS') !== false, $plan['systemID']], ['edit', ['parse' => []], true, 31001880]);
+// "Fight here (no comp)", then "Armor HACs" seconds later: its role must be pinged, and edits never notify, so a new
+// message is posted (with the pings) and the old one is struck through; the same system, so "Changed to"
+$noComp = ['webhookID' => 5, 'messageID' => '124', 'content' => "@here Fight here: **AB · J152820** (C5) — set by *Chribba*\n<https://x/>", 'postedAt' => 1000, 'systemID' => 31001880];
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $base, ['systemID' => 31001880, 'setBy' => 'Chribba', 'comp' => $armor], $label), $noComp, 1010);
+check('comp with a new role within 30 s: posted with the pings, not edited', [$plan['op'], $plan['payload']['allowed_mentions'], $plan['strike']['messageID']],
+    ['post', ['parse' => ['everyone'], 'roles' => ['123456789012345678']], '124']);
+check('... the old message: struck, "Changed to" (same system)', $plan['strike']['payload'],
+    ['content' => "~~Fight here: **AB · J152820** (C5) — set by *Chribba*~~\nChanged to **AB · J152820** (Armor HACs) by *Chribba* at <t:1010:t>", 'allowed_mentions' => ['parse' => []]]);
+check('new mentions: only what the live text lacks', [discord_rally_new_mentions(['parse' => ['everyone'], 'roles' => ['123456789012345678']], $noComp['content']),
+    discord_rally_new_mentions(['parse' => ['everyone'], 'roles' => ['123456789012345678']], $live['content']), discord_rally_new_mentions(['parse' => []], ''),
+    discord_rally_new_mentions(['parse' => ['everyone'], 'users' => ['223456789012345678']], 'x')], [[ROLE], [], [], ['@everyone/@here', '<@223456789012345678>']]);
+// Same mentions within the window (same comp, another system): still an edit
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $base, ['systemID' => 31000003, 'setBy' => 'B', 'comp' => $armor], $label), $live + ['systemID' => 31001880], 1010);
+check('same mentions within 30 s: edited', [$plan['op'], $plan['payload']['allowed_mentions']], ['edit', ['parse' => []]]);
+// Only the comp changed after the window: "Changed to"; the old message from before this version (no system): "Moved to"
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1100] + $base, ['systemID' => 31001880, 'setBy' => 'B', 'comp' => $shield], $label), $live + ['systemID' => 31001880], 1100);
+check('comp changed after 30 s on the same system: "Changed to"', strstr($plan['strike']['payload']['content'], "\n"), "\nChanged to **AB · J152820** (Shield BS) by *B* at <t:1100:t>");
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1100] + $base, ['systemID' => 31001880, 'setBy' => 'B', 'comp' => null], $label), $live + ['systemID' => 31001880], 1100);
+check('comp removed after 30 s on the same system: "(no comp)"', strstr($plan['strike']['payload']['content'], "\n"), "\nChanged to **AB · J152820** (no comp) by *B* at <t:1100:t>");
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1100] + $base, ['systemID' => 31001880, 'setBy' => 'B', 'comp' => $shield], $label), $live, 1100);
+check('live message without a system (older row): "Moved to"', strpos($plan['strike']['payload']['content'], "\nMoved to **AB · J152820** (Shield BS)") !== false, true);
+
+// The live message keeps its system (SQLite; an older table gets the column on its first write)
+$lm = new PDO('sqlite::memory:');
+$lm->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$lm->exec('CREATE TABLE discord_rally_message (maskID TEXT PRIMARY KEY, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT)');
+discord_rally_remember($lm, '98000001.2', 5, '42', 'text', 1000, 31001880);
+check('remember: system stored (column added)', [discord_rally_last($lm, '98000001.2')['systemID'], discord_rally_last($lm, '98000001.2')['messageID']], [31001880, '42']);
+discord_rally_update($lm, '98000001.2', '42', 'edited', 31000003);
+check('live edit: text and system updated', [discord_rally_last($lm, '98000001.2')['systemID'], discord_rally_last($lm, '98000001.2')['content']], [31000003, 'edited']);
 $cleared = discord_payload(['previous' => $live['content']] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'time' => 7] + $base, null));
 check('cleared: struck, the comp mention gone', $cleared, ['content' => "~~Fight here: **AB · J152820** (C5) — comp: Armor HACs — set by *Chribba*~~\nCleared by *C* at <t:7:t>", 'allowed_mentions' => ['parse' => []]]);
 
@@ -153,6 +184,9 @@ check('legacy: hostile comp cleaned', rally_discord_payload('set', 'A', 'J1', 'J
     "Fight here: **J1** — comp: @{$zw}here \\*\\*x\\*\\* https\\://e.example — set by *A*");
 check('legacy: moved with comp', rally_discord_end_payload('Fight here: **J1** — set by *A*', 'moved', 'B', 5, 'J2', 'AB', 'Shield BS')['content'],
     "~~Fight here: **J1** — set by *A*~~\nMoved to **AB · J2** (Shield BS) by *B* at <t:5:t>");
+check('legacy: only the comp changed', rally_discord_end_payload('Fight here: **J2** — set by *A*', 'changed', 'B', 5, 'J2', 'AB', 'Shield BS')['content'],
+    "~~Fight here: **J2** — set by *A*~~\nChanged to **AB · J2** (Shield BS) by *B* at <t:5:t>");
+check('legacy: comp removed', rally_discord_end_payload('X', 'changed', 'B', 5, 'J2', '', '')['content'], "~~X~~\nChanged to **J2** (no comp) by *B* at <t:5:t>");
 
 echo $failures ? "$failures of $count checks FAILED\n" : "$count checks passed\n";
 exit($failures ? 1 : 0);

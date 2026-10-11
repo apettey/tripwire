@@ -11,7 +11,8 @@ const rally = {
 	ROUTE_CLASS: "rally-route",
 	NODE_CLASS: "rally-node",
 	COLOUR_PREFIX: "fight-c-",
-	MENU_COMMAND: "fightMenu",
+	MENU_COMMAND: "fightMenu",	// "Fight here ▸" with the comps (masks with at least one comp)
+	TOGGLE_COMMAND: "fightToggle",	// one-click "Fight here" / "Clear fight" (masks without comps)
 
 	// Current fight point of this mask: { systemID, setBy, setAt, comp: {id, name, colour, note} | null, label, age, receivedAt }
 	state: { systemID: null, setBy: null, setAt: null, comp: null, label: "", age: null, receivedAt: null },
@@ -438,9 +439,10 @@ const rally = {
 		};
 
 		// Banner in the chain map header
-		const banner = $("<span id='rally-banner' class='hidden'><span>|</span> <i class='rally-icon'>&#9873;</i> Fight here: <a class='rally-name' href='#'></a> <span class='rally-jumps'></span>"
-			+ "<span class='fight-comp hidden'> · <span class='fight-dot'></span><span class='fight-comp-name'></span></span><span class='fight-who'></span><span class='fight-age'></span>"
-			+ " <i class='rally-clear' title='Clear fight'>&#10005;</i></span>");
+		// The text parts are cut with an ellipsis when the header is narrow; the clear button stays visible after them
+		const banner = $("<span id='rally-banner' class='hidden'><span class='fight-sep'>|</span><span class='fight-text'><i class='rally-icon'>&#9873;</i> Fight here: <a class='rally-name' href='#'></a> <span class='rally-jumps'></span>"
+			+ "<span class='fight-comp hidden'> · <span class='fight-dot'></span><span class='fight-comp-name'></span></span><span class='fight-who'></span><span class='fight-age'></span></span>"
+			+ "<i class='rally-clear' title='Clear fight'>&#10005;</i></span>");
 		const anchor = $("#chainWidget .controls #higgs-jump");
 		if (anchor.length) { banner.insertAfter(anchor); } else { $("#chainWidget .controls").append(banner); }
 		banner.on("click", ".rally-clear", function(e) { e.preventDefault(); rally.clear(); });
@@ -449,6 +451,7 @@ const rally = {
 		try {
 			const chainParent = $("#chainParent");
 			$("#chainMenu").append("<li data-command='" + rally.MENU_COMMAND + "'><a id='rallyMenuItem'>Fight here</a><ul id='fightSubmenu' class='fight-submenu'></ul></li>");
+			$("#chainMenu").append("<li data-command='" + rally.TOGGLE_COMMAND + "'><a id='fightToggleMenuItem'>Fight here</a></li>");
 			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='" + rally.escape("Post your fight changes too. " + rally.DISCORD_HELP) + "'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
 			$("#fightSubmenu").html(fightComps.menuHtml(fightComps.menuEntries([], null, null)));
 			$("#chainMenu").menu("refresh");
@@ -458,6 +461,11 @@ const rally = {
 				const compID = fightComps.compOfCommand(ui.cmd);
 				if (compID !== null) {
 					rally.set($(ui.target[0]).closest("[data-nodeid]").data("nodeid"), compID);
+					return;
+				}
+				if (ui.cmd === rally.TOGGLE_COMMAND) {
+					const systemID = $(ui.target[0]).closest("[data-nodeid]").data("nodeid");
+					if (fightComps.flatEntry(rally.state, systemID).clear) { rally.clear(); } else { rally.set(systemID, ""); }
 					return;
 				}
 				if (ui.cmd === fightComps.CLEAR_COMMAND) {
@@ -476,8 +484,13 @@ const rally = {
 			chainParent.contextmenu("option", "beforeOpen", function(e, ui) {
 				const systemID = $(ui.target[0]).closest("[data-nodeid]").data("nodeid");
 				try {
-					$(this).contextmenu("showEntry", rally.MENU_COMMAND, rally.isRealSystemID(systemID));
-					if (rally.isRealSystemID(systemID)) { rally.renderSubmenu(systemID); }
+					// With comps a submenu, without them the old one-click entry
+					const real = rally.isRealSystemID(systemID);
+					const withComps = rally.comps.length > 0;
+					$(this).contextmenu("showEntry", rally.MENU_COMMAND, real && withComps);
+					$(this).contextmenu("showEntry", rally.TOGGLE_COMMAND, real && !withComps);
+					if (real && withComps) { rally.renderSubmenu(systemID); }
+					if (real && !withComps) { $("#fightToggleMenuItem").text(fightComps.flatEntry(rally.state, systemID).text); }
 					$(this).contextmenu("showEntry", rally.DISCORD_COMMAND, rally.isRealSystemID(systemID) && rally.discordAvailable);
 					rally.renderDiscordEntry();
 				} catch (err) { console.error("fight here: menu update failed", err); }

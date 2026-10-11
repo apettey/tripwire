@@ -275,7 +275,9 @@ function discord_payload(array $ctx) {
         if ($ending) $values['pings'] = '';
         array_push($raw, 'was', 'time', 'rally', 'withComp');
         if (!empty($ctx['moved']) && !$cleared) {
-            $content = discord_render("Moved to **{labelSystem}**" . ($values['comp'] !== '' ? ' ({comp})' : '') . " by *{who}* at {time}", $values, $raw);
+            // Same system, only the comp changed: "Changed to"
+            $content = discord_render((!empty($ctx['changed']) ? 'Changed to' : 'Moved to') . " **{labelSystem}**"
+                . ($values['comp'] !== '' ? ' ({comp})' : (!empty($ctx['changed']) ? ' (no comp)' : '')) . " by *{who}* at {time}", $values, $raw);
         } else {
             $content = discord_render($template, $values, $raw);
             if ($content === '' || $content === $marker) {
