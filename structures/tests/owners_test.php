@@ -143,6 +143,21 @@ check('queue: up to the cap per mask', structures_owner_queue($mysql, 'Zzo Last 
 check('queue: over the cap the name is refused (and logged); another mask can still queue', [structures_owner_queue($mysql, 'Zzo One Too Many', MASK_A), structures_owner_queue($mysql, 'Zzo One Too Many', '999999995.3')], [false, true]);
 $mysql->exec("DELETE FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo %'");
 
+// A name ESI already answered: typing it on another structure applies the answer at once (no request, this mask's rows only)
+$mysql->exec("INSERT INTO fork_structure_owner_lookups (name, maskID, status, entityID, entityType, entityName, requestedAt) VALUES ('Zzo Known Corp', 999999995.1, 'done', 2100000020, 'corporation', 'Zzo Known Corp', UTC_TIMESTAMP())");
+$mysql->exec('DELETE FROM fork_pilot_entities WHERE id = 2100000020');
+$mysql->exec("INSERT INTO fork_pilot_entities (id, kind, name, ticker, status, requestedAt, wantedAt, fetchedAt) VALUES (2100000020, 'corporation', 'Zzo Known Corp', 'ZZK', 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+structures_apply_scan($mysql, MASK_A, SYSTEM, structures_parse_scan("35835\tJ163702 - New\tAthanor\t1 km", 'J163702')['structures'], 0, 'Scout');
+structures_apply_scan($mysql, '999999995.3', SYSTEM, structures_parse_scan("35835\tJ163702 - Other\tAthanor\t1 km", 'J163702')['structures'], 0, 'Scout');
+$mysql->exec("UPDATE fork_structures SET ownerText = 'zzo known corp' WHERE name IN ('J163702 - New', 'J163702 - Other')");
+$calls = [];
+check('queue: an answered name is applied to the asking mask at once', [structures_queue_owner_text($mysql, ['ownerID' => null, 'ownerText' => 'zzo known corp'], MASK_A), count($calls)], [true, 0]);
+check('... owner, type, name and the ticker from the cache; the other mask keeps its text', $mysql->query("SELECT maskID, ownerID, ownerType, ownerName, ownerTicker, ownerText FROM fork_structures WHERE name IN ('J163702 - New', 'J163702 - Other') ORDER BY maskID")->fetchAll(PDO::FETCH_NUM),
+    [['999999995.1', 2100000020, 'corporation', 'Zzo Known Corp', 'ZZK', null], ['999999995.3', null, null, null, null, 'zzo known corp']]);
+$mysql->exec("DELETE FROM fork_structures WHERE maskID = 999999995.3");
+$mysql->exec("DELETE FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo %'");
+$mysql->exec('DELETE FROM fork_structures WHERE maskID = ' . MASK_A);
+
 // --- hints from stored kills ---
 cleanup($mysql);
 $scan = structures_parse_scan("35832\tJ163702 - One\tAstrahus\t1 km\n35832\tJ163702 - Owned\tAstrahus\t2 km\n35833\tJ163702 - Fort\tFortizar\t3 km", 'J163702');
@@ -204,7 +219,8 @@ check('dismiss: bad kind or key is refused', [structures_hint_dismiss($mysql, $a
 $hint = $s[$a['J163702 - A3']]['destroyed'][0];
 check('dismiss: stored', structures_hint_dismiss($mysql, $a['J163702 - A3'], 'destroyed', (string) $hint, 'Scout'), true);
 $s = structures_suggestions($mysql, SYSTEM, structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'], $now);
-check('dismiss: that kill is not offered for that structure any more (it goes to the next best one)', [isset($s[$a['J163702 - A3']]['destroyed']), count(array_filter($s, function ($h) { return isset($h['destroyed']); }))], [true, 2]);
+$offered = array_map(function ($h) { return $h['destroyed'][0]; }, array_filter($s, function ($h) { return isset($h['destroyed']); }));
+check('dismiss: dismissed on one structure of the type, the kill is dismissed for the whole system (it does not move to the next structure)', [in_array($hint, $offered, true), count($offered)], [false, 1]);
 $mysql->exec('DELETE FROM fork_structure_hint_dismissed WHERE structureID IN (' . implode(',', array_values($a)) . ')');
 structures_hint_dismiss($mysql, $byName['J163702 - One'] ?? 0, 'owner', (string) VICTIM, 'Scout');
 check('prune: dismissals of structures that no longer exist are removed', [structures_prune($mysql) >= 0, (int) $mysql->query('SELECT COUNT(*) FROM fork_structure_hint_dismissed WHERE structureID = ' . (int) ($byName['J163702 - One'] ?? 0))->fetchColumn()], [true, 0]);

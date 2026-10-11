@@ -57,6 +57,20 @@ function structures_owner_queue(PDO $db, $text, $maskID = null) {
     if (mb_strlen($name, 'UTF-8') < 3) return false;
     // A ticker ("HSTL", "[ABC]"): ESI /universe/ids knows names only, the cache by ticker was tried before this
     if (structures_ticker_like($name)) return false;
+    // Already answered by ESI: no new request, the answer goes into this mask's rows now (a DB-only update; the ticker from the entity cache when it has it)
+    $done = $db->prepare("SELECT 1 FROM fork_structure_owner_lookups WHERE name = :n AND status = 'done'");
+    $done->bindValue(':n', $name);
+    $done->execute();
+    if ($done->fetchColumn()) {
+        $apply = $db->prepare("UPDATE fork_structures s INNER JOIN fork_structure_owner_lookups l ON l.status = 'done' AND l.name = s.ownerText
+            LEFT JOIN fork_pilot_entities e ON e.id = l.entityID AND e.kind = l.entityType AND e.status = 'done'
+            SET s.ownerID = l.entityID, s.ownerType = l.entityType, s.ownerName = l.entityName, s.ownerTicker = NULLIF(e.ticker, ''), s.ownerText = NULL
+            WHERE s.ownerID IS NULL AND s.ownerText = :n AND s.maskID <=> :m");
+        $apply->bindValue(':n', $name);
+        $apply->bindValue(':m', $maskID === null ? null : (string) $maskID);
+        try { $apply->execute(); } catch (PDOException $error) { if ((string) $error->getCode() !== '42S02') throw $error; }   // no entity cache yet
+        return true;
+    }
     $cap = $db->prepare("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE status = 'queued' AND maskID <=> :m");
     $cap->bindValue(':m', $maskID === null ? null : (string) $maskID);
     $cap->execute();

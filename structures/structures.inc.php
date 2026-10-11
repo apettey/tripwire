@@ -538,6 +538,10 @@ function structures_suggestions(PDO $db, $systemID, array $live, $now) {
     // Destroyed?: every kill (newest first) goes to the best row of its type that could be its victim
     foreach ($kills as $k) {
         $best = null;
+        // Dismissed on any structure of this type here: the kill is dismissed for the system (not offered to the next one)
+        foreach ($live as $r) {
+            if ($r['typeID'] !== null && (int) $r['typeID'] === (int) $k['victimShipTypeID'] && isset($dismissed[$r['id'] . ':destroyed:' . $k['killID']])) continue 2;
+        }
         foreach ($live as $r) {
             if ($r['typeID'] === null || (int) $r['typeID'] !== (int) $k['victimShipTypeID'] || isset($out[(int) $r['id']]['destroyed'])) continue;
             if ((int) $k['killTime'] <= (int) $r['firstSeenAt'] || isset($dismissed[$r['id'] . ':destroyed:' . $k['killID']])) continue;
