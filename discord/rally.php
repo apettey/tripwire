@@ -1,5 +1,7 @@
 <?php
-// Fork-owned: notification type 5, "rally point" (see discord/discord.inc.php).
+// Fork-owned: notification type 5, "rally point", shown to users as "Fight here" since the fleet comps (see
+// discord/discord.inc.php, fight/fight.inc.php). Internal names (type key 'rally', tables) stay. The fleet comp stored
+// with the fight point is in the message ({comp}, {compNote}, {withComp}) and its mention is pinged with the type's.
 //
 // public/rally.php queues a message when someone sets, moves or clears the chain map's rally point (and wants it
 // posted, options.rallyDiscord). The sender (discord_dispatch) then:
@@ -74,16 +76,21 @@ function discord_rally_enqueue(PDO $db, $maskID, array $type, $action, $who, $pr
     return discord_enqueue($db, (string) $maskID, $type['webhookID'], 'rally', $data, DISCORD_PRIORITY_RALLY);
 }
 
-/** The mask's rally as stored now: ['systemID', 'setBy'], null when there is none, false when it can't be read */
+/** The mask's rally (fight point) as stored now: ['systemID', 'setBy', 'comp' (null or the fleet comp stored with it,
+    fight_rally_read)], null when there is none, false when it can't be read */
 function discord_rally_current(PDO $db, $maskID) {
     try {
-        $stmt = $db->prepare('SELECT systemID, setBy FROM fork_rally WHERE maskID = ?');
-        if (!$stmt || !$stmt->execute([(string) $maskID])) return false;
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return fight_rally_read($db, $maskID);
     } catch (PDOException $error) {
-        return false;   // no fork_rally table yet
+        return false;
     }
-    return $row ? ['systemID' => (int) $row['systemID'], 'setBy' => $row['setBy']] : null;
+}
+
+/** The pings of a fight point message: the comp's mention (admin configuration, fight/fight.inc.php) in front of the
+    type's ping field, each mention once */
+function discord_rally_pings($typePing, $compMention) {
+    $tokens = array_filter(explode(' ', trim((discord_ping_normalise($compMention) ?? '') . ' ' . (discord_ping_normalise($typePing) ?? ''))), 'strlen');
+    return implode(' ', array_values(array_unique($tokens)));
 }
 
 /**
@@ -111,7 +118,12 @@ function discord_rally_context(array $data, $rally, ?callable $labelOf = null) {
         $was = $clear && (int) ($data['systemID'] ?? 0) > 0 ? discord_rally_system((int) $data['systemID'], $known) : [];
         return $base + ['cleared' => true, 'who' => $who] + $was;
     }
-    return $base + ['cleared' => false, 'who' => ($rally['setBy'] ?? '') !== '' ? $rally['setBy'] : 'someone']
+    // The fleet comp stored with the fight point (fight_rally_read): its name and note in the text, its mention (admin
+    // configuration) pinged with the type's ping
+    $comp = $rally['comp'] ?? null;
+    if ($comp) $base['ping'] = discord_rally_pings($base['ping'], $comp['mention'] ?? '');
+    return $base + ['cleared' => false, 'who' => ($rally['setBy'] ?? '') !== '' ? $rally['setBy'] : 'someone',
+        'comp' => $comp ? (string) $comp['name'] : '', 'compNote' => $comp ? (string) ($comp['note'] ?? '') : '']
         + discord_rally_system((int) $rally['systemID'], $labelOf);
 }
 
@@ -134,14 +146,46 @@ function discord_rally_superseded(PDO $db, array $row) {
     return (int) $stmt->fetchColumn() > 0;
 }
 
-/** The mask's live rally message: ['webhookID', 'messageID', 'content' (as last posted / edited), 'postedAt' (unix)] or null */
+/** The mask's live rally message: ['webhookID', 'messageID', 'content' (as last posted / edited), 'postedAt' (unix),
+    'systemID' (the system it shows; 0 = unknown, a row from before Fight here)] or null */
 function discord_rally_last(PDO $db, $maskID) {
-    $stmt = $db->prepare('SELECT webhookID, messageID, content, postedAt FROM discord_rally_message WHERE maskID = ?');
+    $stmt = $db->prepare('SELECT * FROM discord_rally_message WHERE maskID = ?');
     $stmt->execute([(string) $maskID]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) return null;
     return ['webhookID' => (int) $row['webhookID'], 'messageID' => (string) $row['messageID'], 'content' => (string) $row['content'],
-        'postedAt' => (int) strtotime($row['postedAt'] . ' UTC')];
+        'postedAt' => (int) strtotime($row['postedAt'] . ' UTC'), 'systemID' => (int) ($row['systemID'] ?? 0)];
+}
+
+/**
+ * Run $write($db) against a table that may be from before Fight here (no systemID column): on an error the column is
+ * added (ALTER TABLE, another request may have done it already) and $write runs once more. For discord_rally_message
+ * and the legacy fork_rally_discord_message.
+ */
+function discord_rally_with_system_column(PDO $db, $table, callable $write) {
+    try {
+        return $write($db);
+    } catch (PDOException $error) {
+        try { $db->exec("ALTER TABLE $table ADD COLUMN systemID int NOT NULL DEFAULT 0"); } catch (PDOException $ignored) { /* already there */ }
+        return $write($db);
+    }
+}
+
+/**
+ * Mentions a new rally payload would ping that the live message's text doesn't have: a comp's role picked (or changed)
+ * after the post. An edit never notifies anyone, so such a change has to be a new message. $allowed: the new payload's
+ * allowed_mentions (built from admin configuration only), $liveContent: the live message as posted.
+ */
+function discord_rally_new_mentions(array $allowed, $newContent, $liveContent) {
+    // Only mentions that are allowed AND in the new text ping anyone (a ping field or comp mention the admin's template
+    // doesn't show via {pings} pings nobody), minus what the live text already had
+    $in = discord_mentions_in($newContent);
+    $had = discord_mentions_in($liveContent);
+    $new = [];
+    if (in_array('everyone', $allowed['parse'] ?? [], true) && $in['everyone'] && !$had['everyone']) $new[] = '@everyone/@here';
+    foreach (array_diff(array_intersect($allowed['roles'] ?? [], $in['roles']), $had['roles']) as $role) $new[] = '<@&' . $role . '>';
+    foreach (array_diff(array_intersect($allowed['users'] ?? [], $in['users']), $had['users']) as $user) $new[] = '<@' . $user . '>';
+    return array_values($new);
 }
 
 /**
@@ -171,27 +215,36 @@ function discord_rally_plan(array $ctx, $live, $now = null, $window = DISCORD_RA
         return ['op' => 'edit', 'payload' => discord_payload(['previous' => $live['content']] + $ctx), 'live' => false];
     }
     $payload = discord_payload($ctx);
+    $systemID = (int) ($ctx['systemID'] ?? 0);
     $age = $live ? $now - (int) $live['postedAt'] : null;
-    if ($live && $age >= 0 && $age < $window) {
+    // Within the window an edit, unless the change pings someone the live message didn't (e.g. a comp with a role picked
+    // seconds after "no comp"): edits never notify, so that is a new message with the pings, the old one struck through
+    if ($live && $age >= 0 && $age < $window && !discord_rally_new_mentions($payload['allowed_mentions'] ?? [], $payload['content'], $live['content'])) {
         if ($payload['content'] === $live['content']) return ['op' => 'skip', 'why' => 'the message already shows this rally'];
         unset($payload['username']);
         $payload['allowed_mentions'] = ['parse' => []];
-        return ['op' => 'edit', 'payload' => $payload, 'live' => true];
+        return ['op' => 'edit', 'payload' => $payload, 'live' => true, 'systemID' => $systemID];
     }
-    $strike = $live ? ['messageID' => $live['messageID'], 'payload' => discord_payload(['moved' => true, 'previous' => $live['content']] + $ctx)] : null;
-    return ['op' => 'post', 'payload' => $payload, 'strike' => $strike];
+    // The old message ends with "Moved to ..." or, on the same system (only the comp changed), "Changed to ..."
+    $changed = $live && (int) ($live['systemID'] ?? 0) > 0 && (int) $live['systemID'] === $systemID;
+    $strike = $live ? ['messageID' => $live['messageID'], 'payload' => discord_payload(['moved' => true, 'changed' => $changed, 'previous' => $live['content']] + $ctx)] : null;
+    return ['op' => 'post', 'payload' => $payload, 'strike' => $strike, 'systemID' => $systemID];
 }
 
-function discord_rally_remember(PDO $db, $maskID, $webhookID, $messageID, $content, $now = null) {
+function discord_rally_remember(PDO $db, $maskID, $webhookID, $messageID, $content, $now = null, $systemID = 0) {
     discord_rally_forget($db, $maskID);
-    $db->prepare('INSERT INTO discord_rally_message (maskID, webhookID, messageID, content, postedAt) VALUES (?, ?, ?, ?, ?)')
-        ->execute([(string) $maskID, (int) $webhookID, (string) $messageID, (string) $content, gmdate('Y-m-d H:i:s', $now ?? time())]);
+    discord_rally_with_system_column($db, 'discord_rally_message', function (PDO $db) use ($maskID, $webhookID, $messageID, $content, $now, $systemID) {
+        $db->prepare('INSERT INTO discord_rally_message (maskID, webhookID, messageID, content, postedAt, systemID) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([(string) $maskID, (int) $webhookID, (string) $messageID, (string) $content, gmdate('Y-m-d H:i:s', $now ?? time()), (int) $systemID]);
+    });
 }
 
-/** After a live edit: the message's new text (its post time, and so the window, stays) */
-function discord_rally_update(PDO $db, $maskID, $messageID, $content) {
-    $db->prepare('UPDATE discord_rally_message SET content = ? WHERE maskID = ? AND messageID = ?')
-        ->execute([(string) $content, (string) $maskID, (string) $messageID]);
+/** After a live edit: the message's new text and system (its post time, and so the window, stays) */
+function discord_rally_update(PDO $db, $maskID, $messageID, $content, $systemID = 0) {
+    discord_rally_with_system_column($db, 'discord_rally_message', function (PDO $db) use ($maskID, $messageID, $content, $systemID) {
+        $db->prepare('UPDATE discord_rally_message SET content = ?, systemID = ? WHERE maskID = ? AND messageID = ?')
+            ->execute([(string) $content, (int) $systemID, (string) $maskID, (string) $messageID]);
+    });
 }
 
 function discord_rally_forget(PDO $db, $maskID) {
@@ -248,11 +301,11 @@ function discord_rally_after_send(PDO $db, array $row, array $request, $status, 
         if (!empty($plan['strike'])) discord_enqueue($db, (string) $row['maskID'], (int) $row['webhookID'], 'rallyEdit', $plan['strike'], DISCORD_PRIORITY_RALLY);
         $message = json_decode((string) $body, true);
         $id = is_array($message) && isset($message['id']) ? (string) $message['id'] : '';
-        if (preg_match('/^\d{1,32}$/', $id)) discord_rally_remember($db, $row['maskID'], $row['webhookID'], $id, $request['payload']['content'] ?? '', $now);
+        if (preg_match('/^\d{1,32}$/', $id)) discord_rally_remember($db, $row['maskID'], $row['webhookID'], $id, $request['payload']['content'] ?? '', $now, $plan['systemID'] ?? 0);
         else discord_rally_forget($db, $row['maskID']);
     } elseif (!empty($plan['live'])) {
         $last = discord_rally_last($db, $row['maskID']);
-        if ($last) discord_rally_update($db, $row['maskID'], $last['messageID'], $request['payload']['content'] ?? '');
+        if ($last) discord_rally_update($db, $row['maskID'], $last['messageID'], $request['payload']['content'] ?? '', $plan['systemID'] ?? 0);
     } else {
         discord_rally_forget($db, $row['maskID']);   // ended: the next rally is a new message
     }
