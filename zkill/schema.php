@@ -93,6 +93,21 @@ const ZK_DDL = [
       KEY `requested_by` (`requestedBy`, `status`),
       KEY `wanted` (`wantedAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Single-kill lookups (Smart notes kill cards, zkill/lookup.php): web endpoints queue kills that are not in
+    // zkill_killmails ('queued'), the worker fetches them ('running' -> 'done' / 'failed', at most 3 attempts).
+    // requestedBy = Tripwire userID (per-user cap).
+    "CREATE TABLE IF NOT EXISTS `zkill_kill_lookup` (
+      `killID` bigint unsigned NOT NULL,
+      `status` varchar(8) NOT NULL DEFAULT 'queued',
+      `attempts` smallint unsigned NOT NULL DEFAULT 0,
+      `requestedBy` int unsigned NOT NULL DEFAULT 0,
+      `requestedAt` datetime NOT NULL,
+      `attemptedAt` datetime DEFAULT NULL,
+      `error` varchar(255) NOT NULL DEFAULT '',
+      PRIMARY KEY (`killID`),
+      KEY `queue` (`status`, `requestedAt`),
+      KEY `requested_by` (`requestedBy`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
 function zk_ensure_schema(PDO $db) {
