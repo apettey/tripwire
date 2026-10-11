@@ -484,7 +484,8 @@ No runtime calls to third parties and no configuration.
 - Static data in `public/jumprange/`: `systems.json` (positions of every gate-reachable k-space system plus Pochven and
   Zarzakh, 0.001 LY, delta-encoded, about 86 kB) and `ships.json` (every published hull with a jump drive and its base
   range, dogma attribute 867). Both are generated from CCP's Static Data Export (JSON Lines zip from
-  https://developers.eveonline.com/static-data) with `node jumprange/tools/generate-coords.js <unzipped-sde-dir>`; re-run
+  https://developers.eveonline.com/static-data) with `node jumprange/tools/generate-coords.js <unzipped-sde-dir> --zip <the zip>`
+  (records the zip name and SHA-256 in `meta`); re-run
   it after a game update, commit both files and set `jumpPlanner.DATA_VERSION` to the new `meta.version` (a test checks).
 - Cyno-jammed systems are marked by hand per mask (ESI has no public cyno jammer feed): `public/jump_jammed.php`
   (`GET` lists, `POST mode=set|clear&systemID=`), same session/mask checks and `X-Requested-With` rule as `rally.php`,

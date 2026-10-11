@@ -229,6 +229,14 @@ describe('jumpRange', () => {
 			const j2 = {}; j2[best] = true;
 			assert.ok(!jumpRange.reach(sid('Amarr'), sid('Amamake'), 7, INDEX, S, { jammed: j2 }).via.some(v => v.id === best));
 		});
+		it('a jammed midpoint stays a valid midpoint for a covert cyno (Black Ops)', () => {
+			const plain = jumpRange.reach(sid('Amarr'), sid('Amamake'), 7, INDEX, S, {});
+			const best = plain.via[0].id;
+			const jammed = {}; jammed[best] = true;
+			const covert = jumpRange.reach(sid('Amarr'), sid('Amamake'), 7, INDEX, S, { jammed, covert: true });
+			assert.strictEqual(covert.via[0].id, best);
+			assert.strictEqual(covert.via.length, plain.via.length);
+		});
 		it('same system: 0 jumps', () => {
 			assert.strictEqual(jumpRange.reach(sid('Amamake'), sid('Amamake'), 7, INDEX, S, {}).jumps, 0);
 		});

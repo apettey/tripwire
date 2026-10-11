@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Fork-owned: builds the Jump planner's static data from CCP's Static Data Export (SDE, JSON Lines edition).
 //
-//   node jumprange/tools/generate-coords.js <sde-dir> [out-dir]
+//   node jumprange/tools/generate-coords.js <sde-dir> [out-dir] [--zip <the downloaded SDE zip>]
 //
 // <sde-dir> holds the unzipped SDE files this reads: _sde.jsonl, mapSolarSystems.jsonl, mapStargates.jsonl,
 // types.jsonl, groups.jsonl, typeDogma.jsonl (download: https://developers.eveonline.com/static-data, the
-// "JSON Lines" zip). [out-dir] defaults to public/jumprange. Writes:
+// "JSON Lines" zip). [out-dir] defaults to public/jumprange. --zip records the zip's file name and SHA-256 in meta. Writes:
 //
 // systems.json  Every k-space solar system that can be reached by stargates from Jita, plus Pochven (cut off
 //               from the gate network, but you can jump out of it) and Zarzakh. Positions in light-years,
@@ -20,6 +20,7 @@
 //
 // The output only changes when the SDE does, so re-run it after a game update and commit both files.
 'use strict';
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
@@ -44,11 +45,22 @@ function deltas(values) {
 	return values.map((v, i) => (i ? v - values[i - 1] : v));
 }
 
+function sha256(file) {
+	return new Promise((resolve, reject) => {
+		const hash = crypto.createHash('sha256');
+		fs.createReadStream(file).on('data', (d) => hash.update(d)).on('end', () => resolve(hash.digest('hex'))).on('error', reject);
+	});
+}
+
 async function main() {
-	const sde = process.argv[2];
-	const out = process.argv[3] || path.join(__dirname, '..', '..', 'public', 'jumprange');
+	const args = process.argv.slice(2);
+	const zipAt = args.indexOf('--zip');
+	const zip = zipAt >= 0 ? args.splice(zipAt, 2)[1] : null;
+	const sde = args[0];
+	const out = args[1] || path.join(__dirname, '..', '..', 'public', 'jumprange');
 	if (!sde) { console.error('usage: generate-coords.js <sde-dir> [out-dir]'); process.exit(2); }
 
+	const zipInfo = zip ? { sdeZip: path.basename(zip), sdeZipSha256: await sha256(zip) } : {};
 	let build = null;
 	await eachLine(sde, '_sde.jsonl', (r) => { if (r._key === 'sde') { build = r; } });
 	if (!build) { throw new Error('_sde.jsonl has no build number'); }
@@ -86,6 +98,7 @@ async function main() {
 			source: 'EVE Online Static Data Export (developers.eveonline.com), mapSolarSystems + mapStargates',
 			sdeBuild: build.buildNumber,
 			sdeReleaseDate: build.releaseDate,
+			...zipInfo,
 			unit: 'light-years x ' + SCALE + ' (LY = ' + LY_M + ' m), rounded',
 			axes: 'x east, y up, z north (SDE axes); top-down map: x right, z up',
 			encoding: 'ids, x, y, z: first value, then differences to the previous entry (decode with running sums)',
@@ -119,6 +132,7 @@ async function main() {
 			source: 'EVE Online Static Data Export (developers.eveonline.com), types + groups + typeDogma attribute 867 (jumpDriveRange)',
 			sdeBuild: build.buildNumber,
 			sdeReleaseDate: build.releaseDate,
+			...zipInfo,
 			covert: 'true for the Black Ops group (898): the only hulls that can jump to a covert cynosural field'
 		},
 		ships: ships

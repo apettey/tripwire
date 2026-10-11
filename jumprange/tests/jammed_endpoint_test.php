@@ -101,6 +101,12 @@ check('clear', [$status, ids($body)], [200, [EC_P8R]]);
 [$status, $body] = call('POST', ['mode' => 'clear', 'systemID' => AMAMAKE]);
 check('clear again: no error', [$status, ids($body)], [200, [EC_P8R]]);
 
+// --- Storage helpers ---
+check('is marked', jump_jammed_is_marked($mysql, MASK_A, EC_P8R), true);
+check('is not marked', jump_jammed_is_marked($mysql, MASK_A, AMAMAKE), false);
+check('not marked on another mask', jump_jammed_is_marked($mysql, MASK_B, EC_P8R), false);
+check('count', [jump_jammed_count($mysql, MASK_A), jump_jammed_count($mysql, MASK_B)], [1, 0]);
+
 // --- Limit per mask ---
 cleanup($mysql);
 $known = array_keys(jump_jammed_known_systems());

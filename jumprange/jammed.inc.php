@@ -77,6 +77,16 @@ function jump_jammed_count($mysql, $mask) {
 	return (int)$stmt->fetchColumn();
 }
 
+/** Whether the system is marked on the mask */
+function jump_jammed_is_marked($mysql, $mask, $systemID) {
+	$stmt = $mysql->prepare('SELECT 1 FROM fork_jump_jammed WHERE maskID = :mask AND systemID = :systemID');
+	if (!$stmt) throw new PDOException('Could not read fork_jump_jammed');
+	$stmt->bindValue(':mask', $mask);
+	$stmt->bindValue(':systemID', $systemID, PDO::PARAM_INT);
+	if (!$stmt->execute()) throw new PDOException('Could not read fork_jump_jammed: ' . implode(' ', $stmt->errorInfo()));
+	return $stmt->fetchColumn() !== false;
+}
+
 /** Mark a system (or update who/when when it already is) */
 function jump_jammed_set($mysql, $mask, $systemID, $setBy) {
 	$stmt = $mysql->prepare('INSERT INTO fork_jump_jammed (maskID, systemID, setBy, setAt) VALUES (:mask, :systemID, :setBy, CURRENT_TIMESTAMP)

@@ -179,3 +179,4 @@
 .jp-options .jp-sep td { border-top: 1px solid #2c2c2c; padding: 0; height: 4px; }
 .jp-options .jp-cap-label { color: #5cc8f5; font-weight: bold; }
 .jp-options input[type='range'] { vertical-align: middle; width: 140px; }
+.jp-state.jp-error, .jp-settings-error { color: #ff7b7b; }

@@ -36,7 +36,7 @@ describe('jumpPlanner', () => {
 		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
-				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, hubs: true, open: false });
+				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, open: false });
 			assert.strictEqual(jumpPlanner.enabled({}), true);
 			assert.strictEqual(jumpPlanner.enabled({ jumpRange: { enabled: false } }), false);
 		});
@@ -125,11 +125,39 @@ describe('jumpPlanner', () => {
 				assert.strictEqual(Math.sign(Math.round(map.cy - p.y)), Math.sign(Math.round((q.z - exit.z) * map.scale)));
 			});
 		});
-		it('in-range points match the list; high-sec drawn as non-targets; nothing beyond the radius', () => {
+		it('in-range points match the list; no high-sec by default; nothing beyond the radius', () => {
 			assert.strictEqual(map.points.filter(p => p.kind === 'in').length, 81);
-			assert.ok(map.points.some(p => p.kind === 'hs'));
+			assert.strictEqual(map.points.filter(p => p.kind === 'hs').length, 0);
 			assert.ok(map.points.every(p => p.ly <= 10 + 1e-9));
 			assert.ok(map.lines.length > 0);
+		});
+		it('high-sec only with its setting: inside the range ring, without gate lines', () => {
+			const c2 = ctx({ showHs: true });
+			const hs = jumpPlanner.mapModel(c2, jumpPlanner.model(c2));
+			const dots = hs.points.filter(p => p.kind === 'hs');
+			assert.ok(dots.length > 0);
+			assert.ok(dots.every(p => p.ly <= 7 + 1e-9));
+			const at = {}; dots.forEach(p => { at[p.x + ',' + p.y] = true; });
+			assert.ok(hs.lines.every(l => !at[l[0] + ',' + l[1]] && !at[l[2] + ',' + l[3]]));
+			assert.strictEqual(hs.lines.length, map.lines.length);
+		});
+		it('the whole range fits when it is larger than the mini-map radius', () => {
+			const c2 = ctx({ ship: 'group-902', mapRadius: 7 });	// jump freighter, 10 LY
+			const m2 = jumpPlanner.mapModel(c2, jumpPlanner.model(c2));
+			const outer = m2.rings[m2.rings.length - 1];
+			assert.strictEqual(outer.ly, 10);
+			assert.ok(outer.r <= jumpPlanner.MAP_H / 2 - 6);
+			assert.ok(m2.points.every(p => p.y >= 0 && p.y <= jumpPlanner.MAP_H));
+		});
+		it('"Cyno-jammed: Hide" leaves jammed systems off the map and out of the out-of-range count', () => {
+			const auga = sid('Auga');
+			const jammed = {}; jammed[auga] = { setBy: 'X', age: 1 };
+			const c2 = ctx({ jammed: 'hide' }, { jammed });
+			const m2 = jumpPlanner.mapModel(c2, jumpPlanner.model(c2));
+			assert.ok(!m2.points.some(p => p.id === auga));
+			assert.strictEqual(m2.outShown, map.outShown);
+			const c3 = ctx({}, { jammed });
+			assert.strictEqual(jumpPlanner.mapModel(c3, jumpPlanner.model(c3)).points.find(p => p.id === auga).kind, 'jammed');
 		});
 		it('out-of-range systems only when switched on', () => {
 			const off = jumpPlanner.mapModel(ctx({ showOut: false }), m);
@@ -181,6 +209,18 @@ describe('jumpPlanner', () => {
 			noRawHtml(html);
 			assert.ok(/2 jumps/.test(html) && /1 other midpoint\)/.test(html) && /not within 2 jumps/.test(html) && /3 gates to/.test(html));
 		});
+		it('hub reach to a jammed exit (normal cyno) says so', () => {
+			const jammed = {}; jammed[AMAMAKE] = true;
+			const to = jumpRange.reach(jumpRange.AMARR, AMAMAKE, 7, INDEX, S, { jammed }, 2);
+			assert.strictEqual(to.reason, 'target');
+			const html = jumpPlanner.hubsHtml([{ hubID: jumpRange.AMARR, to: to, back: null }], 'Amamake', id => S[id].name);
+			assert.ok(/exit is cyno-jammed \(normal cyno\)/.test(html) && !/not within 2 jumps/.test(html));
+		});
+		it('settings ship list: placeholder until ships.json is there', () => {
+			assert.ok(/Loading ships/.test(jumpPlanner.shipOptionsHtml(null)));
+			assert.ok(/Carrier \(3.5 LY base\)/.test(jumpPlanner.shipOptionsHtml(PRESETS)));
+			assert.ok(/Loading ships/.test(jumpPlanner.settingsHtml(null)) && /jumpPlanner-showHs/.test(jumpPlanner.settingsHtml(null)));
+		});
 		it('settings section', () => {
 			noRawHtml(jumpPlanner.settingsHtml([{ key: 'group-1', label: EVIL, ships: [EVIL], baseLy: 3 }]));
 		});
@@ -214,6 +254,16 @@ describe('jumpPlanner', () => {
 			assert.deepStrictEqual(jumpPlanner.savedPlacement({ col: 3, row: 4, size_x: 2, size_y: 20 }), { col: 3, row: 4, size_x: 6, size_y: 20 });
 			assert.strictEqual(jumpPlanner.savedPlacement({ col: 0, row: 1 }), null);
 			assert.deepStrictEqual(jumpPlanner.gridEntry([{ id: 'x' }, { id: jumpPlanner.WIDGET_ID, col: 1 }], jumpPlanner.WIDGET_ID), { id: jumpPlanner.WIDGET_ID, col: 1 });
+		});
+		it('Reset drops the panel from the layout (array, object and old oog forms)', () => {
+			const id = jumpPlanner.WIDGET_ID;
+			const arr = [{ id: 'chainWidget', col: 1 }, { id: id, col: 25 }];
+			assert.deepStrictEqual(jumpPlanner.withoutGridEntry(arr, id), [{ id: 'chainWidget', col: 1 }]);
+			assert.strictEqual(arr.length, 2);
+			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ 0: { id: 'a' }, 1: { id: id } }, id), { 0: { id: 'a' } });
+			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ oog: { 0: { id: id }, 1: { id: 'b' } } }, id), { oog: { 1: { id: 'b' } } });
+			assert.strictEqual(jumpPlanner.gridEntry(jumpPlanner.withoutGridEntry(arr, id), id), null);
+			assert.strictEqual(jumpPlanner.withoutGridEntry(null, id), null);
 		});
 		it('age text', () => {
 			assert.deepStrictEqual([30, 600, 7200, 200000].map(jumpPlanner.ageText), ['now', '10 min', '2 h', '2 d']);

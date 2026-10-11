@@ -4,6 +4,8 @@
 		"source": "EVE Online Static Data Export (developers.eveonline.com), types + groups + typeDogma attribute 867 (jumpDriveRange)",
 		"sdeBuild": 3586130,
 		"sdeReleaseDate": "2026-10-07T11:10:05Z",
+		"sdeZip": "eve-online-static-data-3586130-jsonl.zip",
+		"sdeZipSha256": "b6efc200ec30911e5d22decc8ee3c34cafeac1ecc49faa76491fd75fa6c36045",
 		"covert": "true for the Black Ops group (898): the only hulls that can jump to a covert cynosural field"
 	},
 	"ships": [

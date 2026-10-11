@@ -54,8 +54,7 @@ try {
 			jump_jammed_fail(400, 'Invalid systemID');
 		}
 		if ($mode === 'set') {
-			$marked = array_map(function ($j) { return $j['systemID']; }, jump_jammed_list($mysql, $mask));
-			if (!in_array($systemID, $marked, true) && count($marked) >= JUMP_JAMMED_MAX_PER_MASK) {
+			if (!jump_jammed_is_marked($mysql, $mask, $systemID) && jump_jammed_count($mysql, $mask) >= JUMP_JAMMED_MAX_PER_MASK) {
 				jump_jammed_fail(409, 'Too many systems marked as jammed');
 			}
 			$setBy = isset($_SESSION['characterName']) ? $_SESSION['characterName'] : (isset($_SESSION['username']) ? $_SESSION['username'] : null);

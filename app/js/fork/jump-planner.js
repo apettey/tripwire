@@ -23,7 +23,7 @@ const jumpPlanner = {
 	ROMAN: ["0", "I", "II", "III", "IV", "V"],
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
-		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, hubs: true
+		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true
 	},
 
 	escape: function(text) {
@@ -56,6 +56,7 @@ const jumpPlanner = {
 			clickOpen: raw.clickOpen !== false,
 			mapRadius: Math.round(num(raw.mapRadius, 7, 15, d.mapRadius)),
 			showOut: raw.showOut !== false,
+			showHs: raw.showHs === true,
 			hubs: raw.hubs !== false,
 			open: raw.open === true
 		};
@@ -224,7 +225,8 @@ const jumpPlanner = {
 		const W = jumpPlanner.MAP_W, H = jumpPlanner.MAP_H;
 		const s = ctx.settings;
 		const origin = ctx.index.pos[ctx.exitID];
-		const scale = (H / 2 - 6) / s.mapRadius;
+		// The whole range must fit (it can be larger than the "Mini-map shows" radius), with a little margin
+		const scale = (H / 2 - 6) / (Math.max(s.mapRadius, model.range) * 1.04);
 		const cx = W / 2, cy = H / 2;
 		const project = function(p) { return { x: cx + (p.x - origin.x) * scale, y: cy - (p.z - origin.z) * scale }; };
 		const rings = jumpRange.rings(model.range).map(function(ly, i, all) {
@@ -243,7 +245,13 @@ const jumpPlanner = {
 			let kind;
 			if (hit.id === Number(ctx.exitID)) { kind = "exit"; }
 			else if (row) { kind = row.blocked ? "jammed" : "in"; }
-			else if (jumpRange.kind(hit.id, sys) === "hs") { kind = "hs"; }
+			// "Cyno-jammed systems: Hide": not on the map at all (not even as out of range)
+			else if (s.jammed === "hide" && model.opts.jammed && model.opts.jammed[hit.id] && hit.ly <= model.range) { return; }
+			// High-sec (no cyno there): only with its own setting (off by default), faint, inside the range ring
+			else if (jumpRange.kind(hit.id, sys) === "hs") {
+				if (!s.showHs || hit.ly > model.range) { return; }
+				kind = "hs";
+			}
 			else if (s.showOut) { kind = "out"; }
 			else { return; }
 			shown[hit.id] = true;
@@ -257,7 +265,8 @@ const jumpPlanner = {
 			const next = ctx.map ? ctx.map[p.id - 30000000] : null;
 			for (const key in (next || {})) {
 				const id = 30000000 + Number(key);
-				if (id > p.id && byID[id]) { lines.push([p.x, p.y, byID[id].x, byID[id].y]); }
+				// No gate lines to high-sec dots: they would draw the whole high-sec network
+				if (id > p.id && byID[id] && p.kind !== "hs" && byID[id].kind !== "hs") { lines.push([p.x, p.y, byID[id].x, byID[id].y]); }
 			}
 		});
 		const out = points.filter(function(p) { return p.kind === "out"; }).length;
@@ -427,7 +436,9 @@ const jumpPlanner = {
 			const hub = esc(name(h.hubID));
 			let to;
 			const r = h.to;
-			if (!r || r.jumps === null) {
+			if (r && r.reason === "target") {
+				to = "<span class='jp-hub-no'>exit is cyno-jammed (normal cyno)</span>";
+			} else if (!r || r.jumps === null) {
 				to = "<span class='jp-hub-no'>not within 2 jumps</span>" + (r && isFinite(r.direct) ? " <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY)</span>" : "");
 			} else if (r.jumps === 1) {
 				to = "<span class='jp-hub-ok'>1 jump</span> <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY)</span>";
@@ -514,6 +525,28 @@ const jumpPlanner = {
 		return entries.filter(function(e) { return e && e.id === id; })[0] || null;
 	},
 
+	/** Options of the Settings ship select (a disabled "Loading ships…" one until ships.json is there) */
+	shipOptionsHtml: function(presets) {
+		const esc = jumpPlanner.escape;
+		if (!presets || !presets.length) { return "<option value='' disabled>Loading ships…</option>"; }
+		return presets.map(function(p) {
+			return "<option value='" + esc(p.key) + "' title='" + esc(p.ships.join(", ")) + "'>" + esc(p.label + " (" + p.baseLy + " LY base)") + "</option>";
+		}).join("");
+	},
+
+	/** A layout (options.grid: array, object, or the old {oog: ...} form) without the panel's entry. Never mutates grid. */
+	withoutGridEntry: function(grid, id) {
+		if (!grid || typeof grid !== "object") { return grid; }
+		const strip = function(source) {
+			if (Array.isArray(source)) { return source.filter(function(e) { return !(e && e.id === id); }); }
+			const out = {};
+			Object.keys(source || {}).forEach(function(k) { if (!(source[k] && source[k].id === id)) { out[k] = source[k]; } });
+			return out;
+		};
+		if (grid.oog && typeof grid.oog === "object") { return Object.assign(strip(grid), { oog: strip(grid.oog) }); }
+		return strip(grid);
+	},
+
 	/** Settings section rows (HTML) */
 	settingsHtml: function(presets) {
 		const esc = jumpPlanner.escape;
@@ -524,9 +557,8 @@ const jumpPlanner = {
 		return "<h3 id='jumpPlanner-header'><a href='#'>Jump Planner</a></h3>"
 			+ "<div id='jumpPlanner-section'><table class='optionsTable jp-options' width='100%' cellpadding='1' cellspacing='0'>"
 			+ "<tr><th>Enable jump planner:</th><td>" + radios("jumpPlanner-enabled", [["1", "Yes"], ["0", "No"]]) + "</td></tr>"
-			+ "<tr><th>Jump ship:</th><td><select id='jumpPlanner-ship'>" + (presets || []).map(function(p) {
-				return "<option value='" + esc(p.key) + "' title='" + esc(p.ships.join(", ")) + "'>" + esc(p.label + " (" + p.baseLy + " LY base)") + "</option>";
-			}).join("") + "</select></td></tr>"
+			+ "<tr><th>Jump ship:</th><td><select id='jumpPlanner-ship'>" + jumpPlanner.shipOptionsHtml(presets) + "</select>"
+			+ " <span class='jp-settings-error hidden'></span></td></tr>"
 			+ "<tr><th>Jump Drive Calibration:</th><td>" + radios("jumpPlanner-jdc", jumpPlanner.ROMAN.map(function(r, i) { return [String(i), r]; })) + "</td></tr>"
 			+ "<tr><th>Range used:</th><td><span class='jp-dim'>cap</span> <input type='range' id='jumpPlanner-cap' min='1' max='10' step='0.05' /> <span id='jumpPlanner-cap-label' class='jp-cap-label'></span></td></tr>"
 			+ "<tr><th>Targets:</th><td><label><input type='checkbox' id='jumpPlanner-lowsec' /> <span class='jp-ls'>Low-sec</span></label> <label><input type='checkbox' id='jumpPlanner-nullsec' /> <span class='jp-ns'>Null-sec</span></label></td></tr>"
@@ -538,6 +570,7 @@ const jumpPlanner = {
 			+ "<tr><th>Open when I click an exit:</th><td>" + radios("jumpPlanner-click", [["1", "Yes"], ["0", "Only from ring icon"]]) + "</td></tr>"
 			+ "<tr><th>Mini-map shows:</th><td><span class='jp-dim'>out to</span> <input type='range' id='jumpPlanner-radius' min='7' max='15' step='1' /> <span id='jumpPlanner-radius-label'></span></td></tr>"
 			+ "<tr><th>Out-of-range systems:</th><td><label><input type='checkbox' id='jumpPlanner-showOut' /> Show greyed in mini-map</label></td></tr>"
+			+ "<tr><th>High-sec systems:</th><td><label><input type='checkbox' id='jumpPlanner-showHs' /> Show inside the range (no cyno there)</label></td></tr>"
 			+ "<tr><th>Trade-hub reach:</th><td>" + radios("jumpPlanner-hubs", [["1", "Show"], ["0", "Hide"]]) + "</td></tr>"
 			+ "</table></div>";
 	}
@@ -581,20 +614,42 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (save) { options.save(); }
 		}
 
+		// Settings > Reset happened in this page and the panel hasn't been placed since: forget its saved position
+		// (options.apply() restores options.grid from the browser's copy, so the layout entry is dropped there too)
+		let resetPending = false;
+
 		// ---- Data ----
 
+		let presets = null, presetsLoading = null;
+
+		/** The ship presets (ships.json, small): for Settings and the panel. A failed fetch is retried on the next call. */
+		function loadShips() {
+			if (presets) { return $.Deferred().resolve(presets).promise(); }
+			if (!presetsLoading) {
+				presetsLoading = $.getJSON(jp.DATA_URL + "ships.json?v=" + jp.DATA_VERSION).then(function(ships) {
+					presets = jumpRange.presets(ships);
+					return presets;
+				}, function() {
+					presetsLoading = null;
+					return $.Deferred().reject().promise();
+				});
+			}
+			return presetsLoading;
+		}
+
+		/** Everything the panel needs: positions (systems.json, only fetched when the panel is first shown) and presets */
 		function load() {
 			if (state.data) { return $.Deferred().resolve(state.data).promise(); }
 			if (state.loading) { return state.loading; }
-			const v = "?v=" + jp.DATA_VERSION;
-			state.loading = $.when($.getJSON(jp.DATA_URL + "systems.json" + v), $.getJSON(jp.DATA_URL + "ships.json" + v)).then(function(sys, ships) {
+			state.loading = $.when($.getJSON(jp.DATA_URL + "systems.json?v=" + jp.DATA_VERSION), loadShips()).then(function(sys, list) {
 				const coords = jumpRange.decode(sys[0]);
-				state.data = { coords: coords, index: jumpRange.buildIndex(coords, 7), presets: jumpRange.presets(ships[0]) };
+				state.data = { coords: coords, index: jumpRange.buildIndex(coords, 7), presets: list };
 				state.error = "";
 				return state.data;
 			}, function() {
-				state.error = "Could not load the jump range data.";
+				state.error = "Could not load the jump range data. Click an exit's ring icon to try again.";
 				state.loading = null;
+				return $.Deferred().reject().promise();
 			});
 			return state.loading;
 		}
@@ -694,8 +749,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				$existing.stop(true, true).remove();
 			}
 			const s = current();
-			const placement = jp.savedPlacement(jp.gridEntry(options.grid, jp.WIDGET_ID)) || jp.savedPlacement(s.position)
+			// After Settings > Reset the remembered position is gone: place it by the Dock side setting
+			const placement = (resetPending ? null : jp.savedPlacement(jp.gridEntry(options.grid, jp.WIDGET_ID)) || jp.savedPlacement(s.position))
 				|| jp.defaultPlacement(api.serialize(), availableCols(api), s.dock);
+			resetPending = false;
 			const $w = api.add_widget(widgetHtml(), placement.size_x, placement.size_y, placement.col, placement.row, null, [jp.MIN_SIZE.x, jp.MIN_SIZE.y]);
 			$w.stop(true, true);
 			$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
@@ -708,8 +765,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const $w = $widget();
 			clearTimeout(state.jammedTimer);
 			if (!api || !$w.length) { return; }
+			// Remember where it was, so opening it again puts it back there (not when Settings > Reset removes it)
 			const entry = jp.gridEntry(api.serialize($w), jp.WIDGET_ID);
-			if (entry) { store({ position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y } }); }
+			if (entry && !resetPending) { store({ position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y } }); }
 			$w.attr("id", jp.WIDGET_ID + "-removed");
 			api.remove_widget($w, true);
 			$w.stop(true, true);
@@ -721,6 +779,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const id = parseInt(systemID, 10);
 			if (id) { state.selected = id; }
 			state.pinnedID = null;
+			state.error = "";
 			const wasOpen = !!$widget().length;
 			const $w = addWidget();
 			if (!current().open) { store({ open: true }, true); }
@@ -765,9 +824,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const $w = $widget();
 			if (!$w.length) { return; }
 			if (!state.data) {
-				$w.find(".jp-body").html("<div class='jp-state'>" + jp.escape(state.error || "Loading jump range data…") + "</div>");
-				const p = load();
-				if (p && p.done) { p.done(render).fail(render); }
+				$w.find(".jp-body").html("<div class='jp-state" + (state.error ? " jp-error" : "") + "'>" + jp.escape(state.error || "Loading jump range data…") + "</div>");
+				if (state.error) { return; }	// tried again when the planner is opened again (open() clears it)
+				load().always(render);
 				return;
 			}
 			const s = current();
@@ -904,7 +963,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		// ---- Settings ----
 
-		let presetsForSettings = null;
+		/** Fill the ship select once ships.json is there; show an error (and retry on the next open) if it fails */
+		function fillShips() {
+			const $err = $("#jumpPlanner-section .jp-settings-error");
+			loadShips().done(function(list) {
+				const $ship = $("#jumpPlanner-ship");
+				if (!$ship.find("option:not([disabled])").length) {
+					$ship.html(jp.shipOptionsHtml(list));
+					fillForm(current());
+				}
+				$err.addClass("hidden").text("");
+			}).fail(function() {
+				$err.removeClass("hidden").text("Could not load the ship list; it is tried again when Settings opens.");
+			});
+		}
 
 		function fillForm(s) {
 			const $s = $("#jumpPlanner-section");
@@ -920,6 +992,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$s.find("input[name='jumpPlanner-click'][value='" + (s.clickOpen ? "1" : "0") + "']").prop("checked", true);
 			$("#jumpPlanner-radius").val(s.mapRadius);
 			$("#jumpPlanner-showOut").prop("checked", s.showOut);
+			$("#jumpPlanner-showHs").prop("checked", s.showHs);
 			$s.find("input[name='jumpPlanner-hubs'][value='" + (s.hubs ? "1" : "0") + "']").prop("checked", true);
 			updateCap(s.cap);
 			$("#jumpPlanner-radius-label").text(s.mapRadius + " LY");
@@ -927,7 +1000,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** The cap slider goes from 1 LY to the ship's range at the chosen JDC; at the top it means "no cap" */
 		function updateCap(cap) {
-			const max = jp.range({ ship: $("#jumpPlanner-ship").val(), jdc: Number($("input[name='jumpPlanner-jdc']:checked").val()), cap: null }, presetsForSettings || []).max || 10;
+			const max = jp.range({ ship: $("#jumpPlanner-ship").val(), jdc: Number($("input[name='jumpPlanner-jdc']:checked").val()), cap: null }, presets || []).max || 10;
 			const $cap = $("#jumpPlanner-cap");
 			const value = cap === undefined ? Number($cap.val()) : (cap === null ? max : cap);
 			$cap.attr("max", max).val(Math.min(max, value));
@@ -938,11 +1011,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function readForm() {
 			const max = Number($("#jumpPlanner-cap").attr("max"));
 			const cap = Number($("#jumpPlanner-cap").val());
+			const before = current();
 			return {
 				enabled: $("input[name='jumpPlanner-enabled']:checked").val() !== "0",
-				ship: $("#jumpPlanner-ship").val() || jp.DEFAULTS.ship,
+				// Without the ship list (not loaded) the ship and cap rows can't have changed: keep them
+				ship: presets ? ($("#jumpPlanner-ship").val() || jp.DEFAULTS.ship) : before.ship,
 				jdc: Number($("input[name='jumpPlanner-jdc']:checked").val()),
-				cap: cap >= max - 0.025 ? null : Math.round(cap * 20) / 20,
+				cap: !presets ? before.cap : cap >= max - 0.025 ? null : Math.round(cap * 20) / 20,
 				lowsec: $("#jumpPlanner-lowsec").prop("checked"),
 				nullsec: $("#jumpPlanner-nullsec").prop("checked"),
 				exits: $("#jumpPlanner-exits").val(),
@@ -951,6 +1026,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				clickOpen: $("input[name='jumpPlanner-click']:checked").val() !== "0",
 				mapRadius: Number($("#jumpPlanner-radius").val()),
 				showOut: $("#jumpPlanner-showOut").prop("checked"),
+				showHs: $("#jumpPlanner-showHs").prop("checked"),
 				hubs: $("input[name='jumpPlanner-hubs']:checked").val() !== "0"
 			};
 		}
@@ -958,20 +1034,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function setupSettings() {
 			const $accordion = $("#dialog-options #optionsAccordion");
 			if (!$accordion.length || $("#jumpPlanner-section").length) { return; }
-			// The ship list comes from ships.json: build the section when the data is there
-			load().done(function(data) {
-				presetsForSettings = data.presets;
-				if ($("#jumpPlanner-section").length) { return; }
-				// Before "Personal Statistics" (the last section), so the indexes other code uses for the first three stay put
-				const $last = $accordion.children("h3").last();
-				if ($last.length) { $last.before(jp.settingsHtml(data.presets)); } else { $accordion.append(jp.settingsHtml(data.presets)); }
-				if ($accordion.hasClass("ui-accordion")) { $accordion.accordion("refresh"); }
-				if ($("#dialog-options").is(":visible")) { fillForm(current()); }
-			});
+			// Built right away (so the feature can always be turned off); the ship list fills in from ships.json when
+			// Settings opens. Before "Personal Statistics" (the last section): the indexes other code uses stay put.
+			const $last = $accordion.children("h3").last();
+			if ($last.length) { $last.before(jp.settingsHtml(presets)); } else { $accordion.append(jp.settingsHtml(presets)); }
+			if ($accordion.hasClass("ui-accordion")) { $accordion.accordion("refresh"); }
 			$(document).on("change", "#jumpPlanner-ship, input[name='jumpPlanner-jdc']", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-cap", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-radius", function() { $("#jumpPlanner-radius-label").text($(this).val() + " LY"); });
-			$(document).on("dialogopen", "#dialog-options", function() { if ($("#jumpPlanner-section").length) { fillForm(current()); } });
+			$(document).on("dialogopen", "#dialog-options", function() {
+				if (!$("#jumpPlanner-section").length) { return; }
+				fillForm(current());
+				fillShips();
+			});
 			// Capture phase so the values are in place before upstream's Save handler applies and saves options
 			document.addEventListener("click", function(e) {
 				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
@@ -986,6 +1061,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const wrapped = function() {
 					const result = reset.apply(this, arguments);
 					delete this.jumpRange;
+					resetPending = true;
 					return result;
 				};
 				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
@@ -997,6 +1073,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const apply = options.apply;
 				options.apply = function() {
 					const result = apply.apply(this, arguments);
+					if (resetPending) { this.grid = jp.withoutGridEntry(this.grid, jp.WIDGET_ID); }
 					try { state.counts = {}; sync(); } catch (err) { console.error("Jump planner: apply failed", err); }
 					return result;
 				};
