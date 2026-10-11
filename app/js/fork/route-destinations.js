@@ -181,10 +181,12 @@ const routeDestinations = {
 	onMap: the routes to draw - every exit within the limit, or else just the best one; none if the destination is on the chain. */
 	evaluate: function(exits, destinationID, limit) {
 		const id = routeDestinations.toID(destinationID);
-		const routes = (exits || []).map(function(exit, index) {
+		let routes = (exits || []).map(function(exit, index) {
 			const r = routeDestinations.route(exit.systemID, id);
 			return r ? {exit: exit, jumps: r.jumps, path: r.path, index: index} : null;
 		}).filter(function(r) { return r; }).sort(function(a, b) { return a.jumps - b.jumps || a.index - b.index; });
+		// Exits whose way home through the chain avoids EOL / critical / ... holes come first (routeHoleFilters), else the nearest anyway
+		if (routeDestinations.holeFilters) { routes = routeHoleFilters.pickRoutes(routes, routeDestinations.holeFilters); }
 		const best = routes[0] || null;
 		const near = routes.filter(function(r) { return r.jumps <= limit; });
 		// A route through Thera/Turnur (theraRoute), when it has fewer jumps than the best gate route
@@ -243,6 +245,14 @@ const routeDestinations = {
 		const scoutLines = typeof routeDestinations.scoutEnabled === "function" && routeDestinations.scoutEnabled() ? result.lines : null;
 		const exits = routeDestinations.chainExits(result.map.rows, scoutLines);
 		routeDestinations.lastExits = exits;
+		routeDestinations.holeFilters = null;
+		if (typeof routeHoleFilters !== "undefined" && routeHoleFilters.contextFor) {
+			const hf = routeHoleFilters.contextFor(result.lines);
+			if (hf) {
+				exits.forEach(function(e) { e.holes = routeHoleFilters.holesHome(result.lines, e.nodeID); });
+				routeDestinations.holeFilters = routeHoleFilters.reasonTable(rally.systemConnections(result.map.rows, result.lines), hf);
+			}
+		}
 		routeDestinations.lastChainSystems = routeDestinations.chainSystems(result.map.rows, scoutLines);
 		const extra = routeDestinations.syntheticRows(exits, destinations === undefined ? routeDestinations.saved() : destinations,
 			limit === undefined ? routeDestinations.routingLimit() : limit);
@@ -303,6 +313,7 @@ const routeDestinations = {
 			} else {
 				exitCell = routeDestinations.systemLabel(ev.best.exit.systemID)
 					+ (ev.best.exit.holeName ? " <span class='route-dest-hole'>(" + esc(ev.best.exit.holeName) + ")</span>" : "")
+					+ (ev.best.note ? " <span class='route-dest-warn' title='" + esc(ev.best.note) + "'>&#9888; " + esc(ev.best.note) + "</span>" : "")
 					+ (typeof favouritesRouteStrip !== "undefined" ? routeDestinations.stripHtml(favouritesRouteStrip.pathSteps(ev.best.path), []) : "");
 				jumpsCell = String(ev.best.jumps);
 			}
