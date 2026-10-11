@@ -567,7 +567,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					if (JSON.stringify(data.jumps) === state.fingerprint) { return; }
 					const open = $d.dialog("option", "open");
 					if (typeof open !== "function") { return; }
-					// The dialog's own refresh, fed with this response instead of fetching mass.php again (synchronous, so no flash)
+					// The dialog's own refresh, fed with this response instead of fetching mass.php again (synchronous, so no flash).
+					// Relies on the open handler being synchronous with a single mass.php call; if another mass.php call is added
+					// inside open, it would get this response too. Fallback: just call open (one extra fetch).
 					const real = $.ajax;
 					$.ajax = function(settings) {
 						if (settings && settings.url === "mass.php") { return $.Deferred().resolve(data).promise(); }
