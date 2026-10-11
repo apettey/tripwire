@@ -338,7 +338,8 @@ const jumpPlanner = {
 		const jammedIDs = {};
 		Object.keys(ctx.jammed || {}).forEach(function(id) { jammedIDs[id] = true; });
 		// Systems in a Sansha incursion are jammed too ("Avoid incursions"): shown like cyno-jammed ones (marked, or hidden with "Hide")
-		const incursion = s.avoidIncursions !== false && ctx.live && ctx.live.incursion ? ctx.live.incursion : {};
+		// (covert cynos work there, so Black Ops see nothing special)
+		const incursion = !covert && s.avoidIncursions !== false && ctx.live && ctx.live.incursion ? ctx.live.incursion : {};
 		const opts = {
 			lowsec: s.lowsec, nullsec: s.nullsec, covert: covert,
 			jammed: Object.assign({}, s.jammed === "ignore" ? {} : jammedIDs, incursion), showJammed: s.jammed !== "hide"

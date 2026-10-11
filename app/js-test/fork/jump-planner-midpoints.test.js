@@ -224,6 +224,8 @@ describe('jumpPlanner midpoints', () => {
 			assert.strictEqual(model(live, { avoidIncursions: false }).rows.find(x => x.id === target.id).blocked, false);
 			const covert = model(live, { ship: 'group-898' }).rows.find(x => x.id === target.id);
 			assert.strictEqual(covert.blocked, false);
+			assert.deepStrictEqual([covert.jammed, covert.incursion], [false, false], 'no misleading jammed tag for covert ships');
+			assert.strictEqual(model(live, { ship: 'group-898' }).counts.jammed, base.counts.jammed);
 		});
 		it('without live data nothing changes', () => {
 			assert.deepStrictEqual(model({ rev: 'x' }).rows.map(r => r.id), base.rows.map(r => r.id));
