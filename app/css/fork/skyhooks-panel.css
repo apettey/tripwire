@@ -1,0 +1,130 @@
+/* Raidable skyhooks panel (fork-owned, see app/js/fork/skyhooks-panel.js) */
+
+#skyhooksWidget .controls .sky-title {
+	color: #CCC;
+	font-weight: bold;
+	cursor: default;
+}
+
+#skyhooksWidget .controls .sky-title i {
+	color: #4191ff;
+	cursor: default;
+}
+
+#skyhooksWidget .controls .sky-count,
+#skyhooksWidget .controls .sky-time {
+	color: #888;
+	font-weight: normal;
+	cursor: default;
+}
+
+#skyhooksWidget .controls .sky-time {
+	float: right;
+	margin-right: 4px;
+}
+
+#skyhooksWidget .sky-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 10px;
+	margin: 2px 0 4px 0;
+	padding-bottom: 4px;
+	border-bottom: 1px solid #222;
+	color: #999;
+}
+
+#skyhooksWidget .sky-options select {
+	max-width: 130px;
+}
+
+#skyhooksWidget .sky-status {
+	color: #999;
+	padding: 2px 0;
+}
+
+#skyhooksWidget .sky-status:empty {
+	display: none;
+}
+
+#skyhooksWidget .sky-status.sky-error {
+	color: #e8a33d;
+}
+
+#skyhooksWidget .sky-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+#skyhooksWidget .sky-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 2px;
+	border-bottom: 1px solid #222;
+	white-space: nowrap;
+}
+
+#skyhooksWidget .sky-row:hover {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+#skyhooksWidget .sky-system {
+	flex: 0 0 auto;
+	min-width: 110px;
+}
+
+#skyhooksWidget .sky-sec {
+	color: #777;
+	font-size: 0.9em;
+}
+
+#skyhooksWidget .sky-region {
+	flex: 1 1 60px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: #777;
+}
+
+#skyhooksWidget .sky-exit {
+	flex: 0 1 auto;
+	color: #AAA;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#skyhooksWidget .sky-window {
+	flex: 0 0 auto;
+	color: #BBB;
+}
+
+#skyhooksWidget .sky-countdown {
+	flex: 0 0 auto;
+	min-width: 120px;
+	text-align: right;
+}
+
+#skyhooksWidget .sky-open .sky-countdown {
+	color: #e0524d;
+	font-weight: bold;
+}
+
+#skyhooksWidget .sky-soon .sky-countdown {
+	color: #e8a33d;
+}
+
+#skyhooksWidget .sky-route,
+#skyhooksWidget .sky-route-none {
+	flex: 0 0 auto;
+	width: 1.2em;
+}
+
+#skyhooksWidget .sky-route {
+	color: #4191ff;
+	cursor: pointer;
+}
+
+#skyhooksWidget .sky-route:hover {
+	color: #FFF;
+}
