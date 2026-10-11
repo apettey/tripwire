@@ -11,6 +11,9 @@
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header (like rally.php).
 //				Any request may pass have=<id>,<id>: scans never change, so their rows ("data") are left out of
 //				`scans` for the IDs the browser already has (polls then carry only the small metadata).
+//				Any request with systemID may pass pilots=<id> (a local scan of that system): `pilots` then holds its
+//				pilots' corporations, alliances and zKillboard threat (intel/pilots.inc.php; looked up by the
+//				zKillboard worker, queued when a local scan is shared and refreshed when viewed).
 //
 //	The fork_intel_scans table is created on first use, so existing databases need no migration. Scans are kept
 //	for INTEL_RETENTION_H hours; the browser decides how long a scan counts as fresh.
@@ -27,6 +30,7 @@ if (!isset($_SESSION['userID']) || !isset($_SESSION['mask'])) {
 require_once('../config.php');
 require_once('../db.inc.php');
 require_once('../intel/intel.inc.php');
+require_once('../intel/pilots.inc.php');
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -69,6 +73,14 @@ try {
 			$createdBy = isset($_SESSION['characterName']) ? $_SESSION['characterName'] : (isset($_SESSION['username']) ? $_SESSION['username'] : null);
 			$output['added'] = intel_insert($mysql, $mask, $systemID, $kind, $data, $createdBy, $userID);
 			intel_prune($mysql, $mask, $systemID);
+			if ($kind === 'local') {
+				// Queue the pilots for the worker; the scan is stored even if this fails
+				try {
+					intel_pilots_on_share($mysql, $output['added'], $data['names'], $userID, intel_friendly_ids($_SESSION, $mask));
+				} catch (PDOException $e) {
+					error_log('intel_scans.php: could not queue pilot lookups: ' . $e->getMessage());
+				}
+			}
 		} else if ($mode === 'delete') {
 			$id = isset($_POST['id']) ? filter_var($_POST['id'], FILTER_VALIDATE_INT) : false;
 			if ($id === false || $id <= 0) intel_fail(400, 'Invalid id');
@@ -88,6 +100,12 @@ try {
 		$output['systemID'] = $systemID;
 		$have = $_SERVER['REQUEST_METHOD'] === 'POST' ? (isset($_POST['have']) ? $_POST['have'] : '') : (isset($_GET['have']) ? $_GET['have'] : '');
 		$output['scans'] = intel_list($mysql, $mask, $systemID, $userID, intel_have_param($have));
+		$pilots = $_SERVER['REQUEST_METHOD'] === 'POST' ? (isset($_POST['pilots']) ? $_POST['pilots'] : '') : (isset($_GET['pilots']) ? $_GET['pilots'] : '');
+		$pilotsScan = filter_var($pilots, FILTER_VALIDATE_INT);
+		if ($pilotsScan !== false && $pilotsScan > 0) {
+			$names = intel_scan_names($mysql, $mask, $systemID, $pilotsScan);
+			if ($names !== null) $output['pilots'] = intel_pilots_view($mysql, $pilotsScan, $names, $userID, intel_friendly_ids($_SESSION, $mask));
+		}
 	}
 	$output['retentionSeconds'] = INTEL_RETENTION_H * 3600;
 } catch (PDOException $e) {

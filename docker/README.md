@@ -77,7 +77,9 @@ and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask
 `fork_watchlist_baseline` / `fork_watchlist_seen` (what the Discord type "Watchlist match" has seen, created by
 `discord_notify.worker.php`; DDL in `docker/sql/watchlist.sql`) and `fork_jump_jammed` (cyno-jammed systems marked per
 mask for the [Jump planner](#jump-planner), created by `public/jump_jammed.php`, DDL in `jumprange/jammed.inc.php`, reference
-copy `docker/sql/jump-jammed.sql`). The app user therefore
+copy `docker/sql/jump-jammed.sql`) and `fork_pilot_affiliation` / `fork_pilot_entities` / `fork_intel_lookups` /
+`fork_pilot_threat` ([who is in local](#who-is-in-local), created by `public/intel_scans.php` and the zKillboard worker,
+DDL in `intel/pilots.inc.php`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -126,6 +128,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
+| `INTEL_ZKILL_THREAT_ENABLED` | `true` | `config.php` (`INTEL_ZKILL_THREAT_ENABLED`), `intel/pilots.inc.php` | Whether the worker fetches zKillboard character stats for pilots in shared local scans ([who is in local](#who-is-in-local)). `false` = corporations / alliances only (ESI), nothing is asked from zKillboard for local scans. Without `ZKILL_FEED_ENABLED` neither lookup runs |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
 | `DISCORD_API_BASE` | `https://discord.com/api` | `discord/` (environment) | Dev only: base URL of a local fake Discord; only `localhost`, `127.0.0.0/8`, `::1` and the dev stack's `discord-mock` are accepted, anything else is ignored |
 | `TZ` | `UTC` | `config.php` (PHP default time zone), Alpine `tzdata` | Time zone. Keep `UTC` (recommended): signature times are stored in it, and the [Discord notifications](#discord-notifications) compare them across daylight-saving changes |
@@ -205,7 +208,7 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
+tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats, local pilots). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
@@ -255,7 +258,11 @@ Data flow:
    after a day).
 4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
    older than the retention, stale names.
-5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
+5. **System stats.** After back-fills: see [System stats](#system-stats-system-threat).
+6. **Local pilots.** ESI lookups of the pilots in shared local scans every 2 seconds with the name passes, and their
+   zKillboard character stats at the lowest priority, after back-fills and system stats: see
+   [Who is in local](#who-is-in-local). The order of the zKillboard API work is `intel_zkill_api_step()` in
+   `intel/pilots.inc.php`.
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -497,6 +504,50 @@ scans are left out, so polls carry only metadata. The browser builds the summary
 `node intel/tools/generate-types.js` after a game update (no runtime ESI calls). No configuration.
 Tests: `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/intel_test.php` and, against the dev
 database, `php intel/tests/intel_endpoint_test.php`.
+
+#### Who is in local
+
+A shared local scan stores names only; `intel/pilots.inc.php` turns them into corporations, alliances and a compact
+zKillboard threat summary. Like the [zKillboard integration](#zkillboard-integration), web requests only read cache
+tables and queue work; **only `zkill_feed.worker.php` calls ESI and zKillboard**, through `zkill/http.php` (same
+User-Agent, per-host spacing, ESI error/rate limits, 403 blocks), and only while `ZKILL_FEED_ENABLED` is on and the
+stream is caught up. With the feed off nothing is queued and the panel shows the names as "not looked up".
+
+| Table | Holds |
+| --- | --- |
+| `fork_pilot_affiliation` | One row per character name (case-insensitive): `characterID` (`NULL` = not resolved yet, `0` = no such character), `corporationID`, `allianceID`, fetched time. Also the ESI queue (`status` queued / done / failed, `requestedBy`, `wantedAt`) |
+| `fork_pilot_entities` | Corporation / alliance name and ticker (also a queue); refreshed after a week |
+| `fork_intel_lookups` | One job per shared local scan with the sharer's friendly corporation / alliance IDs (session plus a corp/alliance mask's owner) |
+| `fork_pilot_threat` | Compact zKillboard character stats per character (`danger`, `gang`, `kills`, `losses`, `solo`, `kills7d`, `lastMonth`, top 3 ship types), fresh for 24 hours, deleted after 48; also that queue |
+
+1. **Share.** `POST mode=add` of a local scan queues its names (at most 2000 per scan; caps: 20,000 queued names
+   overall, 6,000 per user; above them nothing more is queued and the answer says `queueFull`) and creates a lookup job.
+2. **ESI** (every 2 seconds with the name passes, at most 8 requests per pass): `POST /universe/ids` (500 names per
+   call; names ESI doesn't know become unknown and are asked again after a day), `POST /characters/affiliation` (1000
+   IDs per call), then `GET /corporations/<id>` and `GET /alliances/<id>` for names and tickers (NPC corporations,
+   1000000-1999999, are not looked up). A rejected batch is retried in smaller batches, then one by one (like the
+   name cache), one rejection per pass; names still queued after an hour are given up. Affiliations are refreshed
+   when a scan is viewed and its entry is older than an hour (ESI caches them that long).
+3. **Threat selection** (no HTTP): once a scan's names are resolved (or after 15 minutes), the worker queues
+   zKillboard stats for at most **20 new pilots per scan**: never friendly ones, pilots in player corporations before
+   those in NPC corporations, paste order otherwise; pilots with fresh (24 h) or queued stats don't count. Caps: 300
+   queued overall, 100 per user.
+4. **zKillboard** (lowest priority): `https://zkillboard.com/api/stats/characterID/<id>/`, one request per pilot, only
+   when no back-fill or system stats are queued and within `ZKILL_API_INTERVAL` (10 s timeout); a failure is retried
+   after an hour at the earliest. `INTEL_ZKILL_THREAT_ENABLED=false` turns this step off.
+5. Rows nobody asked for in 7 days are pruned (hourly).
+
+`public/intel_scans.php` accepts `pilots=<scanID>` with `systemID` (a local scan of the mask in that system) and then
+returns `pilots`: `pilots` (per name in paste order `[characterID, corporationID, allianceID, threat]`, threat being
+the compact stats, `"q"` queued, `"f"` failed or `null` not looked up), `entities` (`id => [name, ticker]`),
+`friendly`, `lookups`, `threat`, `pending` (names still being looked up), `threatPending` (the job hasn't picked yet)
+and `queueFull`. The Intel panel (`app/js/fork/intel-pilots.js`) polls every 5 seconds while something is pending
+(for at most 5 minutes after opening a scan), then with the normal 30-second poll.
+
+**Outbound hosts:** `esi.evetech.net` and `zkillboard.com`, from the worker only. Settings per user: Settings > General
+Preferences > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
+database): `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/pilots_test.php`; mocha
+`app/js-test/fork/intel-pilots.test.js`.
 
 ### Watchlist
 

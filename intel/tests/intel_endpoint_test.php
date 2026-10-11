@@ -135,6 +135,45 @@ for ($i = 0; $i < INTEL_RATE_PER_MIN; $i++) {
 check('rate limit: 429', call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => 'Chribba'])[0], 429);
 check('rate limit is per user', call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => 'Chribba'], ['userID' => 900004, 'mask' => MASK_A])[0], 200);
 
+// --- Local pilots (intel/pilots.inc.php): pilots=<id> ---
+cleanup($mysql);
+require_once(__DIR__ . '/../pilots.inc.php');
+intel_pilots_schema($mysql);
+$session = ['userID' => 900001, 'mask' => MASK_A, 'characterName' => 'Test Pilot', 'corporationID' => 2100009100, 'allianceID' => null];
+$mysql->exec("DELETE FROM fork_pilot_affiliation WHERE name LIKE 'Zzu %'");
+[$status, $body] = call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => "Zzu Alpha\nZzu Beta\nZzu Gamma"], $session);
+$local = $body['added'];
+$job = $mysql->query('SELECT COUNT(*) FROM fork_intel_lookups WHERE scanID = ' . (int) $local)->fetchColumn();
+$queued = (int) $mysql->query("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE name LIKE 'Zzu %'")->fetchColumn();
+if (zk_feed_enabled()) {
+    check('share local: names queued and a lookup job', [$queued, (int) $job], [3, 1]);
+} else {
+    check('share local with the feed off: nothing queued', [$queued, (int) $job], [0, 0]);
+}
+$mysql->exec("DELETE FROM fork_pilot_affiliation WHERE name LIKE 'Zzu %'");
+$mysql->exec("INSERT INTO fork_pilot_affiliation (name, characterID, corporationID, allianceID, status, requestedAt, wantedAt, fetchedAt) VALUES
+    ('Zzu Alpha', 2100000301, 2100009001, 2100009501, 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP()),
+    ('Zzu Beta', 0, NULL, NULL, 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+$mysql->exec("INSERT INTO fork_pilot_entities (id, kind, name, ticker, status, requestedAt, wantedAt, fetchedAt) VALUES
+    (2100009001, 'corporation', '<b>Zzu</b> Corp', 'Z<U', 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())
+    ON DUPLICATE KEY UPDATE name = VALUES(name), ticker = VALUES(ticker)");
+$mysql->exec("INSERT INTO fork_pilot_threat (characterID, status, requestedAt, fetchedAt, data) VALUES
+    (2100000301, 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), '{\"danger\":90,\"kills\":10}') ON DUPLICATE KEY UPDATE data = VALUES(data)");
+[$status, $body] = call('GET', ['systemID' => SYSTEM, 'pilots' => $local], $session);
+check('pilots: in paste order', $body['pilots']['pilots'], [[2100000301, 2100009001, 2100009501, ['danger' => 90, 'kills' => 10]], [0, null, null, null], [null, null, null, null]]);
+check('pilots: entities as data', $body['pilots']['entities'], ['2100009001' => ['<b>Zzu</b> Corp', 'Z<U']]);
+check('pilots: friendly from the session', $body['pilots']['friendly'], ['corporations' => [2100009100], 'alliances' => []]);
+check('pilots: lookups follow the feed setting', $body['pilots']['lookups'], zk_feed_enabled());
+check("pilots: another mask's scan", array_key_exists('pilots', call('GET', ['systemID' => SYSTEM, 'pilots' => $local], ['userID' => 900002, 'mask' => MASK_B])[1]), false);
+check('pilots: another system', array_key_exists('pilots', call('GET', ['systemID' => OTHER_SYSTEM, 'pilots' => $local], $session)[1]), false);
+[$status, $body] = call('POST', ['mode' => 'add', 'systemID' => SYSTEM, 'text' => $dscan], $session);
+check('pilots: not for a d-scan', array_key_exists('pilots', call('GET', ['systemID' => SYSTEM, 'pilots' => $body['added']], $session)[1]), false);
+check('pilots: junk id', [call('GET', ['systemID' => SYSTEM, 'pilots' => 'x'], $session)[0], array_key_exists('pilots', call('GET', ['systemID' => SYSTEM, 'pilots' => '-1'], $session)[1])], [200, false]);
+$mysql->exec("DELETE FROM fork_pilot_affiliation WHERE name LIKE 'Zzu %'");
+$mysql->exec('DELETE FROM fork_pilot_entities WHERE id = 2100009001');
+$mysql->exec('DELETE FROM fork_pilot_threat WHERE characterID = 2100000301');
+$mysql->exec('DELETE FROM fork_intel_lookups WHERE scanID = ' . (int) $local);
+
 cleanup($mysql);
 echo "$count checks, $failures failures\n";
 exit($failures ? 1 : 0);
