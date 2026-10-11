@@ -118,9 +118,19 @@ sigDialog.openSignatureDialog = function(e) {
 
 				// Ensure first signature ID field only accepts letters
 				$("#dialog-signature [name='signatureID_Alpha'], #dialog-signature [name='signatureID2_Alpha']").on("input", function() {
+					// A whole id ("ABC-123" pasted from the scanner) splits itself across the two fields
+					// (adapted from mogglemoss/tripwire 09bcb40, MIT)
+					var m = /^([a-zA-Z?]{3})[- ]?([0-9?]{1,3})/.exec(this.value);
+					if (m) {
+						var numeric = this.name === "signatureID_Alpha" ? "signatureID_Numeric" : "signatureID2_Numeric";
+						this.value = m[1];
+						$("#dialog-signature [name='" + numeric + "']").val(m[2]).trigger("focus");
+						return;
+					}
 					while (!/^[a-zA-Z?]*$/g.test(this.value)) {
 						this.value = this.value.substring(0, this.value.length -1);
 					}
+					this.value = this.value.substring(0, 3);
 				});
 
 				// Move to the numeric ID after filling out alpha ID

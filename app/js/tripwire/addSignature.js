@@ -34,7 +34,7 @@ tripwire.addSig = function(add, option, disabled) {
     var option = option || {};
     var animate = typeof(option.animate) !== 'undefined' ? option.animate : true;
     var disabled = disabled || false;
-    var wormhole = {};
+    var wormhole;
 
 	const returnLinkText = add.signatureID ? '<a class="return-link" href="#" onclick="tripwire.setReturnSig(event, ' + add.id + ')">&gt;&gt; Set ' + 
 				add.signatureID.substring(0, 3).toUpperCase() + '-' + add.signatureID.substring(3) +
@@ -79,7 +79,7 @@ tripwire.addSig = function(add, option, disabled) {
     $("#sigTable").append(tr);
 
     // Add counter
-    if (wormhole.life == "critical") {
+    if (wormhole && wormhole.life != "stable") {
         $(tr).find('span[data-age]').countdown({until: moment.utc(add.lifeLeft).toDate(), onExpiry: this.pastEOL, alwaysExpire: true, compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime})
             // .countdown('pause')
             .addClass('critical')
