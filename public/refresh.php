@@ -204,7 +204,8 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 				$character->accessToken = $esi->accessToken;
 				$character->refreshToken = $esi->refreshToken;
 				$character->tokenExpire = $esi->tokenExpire;
-			} else if ($esi->httpCode >= 400 && $esi->httpCode < 500) {
+			} else if ($esi->httpCode == 401 || $esi->httpCode == 403 || ($esi->httpCode == 400 && strpos((string)$esi->lastError, 'invalid_grant') !== false)) {
+				// fork: only a real refusal drops the character; 420/429/5xx or a paused ESI keep it (stale token) for the next poll
 				$query = 'DELETE FROM esi WHERE characterID = :characterID';
 				$stmt = $mysql->prepare($query);
 				$stmt->bindValue(':characterID', $character->characterID);

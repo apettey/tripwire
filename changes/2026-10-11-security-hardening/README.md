@@ -22,3 +22,5 @@ No toggle, because these are security fixes.
 3. **Refused ESI token** (mogglemoss `23da334`). `public/refresh.php` ends the session and answers 403 when the account's SSO refresh gets `invalid_grant` (other 4xx errors are still only logged). `app/js/tripwire/esi.js` shows a yellow notice naming the tracked character the server dropped because its token was refused. The server already deleted such characters (upstream behaviour), so there is no row left to mark in the tracking list.
 
 Upstream files touched: `app/js/tripwire/comments.js`, `app/js/tripwire/esi.js`, `public/comments.php`, `public/refresh.php`, `esi.class.php`, `composer.json`, `vendor/`, `package.json`, `package-lock.json`.
+
+4. **Tracked characters are only dropped on a real refusal** (`public/refresh.php`): 400 with `invalid_grant`, 401 or 403. On 420/429/5xx, or while the ESI rate-limit pause is active, the character is kept (with its old token) and retried on the next poll, so a rate-limit hiccup no longer drops it or shows the notice.
