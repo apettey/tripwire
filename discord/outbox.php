@@ -27,16 +27,18 @@ function discord_dedupe_cooldown(PDO $db, $maskID, $kind, $ref, $seconds) {
     return $stmt->rowCount() > 0;
 }
 
-/** Queue a message. Returns the outbox id, or null when the mask's queue is full. */
-function discord_enqueue(PDO $db, $maskID, $webhookID, $kind, array $data, $priority = DISCORD_PRIORITY_DEFAULT) {
+/** Queue a message, due now or in $delaySeconds (a debounce). Returns the outbox id, or null when the mask's queue is full. */
+function discord_enqueue(PDO $db, $maskID, $webhookID, $kind, array $data, $priority = DISCORD_PRIORITY_DEFAULT, $delaySeconds = 0) {
     $stmt = $db->prepare("SELECT COUNT(*) FROM discord_outbox WHERE maskID = ? AND status = 'queued'");
     $stmt->execute([$maskID]);
     if ((int) $stmt->fetchColumn() >= DISCORD_OUTBOX_MASK_CAP) {
         discord_log("outbox full for mask $maskID, dropped a $kind notification");
         return null;
     }
+    // Due in $delaySeconds from the start (never due in between, so a dispatch pass can't skip the delay)
+    $due = (int) $delaySeconds > 0 ? 'UTC_TIMESTAMP() + INTERVAL ' . (int) $delaySeconds . ' SECOND' : 'UTC_TIMESTAMP()';
     $stmt = $db->prepare("INSERT INTO discord_outbox (maskID, webhookID, kind, priority, data, status, nextAttemptAt, createdAt)
-        VALUES (?, ?, ?, ?, ?, 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        VALUES (?, ?, ?, ?, ?, 'queued', $due, UTC_TIMESTAMP())");
     $stmt->execute([$maskID, (int) $webhookID, $kind, (int) $priority, json_encode($data)]);
     return (int) $db->lastInsertId();
 }
@@ -61,10 +63,10 @@ function discord_rate_take(PDO $db, $maskID, $kind, $max, $seconds) {
  * exactly when the message was queued (a full queue rolls both back), and two processes can't both queue it (the
  * dedupe row's primary key decides). Returns the outbox id or null.
  */
-function discord_enqueue_once(PDO $db, $maskID, $webhookID, $kind, array $data, callable $claim, $priority = DISCORD_PRIORITY_DEFAULT) {
+function discord_enqueue_once(PDO $db, $maskID, $webhookID, $kind, array $data, callable $claim, $priority = DISCORD_PRIORITY_DEFAULT, $delaySeconds = 0) {
     $db->beginTransaction();
     try {
-        $id = $claim() ? discord_enqueue($db, $maskID, $webhookID, $kind, $data, $priority) : null;
+        $id = $claim() ? discord_enqueue($db, $maskID, $webhookID, $kind, $data, $priority, $delaySeconds) : null;
         if ($id === null) { $db->rollBack(); return null; }
         $db->commit();
         return $id;

@@ -20,6 +20,8 @@
 //   discord/rally.php       type 5: the chain map's rally point ("Fight here", with the fleet comp of fight/fight.inc.php),
 //                           queued by public/rally.php; edits its last message
 //   discord/watchlist.php   type 6: watchlist matches (filters of watchlist/watchlist.inc.php), polls the chain
+//   discord/preserve_mass.php type 7: a connection marked / cleared "preserve mass" (preserve_mass.inc.php), queued by
+//                           public/preserve_mass.php; edits its message per hole like Fight here
 //   discord/dispatch.php    the sender: rate limits (429, X-RateLimit-*, global), retries, broken webhooks
 // (The rally point's first version still posts directly to upstream's DISCORD_WEB_HOOK for masks without type 5,
 // see rally_discord.inc.php.)
@@ -43,6 +45,7 @@ require_once(__DIR__ . '/../fight/fight.inc.php');
 require_once(__DIR__ . '/rally.php');
 require_once(__DIR__ . '/../watchlist/watchlist.inc.php');
 require_once(__DIR__ . '/watchlist.php');
+require_once(__DIR__ . '/preserve_mass.php');
 require_once(__DIR__ . '/dispatch.php');
 
 /** String setting from a config.php constant or the environment ('' when unset) */

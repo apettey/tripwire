@@ -17,6 +17,7 @@
 // Rally point messages (discord/rally.php) are the only ones that are edited (PATCH) instead of posted: a change may
 // edit the live rally message or post a new one, a 'rallyEdit' row ends an old one; a queued change is skipped
 // (deleted) when a newer one of the same mask is queued, or when there is nothing to send (a clear without a message).
+// Preserve mass messages (discord/preserve_mass.php) work the same way, one live message per (mask, wormhole).
 
 const DISCORD_HTTP_TIMEOUT   = 10;
 const DISCORD_SPACING        = 0.05;   // seconds between any two requests (Discord's global limit is 50/s)
@@ -195,7 +196,8 @@ function discord_handle_response($bucket, $status, array $headers, $body, $attem
     return ['result' => 'failed', 'delay' => 0, 'error' => discord_error_text($status, $body)];
 }
 
-/** The message context of an outbox row, or null when it should wait for names a little longer */
+/** The message context of an outbox row, or null when it should wait a little: for names (kills), or for a fight point /
+    preserve mass flag that can't be read right now (a database error; a set can't be shown without it) */
 function discord_row_context(PDO $db, array $row) {
     $data = json_decode($row['data'], true);
     if (!is_array($data)) return [];
@@ -210,8 +212,9 @@ function discord_row_context(PDO $db, array $row) {
     }
     if ($row['kind'] === 'rally') {
         $labelOf = function ($systemID) use ($db, $row) { return discord_chain_label($db, $row['maskID'], $systemID); };
-        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf) ?? [];
+        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf);
     }
+    if ($row['kind'] === 'preserveMass') return discord_preserve_row_context($db, $row['maskID'], $data);
     return $data;
 }
 
@@ -272,7 +275,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             discord_log("webhook {$webhook['id']} broken: $reason");
             continue;
         }
-        if ($row['kind'] === 'rally' && discord_rally_superseded($db, $row)) {
+        if (($row['kind'] === 'rally' && discord_rally_superseded($db, $row)) || ($row['kind'] === 'preserveMass' && discord_preserve_superseded($db, $row))) {
             // A newer rally change of this mask is queued and will show the rally as it is then: this one is not needed
             $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
             $counts['superseded']++;
@@ -291,7 +294,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
         }
         $context = discord_row_context($db, $row);
         if ($context === null) {
-            discord_outbox_mark($db, $row['id'], 'queued', 'waiting for names', 5, false);
+            discord_outbox_mark($db, $row['id'], 'queued', in_array($row['kind'], ['rally', 'preserveMass'], true) ? 'waiting for the database' : 'waiting for names', 5, false);
             $counts['deferred']++;
             continue;
         }
@@ -301,8 +304,10 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
             continue;
         }
         $rally = in_array($row['kind'], ['rally', 'rallyEdit'], true);
+        $preserve = in_array($row['kind'], ['preserveMass', 'preserveMassEdit'], true);   // discord/preserve_mass.php
         $request = $rally ? discord_rally_request($db, $row, $url, $context)
-            : ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => discord_payload($context)];
+            : ($preserve ? discord_preserve_request($db, $row, $url, $context)
+            : ['method' => 'POST', 'url' => discord_webhook_send_url($url), 'payload' => discord_payload($context)]);
         if (isset($request['skip'])) {   // e.g. a rally cleared without a message to edit: nothing to send
             $db->prepare('DELETE FROM discord_outbox WHERE id = ?')->execute([$row['id']]);
             $counts['skipped']++;
@@ -314,6 +319,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
         [$status, $body, $headers] = discord_http_post($request['url'], $request['payload'], $request['method']);
         $decision = discord_handle_response($bucket, $status, $headers, $body, (int) $row['attempts']);
         if ($rally) $decision = discord_rally_after_send($db, $row, $request, $status, $body, $decision);
+        if ($preserve) $decision = discord_preserve_after_send($db, $row, $request, $status, $body, $decision);
         foreach (discord_breaker_record($status, null, $scopes) as $scope) {
             if ($scope !== 'global') discord_breaker_notes($db, $row['maskID'], $scope, discord_scope_wait($scope));
         }
