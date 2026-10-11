@@ -29,12 +29,22 @@ const holeRolling = {
 		return result;
 	},
 
+	/** Flags by wormhole id with the passes read from the jump log added (passInfo: by wormhole id) */
+	withPasses: function(map, info) {
+		const result = {};
+		Object.keys(map || {}).forEach(function(id) {
+			const p = info && info[id];
+			result[id] = p ? Object.assign({}, map[id], { passes: p.passes, massKg: p.massKg }) : map[id];
+		});
+		return result;
+	},
+
 	/** Whether two flag maps differ (anything a viewer would see) */
 	changed: function(a, b) {
 		const key = function(m) {
 			return Object.keys(m || {}).sort().map(function(id) {
 				const f = m[id];
-				return [id, f.setBy, f.setAt, f.note].join("\u0001");
+				return [id, f.setBy, f.setAt, f.note, f.passes || 0, Math.round(Number(f.massKg || 0) / 1e6)].join("\u0001");
 			}).join("\u0002");
 		};
 		return key(a) !== key(b);
@@ -61,11 +71,24 @@ const holeRolling = {
 		return ["started", flag.setBy ? "by " + flag.setBy : "", when ? "at " + when : ""].filter(Boolean).join(" ");
 	},
 
+	// Passes through flagged holes by wormhole id: { passes, massKg } from the jump log (mass.php); set by refreshPasses
+	passInfo: {},
+	PASSES_MS: 30000,
+
+	/** "3 passes, 450 kt through" (kt = 1,000 t); "" when the jump log hasn't been read or is empty */
+	passesText: function(flag) {
+		if (!flag || !(Number(flag.passes) > 0)) { return ""; }
+		const n = Number(flag.passes);
+		return n + " pass" + (n === 1 ? "" : "es") + ", " + Math.round(Number(flag.massKg || 0) / 1e6).toLocaleString("en-US") + " kt through";
+	},
+
 	/** Plain-text tooltip for the marker (escape it before putting it in markup) */
 	tooltipText: function(flag) {
 		if (!flag) { return ""; }
 		const lines = ["Rolling — " + holeRolling.startedText(flag)];
 		if (flag.note) { lines.push("Note: " + flag.note); }
+		const passes = holeRolling.passesText(flag);
+		if (passes) { lines.push(passes); }
 		return lines.join("\n");
 	},
 
@@ -101,7 +124,8 @@ const holeRolling = {
 				holeRolling.GLYPH + " Rolling&hellip;</a>";
 		}
 		return "<div class='hr-line'><span class='hr-glyph'>" + holeRolling.GLYPH + "</span> " + e(holeRolling.beingRolledText(flag)) +
-			" <a href='#' class='hr-clear' title='Rolling is done: remove the rolling mark'>Stop rolling</a></div>" +
+			" <a href='#' class='hr-clear' title='Rolling is done: remove the rolling mark'>Stop rolling</a>" +
+			" <a href='#' class='hr-rolled' title='The hole is rolled (closed): remove the mark and tell Discord it was rolled'>Rolled (closed)</a></div>" +
 			(flag.note ? "<div class='hr-meta'><span class='hr-note'>" + e(flag.note) + "</span></div>" : "");
 	},
 
@@ -226,7 +250,7 @@ const holeRolling = {
 
 	/** Apply a server list */
 	apply: function(list) {
-		const next = holeRolling.toMap(list);
+		const next = holeRolling.withPasses(holeRolling.toMap(list), holeRolling.passInfo);
 		if (!holeRolling.changed(holeRolling.flags, next)) { return; }
 		holeRolling.flags = next;
 		preserveMass.refreshMap();	// redraws every marker (size tags, preserve mass and these)
@@ -235,7 +259,51 @@ const holeRolling = {
 
 	fetch: function() {
 		return $.ajax({ url: holeRolling.URL, type: "GET", dataType: "JSON", cache: false })
-			.done(function(data) { if (data && data.flags) { holeRolling.apply(data.flags); } });
+			.done(function(data) {
+				if (data && data.flags) { holeRolling.apply(data.flags); }
+				holeRolling.refreshPasses();
+			});
+	},
+
+	/** Mass of one jump log row (mass.php) in kg, or null when its ship is unknown: the fitted mass when logged, else the
+	hull with the hot/cold prop rule, like the mass dialog */
+	rowMass: function(row) {
+		const ship = typeof appData !== "undefined" && appData.mass ? appData.mass[row.shipTypeID] : null;
+		if (!ship) { return null; }
+		const hull = parseFloat(ship.mass);
+		const flags = String(row.shipType || "").split("|", 2)[1] || "";
+		const j = { originalMass: hull, prop: flags.indexOf("p") >= 0, higgs: flags.indexOf("h") >= 0 };
+		if (typeof autoMass !== "undefined" && typeof autoMass.jumpMass === "function") { return autoMass.jumpMass(row, j).mass; }
+		return (hull + (j.prop ? (hull > 500e6 ? 500e6 : 50e6) : 0)) * (j.higgs ? 2 : 1);
+	},
+
+	/** Read the jump log of every flagged hole (at most every PASSES_MS) for the marker tooltip's "N passes, X kt through" */
+	refreshPasses: function() {
+		const ids = Object.keys(holeRolling.flags);
+		const now = Date.now();
+		const fresh = ids.some(function(id) { return !holeRolling.passInfo[id]; });
+		if (!ids.length || holeRolling.passesBusy || (!fresh && now - (holeRolling.passesAt || 0) < holeRolling.PASSES_MS)) { return; }
+		holeRolling.passesBusy = true;
+		holeRolling.passesAt = now;
+		const info = {};
+		let left = ids.length;
+		const done = function() {
+			if (--left > 0) { return; }
+			holeRolling.passesBusy = false;
+			holeRolling.passInfo = info;
+			const next = holeRolling.withPasses(holeRolling.flags, info);
+			if (holeRolling.changed(holeRolling.flags, next)) {
+				holeRolling.flags = next;
+				preserveMass.refreshMap();
+			}
+		};
+		ids.forEach(function(id) {
+			$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: id }, dataType: "JSON" })
+				.done(function(data) {
+					if (data && data.jumps && typeof rollingCalc !== "undefined") { info[id] = rollingCalc.summarisePasses(data.jumps, holeRolling.rowMass); }
+				})
+				.always(done);
+		});
 	},
 
 	post: function(body) {
@@ -254,7 +322,7 @@ const holeRolling = {
 	optimistic: function(wormholeID, flag) {
 		const next = Object.assign({}, holeRolling.flags);
 		if (flag) { next[String(wormholeID)] = flag; } else { delete next[String(wormholeID)]; }
-		holeRolling.flags = next;
+		holeRolling.flags = holeRolling.withPasses(next, holeRolling.passInfo);
 		preserveMass.refreshMap();
 		holeRolling.renderMassPanel();
 	},
@@ -268,10 +336,10 @@ const holeRolling = {
 		return holeRolling.post(body);
 	},
 
-	clear: function(wormholeID) {
+	clear: function(wormholeID, rolled) {
 		if (!preserveMass.isWormholeID(wormholeID)) { return; }
 		holeRolling.optimistic(wormholeID, null);
-		return holeRolling.post(holeRolling.payload("clear", wormholeID));
+		return holeRolling.post(holeRolling.payload(rolled ? "rolled" : "clear", wormholeID));
 	},
 
 	/** Ask for the optional note, then flag the hole (after a confirm when it is marked preserve mass) */
@@ -449,6 +517,10 @@ const holeRolling = {
 		$(document).on("click", "#hole-rolling-panel .hr-clear", function(e) {
 			e.preventDefault();
 			holeRolling.clear($("#dialog-mass").data("id"));
+		});
+		$(document).on("click", "#hole-rolling-panel .hr-rolled", function(e) {
+			e.preventDefault();
+			holeRolling.clear($("#dialog-mass").data("id"), true);
 		});
 
 		holeRolling.fetch();

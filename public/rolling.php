@@ -7,6 +7,7 @@
 //				GET                                             -> the mask's flags
 //				POST mode=set&wormholeID=<id>[&note=<text>]     -> flag a wormhole of the mask
 //				POST mode=clear&wormholeID=<id>                 -> remove the flag
+//				POST mode=rolled&wormholeID=<id>                -> remove the flag: the hole is rolled (closed); Discord says so
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header (as public/preserve_mass.php).
 //				Every answer: { flags: [ { wormholeID, setByID, setBy, setAt (unix seconds), note } ] }.
 //
@@ -63,13 +64,13 @@ try {
 				rolling_fail(404, 'Unknown wormhole');
 			}
 			rolling_set($mysql, $mask, $wormholeID, $setByID, $setBy, isset($_POST['note']) ? $_POST['note'] : '');
-		} else if ($mode === 'clear') {
+		} else if ($mode === 'clear' || $mode === 'rolled') {	// rolled: it is closed (Discord says "Rolled by" instead of "Done")
 			rolling_clear($mysql, $mask, $wormholeID);
 		} else {
 			rolling_fail(400, 'Unknown mode');
 		}
 		$output['result'] = true;
-		$discordChange = array('wormholeID' => $wormholeID, 'before' => $before, 'after' => rolling_get($mysql, $mask, $wormholeID));
+		$discordChange = array('wormholeID' => $wormholeID, 'before' => $before, 'after' => rolling_get($mysql, $mask, $wormholeID), 'rolled' => $mode === 'rolled');
 		rolling_clean($mysql, $mask);	// on changes only: GET polls never write
 	} else if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 		rolling_fail(405, 'Method not allowed');
@@ -92,7 +93,7 @@ if (isset($discordChange)) {
 	try {
 		require_once('../discord/discord.inc.php');
 		$action = discord_rolling_change($discordChange['before'], $discordChange['after']);
-		if ($action) discord_rolling_enqueue($mysql, $mask, $discordChange['wormholeID'], $action, $setBy === null ? '' : $setBy);
+		if ($action) discord_rolling_enqueue($mysql, $mask, $discordChange['wormholeID'], $action, $setBy === null ? '' : $setBy, null, false, $action === 'clear' && $discordChange['rolled']);
 	} catch (Throwable $e) {
 		error_log('rolling.php discord: ' . $e->getMessage());
 	}

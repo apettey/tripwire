@@ -60,12 +60,12 @@ function discord_rolling_change($before, $after) {
  * message is sent. $ends: the hole as it is now (discord_preserve_ends), kept for a message sent after the hole is gone.
  * $gone: the clear of a hole gone from the map (the worker). Null when the change is from before the type was turned on.
  */
-function discord_rolling_data(array $type, $homeSystemID, $maskName, $wormholeID, $action, $who, $ends = null, $gone = false, $now = null) {
+function discord_rolling_data(array $type, $homeSystemID, $maskName, $wormholeID, $action, $who, $ends = null, $gone = false, $now = null, $rolled = false) {
     $now = $now ?? time();
     if (!empty($type['enabledAt']) && $now < (int) $type['enabledAt']) return null;
     return [
         'kind' => 'rolling', 'wormholeID' => (int) $wormholeID, 'action' => $action === 'clear' ? 'clear' : 'set', 'who' => (string) $who,
-        'gone' => (bool) $gone,
+        'gone' => (bool) $gone, 'rolled' => (bool) $rolled,
         'template' => $type['template'], 'templateClear' => $type['templateClear'], 'ping' => $type['ping'],
         'chainOnly' => !empty($type['chainOnly']), 'homeSystemID' => (int) $homeSystemID,
         'mask' => (string) $maskName, 'time' => (int) $now, 'enabledAt' => (int) ($type['enabledAt'] ?? 0), 'ends' => $ends,
@@ -76,13 +76,13 @@ function discord_rolling_data(array $type, $homeSystemID, $maskName, $wormholeID
  * Queue a change of a hole's flag (public/rolling.php, discord_rolling_clear_gone). Returns the outbox id, or null
  * (type off, queue full, or $claim() said no: then nothing is queued, in one transaction with the claim).
  */
-function discord_rolling_enqueue(PDO $db, $maskID, $wormholeID, $action, $who, ?callable $claim = null, $gone = false) {
+function discord_rolling_enqueue(PDO $db, $maskID, $wormholeID, $action, $who, ?callable $claim = null, $gone = false, $rolled = false) {
     $target = discord_rolling_target($db, $maskID);
     if (!$target) return null;
     [$type, $home] = $target;
     $hole = discord_preserve_hole($db, $maskID, $wormholeID);
     $ends = $hole ? discord_preserve_ends($hole, function ($systemID) use ($db, $maskID) { return discord_chain_label($db, $maskID, $systemID); }, $home) : null;
-    $data = discord_rolling_data($type, $home, discord_mask_name($db, $maskID), $wormholeID, $action, $who, $ends, $gone);
+    $data = discord_rolling_data($type, $home, discord_mask_name($db, $maskID), $wormholeID, $action, $who, $ends, $gone, null, $rolled);
     if ($data === null) return null;
     // Debounce: the row waits a little, so a quick mark + clear (or several edits) collapse into the last one
     if ($claim) return discord_enqueue_once($db, (string) $maskID, $type['webhookID'], 'rolling', $data, $claim, DISCORD_PRIORITY_ROLLING, DISCORD_ROLLING_DELAY);
@@ -97,6 +97,17 @@ function discord_rolling_gone(PDO $db) {
     return array_map(function ($r) { return [(string) $r[0], (int) $r[1]]; }, $rows);
 }
 
+/** Who started rolling a hole (fork_rolling.setBy, kept until the mask's flags next change even when the hole is gone), '' when unknown */
+function discord_rolling_setter(PDO $db, $maskID, $wormholeID) {
+    try {
+        $stmt = $db->prepare('SELECT setBy FROM fork_rolling WHERE maskID = ? AND wormholeID = ?');
+        $stmt->execute([(string) $maskID, (int) $wormholeID]);
+        return trim((string) $stmt->fetchColumn());
+    } catch (Throwable $error) {
+        return '';
+    }
+}
+
 /**
  * Worker, with the outbox prune: queue a clear for every live message whose hole is gone (most often: it was rolled),
  * so the channel doesn't keep marks that look live. Once per message: the claim ('rollGone' + wormholeID in
@@ -107,7 +118,9 @@ function discord_rolling_clear_gone(PDO $db) {
     $queued = 0;
     foreach (discord_rolling_gone($db) as [$maskID, $wormholeID]) {
         $claim = function () use ($db, $maskID, $wormholeID) { return discord_dedupe_once($db, $maskID, 'rollGone', (string) $wormholeID); };
-        if (discord_rolling_enqueue($db, $maskID, $wormholeID, 'clear', DISCORD_ROLLING_GONE_WHO, $claim, true) !== null) $queued++;
+        // A live message means the hole was flagged when it went: it was rolled ("Rolled by <who started it>")
+        $setter = discord_rolling_setter($db, $maskID, $wormholeID);
+        if (discord_rolling_enqueue($db, $maskID, $wormholeID, 'clear', $setter !== '' ? $setter : DISCORD_ROLLING_GONE_WHO, $claim, true, true) !== null) $queued++;
     }
     return $queued;
 }
@@ -144,7 +157,7 @@ function discord_rolling_context(array $data, $flag, $ends, $chain = null) {
     if (!$flag) {
         // Only name who cleared it when this row was the clear (a set whose flag is gone by now was cleared by someone else)
         $who = ($data['action'] ?? '') === 'clear' && ($data['who'] ?? '') !== '' ? $data['who'] : 'someone';
-        return $base + ['cleared' => true, 'gone' => !empty($data['gone']) || $ends === null, 'who' => $who, 'note' => '', 'setAt' => 0, 'inChain' => false];
+        return $base + ['cleared' => true, 'gone' => !empty($data['gone']) || $ends === null, 'rolled' => !empty($data['rolled']), 'who' => $who, 'note' => '', 'setAt' => 0, 'inChain' => false];
     }
     $systems = $base['ends']['systems'] ?? [];
     $inChain = $chain === null || (bool) array_filter($systems, function ($id) use ($chain) { return isset($chain[(int) $id]); });
@@ -155,6 +168,16 @@ function discord_rolling_context(array $data, $flag, $ends, $chain = null) {
 /** "19:08" (EVE time is UTC) */
 function discord_rolling_eve_time($unix) {
     return gmdate('H:i', (int) $unix);
+}
+
+/** The {outcome} text of a cleared message (plain text, escaped by the renderer): "Rolled by Kytus" when the hole was rolled
+    (closed: "Stop rolling > Rolled", or the hole was deleted while flagged), "Hole collapsed" when it was already gone, else "Done" */
+function discord_rolling_outcome(array $ctx) {
+    if (!empty($ctx['rolled'])) {
+        $who = (string) ($ctx['who'] ?? '');
+        return $who !== '' && $who !== 'someone' && $who !== DISCORD_ROLLING_GONE_WHO ? 'Rolled by ' . $who : 'Rolled';
+    }
+    return !empty($ctx['gone']) ? 'Hole collapsed' : 'Done';
 }
 
 /** Placeholder values of a context (escaped by discord_render unless listed in the raw keys) */
@@ -183,7 +206,7 @@ function discord_rolling_values(array $ctx) {
         'withNote' => $note !== '' ? ': ' . discord_escape($note) : '',
         'map' => $mapOf ? '<' . discord_map_url($mapOf) . '>' : '',
         'time' => discord_rolling_eve_time($at),
-        'outcome' => !empty($ctx['gone']) ? 'Hole collapsed' : 'Done',
+        'outcome' => discord_rolling_outcome($ctx),
     ];
 }
 

@@ -64,6 +64,25 @@ describe('Rolling', () => {
 			assert.ok(html.indexOf('Being rolled by &lt;i&gt; since 19:08 EVE') > 0);
 			assert.ok(html.indexOf('&lt;img src=x&gt;') > 0 && html.indexOf('<img') < 0);
 			assert.ok(/class='hr-clear'/.test(html));
+			assert.ok(/class='hr-rolled'[^>]*>Rolled \(closed\)</.test(html));
+		});
+		it('the marker tooltip says how many passes and how much mass went through', () => {
+			const withPasses = Object.assign(flag(5), { passes: 3, massKg: 450e6 });
+			assert.strictEqual(holeRolling.passesText(withPasses), '3 passes, 450 kt through');
+			assert.strictEqual(holeRolling.passesText(Object.assign(flag(5), { passes: 1, massKg: 1234e6 })), '1 pass, 1,234 kt through');
+			assert.ok(holeRolling.tooltipText(withPasses).split('\n').pop() === '3 passes, 450 kt through');
+			assert.strictEqual(holeRolling.passesText(flag(5)), '');
+			assert.strictEqual(holeRolling.passesText(Object.assign(flag(5), { passes: 0, massKg: 0 })), '');
+			assert.strictEqual(holeRolling.tooltipText(flag(5)).indexOf('pass'), -1);
+		});
+		it('passes are merged into the flags and count as a change', () => {
+			const map = holeRolling.toMap([flag(5), flag(7)]);
+			const merged = holeRolling.withPasses(map, { 5: { passes: 2, massKg: 10e6 } });
+			assert.strictEqual(merged['5'].passes, 2);
+			assert.strictEqual(merged['7'].passes, undefined);
+			assert.ok(holeRolling.changed(map, merged));
+			assert.ok(!holeRolling.changed(merged, holeRolling.withPasses(map, { 5: { passes: 2, massKg: 10e6 } })));
+			assert.ok(holeRolling.changed(merged, holeRolling.withPasses(map, { 5: { passes: 3, massKg: 10e6 } })));
 		});
 		it('conflict confirms', () => {
 			assert.strictEqual(holeRolling.preserveConflictText({ setBy: 'Kytus', reason: 'home static' }),
@@ -86,6 +105,7 @@ describe('Rolling', () => {
 	describe('payload', () => {
 		it('set carries the cleaned note', () => assert.deepStrictEqual(holeRolling.payload('set', '5', ' a \n b '), { mode: 'set', wormholeID: 5, note: 'a b' }));
 		it('clear has no note', () => assert.deepStrictEqual(holeRolling.payload('clear', 5), { mode: 'clear', wormholeID: 5 }));
+		it('rolled has no note either', () => assert.deepStrictEqual(holeRolling.payload('rolled', 5), { mode: 'rolled', wormholeID: 5 }));
 	});
 
 	describe('flagForNode', () => {

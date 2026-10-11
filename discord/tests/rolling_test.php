@@ -68,7 +68,7 @@ $labels = function ($l) { return function ($id) use ($l) { return $l[$id] ?? '';
 $ends = discord_preserve_ends($hole, $labels([J152820 => 'A']), J163701);
 $type = ['enabledAt' => 1000] + $s['types']['rolling'];
 $data = discord_rolling_data(['chainOnly' => true] + $type, J163701, 'Corp', 42, 'set', 'Kytus Bos', $ends, false, 2000);
-check('data', array_diff_key($data, ['ends' => 1]), ['kind' => 'rolling', 'wormholeID' => 42, 'action' => 'set', 'who' => 'Kytus Bos', 'gone' => false,
+check('data', array_diff_key($data, ['ends' => 1]), ['kind' => 'rolling', 'wormholeID' => 42, 'action' => 'set', 'who' => 'Kytus Bos', 'gone' => false, 'rolled' => false,
     'template' => '{who}: {name}', 'templateClear' => $tpl['rollingClear'], 'ping' => '<@&111111111111111111>', 'chainOnly' => true,
     'homeSystemID' => J163701, 'mask' => 'Corp', 'time' => 2000, 'enabledAt' => 1000]);
 check('data: the hole kept', $data['ends'], $ends);
@@ -114,6 +114,20 @@ check('done: struck through + "Done at" the EVE time it was cleared, nobody ping
     ['content' => "$struck\nDone at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
 $gone = discord_payload(['previous' => $live] + discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null));
 check('gone: struck through + "Hole collapsed at", nobody pinged', $gone, ['content' => "$struck\nHole collapsed at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
+// Rolled (closed): "Stop rolling > Rolled (closed)", or the hole deleted while flagged (the worker)
+$rolledData = discord_rolling_data($type, 0, 'Corp', 42, 'clear', 'Aashai', null, false, 2000, true);
+check('data: rolled', [$rolledData['rolled'], $data['rolled'], discord_rolling_data($type, 0, 'Corp', 42, 'clear', 'Aashai', null, true, 2000)['rolled']], [true, false, false]);
+$rolledByUser = discord_rolling_context(['action' => 'clear', 'who' => 'Aashai', 'rolled' => true] + $base, null, $ends);
+check('context: rolled', [$rolledByUser['cleared'], $rolledByUser['rolled'], $done['rolled']], [true, true, false]);
+check('rolled: struck through + "Rolled by" who at the EVE time, nobody pinged', discord_payload(['previous' => $live] + $rolledByUser),
+    ['content' => "$struck\nRolled by Aashai at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
+$rolledGone = discord_rolling_context(['action' => 'clear', 'gone' => true, 'rolled' => true, 'who' => 'Kytus Bos'] + $base, null, null);
+check('rolled: a deleted hole is rolled by the pilot who started it', discord_payload(['previous' => $live] + $rolledGone)['content'], "$struck\nRolled by Kytus Bos at 19:31 EVE");
+$rolledUnknown = discord_rolling_context(['action' => 'clear', 'gone' => true, 'rolled' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null);
+check('rolled: nobody known: no "by"', discord_payload(['previous' => $live] + $rolledUnknown)['content'], "$struck\nRolled at 19:31 EVE");
+check('rolled: the name cannot ping or format', discord_payload(['previous' => $live] + discord_rolling_context(['action' => 'clear', 'rolled' => true, 'who' => '@everyone **x**'] + $base, null, $ends))['content'],
+    "$struck\nRolled by @\u{200B}everyone \\*\\*x\\*\\* at 19:31 EVE");
+check('rolled: a plain clear is still Done', discord_payload(['previous' => $live] + $done)['content'], "$struck\nDone at 19:31 EVE");
 check('done: a custom text sees who (the gone who too)', [discord_payload(['previous' => 'M', 'templateClear' => '{mark} {outcome} ({who})'] + $done)['content'],
     discord_payload(['previous' => 'M', 'templateClear' => '{outcome} ({who})'] + discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null))['content']],
     ['~~M~~ Done (Aashai)', "~~M~~\nHole collapsed (Tripwire \\(the hole is gone from the map\\))"]);
@@ -204,6 +218,12 @@ $db->exec("INSERT INTO wormholes (id, maskID) VALUES (1, '98000001.2'), (4, '980
 foreach ([1, 2, 3, 4] as $wh) discord_rolling_remember($db, $mask, $wh, 5, (string) $wh, 'm', 100000);
 $db->exec('UPDATE discord_rolling_message SET clearedAt = postedAt WHERE wormholeID = 3');
 check('gone: live messages whose hole is gone (or now in another mask)', discord_rolling_gone($db), [[$mask, 2], [$mask, 4]]);
+
+// Who started a hole that is gone (fork_rolling keeps the row until the mask's flags next change)
+check('setter: no table: unknown', discord_rolling_setter($db, $mask, 2), '');
+$db->exec('CREATE TABLE fork_rolling (maskID TEXT, wormholeID INTEGER, setBy TEXT)');
+$db->exec("INSERT INTO fork_rolling VALUES ('$mask', 2, ' Kytus Bos '), ('$mask', 4, NULL)");
+check('setter: the pilot who flagged it', [discord_rolling_setter($db, $mask, 2), discord_rolling_setter($db, $mask, 4), discord_rolling_setter($db, $mask, 9)], ['Kytus Bos', '', '']);
 
 // Unreadable at send time: a mark waits, a clear is still a clear
 $broken = new PDO('sqlite::memory:');

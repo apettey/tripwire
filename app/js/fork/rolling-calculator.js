@@ -145,6 +145,154 @@ const rollingCalc = {
 		return viewingID !== undefined && sigB.systemID == viewingID ? { home: sigB, far: sigA } : { home: sigA, far: sigB };
 	},
 
+	/** Default roller ships (kt): battleships for holes that pass them, a medium hull for smaller holes */
+	ROLLERS: { bsCold: 200, bsHot: 300, medCold: 15, medHot: 60 },
+	BATTLESHIP_HOLE_KG: 300e6,	// a hole that takes at least this per jump passes battleships
+	MAX_STEPS: 12,
+	LIVE_MS: 10000,	// how often an open mass dialog looks for new passes
+
+	/** Roller ships for a hole: {name, cold, hot} in kg.
+		@param maxJumpKg the hole type's jump mass limit; a hole under 300kt (medium and small holes) gets the medium roller
+		@param opts options.rollPlan {bsCold, bsHot, medCold, medHot} in kt (missing or invalid values use the defaults)
+		A roller never exceeds the hole's jump limit: hot is clamped to it and cold to hot. */
+	rollerProfile: function(maxJumpKg, opts) {
+		const d = rollingCalc.ROLLERS, o = opts || {};
+		const kt = function(v, fallback) { return Number(v) > 0 ? Number(v) : fallback; };
+		const max = Number(maxJumpKg) > 0 ? Number(maxJumpKg) : 0;
+		const battleship = !max || max >= rollingCalc.BATTLESHIP_HOLE_KG;
+		let cold = (battleship ? kt(o.bsCold, d.bsCold) : kt(o.medCold, d.medCold)) * 1e6;
+		let hot = (battleship ? kt(o.bsHot, d.bsHot) : kt(o.medHot, d.medHot)) * 1e6;
+		if (max) { hot = Math.min(hot, max); }
+		cold = Math.min(cold, hot);
+		return { name: battleship ? 'battleship' : 'medium', cold: cold, hot: hot };
+	},
+
+	/** Step-by-step way to roll a hole shut with everyone ending on the home side.
+		@param p {lo, hi, cold, hot, maxJump, rollerName} remaining mass range (worst case) and the roller's pass masses, kg
+		@return {steps: [{dir: 'out'|'back', mass, kind: 'hot'|'cold', status: 'safe'|'may'|'will', after: {lo, hi}}],
+			outcome: 'closes' (the last return pass will close it) | 'may-close' (it may; repeat the last pair if not) |
+			'too-light' (not enough mass left for this roller to go out safely) | 'long' (cap reached) | 'unknown',
+			warning: string, more: hot round trips left out after the listed ones, repeatFrom: step number to repeat (may-close)}
+		Never recommends an outbound jump that may collapse the hole. */
+	recommend: function(p) {
+		p = p || {};
+		let lo = Number(p.lo), hi = Number(p.hi);
+		let hot = Number(p.hot), cold = Number(p.cold);
+		const result = { steps: [], outcome: 'unknown', warning: '', more: 0, repeatFrom: 0 };
+		if (!(hi > 0) || !(lo >= 0) || !(hot > 0)) { return result; }
+		if (Number(p.maxJump) > 0) { hot = Math.min(hot, Number(p.maxJump)); }
+		cold = cold > 0 ? Math.min(cold, hot) : hot;
+		const push = function(dir, mass, kind, st) {
+			lo = Math.max(0, lo - mass); hi = Math.max(0, hi - mass);
+			result.steps.push({ dir: dir, mass: mass, kind: kind, status: st, after: { lo: lo, hi: hi } });
+		};
+		// Hot round trips while a whole one is safe even at the lightest hole; the first few are listed, the rest counted
+		const pairs = 2 * hot < lo ? Math.ceil(lo / (2 * hot)) - 1 : 0;
+		const listed = Math.min(pairs, Math.floor((rollingCalc.MAX_STEPS - 2) / 2));
+		for (let i = 0; i < listed; i++) { push('out', hot, 'hot', 'safe'); push('back', hot, 'hot', 'safe'); }
+		if (pairs > listed) {
+			result.more = pairs - listed;
+			result.moreAt = result.steps.length;
+			lo = Math.max(0, lo - result.more * 2 * hot); hi = Math.max(0, hi - result.more * 2 * hot);
+		}
+		// Finish: an outbound pass under the lightest remaining mass, then a hot return
+		for (;;) {
+			if (result.steps.length + 2 > rollingCalc.MAX_STEPS) { result.outcome = 'long'; return result; }
+			const kind = cold < lo ? 'cold' : hot < lo ? 'hot' : null;
+			if (!kind) {
+				result.outcome = 'too-light';
+				result.warning = 'Too little mass left for a ' + (p.rollerName || 'battleship') + ' to go out safely: use a lighter ship out (under ' +
+					rollingCalc.formatKt(lo, 'floor') + ') or accept the risk of being stranded.';
+				return result;
+			}
+			push('out', kind === 'cold' ? cold : hot, kind, 'safe');
+			const back = hot >= hi ? 'will' : hot >= lo ? 'may' : 'safe';
+			push('back', hot, 'hot', back);
+			if (back === 'will') { result.outcome = 'closes'; return result; }
+			if (back === 'may') {
+				result.outcome = 'may-close';
+				result.repeatFrom = result.steps.length - 1;
+				return result;
+			}
+		}
+	},
+
+	/** Overall verdict of an out-and-back plan: the worse of its two passes */
+	worstVerdict: function(plan) {
+		const order = ['safe', 'may', 'collapse', 'too-heavy'];
+		const a = order.indexOf(plan.out.verdict), b = order.indexOf(plan.back.verdict);
+		if (a < 0 && b < 0) { return 'unknown'; }
+		return order[Math.max(a, b)];
+	},
+
+	/** Symbol that goes with a verdict, so colour is never the only signal */
+	ICONS: { safe: '✓', may: '!', collapse: '✕', 'too-heavy': '⊘', unknown: '?', none: '-' },
+
+	/** Jump log (newest first, as mass.php returns it) with the running total and the worst-case mass left after each pass.
+		@param jumps [{mass}] newest first @param totalKg nominal total mass of the hole type (or 0)
+		@return [{total, left}] in the same order; left is null without a total mass. */
+	passLog: function(jumps, totalKg) {
+		const list = jumps || [];
+		const lightest = Number(totalKg) > 0 ? Number(totalKg) * (1 - rollingCalc.VARIANCE) : null;
+		let sum = 0;
+		const out = new Array(list.length);
+		for (let i = list.length - 1; i >= 0; i--) {	// oldest first
+			sum += Number(list[i] && list[i].mass) > 0 ? Number(list[i].mass) : 0;
+			out[i] = { total: sum, left: lightest === null ? null : Math.max(0, lightest - sum) };
+		}
+		return out;
+	},
+
+	/** Number of passes and mass (kg) through a hole, from the raw mass.php rows.
+		@param lookup function(row) -> pass mass in kg, or null for a row that can't be weighed (skipped) */
+	summarisePasses: function(rows, lookup) {
+		const out = { passes: 0, massKg: 0 };
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			const m = lookup(row);
+			if (m > 0) { out.passes++; out.massKg += m; }
+		});
+		return out;
+	},
+
+	/** Text and status class for one step of recommend() */
+	stepText: function(step, farName, homeName) {
+		const where = step.dir === 'out' ? 'Out to ' + farName : 'Back to ' + homeName;
+		return where + ' (' + step.kind + ', ' + rollingCalc.formatKt(step.mass) + ')';
+	},
+
+	/** HTML of the "How to roll this hole" panel body.
+		@param rec recommend() result @param profile rollerProfile() result
+		@param ctx {farName, homeName, startedText: 'Rolling started by X at HH:MM EVE' or '', preserved: preserve-mass warning or ''} */
+	recommendHtml: function(rec, profile, ctx) {
+		const e = rollingCalc.escape, L = { safe: 'Safe', may: 'May collapse', will: 'Will collapse' };
+		const icon = { safe: rollingCalc.ICONS.safe, may: rollingCalc.ICONS.may, will: rollingCalc.ICONS.collapse };
+		ctx = ctx || {};
+		let html = '';
+		if (ctx.preserved) { html += "<p class='rolling-warning'>" + e(ctx.preserved) + "</p>"; }
+		if (ctx.startedText) { html += "<p class='rolling-note'>" + e(ctx.startedText) + "</p>"; }
+		html += "<p class='rolling-note'>Assuming " + e(profile.name) + " rollers: " + rollingCalc.formatKt(profile.cold) + " cold / " +
+			rollingCalc.formatKt(profile.hot) + " hot (change in Settings). Everyone starts in " + e(ctx.homeName) + ".</p>";
+		if (rec.outcome === 'unknown' && !rec.steps.length) { return html + "<p class='rolling-hint'>Not enough information to plan.</p>"; }
+		const more = "<li class='rolling-more'>" + rec.more + " more hot round trip" + (rec.more === 1 ? "" : "s") +
+			" (out and back, " + rollingCalc.formatKt(profile.hot) + " each way), all safe</li>";
+		html += "<ul class='rolling-steps'>" + rec.steps.map(function(s, i) {
+			return (rec.more > 0 && rec.moreAt === i ? more : "") +
+				"<li class='rolling-step rolling-step-" + s.status + "'><span class='rolling-step-num'>" + (i + 1) + ".</span> <span class='rolling-step-icon' aria-hidden='true'>" + icon[s.status] + "</span> " +
+				e(rollingCalc.stepText(s, ctx.farName, ctx.homeName)) + " <span class='rolling-step-status'>" + L[s.status] + "</span></li>";
+		}).join('') + (rec.more > 0 && rec.moreAt >= rec.steps.length ? more : "") + "</ul>";
+		if (rec.outcome === 'closes') {
+			html += "<p class='rolling-caution'>The hole closes on the way back, with everyone home.</p>";
+		} else if (rec.outcome === 'may-close') {
+			html += "<p class='rolling-caution'>The last return pass may close it. If it didn't close, repeat steps " + rec.repeatFrom +
+				"&ndash;" + (rec.repeatFrom + 1) + " until it does.</p>";
+		} else if (rec.outcome === 'long') {
+			html += "<p class='rolling-note'>That is the first " + rollingCalc.MAX_STEPS + " steps; check the remaining mass again after them.</p>";
+		} else if (rec.outcome === 'too-light') {
+			html += "<p class='rolling-warning'>" + e(rec.warning) + "</p>";
+		}
+		return html;
+	},
+
 	escape: function(s) {
 		return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function(c) {
 			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -184,6 +332,11 @@ const rollingCalc = {
 	/** Whether the feature is on (options.rollingCalc.enabled; on unless explicitly false) */
 	enabled: function(opts) {
 		return !(opts && opts.rollingCalc && opts.rollingCalc.enabled === false);
+	},
+
+	/** Whether the "How to roll this hole" panel is on (options.rollPlan.enabled; on unless explicitly false) */
+	planEnabled: function(opts) {
+		return rollingCalc.enabled(opts) && !(opts && opts.rollPlan && opts.rollPlan.enabled === false);
 	},
 
 	/** HTML for the verdicts of a plan (from plan()) */
@@ -227,7 +380,7 @@ const rollingCalc = {
 
 if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn && jQuery.fn.dialog) {
 	$(function() {
-		const state = { massData: null, choice: null, outProp: null, backProp: null, higgs: null, customKt: '' };
+		const state = { massData: null, choice: null, outProp: null, backProp: null, higgs: null, customKt: '', planOpen: null, fingerprint: null };
 
 		function panel() {
 			let $p = $("#rolling-calc");
@@ -272,9 +425,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function render() {
 			state.lastKey = holeKey();
 			const $p = panel();
-			if (!rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { $p.hide().empty(); return; }
+			if (!rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { $p.hide().empty(); planPanel().hide().empty(); return; }
 			const info = holeInfo();
-			if (!info || !state.massData) { $p.hide().empty(); return; }
+			if (!info || !state.massData) { $p.hide().empty(); planPanel().hide().empty(); return; }
 			$p.show();
 
 			const eve = tripwire.client ? tripwire.client.EVE : null;
@@ -294,12 +447,26 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			});
 
 			const e = rollingCalc.escape;
-			let controls = "<p class='rolling-controls'><b>Rolling:</b> <select class='rolling-ship'>" +
+			// One button per ship, coloured by an out-and-back with that ship (and an icon: colour is never the only signal)
+			const shipVerdict = function(mass, s) {
+				const higgs = s && s.name === state.choice ? state.higgs : (s && s.higgs !== undefined ? s.higgs : state.higgs);
+				const pm = function(prop) { return rollingCalc.passMass(mass, { prop: prop, higgs: higgs, propKg: s ? s.propKg : undefined }); };
+				return rollingCalc.worstVerdict(rollingCalc.plan({
+					totalKg: info.type.mass, jumpKg: info.type.jump, usedKg: state.massData.totalMass, massState: info.wormhole.mass,
+					outKg: pm(state.outProp), backKg: pm(state.backProp)
+				}));
+			};
+			const button = function(value, label, verdict, selected) {
+				return "<button type='button' class='rolling-ship-btn rolling-btn-" + verdict + (selected ? " selected" : "") + "' data-ship='" + e(value) + "'" +
+					" aria-pressed='" + (selected ? "true" : "false") + "' title='Out and back with this ship: " + e(rollingCalc.LABELS[verdict]) + "'>" +
+					"<span class='rolling-btn-icon' aria-hidden='true'>" + rollingCalc.ICONS[verdict] + "</span> " + label + "</button> ";
+			};
+			const customHull = parseFloat(state.customKt) * 1e6;
+			let controls = "<p class='rolling-controls'><b>Rolling:</b> " +
 				ships.map(function(s) {
-					return "<option value='" + e(s.name) + "'" + (s.name === state.choice ? " selected" : "") + ">" +
-						e(s.name) + (s.current ? " (current)" : "") + " " + rollingCalc.formatKt(s.mass) + "</option>";
+					return button(s.name, e(s.name) + (s.current ? " (current)" : "") + " " + rollingCalc.formatKt(s.mass), shipVerdict(s.mass, s), s.name === state.choice);
 				}).join('') +
-				"<option value='custom'" + (state.choice === 'custom' ? " selected" : "") + ">Custom mass</option></select>" +
+				button('custom', "Custom mass", customHull > 0 ? shipVerdict(customHull, null) : 'unknown', state.choice === 'custom') +
 				(state.choice === 'custom' ? " <input type='number' class='rolling-custom' min='0' step='1' placeholder='kt' value='" + e(state.customKt) + "'> kt" : "") +
 				" <label data-tooltip='Prop mod on for the out pass'><input type='checkbox' class='rolling-out-prop'" + (state.outProp ? " checked" : "") + "> Out hot</label>" +
 				" <label data-tooltip='Prop mod on for the return pass'><input type='checkbox' class='rolling-back-prop'" + (state.backProp ? " checked" : "") + "> Back hot</label>" +
@@ -312,10 +479,41 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				const input = $p.find(".rolling-custom")[0];
 				if (input) { input.focus(); const v = input.value; input.value = ''; input.value = v; }
 			}
+			renderPlan(info, plan);
 		}
 
-		$(document).on("change", "#rolling-calc .rolling-ship", function() {
-			state.choice = $(this).val();
+		function planPanel() {
+			let $r = $("#rolling-plan");
+			if (!$r.length) {
+				$r = $("<div id='rolling-plan'></div>");
+				panel().after($r);
+			}
+			return $r;
+		}
+
+		// "How to roll this hole": the step list for a typical roller crew (Settings > Wormhole Jumps & Mass > Roller ships)
+		function renderPlan(info, plan) {
+			const $r = planPanel();
+			const opts = typeof options !== "undefined" ? options : undefined;
+			if (!plan.range.known || !rollingCalc.planEnabled(opts)) { $r.hide().empty(); return; }
+			const profile = rollingCalc.rollerProfile(info.type.jump, opts && opts.rollPlan);
+			const rec = rollingCalc.recommend({ lo: plan.range.min, hi: plan.range.max, cold: profile.cold, hot: profile.hot,
+				maxJump: info.type.jump, rollerName: profile.name });
+			const pm = typeof preserveMass !== "undefined" && preserveMass.flags ? preserveMass.flags[String(info.wormhole.id)] : null;
+			const flag = typeof holeRolling !== "undefined" && holeRolling.flags ? holeRolling.flags[String(info.wormhole.id)] : null;
+			const preserved = pm ? "Marked preserve mass" + (pm.setBy ? " by " + pm.setBy : "") + (pm.reason ? " (" + pm.reason + ")" : "") +
+				": don't roll it unless that has changed." : "";
+			const body = rollingCalc.recommendHtml(rec, profile, { farName: info.farName, homeName: info.homeName, preserved: preserved,
+				startedText: flag ? "Rolling " + holeRolling.startedText(flag) : "" });
+			const open = state.planOpen === null ? !preserved : state.planOpen;
+			$r.show().html("<details class='rolling-plan-details'" + (open ? " open" : "") + "><summary><b>How to roll this hole</b></summary>" + body + "</details>");
+		}
+
+		$(document).on("click", "#rolling-plan summary", function() {
+			state.planOpen = !$(this).parent().prop("open");
+		});
+		$(document).on("click", "#rolling-calc .rolling-ship-btn", function() {
+			state.choice = $(this).attr("data-ship");
 			const ship = state.ships ? state.ships.filter(function(s) { return s.name === state.choice; })[0] : null;
 			if (ship && ship.higgs !== undefined) { state.higgs = ship.higgs; }	// a logged fit knows its Higgs anchor
 			render();
@@ -328,8 +526,65 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		// A fresh start every time the dialog opens; the mass log arrives later through parseMassData
 		$(document).on("dialogopen", "#dialog-mass", function() {
 			state.massData = null; state.choice = null; state.outProp = null; state.backProp = null; state.higgs = null;
+			state.planOpen = null; state.fingerprint = null;
 			panel().hide().empty();
+			planPanel().hide().empty();
+			startLive();
 		});
+		$(document).on("dialogclose", "#dialog-mass", function() { stopLive(); });
+
+		// Live mass: while the dialog is open, look for new passes every 10 s and redraw the log and the recommendation
+		// when someone else's pass (or a hot/cold correction) arrived. Stops when the dialog closes.
+		let liveTimer = null, liveBusy = false;
+		function startLive() {
+			stopLive();
+			liveTimer = setInterval(pollLive, rollingCalc.LIVE_MS);
+		}
+		function stopLive() {
+			if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+		}
+		function pollLive() {
+			try {
+				const $d = $("#dialog-mass");
+				if (!$d.dialog("isOpen")) { stopLive(); return; }
+				if (liveBusy || document.hidden || state.fingerprint === null || !rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { return; }
+				liveBusy = true;
+				$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: $d.data("id") }, dataType: "JSON" }).done(function(data) {
+					if (!data || !data.jumps || !$d.dialog("isOpen")) { return; }
+					if (JSON.stringify(data.jumps) === state.fingerprint) { return; }
+					const open = $d.dialog("option", "open");
+					if (typeof open === "function") { open.call($d[0]); }	// the dialog's own refresh: reloads the log and re-renders
+				}).always(function() { liveBusy = false; });
+			} catch (e) {
+				liveBusy = false;
+				if (typeof console !== "undefined") { console.warn("rolling-calculator: live refresh failed", e); }
+			}
+		}
+
+		// The jump log gets a running total and the worst-case mass left after each pass (two extra columns)
+		function decorateLog() {
+			try {
+				const info = holeInfo();
+				if (!state.massData || !info || !rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { return; }
+				const log = rollingCalc.passLog(state.massData.jumps, info.type.mass);
+				const $table = $("#massTable");
+				if (!$table.find("thead th.rolling-log-head").length) {
+					$table.find("thead tr").append(
+						"<th class='rolling-log-head' data-tooltip='Mass through the hole up to and including this pass'>Total</th>" +
+						"<th class='rolling-log-head' data-tooltip='Worst case: the lightest this hole can be (-10%) minus the total'>Left</th>");
+				}
+				let i = 0;
+				$table.find("tbody tr").each(function() {
+					const $row = $(this);
+					$row.children(".rolling-log-cell").remove();
+					const entry = $row.is("[class^='mass-']") ? log[i++] : null;
+					$row.append("<td class='rolling-log-cell'>" + (entry ? rollingCalc.formatKt(entry.total) : "") + "</td>" +
+						"<td class='rolling-log-cell'>" + (entry && entry.left !== null ? "&ge;&nbsp;" + rollingCalc.formatKt(entry.left, "floor") : "") + "</td>");
+				});
+			} catch (e) {
+				if (typeof console !== "undefined") { console.warn("rolling-calculator: could not decorate the log", e); }
+			}
+		}
 		if (typeof parseMassData === "function" && !parseMassData.rollingCalcWrapped) {
 			const previous = parseMassData;
 			parseMassData = function() {
@@ -337,7 +592,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				try {
 					if ($("#dialog-mass").is(":visible") || $("#dialog-mass").dialog("isOpen")) {
 						state.massData = result;
+						state.fingerprint = JSON.stringify(arguments[0]);
 						render();
+						setTimeout(decorateLog, 0);	// after the dialog added its rows (and auto-mass its badges)
 					}
 				} catch (e) {
 					if (typeof console !== "undefined") { console.warn("rolling-calculator: could not render", e); }
@@ -380,6 +637,32 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			label: "Rolling guidance:", text: "Show worst-case rolling in the mass dialog",
 			get: function(o) { return rollingCalc.enabled(o); },
 			set: function(o, on) { o.rollingCalc = { enabled: on }; }
+		});
+
+		// Settings > Wormhole Jumps & Mass: "Roller ships" for the recommendation (kt; blank = the default)
+		const rollerRow = function(prefix, label, cold, hot) {
+			return "<div>" + label + ": <input type='number' min='1' step='1' id='rollPlan-" + prefix + "Cold' class='rollplan-input' placeholder='" + cold + "'> kt cold, " +
+				"<input type='number' min='1' step='1' id='rollPlan-" + prefix + "Hot' class='rollplan-input' placeholder='" + hot + "'> kt hot</div>";
+		};
+		forkSettings.register({
+			section: "jumps", order: 21, id: "rollPlan", type: "custom", key: "rollPlan", label: "Roller ships:",
+			html: "<label><input type='checkbox' id='rollPlan-enabled'> Show \"How to roll this hole\" in the mass dialog</label>" +
+				rollerRow("bs", "Battleships", rollingCalc.ROLLERS.bsCold, rollingCalc.ROLLERS.bsHot) +
+				rollerRow("med", "Medium holes", rollingCalc.ROLLERS.medCold, rollingCalc.ROLLERS.medHot) +
+				"<div class='rolling-note'>Mass of the ships you roll with, used for the recommendation (hot is capped at the hole's jump limit).</div>",
+			load: function(o) {
+				const p = o.rollPlan || {};
+				$("#rollPlan-enabled").prop("checked", p.enabled !== false);
+				["bsCold", "bsHot", "medCold", "medHot"].forEach(function(k) { $("#rollPlan-" + k).val(Number(p[k]) > 0 ? p[k] : ""); });
+			},
+			save: function(o) {
+				const p = { enabled: $("#rollPlan-enabled").prop("checked") };
+				["bsCold", "bsHot", "medCold", "medHot"].forEach(function(k) {
+					const v = parseFloat($("#rollPlan-" + k).val());
+					if (v > 0) { p[k] = v; }
+				});
+				o.rollPlan = p;
+			}
 		});
 	});
 }
