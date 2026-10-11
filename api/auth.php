@@ -54,7 +54,7 @@ if (isset($_REQUEST['maskID']) && !empty($_REQUEST['maskID'])) {
                 $stmt->bindValue(':maskID', $_REQUEST['maskID']);
                 $stmt->execute();
                 $masks = $stmt->fetchAll();
-                if ($masks && $masks['0']['maskID'] == $_REQUEST['maskID']) {
+                if ($masks && $masks['0']['maskID'] == $_REQUEST['maskID'] && !(function_exists('maskadmin_is_blocked') && maskadmin_is_blocked($mysql, (string) $masks['0']['maskID'], $character->characterID))) { // fork: blocked characters
                     $maskID = $masks['0']['maskID'];
                     break;
                 }

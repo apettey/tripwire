@@ -77,7 +77,7 @@ if ($mode == 'create') {
 			}
 		}
 	}
-} else if ($mode == 'save' && $mask && (checkOwner($mask) || checkAdmin($mask))) {
+} else if ($mode == 'save' && $mask && (checkOwner($mask) || (function_exists('maskadmin_corp_admin') ? maskadmin_corp_admin($mask) : checkAdmin($mask)))) { // fork: granted mask admins can't edit the access list
 	foreach ($adds as $add) {
 		list($id, $type) = explode('_', $add);
 
@@ -101,7 +101,7 @@ if ($mode == 'create') {
 	}
 
 	$output['result'] = true;
-} else if ($mode == 'edit' && $mask && (checkOwner($mask) || checkAdmin($mask))) {
+} else if ($mode == 'edit' && $mask && (checkOwner($mask) || (function_exists('maskadmin_corp_admin') ? maskadmin_corp_admin($mask) : checkAdmin($mask)))) {
 	$query = 'SELECT eveID FROM masks INNER JOIN `groups` ON `groups`.maskID = masks.maskID WHERE masks.maskID = :mask';
 	$stmt = $mysql->prepare($query);
 	$stmt->bindValue(':mask', $mask);

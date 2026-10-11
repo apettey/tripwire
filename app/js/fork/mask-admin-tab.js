@@ -94,7 +94,7 @@ const maskAdminTab = {
 		return "<h3>Members</h3><div class='ma-search'><input type='search' class='ma-q' placeholder='Find a character...' value='" + esc(maskAdminTab.query) + "' maxlength='50' /></div>"
 			+ "<table class='ma-table'><thead><tr><th>Character</th><th>Corporation</th><th>Status</th><th></th></tr></thead><tbody>"
 			+ (rows || "<tr><td colspan='4' class='ma-dim'>No members found.</td></tr>") + "</tbody></table>"
-			+ "<p class='ma-dim'>Members are the characters of the mask's corporations and characters, and anyone who used the mask. Alliance members appear once they have used it.</p>"
+			+ "<p class='ma-dim'>Members are the characters of the mask's corporations and characters, and anyone who used the mask. Alliance members appear once they have used it. Blocks are per character: a player's other characters are not blocked unless you block them too.</p>"
 			+ (state.truncated ? "<p class='ma-dim'>Showing the first " + (state.members || []).length + ": search by name to find others.</p>" : "");
 	},
 

@@ -604,7 +604,9 @@ Mask Admin > Admins & members (`public/mask_admins.php`, `maskadmin/maskadmin.in
 - **Several admins.** On a custom mask the owner and the owning corporation's Tripwire admins can make any member a
   mask admin (and revoke it). `checkAdmin()` in `lib.inc.php` accepts granted admins, so Mask Admin and the Discord,
   Watchlist and Fight here tabs honour them. Granted admins can block, unblock, remove members and set the defaults;
-  they can't grant/revoke or delete the mask. The owner and corporation admins can't be revoked, blocked or removed.
+  they can't grant/revoke, edit the access list or delete the mask, and Discord / Fight here / Watchlist stay for the
+  corporation's Tripwire admins. A grant counts only while the character still has access to the mask. The owner and
+  corporation admins can't be revoked, blocked or removed. Blocks are per character.
 - **Remove / block.** *Remove* deletes a character's own entry from the access list (not possible for access through
   a corporation or alliance). *Block* (with a reason) makes the mask unusable for that character whatever grants
   access: `docker/db.inc.php`, loaded by every endpoint, drops a blocked character's session to their corp mask

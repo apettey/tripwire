@@ -36,5 +36,21 @@ badge only appears on settings an admin chose.
 - **Upstream files touched (one line each):** `lib.inc.php` (`checkAdmin()` also accepts granted admins),
   `masks.inc.php` (blocked masks are left out of the mask list), `public/masks.php` (deleting a mask stays with the
   owner / corp admins, via `maskadmin_corp_admin()`).
+- **Security review fixes (same entry):**
+  - Mask ids are canonicalised on every request (`maskadmin_enforce_session`, from `docker/db.inc.php`, and again in
+    `login.php`): only `digits.0-3` is accepted (leading zeros dropped), anything else becomes the corp mask, then the
+    block check runs. This also closes an **upstream** hole that exists on `origin/main`: `verifyMask()` lets
+    `"12.0abc"` through on PHP 8, so any logged-in user could put it in their session through `options.php` and read or
+    write mask 12.0 (MySQL casts it to 12.0). Reproduced on the dev stack (a character without access wrote a note into
+    another mask) and verified closed.
+  - `api/auth.php` (REST API) refuses blocked characters (upstream file, one guarded condition).
+  - A grant counts only while the character still has access to the mask (verifyMask's rule, including alliance).
+  - `public/masks.php` `save` and `edit` (access list) are owner / corp admins only; Discord, Fight here and Watchlist
+    stay corp-admin only (`maskadmin_corp_admin`), so granted admins see them read-only.
+  - Mask defaults are checked against an allow-list of the keys the Settings rows store (server and browser; a mocha test
+    keeps both equal to the `forkSettings.register` keys); prototype names are rejected.
+  - Help text: blocks are per character.
+  - Upstream files now also touched: `api/auth.php`, `public/login.php`, `public/masks.php` (save/edit lines).
+    `public/discord.php`, `public/fight.php`, `public/watchlist.php` (fork files) call `maskadmin_corp_admin()`.
 - Defaults are applied in the browser by wrapping `options.get` / `options.apply`; inherited values are not saved
   as personal choices.

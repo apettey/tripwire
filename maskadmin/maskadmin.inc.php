@@ -67,10 +67,11 @@ const MASKADMIN_AUDIT_KEEP = 500;
 const MASKADMIN_REASON_MAX = 200;
 const MASKADMIN_DEFAULTS_MAX_BYTES = 16384;
 const MASKADMIN_DEFAULTS_MAX_KEYS = 40;
-// Options a mask default must never carry: the user's own layout/identity/mask choice and upstream's built-in groups
-// (those always exist in options, so a "missing key" default could not apply to them anyway)
-const MASKADMIN_DEFAULTS_DENY = ['masks', 'grid', 'tracking', 'favorites', 'background', 'uiscale', 'buttons', 'chain', 'signatures',
-    'character', 'userID', 'whatsNew', 'localOptions'];
+// The only options a mask default may carry: the top-level options keys the fork's Settings rows store (forkSettings.register
+// with a `key`). The browser has the same list (maskDefaults.ALLOWED); a mocha test keeps both equal to the keys the rows use.
+const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'favoritesPanel', 'favouritesRouteStrip', 'highsecRegion', 'intelScans', 'jumpReturn',
+    'killReporting', 'preserveMass', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sizeTags', 'skyhooksPanel', 'smartNotes',
+    'soundMute', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
 
 function maskadmin_ensure_schema(PDO $db) {
     foreach (MASKADMIN_DDL as $ddl) $db->exec($ddl);
@@ -148,11 +149,25 @@ function maskadmin_is_blocked(PDO $db, $mask, $characterID) {
 }
 
 /** 'owner' | 'corp-admin' | 'granted' | null. A blocked character has no level (blocking is refused for admins, this is the safety net). */
-function maskadmin_level(PDO $db, $mask, $characterID) {
+function maskadmin_level(PDO $db, $mask, $characterID, $allianceID = null) {
     $base = maskadmin_base_level($db, $mask, $characterID);
     if ($base) return $base;
     if (maskadmin_is_blocked($db, $mask, $characterID)) return null;
-    return maskadmin_is_granted($db, $mask, $characterID) ? 'granted' : null;
+    if (!maskadmin_is_granted($db, $mask, $characterID)) return null;
+    // a grant counts only while the character still has access to the mask (their corporation / alliance may have lost it)
+    $character = maskadmin_character($db, $characterID);
+    return $character && maskadmin_has_access($db, $mask, $characterID, $character['corporationID'], $allianceID) ? 'granted' : null;
+}
+
+/** Access to a custom mask by the same rule as upstream's verifyMask(): owner or an access-list entry for the character, corporation or alliance */
+function maskadmin_has_access(PDO $db, $mask, $characterID, $corporationID, $allianceID = null) {
+    if (!maskadmin_is_custom($mask)) return false;
+    $stmt = $db->prepare('SELECT 1 FROM masks m LEFT JOIN `groups` g ON g.maskID = m.maskID WHERE m.maskID = :m AND ('
+        . '(m.ownerType = 1373 AND m.ownerID = :c) OR (m.ownerType = 2 AND m.ownerID = :corp) OR (m.ownerType = 3 AND m.ownerID = :ally)'
+        . ' OR (g.eveType = 1373 AND g.eveID = :c2) OR (g.eveType = 2 AND g.eveID = :corp2) OR (g.eveType = 3 AND g.eveID = :ally2)) LIMIT 1');
+    $stmt->execute([':m' => $mask, ':c' => (int) $characterID, ':corp' => (int) $corporationID, ':ally' => (int) $allianceID,
+        ':c2' => (int) $characterID, ':corp2' => (int) $corporationID, ':ally2' => (int) $allianceID]);
+    return (bool) $stmt->fetchColumn();
 }
 
 /** May grant/revoke admins: the owner and the owning corporation's admins, not granted admins */
@@ -161,22 +176,24 @@ function maskadmin_is_manager(PDO $db, $mask, $characterID) {
 }
 
 /** May block, unblock, remove members and set the mask defaults: every admin level. The corp mask: its admins (defaults only). */
-function maskadmin_is_admin(PDO $db, $mask, $characterID) {
-    return maskadmin_level($db, $mask, $characterID) !== null;
+function maskadmin_is_admin(PDO $db, $mask, $characterID, $allianceID = null) {
+    return maskadmin_level($db, $mask, $characterID, $allianceID) !== null;
 }
 
 // ---- the session wrappers upstream's code calls ----
 
 /** lib.inc.php checkAdmin() falls back to this: is the session's character a granted admin of $mask */
-function maskadmin_session_granted($mask) {
+function maskadmin_session_granted($mask, $fresh = false) {
     global $mysql;
     static $cache = [];
     if (!maskadmin_is_custom($mask) || empty($_SESSION['characterID']) || !($mysql instanceof PDO)) return false;
     $key = $mask . '|' . $_SESSION['characterID'];
-    if (!isset($cache[$key])) {
+    if ($fresh || !isset($cache[$key])) {
         try {
             $cache[$key] = maskadmin_is_granted($mysql, $mask, $_SESSION['characterID'])
-                && !maskadmin_is_blocked($mysql, $mask, $_SESSION['characterID']);
+                && !maskadmin_is_blocked($mysql, $mask, $_SESSION['characterID'])
+                && maskadmin_has_access($mysql, $mask, $_SESSION['characterID'], isset($_SESSION['corporationID']) ? $_SESSION['corporationID'] : 0,
+                    isset($_SESSION['allianceID']) ? $_SESSION['allianceID'] : null);
         } catch (PDOException $e) {
             error_log('maskadmin_session_granted: ' . $e->getMessage());
             $cache[$key] = false;
@@ -205,11 +222,26 @@ function maskadmin_corp_admin($mask) {
 }
 
 /**
+ * The one spelling of a mask id the rest of the code (and this feature's tables) must see. Upstream compares and stores mask ids
+ * loosely: MySQL turns "12.00", " 12.0", "012.0" or "12.0abc" into the decimal 12.0, so a session mask of any of those would
+ * read the data of mask 12.0 while escaping a lookup by the exact string "12.0" (our block check). Only `digits.0-3` is accepted
+ * (leading zeros dropped); anything else, or anything that is not a string/number, becomes the character's corp mask.
+ */
+function maskadmin_canonical_mask($mask, $corporationID) {
+    $fallback = ((int) $corporationID) . '.2';
+    if (!is_string($mask) && !is_int($mask)) return $fallback;
+    if (!preg_match('/^([0-9]{1,10})\.([0-3])$/D', (string) $mask, $m)) return $fallback;
+    $id = ltrim($m[1], '0');
+    return ($id === '' ? '0' : $id) . '.' . $m[2];
+}
+
+/**
  * The mask a character may use: $mask itself, or their corp mask if $mask is a custom mask they are blocked from.
  * (Access to a mask they are not blocked from is upstream's verifyMask().) Fails closed for a custom mask if the
  * blocks can't be read.
  */
 function maskadmin_enforced_mask(PDO $db, $mask, $characterID, $corporationID) {
+    $mask = maskadmin_canonical_mask($mask, $corporationID);
     if (!maskadmin_is_custom((string) $mask)) return $mask;
     try {
         return maskadmin_is_blocked($db, (string) $mask, $characterID) ? ((int) $corporationID . '.2') : $mask;
@@ -222,8 +254,8 @@ function maskadmin_enforced_mask(PDO $db, $mask, $characterID, $corporationID) {
 /** docker/db.inc.php: runs on every request that loads the database, before the endpoint reads $_SESSION['mask'] */
 function maskadmin_enforce_session(PDO $db) {
     if (!isset($_SESSION) || !is_array($_SESSION) || !isset($_SESSION['mask'], $_SESSION['characterID'], $_SESSION['corporationID'])) return;
-    $mask = maskadmin_enforced_mask($db, (string) $_SESSION['mask'], $_SESSION['characterID'], $_SESSION['corporationID']);
-    if ((string) $mask !== (string) $_SESSION['mask']) {
+    $mask = maskadmin_enforced_mask($db, is_string($_SESSION['mask']) || is_int($_SESSION['mask']) ? (string) $_SESSION['mask'] : null, $_SESSION['characterID'], $_SESSION['corporationID']);
+    if (!is_string($_SESSION['mask']) || (string) $mask !== $_SESSION['mask']) {
         $_SESSION['mask'] = $mask;
         if (isset($_SESSION['options']) && is_object($_SESSION['options']) && isset($_SESSION['options']->masks)) {
             $_SESSION['options']->masks->active = $mask;
@@ -340,7 +372,7 @@ function maskadmin_revoke(PDO $db, $mask, array $actor, $targetID) {
 
 function maskadmin_block(PDO $db, $mask, array $actor, $targetID, $reason) {
     if (!maskadmin_is_custom($mask)) return [false, 'Members can only be blocked from custom masks', 400];
-    if (!maskadmin_is_admin($db, $mask, $actor['id'])) return [false, 'Only mask admins can block members', 403];
+    if (!maskadmin_is_admin($db, $mask, $actor['id'], isset($actor['alliance']) ? $actor['alliance'] : null)) return [false, 'Only mask admins can block members', 403];
     $target = maskadmin_character($db, $targetID);
     if (!$target) return [false, 'Unknown character', 404];
     if ((int) $target['characterID'] === (int) $actor['id']) return [false, 'You can\'t block yourself', 400];
@@ -358,7 +390,7 @@ function maskadmin_block(PDO $db, $mask, array $actor, $targetID, $reason) {
 
 function maskadmin_unblock(PDO $db, $mask, array $actor, $targetID) {
     if (!maskadmin_is_custom($mask)) return [false, 'Members can only be blocked from custom masks', 400];
-    if (!maskadmin_is_admin($db, $mask, $actor['id'])) return [false, 'Only mask admins can unblock members', 403];
+    if (!maskadmin_is_admin($db, $mask, $actor['id'], isset($actor['alliance']) ? $actor['alliance'] : null)) return [false, 'Only mask admins can unblock members', 403];
     $stmt = $db->prepare('SELECT characterName FROM fork_mask_blocks WHERE maskID = ? AND characterID = ?');
     $stmt->execute([$mask, (int) $targetID]);
     $name = $stmt->fetchColumn();
@@ -371,7 +403,7 @@ function maskadmin_unblock(PDO $db, $mask, array $actor, $targetID) {
 /** Take a character's own entry out of the access list. Access through the corporation or alliance can only be blocked. */
 function maskadmin_remove(PDO $db, $mask, array $actor, $targetID) {
     if (!maskadmin_is_custom($mask)) return [false, 'Access can only be removed from custom masks', 400];
-    if (!maskadmin_is_admin($db, $mask, $actor['id'])) return [false, 'Only mask admins can remove members', 403];
+    if (!maskadmin_is_admin($db, $mask, $actor['id'], isset($actor['alliance']) ? $actor['alliance'] : null)) return [false, 'Only mask admins can remove members', 403];
     $target = maskadmin_character($db, $targetID);
     if (!$target) return [false, 'Unknown character', 404];
     if ($why = maskadmin_protected_reason($db, $mask, $targetID)) return [false, $why . ': their access can\'t be removed', 400];
@@ -412,7 +444,7 @@ function maskadmin_validate_defaults($in) {
     foreach ($in as $key => $value) {
         $key = (string) $key;
         if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{0,39}$/', $key)) return [null, 'Invalid setting name'];
-        if (in_array($key, MASKADMIN_DEFAULTS_DENY, true)) return [null, 'The setting "' . $key . '" can\'t have a mask default'];
+        if (!in_array($key, MASKADMIN_DEFAULTS_ALLOW, true)) return [null, 'The setting "' . $key . '" can\'t have a mask default'];
         if (!maskadmin_valid_value($value, 1)) return [null, 'Invalid value for "' . $key . '"'];
     }
     if (strlen(json_encode($in)) > MASKADMIN_DEFAULTS_MAX_BYTES) return [null, 'Defaults too large'];
@@ -427,8 +459,12 @@ function maskadmin_defaults_load(PDO $db, $mask) {
         $stmt->execute([$mask]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         $defaults = $row ? json_decode($row['defaults']) : null;
+        $allowed = new stdClass();   // only allow-listed keys leave the server, whatever the table holds
+        if (is_object($defaults)) {
+            foreach (MASKADMIN_DEFAULTS_ALLOW as $k) if (property_exists($defaults, $k)) $allowed->$k = $defaults->$k;
+        }
         return [
-            'defaults' => is_object($defaults) ? $defaults : new stdClass(),
+            'defaults' => $allowed,
             'updatedBy' => $row ? $row['updatedBy'] : '',
             'updatedAt' => $row ? $row['updatedAt'] : null,
         ];
@@ -438,7 +474,7 @@ function maskadmin_defaults_load(PDO $db, $mask) {
 /** Admins of a custom mask or the corp mask set the defaults. $defaults: decoded array, [] clears them. */
 function maskadmin_defaults_save(PDO $db, $mask, array $actor, $defaults) {
     if (!maskadmin_is_custom($mask) && !preg_match('/^[0-9]+\.2$/', (string) $mask)) return [false, 'Mask defaults are for custom masks and the corp mask', 400];
-    if (!maskadmin_is_admin($db, $mask, $actor['id'])) return [false, 'Only mask admins can set the mask defaults', 403];
+    if (!maskadmin_is_admin($db, $mask, $actor['id'], isset($actor['alliance']) ? $actor['alliance'] : null)) return [false, 'Only mask admins can set the mask defaults', 403];
     list($clean, $error) = maskadmin_validate_defaults($defaults);
     if ($clean === null) return [false, $error, 400];
     if (!$clean) {
@@ -455,8 +491,8 @@ function maskadmin_defaults_save(PDO $db, $mask, array $actor, $defaults) {
 
 // ---- what the Mask Admin tab shows ----
 
-function maskadmin_state(PDO $db, $mask, $viewerID, $search = '') {
-    $level = maskadmin_level($db, $mask, $viewerID);
+function maskadmin_state(PDO $db, $mask, $viewerID, $search = '', $allianceID = null) {
+    $level = maskadmin_level($db, $mask, $viewerID, $allianceID);
     $custom = maskadmin_is_custom($mask);
     $out = ['custom' => $custom, 'level' => $level, 'canManage' => $custom && maskadmin_is_manager($db, $mask, $viewerID), 'canAdmin' => $level !== null];
     if ($level === null) return $out;

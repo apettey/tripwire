@@ -41,7 +41,7 @@ if (!isset($mysql) || !($mysql instanceof PDO)) watchlist_fail(500, 'Database er
 $maskCorporation = discord_mask_corporation_db($mysql, $mask);
 $sessionCorporation = isset($_SESSION['corporationID']) ? (int) $_SESSION['corporationID'] : 0;
 $available = $maskCorporation !== null;
-$canEdit = $available && $maskCorporation === $sessionCorporation && checkAdmin($mask);
+$canEdit = $available && $maskCorporation === $sessionCorporation && maskadmin_corp_admin($mask);
 if ($canEdit && empty($_SESSION['watchlistCsrf'])) $_SESSION['watchlistCsrf'] = bin2hex(random_bytes(32));
 $csrf = $canEdit ? $_SESSION['watchlistCsrf'] : '';
 $characterName = isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : '';

@@ -151,18 +151,18 @@ check('direct entry gone', maskadmin_direct_entry($db, MASK_A, DIRECT), false);
 
 // defaults
 check('defaults by non-admin', maskadmin_defaults_save($db, MASK_A, $M1, ['sizeTags' => ['enabled' => false]])[2], 403);
-check('defaults on other mask by its non-admin', maskadmin_defaults_save($db, MASK_B, $O, ['a' => 1])[2], 403);
-check('defaults on a mask that is not mask-like', maskadmin_defaults_save($db, 'abc', $O, ['a' => 1])[2], 400);
+check('defaults on other mask by its non-admin', maskadmin_defaults_save($db, MASK_B, $O, ['sizeTags' => 1])[2], 403);
+check('defaults on a mask that is not mask-like', maskadmin_defaults_save($db, 'abc', $O, ['sizeTags' => 1])[2], 400);
 check('defaults denied key', maskadmin_defaults_save($db, MASK_A, $O, ['masks' => ['active' => '5.0']])[2], 400);
 check('defaults bad key', maskadmin_defaults_save($db, MASK_A, $O, ['__proto__' => 1])[2], 400);
-check('defaults html in a string', maskadmin_defaults_save($db, MASK_A, $O, ['a' => '<img src=x>'])[2], 400);
+check('defaults html in a string', maskadmin_defaults_save($db, MASK_A, $O, ['sizeTags' => '<img src=x>'])[2], 400);
 check('defaults list instead of object', maskadmin_defaults_save($db, MASK_A, $O, [1, 2])[2], 400);
-check('defaults too deep', maskadmin_defaults_save($db, MASK_A, $O, ['a' => [[[[[[1]]]]]]])[2], 400);
-check('defaults too large', maskadmin_defaults_save($db, MASK_A, $O, ['a' => array_fill(0, 50, str_repeat('x', 200)), 'b' => array_fill(0, 50, str_repeat('y', 200))])[2], 400);
+check('defaults too deep', maskadmin_defaults_save($db, MASK_A, $O, ['sizeTags' => [[[[[[1]]]]]]])[2], 400);
+check('defaults too large', maskadmin_defaults_save($db, MASK_A, $O, ['sizeTags' => array_fill(0, 50, str_repeat('x', 200)), 'soundMute' => array_fill(0, 50, str_repeat('y', 200))])[2], 400);
 check('defaults ok by granted admin', maskadmin_defaults_save($db, MASK_A, $G, ['sizeTags' => ['enabled' => false], 'soundMute' => ['enabled' => true, 'volume' => 0.5]])[0], true);
 check('defaults load', json_decode(json_encode(maskadmin_defaults_load($db, MASK_A)['defaults']), true), ['sizeTags' => ['enabled' => false], 'soundMute' => ['enabled' => true, 'volume' => 0.5]]);
 check('defaults of mask B are separate', (array) maskadmin_defaults_load($db, MASK_B)['defaults'], []);
-check('defaults on the corp mask by its admin', maskadmin_defaults_save($db, CORP_B . '.2', $CA, ['a' => 1])[0], true);
+check('defaults on the corp mask by its admin', maskadmin_defaults_save($db, CORP_B . '.2', $CA, ['sizeTags' => 1])[0], true);
 $db->prepare('DELETE FROM fork_mask_defaults WHERE maskID = ?')->execute([CORP_B . '.2']);
 check('defaults cleared', maskadmin_defaults_save($db, MASK_A, $O, [])[0], true);
 check('defaults gone', (array) maskadmin_defaults_load($db, MASK_A)['defaults'], []);
@@ -186,6 +186,68 @@ maskadmin_enforce_session($db);
 check('enforce_session: blocked, dropped', $_SESSION['mask'], CORP_A . '.2');
 maskadmin_unblock($db, MASK_A, $O, MEMBER2);
 $_SESSION = [];
+
+// canonical mask ids: a spelling MySQL reads as the same decimal must not slip past the block check
+maskadmin_block($db, MASK_A, $O, MEMBER2, 'canon');
+foreach (['990001.00', '0990001.00', '990001.0abc', ' 990001.0', '990001.0 ', "990001.0\n", '9.9e5.0', '1e1', '990001.0.0', '990001', '', '-990001.0', ' ', "990001.0\0", '990001.0%', "990001.0'", '99000100000.0', '0x10.0', '990001,0'] as $variant) {
+    check('blocked, mask "' . addcslashes($variant, "\0..\37") . '" -> corp mask', maskadmin_enforced_mask($db, $variant, MEMBER2, CORP_A), CORP_A . '.2');
+}
+check('blocked, leading zeros -> still blocked', maskadmin_enforced_mask($db, '0990001.0', MEMBER2, CORP_A), CORP_A . '.2');
+check('blocked, many leading zeros', maskadmin_enforced_mask($db, '0000990001.0', MEMBER2, CORP_A), CORP_A . '.2');
+check('blocked, non-string masks', [maskadmin_enforced_mask($db, null, MEMBER2, CORP_A), maskadmin_enforced_mask($db, ['990001.0'], MEMBER2, CORP_A), maskadmin_enforced_mask($db, 990001.0, MEMBER2, CORP_A)], [CORP_A . '.2', CORP_A . '.2', CORP_A . '.2']);
+check('unblocked: leading zeros are rewritten to the canonical id', maskadmin_enforced_mask($db, '0990001.0', MEMBER1, CORP_A), MASK_A);
+check('unblocked: "990001.00" is not a mask id', maskadmin_enforced_mask($db, '990001.00', MEMBER1, CORP_A), CORP_A . '.2');
+check('default masks keep their id', [maskadmin_enforced_mask($db, '0.0', MEMBER1, CORP_A), maskadmin_enforced_mask($db, MEMBER1 . '.1', MEMBER1, CORP_A), maskadmin_enforced_mask($db, '12.3', MEMBER1, CORP_A)], ['0.0', MEMBER1 . '.1', '12.3']);
+$_SESSION = ['mask' => '990001.0abc', 'characterID' => MEMBER1, 'corporationID' => CORP_A, 'options' => (object) ['masks' => (object) ['active' => '990001.0abc']]];
+maskadmin_enforce_session($db);
+check('enforce_session: junk mask reset, options too', [$_SESSION['mask'], $_SESSION['options']->masks->active], [CORP_A . '.2', CORP_A . '.2']);
+$_SESSION['mask'] = ['990001.0'];
+maskadmin_enforce_session($db);
+check('enforce_session: array mask reset', $_SESSION['mask'], CORP_A . '.2');
+$_SESSION['mask'] = '0990001.0';
+maskadmin_enforce_session($db);
+check('enforce_session: leading zeros rewritten', $_SESSION['mask'], MASK_A);
+maskadmin_unblock($db, MASK_A, $O, MEMBER2);
+
+// a grant counts only while the character has access (verifyMask's rule)
+$_SESSION = ['characterID' => GRANTED, 'corporationID' => CORP_A, 'allianceID' => null, 'admin' => 0];
+check('granted with access', [maskadmin_level($db, MASK_A, GRANTED), maskadmin_session_granted(MASK_A, true)], ['granted', true]);
+$db->prepare('DELETE FROM `groups` WHERE maskID = ? AND eveType = 2')->execute([MASK_A]);
+check('granted, corporation lost access', [maskadmin_level($db, MASK_A, GRANTED), maskadmin_session_granted(MASK_A, true), maskadmin_is_admin($db, MASK_A, GRANTED)], [null, false, false]);
+check('granted, corporation lost access: the grant row is still there', maskadmin_is_granted($db, MASK_A, GRANTED), true);
+$db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, 99000999, 3)')->execute([MASK_A]);
+check('granted, access through the alliance (session alliance)', [maskadmin_level($db, MASK_A, GRANTED, 99000999), maskadmin_level($db, MASK_A, GRANTED, 77)], ['granted', null]);
+$_SESSION['allianceID'] = 99000999;
+check('granted, session alliance', maskadmin_session_granted(MASK_A, true), true);
+$db->prepare('DELETE FROM `groups` WHERE maskID = ? AND eveType = 3')->execute([MASK_A]);
+$db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, ?, 2)')->execute([MASK_A, CORP_A]);
+check('granted again once access is back', maskadmin_session_granted(MASK_A, true), true);
+$_SESSION = [];
+
+// allow-list: a key that is not a Settings key, prototype names
+check('defaults: unknown key', maskadmin_defaults_save($db, MASK_A, $O, ['foo' => 1])[2], 400);
+check('defaults: __proto__ / constructor', [maskadmin_defaults_save($db, MASK_A, $O, ['__proto__' => ['x' => 1]])[2], maskadmin_defaults_save($db, MASK_A, $O, ['constructor' => 1])[2]], [400, 400]);
+check('defaults: nested __proto__ value key', maskadmin_defaults_save($db, MASK_A, $O, ['sizeTags' => ['__proto__' => 1]])[2], 400);
+check('defaults: upstream groups', maskadmin_defaults_save($db, MASK_A, $O, ['chain' => ['zoom' => 3]])[2], 400);
+$db->prepare("INSERT INTO fork_mask_defaults (maskID, `defaults`, updatedBy, updatedAt) VALUES (?, ?, 'x', NOW())")->execute([MASK_A, '{"masks":{"active":"5.0"},"sizeTags":{"enabled":false}}']);
+check('defaults: stored non-allowed keys are not served', array_keys((array) maskadmin_defaults_load($db, MASK_A)['defaults']), ['sizeTags']);
+$db->prepare('DELETE FROM fork_mask_defaults WHERE maskID = ?')->execute([MASK_A]);
+
+// api/auth.php (the REST API): a blocked character gets no mask data
+$hash = (function () { require_once(__DIR__ . '/../password_hash.php'); $h = new PasswordHash(8, false); return $h->HashPassword('api-test-pw'); })();
+$db->prepare("UPDATE accounts SET password = ? WHERE id = (SELECT userID FROM characters WHERE characterID = ?)")->execute([$hash, MEMBER2]);
+$apiUser = $db->query('SELECT username FROM accounts WHERE id = (SELECT userID FROM characters WHERE characterID = ' . MEMBER2 . ')')->fetchColumn();
+$apiMask = function ($maskID = MASK_A) use ($apiUser) {
+    $code = '$_SERVER["PHP_AUTH_USER"] = ' . var_export($apiUser, true) . '; $_SERVER["PHP_AUTH_PW"] = "api-test-pw"; $_REQUEST["maskID"] = ' . var_export($maskID, true)
+        . '; chdir("/opt/app/public"); require "../db.inc.php"; ob_start(); require "../api/auth.php"; ob_end_clean(); echo "MASK=" . var_export($maskID, true);';
+    return trim((string) shell_exec('php -r ' . escapeshellarg($code) . ' 2>/dev/null'));
+};
+check('api: member reads the mask', $apiMask(), 'MASK=\'' . MASK_A . '\'');
+maskadmin_block($db, MASK_A, $O, MEMBER2, 'api test');
+check('api: blocked member is refused', $apiMask(), 'MASK=NULL');
+check('api: blocked member, non-canonical spelling', $apiMask('990001.00'), 'MASK=NULL');
+maskadmin_unblock($db, MASK_A, $O, MEMBER2);
+check('api: unblocked again', $apiMask(), 'MASK=\'' . MASK_A . '\'');
 
 // ---- 2. HTTP ----
 function make_session($name, array $data) {
@@ -277,7 +339,7 @@ check('http: corp admin cannot revoke on A', post($sCorpAdmin, $csrfCA, ['mode' 
 check('http: granted on A unaffected', maskadmin_level($db, MASK_A, GRANTED), 'granted');
 
 // defaults over HTTP
-check('http: defaults by a member', post($sMember, '', ['mode' => 'defaults-save', 'defaults' => ['a' => 1]])[0], 403);
+check('http: defaults by a member', post($sMember, '', ['mode' => 'defaults-save', 'defaults' => ['sizeTags' => 1]])[0], 403);
 list($st, $out) = post($sOwner, $csrfOwner, ['mode' => 'defaults-save', 'defaults' => ['sizeTags' => ['enabled' => false]]]);
 check('http: owner saves defaults', [$st, $out['defaults']['sizeTags']['enabled'] ?? null], [200, false]);
 check('http: bad defaults', post($sOwner, $csrfOwner, ['mode' => 'defaults-save', 'defaults' => ['masks' => 1]])[0], 400);
@@ -303,6 +365,44 @@ post($sOwner, $csrfOwner, ['mode' => 'revoke', 'characterID' => MEMBER1]);
 check('http: a plain member can not (admin.php access-list)', isset(http('GET', 'admin.php?mode=access-list', $sMember)[1]['results']), false);
 check('http: granted admin cannot delete the mask (masks.php)', http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'delete', 'mask' => MASK_A]))[1]['result'] ?? null, null);
 check('http: mask A still exists', (int) $db->query("SELECT COUNT(*) FROM masks WHERE maskID = '" . MASK_A . "'")->fetchColumn(), 1);
+
+// upstream: any logged-in user can put a non-canonical custom mask id into their session through options.php (verifyMask lets
+// "12.0abc" through on PHP 8), MySQL reads it as the decimal 12.0. The fork's db.inc.php hook resets it on the next request.
+$uidOutsider = (int) $db->query('SELECT userID FROM characters WHERE characterID = ' . OUTSIDER)->fetchColumn();
+$sOutsider = make_session('outsider', ['userID' => $uidOutsider, 'mask' => CORP_X . '.2', 'characterID' => OUTSIDER, 'characterName' => 'Test Outsider', 'corporationID' => CORP_X, 'allianceID' => null, 'admin' => 0, 'super' => 0, 'username' => 'maskadmin-test-5']);
+foreach (['990001.0abc', '990001.00', '0990001.0', ' 990001.0', '990001.0%'] as $spelling) {
+    http('POST', 'options.php', $sOutsider, http_build_query(['mode' => 'set', 'options' => json_encode(['masks' => ['active' => $spelling]])]));
+    list($st, $out) = http('GET', 'mask_admins.php?mode=defaults', $sOutsider);
+    check('http: outsider with mask "' . $spelling . '" is not on mask A', [$st, in_array($out['mask'] ?? null, [MASK_A, '990001.0abc', '990001.00', '0990001.0'], true)], [200, false]);
+    list($st, $out) = http('GET', 'mask_admins.php?mode=get', $sOutsider);
+    check('http: outsider with mask "' . $spelling . '" gets no admin data', [$st, $out['canAdmin'] ?? null], [200, false]);
+}
+check('upstream verifyMask lets 990001.0abc through (documents why the hook canonicalises)', (function () {
+    $_SESSION = ['characterID' => OUTSIDER, 'corporationID' => CORP_X, 'allianceID' => null];
+    $r = verifyMask('990001.0abc');
+    $_SESSION = [];
+    return $r;
+})(), '990001.0abc');
+check('MySQL reads 990001.0abc as mask 990001.0', (string) $db->query("SELECT maskID FROM masks WHERE maskID = '990001.0abc'")->fetchColumn(), '990001.0');
+// a blocked member that edits the stored session mask by hand (spelled differently) is still dropped
+maskadmin_block($db, MASK_A, $O, MEMBER2, 'spelling');
+foreach (['990001.0', '0990001.0', '990001.00', '990001.0abc'] as $spelling) {
+    $sid = make_session('blockedspell', ['userID' => 1, 'mask' => $spelling, 'characterID' => MEMBER2, 'characterName' => 'Test Member Two', 'corporationID' => CORP_A, 'allianceID' => null, 'admin' => 0, 'super' => 0]);
+    check('http: blocked member with session mask "' . $spelling . '"', http('GET', 'mask_admins.php?mode=defaults', $sid)[1]['mask'] ?? null, CORP_A . '.2');
+}
+maskadmin_unblock($db, MASK_A, $O, MEMBER2);
+
+// granted admins and the upstream access-list editor / the corp-only fork tabs
+$accessBefore = (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "'")->fetchColumn();
+list($st, $out) = http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'save', 'mask' => MASK_A, 'adds' => [GRANTED . '_1373', '12345_2']]));
+check('http: granted admin cannot edit the access list (save)', [$out['result'] ?? null, (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "'")->fetchColumn()], [null, $accessBefore]);
+check('http: granted admin cannot read the edit list', isset(http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'edit', 'mask' => MASK_A]))[1]['results']), false);
+list($st, $out) = http('POST', 'masks.php', $sOwner, http_build_query(['mode' => 'save', 'mask' => MASK_A, 'adds' => ['990009_1373']]));
+check('http: the owner still edits the access list', [$out['result'] ?? null, (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "' AND eveID = 990009")->fetchColumn()], [true, 1]);
+$db->prepare('DELETE FROM `groups` WHERE maskID = ? AND eveID = 990009')->execute([MASK_A]);
+check('http: fight.php: corp admin edits, a granted admin of the same mask does not', [http('GET', 'fight.php', $sCorpAdmin)[1]['canEdit'] ?? null, http('GET', 'fight.php', $sCorpUser)[1]['canEdit'] ?? null], [true, false]);
+check('http: watchlist.php: corp admin edits, a granted admin does not', [http('GET', 'watchlist.php', $sCorpAdmin)[1]['canEdit'] ?? null, http('GET', 'watchlist.php', $sCorpUser)[1]['canEdit'] ?? null], [true, false]);
+check('http: discord.php: a granted admin is refused', http('GET', 'discord.php', $sCorpUser)[0], 403);
 
 // audit trail
 list($st, $out) = http('GET', 'mask_admins.php?mode=get', $sOwner);

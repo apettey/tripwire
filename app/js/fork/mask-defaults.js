@@ -11,9 +11,12 @@ const maskDefaults = {
 	// A member who picks a value that is exactly the default is not told apart from one who never chose (their value
 	// is then not saved), so it follows later changes of the default.
 	URL: "mask_admins.php",
-	// Options that are the member's own or upstream's: never a mask default (the server refuses them too)
-	DENY: ["masks", "grid", "tracking", "favorites", "background", "uiscale", "buttons", "chain", "signatures", "character", "userID", "whatsNew", "localOptions"],
-	KEY: /^[A-Za-z][A-Za-z0-9_]{0,39}$/,
+	// The only options a mask default may carry: the keys of the fork's Settings rows. The same list as the server's
+	// MASKADMIN_DEFAULTS_ALLOW (maskadmin/maskadmin.inc.php); app/js-test/fork/mask-defaults.test.js checks both against
+	// the keys the forkSettings.register() calls use, so a new setting with a key has to be added to both.
+	ALLOWED: ["autoMass", "chainKillFeed", "favoritesPanel", "favouritesRouteStrip", "highsecRegion", "intelScans", "jumpReturn",
+		"killReporting", "preserveMass", "rollPlan", "rolling", "rollingCalc", "routeHoleFilters", "sigAge", "sizeTags", "skyhooksPanel", "smartNotes",
+		"soundMute", "structures", "systemKillFeed", "systemResidents", "systemThreat", "theraRoute", "watchlist"],
 
 	defaults: {},	// the active mask's defaults {optionsKey: value}
 	updatedBy: "",
@@ -41,7 +44,7 @@ const maskDefaults = {
 
 	/** Is this an options key a mask default may be set for */
 	allowedKey: function(key) {
-		return typeof key === "string" && maskDefaults.KEY.test(key) && maskDefaults.DENY.indexOf(key) < 0;
+		return typeof key === "string" && maskDefaults.ALLOWED.indexOf(key) >= 0;	// "__proto__", "constructor" etc. are not in the list
 	},
 
 	/** The defaults object from the server, cleaned to allowed keys (a bad answer = no defaults) */

@@ -41,14 +41,14 @@ function maskadmin_fail($code, $message) {
 if (!isset($mysql) || !($mysql instanceof PDO)) maskadmin_fail(500, 'Database error');
 
 $mask = (string) $_SESSION['mask'];   // already checked for blocks when db.inc.php was loaded
-$actor = array('id' => (int) $_SESSION['characterID'], 'name' => isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : '');
+$actor = array('alliance' => isset($_SESSION['allianceID']) ? $_SESSION['allianceID'] : null, 'id' => (int) $_SESSION['characterID'], 'name' => isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : '');
 $method = $_SERVER['REQUEST_METHOD'];
 $csrfSession = isset($_SESSION['maskAdminCsrf']) ? (string) $_SESSION['maskAdminCsrf'] : '';
 
 try {
 	maskadmin_run($mysql, function () use ($mysql) { $mysql->query('SELECT 1 FROM fork_mask_audit LIMIT 1'); });
 
-	$canAdmin = maskadmin_is_admin($mysql, $mask, $actor['id']);
+	$canAdmin = maskadmin_is_admin($mysql, $mask, $actor['id'], $actor['alliance']);
 	if ($canAdmin && $csrfSession === '') {
 		$csrfSession = bin2hex(random_bytes(32));
 		$_SESSION['maskAdminCsrf'] = $csrfSession;
@@ -63,7 +63,7 @@ try {
 			exit();
 		}
 		if ($mode !== 'get') maskadmin_fail(400, 'Unknown mode');
-		$output = maskadmin_state($mysql, $mask, $actor['id'], isset($_GET['q']) ? maskadmin_clean_text($_GET['q'], 50) : '');
+		$output = maskadmin_state($mysql, $mask, $actor['id'], isset($_GET['q']) ? maskadmin_clean_text($_GET['q'], 50) : '', $actor['alliance']);
 		if ($canAdmin) $output['csrf'] = $csrfSession;
 		echo json_encode($output);
 		exit();
@@ -109,7 +109,7 @@ try {
 	}
 	if (!$result[0]) maskadmin_fail($result[2], $result[1]);
 
-	$output = maskadmin_state($mysql, $mask, $actor['id']);
+	$output = maskadmin_state($mysql, $mask, $actor['id'], '', $actor['alliance']);
 	$output['result'] = true;
 	$output['csrf'] = $csrfSession;
 	echo json_encode($output);
