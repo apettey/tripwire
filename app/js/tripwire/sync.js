@@ -28,7 +28,6 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
         // so the list comes back whole.
         data.signatureCount = tripwire.forceFullSync ? -1 : tripwire.serverSignatureCount;
         data.signatureTime = tripwire.forceFullSync ? "1970-01-01 00:00:00" : maxTimeByProperty(this.client.signatures, "modifiedTime");
-        tripwire.forceFullSync = false;
 
         data.flareCount = chain.data.flares ? chain.data.flares.flares.length : 0;
         data.flareTime = chain.data.flares ? chain.data.flares.last_modified : 0;
@@ -100,6 +99,7 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
             }
 
             if (data.signatures) {
+                tripwire.forceFullSync = false;	// the full list arrived; a failed request keeps asking
                 tripwire.parse(data, mode);
             } else if (sentAction && data.resultSet && data.resultSet[0] && data.resultSet[0].result == true) {
                 // The action succeeded but the list did not come back: the

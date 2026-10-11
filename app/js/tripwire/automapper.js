@@ -77,18 +77,20 @@ tripwire.autoMapper = function(from, to) {
 		return false;
 	}	 
 
-    var payload = {"signatures": {"add": [], "update": []}, "automap": { "character": tripwire.client.EVE.characterID } };
+    var payload = {"signatures": {"add": [], "update": []}, "automap": { "character": tripwire.client.EVE.characterID, "from": from, "to": to } };
 
     var wormholes = wormholesForJump(from, to, tripwire.client.wormholes, tripwire.client.signatures);
-    var rejump = false;
+    var rejump = false, candidates = [];
     if (!wormholes.length) {
         // No hole out of `from` matches: the hole into `to` may already be scanned with its far side unset (re-jump)
-        wormholes = automapperRejump.holesIntoDestination(from, to, tripwire.client.wormholes, tripwire.client.signatures).map(function(c) { return c.wormhole; });
+        candidates = automapperRejump.holesIntoDestination(from, to, tripwire.client.wormholes, tripwire.client.signatures);
+        wormholes = candidates.map(function(c) { return c.wormhole; });
         rejump = wormholes.length > 0;
     }
 	
     if (wormholes.length) {
-        if (wormholes.length > 1) {
+        // A single re-jump candidate is only linked without asking when its Leads To / hole type match exactly
+        if (wormholes.length > 1 || (rejump && !candidates[0].exact)) {
 			console.log('Automapper: Multiple sigs matched, asking which one to update');
             $("#dialog-select-signature").dialog({
                 autoOpen: true,
@@ -100,6 +102,15 @@ tripwire.autoMapper = function(from, to) {
                     },
                     Ok: function() {
                         var i = $("#dialog-select-signature [name=sig]:checked").val();
+                        if (i === undefined) { return; }
+                        if (i === "new") {
+                            payload.signatures.add.push(automapperRejump.newHole(from, to));
+                            tripwire.refresh('refresh', payload, function(data) {
+                                recordUndo(data);
+                                $("#dialog-select-signature").dialog("close");
+                            });
+                            return;
+                        }
                         var wormhole = wormholes[i];
                         var signature = tripwire.client.signatures[wormhole.initialID];
                         var signature2 = tripwire.client.signatures[wormhole.secondaryID];
@@ -150,6 +161,11 @@ tripwire.autoMapper = function(from, to) {
                         $(trElem).find('td').wrapInner("<label for='sig"+i+"' />");
                         $("#dialog-select-signature .optionsTable tbody").append(trElem);
                     });
+                    if (rejump) {
+                        // The hole may not be the one we came through: offer a fresh unknown hole instead
+                        $("#dialog-select-signature .optionsTable tbody").append("<tr><td><input type='radio' name='sig' value='new' id='signew' /></td>"
+                          + "<td class='centerAlign' colspan='5'><label for='signew'>New hole (none of these)</label></td></tr>");
+                    }
                 }, close: function() {
 					automapState.pendingDecision = false;
 				}
@@ -171,28 +187,11 @@ tripwire.autoMapper = function(from, to) {
     } else {
         // Nothing matches, create a new wormhole
 		console.log('Automapper: No signatures match, creating a new unknown hole');
-        payload.signatures.add.push({
-            "wormhole": {
-                "type": null,
-                "parent": "initial",
-                "life": "stable",
-                "mass": "stable"
-            },
-            "signatures": [
-                {
-                    "systemID": from,
-                    "type": "wormhole"
-                },
-                {
-                    "systemID": to,
-                    "type": "wormhole"
-                }
-            ]
-        });
+        payload.signatures.add.push(automapperRejump.newHole(from, to));
     }
 
-    if (payload.signatures.add.length || payload.signatures.update.length) {
-        var success = function(data) {
+    // Records undo entries for a finished automap request (also used by the picker's "New hole")
+    function recordUndo(data) {
             if (data.resultSet && data.resultSet[0].result == true) {
                 $("#undo").removeClass("disabled");
 
@@ -217,9 +216,10 @@ tripwire.autoMapper = function(from, to) {
 
                 sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo));
             }
-        }
+    }
 
-        tripwire.refresh('refresh', payload, success);
+    if (payload.signatures.add.length || payload.signatures.update.length) {
+        tripwire.refresh('refresh', payload, recordUndo);
     }
 }
 

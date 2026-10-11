@@ -422,6 +422,14 @@ function removeWormhole($wormhole, $mysql) {
     return array(false, null, $stmt->errorInfo());
 }
 
+// From/to of the automapped jump: the ones the client sent in the payload (a re-jump can link a hole whose initial
+// signature is in the destination, so initial/secondary order is not the jump direction), else initial to secondary.
+function automapJumpEnds($automap, $fromSystemID, $toSystemID) {
+    $from = is_array($automap) && isset($automap['from']) && is_numeric($automap['from']) ? (int)$automap['from'] : 0;
+    $to = is_array($automap) && isset($automap['to']) && is_numeric($automap['to']) ? (int)$automap['to'] : 0;
+    return $from && $to ? array($from, $to) : array($fromSystemID, $toSystemID);
+}
+
 function addAutomapMass($wormhole, $sig1, $sig2, $automap, $mysql) {
     // Just automapped a new hole, so add a mass record as the tracking event won't have matched it
     // $automap is in the payload (see automap.js), the other objects have been db-resolved
@@ -438,11 +446,12 @@ function addAutomapMass($wormhole, $sig1, $sig2, $automap, $mysql) {
     if($tracking['shipTypeID']) {
         $query = 'insert into jumps (wormholeID, characterID, characterName, fromID, toID, shipTypeID, shipType, maskID) values (:wormholeID, :characterID, :characterName, :fromID, :toID, :shipTypeID, :shipType, :maskID)';
         $stmt = $mysql->prepare($query);
+        list($fromID, $toID) = automapJumpEnds($automap, $sig1->systemID, $sig2->systemID);
         $stmt->bindValue(':wormholeID', $wormhole->id);
         $stmt->bindValue(':characterID', $automap['character']);
         $stmt->bindValue(':characterName', $tracking['characterName']);
-        $stmt->bindValue(':fromID', $sig1->systemID);
-        $stmt->bindValue(':toID', $sig2->systemID);
+        $stmt->bindValue(':fromID', $fromID);
+        $stmt->bindValue(':toID', $toID);
         $stmt->bindValue(':shipTypeID', $tracking['shipTypeID']);
         $stmt->bindValue(':shipType', $tracking['shipTypeName']);
         $stmt->bindValue(':maskID', $maskID);
@@ -507,10 +516,11 @@ if (isset($_POST['signatures'])) {
                 // Wormhole
                 if (isset($request['signatures']) && count($request['signatures'])  > 1) {
                     $automapLock = isset($_REQUEST['automap']) ? automapLock($request['signatures'][0], $request['signatures'][1], $mysql) : null;
+                    // The lock is always released (finally), also on an exception: connections can be persistent
+                    try {
                     if ($automapLock && $automapLock['existing']) {
                         // The other pilot/tab got here first. Success without results, so no undo is recorded
                         // for a connection this request did not make; the next sync brings the list whole.
-                        automapUnlock($automapLock, $mysql);
                         $output['resultSet'][] = array('result' => true, 'value' => 'Connection already mapped');
                         continue;
                     }
@@ -531,7 +541,9 @@ if (isset($_POST['signatures'])) {
                             removeSignature($signature, $mysql);
                         }
                     }
-                    automapUnlock($automapLock, $mysql);
+                    } finally {
+                        automapUnlock($automapLock, $mysql);
+                    }
                     $output['resultSet'][] = array('result' => $result, 'value' => $msg);
                     if ($result) {
                       $output['results'][] = array('wormhole' => $wormhole->output(), 'signatures' => array($parent->output(), $child->output()));

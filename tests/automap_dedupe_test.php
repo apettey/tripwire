@@ -94,6 +94,22 @@ try {
 	// Missing system ids: no lock at all
 	check('no system ids, no lock', automapLock(array(), array('systemID' => $B), $mysql), null);
 	automapUnlock(null, $mysql);
+
+	// Jump direction for the mass log: the client's from/to win over the signature order (re-jump linked to a hole
+	// whose initial signature is in the destination), fallback to initial -> secondary
+	check('jump ends from the payload', automapJumpEnds(array('character' => 1, 'from' => '31000102', 'to' => '31000101'), $A, $B), array($B, $A));
+	check('jump ends fallback without from/to', automapJumpEnds(array('character' => 1), $A, $B), array($A, $B));
+	check('jump ends fallback with junk', automapJumpEnds(array('from' => 'x', 'to' => 5), $A, $B), array($A, $B));
+	check('jump ends fallback without payload', automapJumpEnds(null, $A, $B), array($A, $B));
+
+	// The lock is released after an exception inside try/finally, so a persistent connection does not keep it
+	$lock = automapLock(array('systemID' => $A), array('systemID' => $C), $mysql);
+	try { try { throw new Exception('boom'); } finally { automapUnlock($lock, $mysql); } } catch (Exception $e) {}
+	$other = connect();
+	$stmt = $other->prepare('SELECT GET_LOCK(?, 0)');
+	$stmt->execute(array($lock['name']));
+	check('lock free after exception path', (int)$stmt->fetchColumn(), 1);
+	$other = null;
 } catch (Throwable $e) {
 	$failures++;
 	fwrite(STDERR, 'ERROR ' . $e->getMessage() . "\n");

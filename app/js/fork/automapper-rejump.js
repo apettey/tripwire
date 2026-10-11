@@ -24,9 +24,13 @@ const automapperRejump = {
 			if (initial.systemID == to && secondary.systemID != to) { dest = initial; other = secondary; }
 			else if (secondary.systemID == to && initial.systemID != to) { dest = secondary; other = initial; }
 			else { return; }
-			if (!automapperRejump.isUnset(other.systemID, fromType, fromClass)) { return; }
+			const linked = other.systemID == from;	// Leads To is exactly the origin system
+			if (!linked && !automapperRejump.isUnset(other.systemID, fromType, fromClass)) { return; }
 			if (!automapperRejump.typeFits(wormhole, dest.id, fromType, toType)) { return; }
-			found.push({ wormhole: wormhole, dest: dest.id, other: other.id });
+			found.push({
+				wormhole: wormhole, dest: dest.id, other: other.id,
+				exact: linked || automapperRejump.typeIsExact(wormhole, dest.id, fromType)
+			});
 		});
 		return found.sort(function(a, b) { return a.wormhole.id - b.wormhole.id; });
 	},
@@ -41,6 +45,30 @@ const automapperRejump = {
 		if (typeName === fromType) { return true; }
 		const classes = systemAnalysis.classForTypeName(typeName);
 		return !!(classes && fromClass !== undefined && classes.indexOf(fromClass) >= 0);
+	},
+
+	/** Is the hole's type known, carried by the destination-side signature, and leading to exactly the origin's
+		class? (K162, no type or a type on the far side tells us nothing certain.) Only then is a single candidate
+		linked without asking. */
+	typeIsExact: function(wormhole, destSigID, fromType) {
+		const info = wormhole.type && appData.wormholes[wormhole.type];
+		if (!info || wormhole.type === 'K162' || !info.leadsTo) { return false; }
+		const realID = wormhole.parent ? wormhole[wormhole.parent + 'ID'] : null;
+		return realID !== null && realID !== undefined && realID == destSigID && info.leadsTo === fromType;
+	},
+
+	/** The payload entry that adds a new, unknown hole between the two systems of a jump. */
+	newHole: function(from, to) {
+		return {
+			wormhole: { type: null, parent: 'initial', life: 'stable', mass: 'stable' },
+			signatures: [{ systemID: from, type: 'wormhole' }, { systemID: to, type: 'wormhole' }]
+		};
+	},
+
+	/** From/to of a jump for the mass log: the ones the client sent, else the signatures' systems (initial to secondary). */
+	jumpEnds: function(automap, sig1SystemID, sig2SystemID) {
+		const from = automap && parseInt(automap.from, 10), to = automap && parseInt(automap.to, 10);
+		return from && to ? { from: from, to: to } : { from: sig1SystemID, to: sig2SystemID };
 	},
 
 	/** Does the wormhole's known type agree with the jump? The side that carries the type leads to the other

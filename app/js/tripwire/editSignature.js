@@ -39,9 +39,9 @@ tripwire.editSig = function(edit, disabled) {
 
     $("#sigTable").trigger("update");
     // Update counter
-    if (wormhole.life == "critical" || (edit.type != "wormhole" && parseInt(edit.lifeLength) !== 0)) {
+    if (wormhole.life == "critical") {
         $(tr).find('span[data-age]').countdown({until: moment.utc(edit.lifeLeft).toDate(), onExpiry: this.pastEOL, alwaysExpire: true, compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime})
-            .toggleClass('critical', wormhole.life == "critical");
+            .addClass('critical');
     } else {
         $(tr).find('span[data-age]').countdown({since: moment.utc(edit.lifeTime).toDate(), compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime});
     }

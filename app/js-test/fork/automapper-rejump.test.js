@@ -42,9 +42,24 @@ describe('automapperRejump.holesIntoDestination', () => {
 		assert.equal(find(C1, C3, holes({}, C3, G_DANGEROUS)).length, 0);
 		assert.equal(find(LS, C3, holes({}, C3, G_HS)).length, 0);
 	});
-	it('already linked to the origin or to another real system is not a candidate', () => {
-		assert.equal(find(C2, C3, holes({}, C3, C2)).length, 0);
+	it('linked to another real system is not a candidate', () => {
 		assert.equal(find(C2, C3, holes({}, C3, C4)).length, 0);
+	});
+	it('Leads To exactly the origin system is a candidate and exact', () => {
+		const c = find(C2, C3, holes({}, C3, C2));
+		assert.equal(c.length, 1);
+		assert.equal(c[0].exact, true);
+	});
+	it('exact: only a known hole type on the destination side that leads to the origin class', () => {
+		assert.equal(find(C2, C3, holes({ type: 'N766', parent: 'initial' }, C3, null))[0].exact, true);
+		// the type is on the far side: nothing certain about the origin
+		assert.equal(find(C1, C2, holes({ type: 'N766', parent: 'initial' }, null, C2))[0].exact, false);
+	});
+	it('not exact: K162, no type, unset or generic Leads To', () => {
+		assert.equal(find(C2, C3, holes({ type: 'K162', parent: 'initial' }, C3, null))[0].exact, false);
+		assert.equal(find(C2, C3, holes({}, C3, null))[0].exact, false);
+		assert.equal(find(C2, C3, holes({}, C3, G_C2))[0].exact, false);
+		assert.equal(find(C2, C3, holes({}, C3, G_UNKNOWN))[0].exact, false);
 	});
 	it('a hole entirely elsewhere is not a candidate', () => {
 		assert.equal(find(C2, C3, holes({}, C4, null)).length, 0);
@@ -79,6 +94,20 @@ describe('automapperRejump.holesIntoDestination', () => {
 	it('missing signatures and empty input are ignored', () => {
 		assert.deepEqual(automapperRejump.holesIntoDestination(C2, C3, {}, {}), []);
 		assert.deepEqual(automapperRejump.holesIntoDestination(C2, C3, { 10: { id: 10, initialID: 11, secondaryID: 12 } }, { 11: { id: 11, systemID: C3 } }), []);
+	});
+});
+
+describe('automapperRejump.newHole / jumpEnds', () => {
+	it('new hole payload joins the two systems', () => {
+		const h = automapperRejump.newHole(C2, C3);
+		assert.deepEqual(h.signatures, [{ systemID: C2, type: 'wormhole' }, { systemID: C3, type: 'wormhole' }]);
+		assert.equal(h.wormhole.type, null);
+		assert.equal(h.wormhole.parent, 'initial');
+	});
+	it('jump ends come from the payload, else the signature systems', () => {
+		assert.deepEqual(automapperRejump.jumpEnds({ from: '5', to: '6' }, 1, 2), { from: 5, to: 6 });
+		assert.deepEqual(automapperRejump.jumpEnds({}, 1, 2), { from: 1, to: 2 });
+		assert.deepEqual(automapperRejump.jumpEnds(undefined, 1, 2), { from: 1, to: 2 });
 	});
 });
 

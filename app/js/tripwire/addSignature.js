@@ -34,7 +34,7 @@ tripwire.addSig = function(add, option, disabled) {
     var option = option || {};
     var animate = typeof(option.animate) !== 'undefined' ? option.animate : true;
     var disabled = disabled || false;
-    var wormhole = {};
+    var wormhole;
 
 	const returnLinkText = add.signatureID ? '<a class="return-link" href="#" onclick="tripwire.setReturnSig(event, ' + add.id + ')">&gt;&gt; Set ' + 
 				add.signatureID.substring(0, 3).toUpperCase() + '-' + add.signatureID.substring(3) +
@@ -79,11 +79,10 @@ tripwire.addSig = function(add, option, disabled) {
     $("#sigTable").append(tr);
 
     // Add counter
-    // Non-wormhole signatures count down to their expiry too (astriania/tripwire 655edf6, MIT)
-    if (wormhole.life == "critical" || (add.type != "wormhole" && parseInt(add.lifeLength) !== 0)) {
+    if (wormhole && wormhole.life != "stable") {
         $(tr).find('span[data-age]').countdown({until: moment.utc(add.lifeLeft).toDate(), onExpiry: this.pastEOL, alwaysExpire: true, compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime})
             // .countdown('pause')
-            .toggleClass('critical', wormhole.life == "critical")
+            .addClass('critical')
             // .countdown('resume');
     } else {
         $(tr).find('span[data-age]').countdown({since: moment.utc(add.lifeTime).toDate(), compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime});
