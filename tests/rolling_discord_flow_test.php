@@ -124,7 +124,7 @@ if (($login['result'] ?? '') !== 'success') { fwrite(STDERR, "login failed (run 
 check('logged in on the corp mask', (string) $login['session']['mask'], $mask);
 
 function pm_mark($wormholeID, $note = '') { global $jar; return http('POST', 'rolling.php', $jar, http_build_query(['mode' => 'set', 'wormholeID' => $wormholeID, 'note' => $note]), ['X-Requested-With: XMLHttpRequest']); }
-function pm_unmark($wormholeID) { global $jar; return http('POST', 'rolling.php', $jar, http_build_query(['mode' => 'clear', 'wormholeID' => $wormholeID]), ['X-Requested-With: XMLHttpRequest']); }
+function pm_unmark($wormholeID, $mode = 'clear') { global $jar; return http('POST', 'rolling.php', $jar, http_build_query(['mode' => $mode, 'wormholeID' => $wormholeID]), ['X-Requested-With: XMLHttpRequest']); }
 function queued() {
     global $db, $mask;
     $stmt = $db->prepare("SELECT COUNT(*) FROM discord_outbox WHERE maskID = ? AND status = 'queued' AND kind LIKE 'rolling%'");
@@ -215,9 +215,18 @@ $db->prepare('DELETE FROM wormholes WHERE id = ?')->execute([$doomed]);
 $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'rollGone']);
 check('hole gone: the prune pass queues one clear', [discord_rolling_clear_gone($db), discord_rolling_clear_gone($db)], [1, 0]);
 pm_flush();
-check('hole gone: "Hole collapsed", nobody pinged', channel('hole gone from the map'), [[$struck . "\nHole collapsed at HH:MM EVE", true, true]]);
+check('hole gone: "Hole closed" + who was rolling it, nobody pinged', channel('hole gone from the map'), [[$struck . "\nHole closed at HH:MM EVE (rolling by " . discord_escape($who) . ")", true, true]]);
 $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'rollGone']);
 check('hole gone: not again (the message is struck now)', discord_rolling_clear_gone($db), 0);
+
+// "Stop rolling > Rolled (closed)": the same text as a gone hole, by the pilot who pressed it; plain "Stop rolling" stays "Done"
+reset_all();
+pm_mark($inChain, '');
+pm_flush();
+[$status, $out] = pm_unmark($inChain, 'rolled');
+check('rolled: the endpoint answers at once and the flag is gone', [$status, $out['result'], count($out['flags'])], [200, true, 0]);
+pm_flush();
+check('rolled: struck through + "Rolled by" + the EVE time', channel('rolled'), [[$struck . "\nRolled by " . discord_escape($who) . " at HH:MM EVE", true, true]]);
 
 reset_all();
 pm_mark($inChain, 'x');

@@ -41,3 +41,57 @@
 #rolling-calc .rolling-warning { color: #ff7a6a; font-weight: bold; }
 #rolling-calc .rolling-caution { color: #f0b030; }
 #rolling-calc .rolling-hint { color: #9aa6ae; font-style: italic; }
+
+/* Ship buttons: coloured by the verdict of an out-and-back with that ship, always with an icon */
+#rolling-calc .rolling-ship-btn {
+	margin: 1px 2px;
+	padding: 1px 6px;
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 2px solid #3a4650;
+	border-radius: 3px;
+	cursor: pointer;
+}
+#rolling-calc .rolling-ship-btn.selected { font-weight: bold; box-shadow: 0 0 0 1px #c0c8cc; }
+#rolling-calc .rolling-btn-icon { display: inline-block; min-width: 1em; text-align: center; font-weight: bold; }
+#rolling-calc .rolling-btn-safe { border-color: #6fcf6f; }
+#rolling-calc .rolling-btn-safe .rolling-btn-icon { color: #6fcf6f; }
+#rolling-calc .rolling-btn-may { border-color: #f0b030; }
+#rolling-calc .rolling-btn-may .rolling-btn-icon { color: #f0b030; }
+#rolling-calc .rolling-btn-collapse,
+#rolling-calc .rolling-btn-too-heavy { border-color: #d03a2a; }
+#rolling-calc .rolling-btn-collapse .rolling-btn-icon,
+#rolling-calc .rolling-btn-too-heavy .rolling-btn-icon { color: #ff7a6a; }
+
+/* How to roll this hole */
+#rolling-plan {
+	margin: 4px 0 6px;
+	padding: 4px 6px;
+	border: 1px solid #3a4650;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.03);
+}
+#rolling-plan summary { cursor: pointer; }
+#rolling-plan p { margin: 2px 0; }
+#rolling-plan .rolling-note { color: #9aa6ae; }
+#rolling-plan .rolling-warning { color: #ff7a6a; font-weight: bold; }
+#rolling-plan .rolling-caution { color: #f0b030; }
+#rolling-plan .rolling-hint { color: #9aa6ae; font-style: italic; }
+#rolling-plan ul.rolling-steps { list-style: none; margin: 4px 0; padding: 0; }
+#rolling-plan li.rolling-step { margin: 1px 0; padding: 1px 6px; border-left: 4px solid #3a4650; }
+#rolling-plan li.rolling-step-safe { border-left-color: #6fcf6f; }
+#rolling-plan li.rolling-step-may { border-left-color: #f0b030; }
+#rolling-plan li.rolling-step-will { border-left-color: #d03a2a; }
+#rolling-plan .rolling-step-num { display: inline-block; min-width: 1.6em; color: #9aa6ae; }
+#rolling-plan .rolling-step-icon { display: inline-block; min-width: 1em; font-weight: bold; }
+#rolling-plan .rolling-step-safe .rolling-step-icon { color: #6fcf6f; }
+#rolling-plan .rolling-step-may .rolling-step-icon { color: #f0b030; }
+#rolling-plan .rolling-step-will .rolling-step-icon { color: #ff7a6a; }
+#rolling-plan .rolling-step-status { float: right; margin-left: 12px; font-weight: bold; }
+#rolling-plan li.rolling-more { margin: 1px 0; padding: 1px 6px 1px 34px; color: #9aa6ae; font-style: italic; }
+
+/* Jump log: running total and worst-case mass left */
+#massTable .rolling-log-cell, #massTable th.rolling-log-head { text-align: right; padding-left: 10px; white-space: nowrap; }
+
+.rollplan-input { width: 48px; }

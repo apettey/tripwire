@@ -56,13 +56,15 @@
 	border-radius: 3px;
 }
 #hole-rolling-panel .hr-line .hr-glyph { font-size: 13px; }
-#hole-rolling-panel .hr-line .hr-clear {
+#hole-rolling-panel .hr-line .hr-clear,
+#hole-rolling-panel .hr-line .hr-rolled {
 	float: right;
 	font-weight: normal;
 	font-size: 11px;
 	color: #3a2200;
 	text-decoration: underline;
 }
+#hole-rolling-panel .hr-line .hr-rolled { margin-right: 12px; }
 #hole-rolling-panel .hr-meta {
 	margin: 2px 0 0 2px;
 	color: #e0c890;

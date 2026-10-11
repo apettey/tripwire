@@ -310,4 +310,179 @@ describe('Rolling calculator', () => {
 		it('off when switched off', () => assert.equal(rollingCalc.enabled({ rollingCalc: { enabled: false } }), false));
 		it('on when switched on', () => assert.equal(rollingCalc.enabled({ rollingCalc: { enabled: true } }), true));
 	});
+
+	describe('planEnabled', () => {
+		it('on by default', () => { assert.equal(rollingCalc.planEnabled(undefined), true); assert.equal(rollingCalc.planEnabled({}), true); });
+		it('off by its own switch', () => assert.equal(rollingCalc.planEnabled({ rollPlan: { enabled: false } }), false));
+		it('off with the whole feature', () => assert.equal(rollingCalc.planEnabled({ rollingCalc: { enabled: false } }), false));
+	});
+
+	describe('rollerProfile', () => {
+		it('battleships for a hole that passes them', () => {
+			const p = rollingCalc.rollerProfile(kt(1000));
+			assert.deepEqual([p.name, p.cold, p.hot], ['battleship', kt(200), kt(300)]);
+		});
+		it('the hot battleship is clamped to the hole limit', () => {
+			const p = rollingCalc.rollerProfile(kt(300), { bsCold: 200, bsHot: 400 });
+			assert.equal(p.hot, kt(300));
+		});
+		it('medium holes get the medium roller', () => {
+			const p = rollingCalc.rollerProfile(kt(62));
+			assert.deepEqual([p.name, p.cold, p.hot], ['medium', kt(15), kt(60)]);
+		});
+		it('small holes clamp the medium roller to the limit', () => {
+			const p = rollingCalc.rollerProfile(kt(20));
+			assert.deepEqual([p.name, p.cold, p.hot], ['medium', kt(15), kt(20)]);
+		});
+		it('settings override the defaults, invalid values do not', () => {
+			assert.equal(rollingCalc.rollerProfile(kt(1000), { bsCold: 150, bsHot: 'x' }).cold, kt(150));
+			assert.equal(rollingCalc.rollerProfile(kt(1000), { bsCold: 150, bsHot: 'x' }).hot, kt(300));
+			assert.equal(rollingCalc.rollerProfile(kt(62), { medHot: 40 }).hot, kt(40));
+		});
+		it('cold never exceeds hot', () => assert.equal(rollingCalc.rollerProfile(kt(1000), { bsCold: 500, bsHot: 300 }).cold, kt(300)));
+	});
+
+	describe('recommend', () => {
+		const rec = (lo, hi, extra) => rollingCalc.recommend(Object.assign({ lo: kt(lo), hi: kt(hi), cold: kt(200), hot: kt(300), maxJump: kt(1000) }, extra));
+		const text = r => r.steps.map(s => s.dir + ':' + s.kind + ':' + s.mass / 1e6 + ':' + s.status).join(' ');
+
+		it('hot round trips while a whole one is safe, then a cold out and a hot return that may close it', () => {
+			const r = rec(1000, 1200);
+			assert.equal(text(r), 'out:hot:300:safe back:hot:300:safe out:cold:200:safe back:hot:300:may');
+			assert.equal(r.outcome, 'may-close');
+			assert.equal(r.repeatFrom, 3);
+		});
+		it('a return pass heavier than the most the hole can hold will close it', () => {
+			const r = rec(400, 480);
+			assert.equal(text(r), 'out:cold:200:safe back:hot:300:will');
+			assert.equal(r.outcome, 'closes');
+		});
+		it('tracks the range after every step', () => {
+			const r = rec(1000, 1200);
+			assert.deepEqual(r.steps[1].after, { lo: kt(400), hi: kt(600) });
+			assert.deepEqual(r.steps[2].after, { lo: kt(200), hi: kt(400) });
+		});
+		it('never recommends an outbound jump that may collapse the hole', () => {
+			[[50, 100], [150, 200], [250, 300], [301, 310], [650, 700], [1300, 1500], [5000, 5200]].forEach(([lo, hi]) => {
+				const r = rec(lo, hi);
+				let low = kt(lo);
+				r.steps.forEach(s => {
+					if (s.dir === 'out') { assert.ok(s.mass < low, 'out ' + s.mass + ' vs lo ' + low); }
+					low = s.after.lo;
+				});
+			});
+		});
+		it('warns when even a cold outbound pass may collapse it', () => {
+			const r = rec(150, 200);
+			assert.equal(r.outcome, 'too-light');
+			assert.equal(r.steps.length, 0);
+			assert.ok(/Too little mass left for a battleship to go out safely: use a lighter ship out \(under 150kt\)/.test(r.warning), r.warning);
+		});
+		it('an empty or crit hole: no ship can go out, no "under 0kt"', () => {
+			[rec(0, 50), rec(0.4, 30)].forEach(r => {
+				assert.equal(r.outcome, 'too-light');
+				assert.equal(r.warning, 'No ship can safely go out: the hole may close on any jump.');
+			});
+			assert.ok(/under 5kt/.test(rec(5, 30, { cold: kt(6), hot: kt(9) }).warning));
+		});
+		it('names the roller in the warning', () => assert.ok(/for a medium to go/.test(rec(10, 12, { cold: kt(15), hot: kt(60), rollerName: 'medium' }).warning)));
+		it('goes out cold when the cold pass is safe', () => {
+			const r = rec(250, 400, { cold: kt(100), hot: kt(200) });
+			assert.equal(r.steps[0].kind, 'cold');
+		});
+		it('a safe return goes round again until the hole is too light', () => {
+			const r = rec(550, 650);
+			assert.equal(text(r), 'out:cold:200:safe back:hot:300:safe');
+			assert.equal(r.outcome, 'too-light');
+			assert.ok(/under 50kt/.test(r.warning), r.warning);
+		});
+		it('caps at 12 steps and counts the remaining hot round trips', () => {
+			const r = rec(10000, 10200);
+			assert.equal(r.steps.length, 12);
+			assert.equal(r.more, 11);
+			assert.equal(r.moreAt, 10);
+			assert.equal(r.outcome, 'may-close');
+			assert.deepEqual(r.steps[9].after, { lo: kt(10000 - 5 * 600), hi: kt(10200 - 5 * 600) });
+			assert.deepEqual(r.steps[10].after, { lo: kt(10000 - 16 * 600 - 200), hi: kt(10200 - 16 * 600 - 200) });
+		});
+		it('clamps the hot mass to the hole limit', () => {
+			const r = rec(1000, 1200, { maxJump: kt(250) });
+			assert.ok(r.steps.every(s => s.mass <= kt(250)));
+		});
+		it('unknown without a range or a roller', () => {
+			assert.equal(rollingCalc.recommend({}).outcome, 'unknown');
+			assert.equal(rollingCalc.recommend({ lo: 0, hi: 0, hot: 1 }).outcome, 'unknown');
+			assert.equal(rollingCalc.recommend({ lo: 5, hi: 9, hot: 0 }).steps.length, 0);
+		});
+		it('renders numbered, coloured, labelled steps and the outcome', () => {
+			const profile = { name: 'battleship', cold: kt(200), hot: kt(300) };
+			const html = rollingCalc.recommendHtml(rec(400, 480), profile, { farName: 'J1<b>', homeName: 'Home', startedText: 'Rolling started by Kytus at 19:08 EVE' });
+			assert.ok(html.includes('Assuming battleship rollers: 200kt cold / 300kt hot'));
+			assert.ok(html.includes('Rolling started by Kytus at 19:08 EVE'));
+			assert.ok(html.includes('rolling-step-safe') && html.includes('rolling-step-will'));
+			assert.ok(html.includes('Out to J1&lt;b&gt; (cold, 200kt)') && html.includes('Back to Home (hot, 300kt)'));
+			assert.ok(html.includes('Will collapse') && html.includes('closes on the way back'));
+		});
+		it('puts the preserve mass warning first and tells how to repeat', () => {
+			const profile = { name: 'battleship', cold: kt(200), hot: kt(300) };
+			const html = rollingCalc.recommendHtml(rec(1000, 1200), profile, { farName: 'F', homeName: 'H', preserved: 'Marked preserve mass' });
+			assert.ok(html.indexOf('Marked preserve mass') < html.indexOf('rolling-steps'));
+			assert.ok(html.includes('repeat steps 3&ndash;4'));
+			assert.ok(html.includes('rolling-more') === false);
+		});
+		it('says how many round trips were left out', () => {
+			const profile = { name: 'battleship', cold: kt(200), hot: kt(300) };
+			const html = rollingCalc.recommendHtml(rec(10000, 10200), profile, { farName: 'F', homeName: 'H' });
+			assert.ok(html.includes('11 more hot round trips'));
+		});
+	});
+
+	describe('worstVerdict', () => {
+		const plan = (out, back) => ({ out: { verdict: out }, back: { verdict: back } });
+		it('is the worse of the two passes', () => {
+			assert.equal(rollingCalc.worstVerdict(plan('safe', 'safe')), 'safe');
+			assert.equal(rollingCalc.worstVerdict(plan('safe', 'may')), 'may');
+			assert.equal(rollingCalc.worstVerdict(plan('may', 'safe')), 'may');
+			assert.equal(rollingCalc.worstVerdict(plan('collapse', 'none')), 'collapse');
+			assert.equal(rollingCalc.worstVerdict(plan('too-heavy', 'none')), 'too-heavy');
+			assert.equal(rollingCalc.worstVerdict(plan('unknown', 'unknown')), 'unknown');
+		});
+		it('every verdict has an icon', () => {
+			['safe', 'may', 'collapse', 'too-heavy', 'unknown'].forEach(v => assert.ok(rollingCalc.ICONS[v]));
+		});
+	});
+
+	describe('passLog', () => {
+		it('running total and lightest-case mass left, newest first', () => {
+			const log = rollingCalc.passLog([{ mass: kt(100) }, { mass: kt(50) }], kt(1000));
+			assert.deepEqual(log, [{ total: kt(150), left: kt(750) }, { total: kt(50), left: kt(850) }]);
+		});
+		it('never negative, null without a total mass', () => {
+			assert.equal(rollingCalc.passLog([{ mass: kt(5000) }], kt(1000))[0].left, 0);
+			assert.equal(rollingCalc.passLog([{ mass: kt(5) }], 0)[0].left, null);
+			assert.deepEqual(rollingCalc.passLog([], kt(1)), []);
+		});
+	});
+
+	describe('jumpRowFlags', () => {
+		it('jump rows first, then the summary and total rows', () => {
+			const ids = ['', '', '', 'small-mass', 'medium-mass', 'large-mass', ''];
+			assert.deepEqual(rollingCalc.jumpRowFlags(ids, 3), [true, true, true, false, false, false, false]);
+		});
+		it('no jumps: nothing is a jump row, even the unnamed total row', () => {
+			assert.deepEqual(rollingCalc.jumpRowFlags(['small-mass', 'medium-mass', 'large-mass', ''], 0), [false, false, false, false]);
+		});
+		it('never counts a summary row, whatever the count says', () => {
+			assert.deepEqual(rollingCalc.jumpRowFlags(['', 'small-mass'], 5), [true, false]);
+			assert.deepEqual(rollingCalc.jumpRowFlags(undefined, 2), []);
+		});
+	});
+
+	describe('summarisePasses', () => {
+		it('counts the passes it can weigh and adds their mass', () => {
+			const r = rollingCalc.summarisePasses([{ m: 5 }, { m: 0 }, { m: 7 }, {}], row => row.m || null);
+			assert.deepEqual(r, { passes: 2, massKg: 12 });
+		});
+		it('copes with nothing', () => assert.deepEqual(rollingCalc.summarisePasses(null, () => 1), { passes: 0, massKg: 0 }));
+	});
 });
