@@ -364,7 +364,8 @@ Mask Admin > Discord." Once per episode and channel: the episode is a `discord_s
 long as the episode lasts. The episode ends (row deleted) when the mask gets a home, chain kills are turned off or
 moved to another channel, the webhook's URL is replaced (it may be another channel: the next pass posts a new notice
 there), or the mask or its webhook can no longer send; if chain kills still go to that channel, now with a home, and
-the notice was sent (or is still queued), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
+the notice did not fail (sent, still queued, or its outbox row already pruned: sent rows go after 7 days; a failed
+notice gets no "resumed", unless the episode outlasts the 14 days failed rows are kept), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
 new episode. Same rule as the chain: only "no home" pauses chain kills (a home without live holes is a chain of one
 system, and an unknown home ID is dropped when the settings load). Both messages are fixed text with empty
 `allowed_mentions` (no pings, whatever the type's ping field says) and the mask name escaped. Mask Admin > Discord adds

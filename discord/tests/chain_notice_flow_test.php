@@ -174,10 +174,20 @@ check('prune: still no repeat after a month', cn_contents('d'), [$paused, $resum
 $db->exec("DELETE FROM discord_outbox WHERE maskID = '" . CN_MASK . "'");   // sent rows are pruned after 7 days
 check('prune: Mask Admin falls back to the episode start once the message row is gone', discord_chain_notice_status($db, CN_MASK)['status'] ?? null, 'old');
 
+// 9b. Weeks without a home (the usual case after an update): the notice's outbox row is pruned after 7 days, but a
+// home set then still gets the "resumed" line
+$db->exec("UPDATE discord_sent SET createdAt = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE maskID = '" . CN_MASK . "' AND kind = 'nohome'");
+$db->exec("DELETE FROM discord_outbox WHERE maskID = '" . CN_MASK . "'");
+cn_settings(CN_MASK, true, $rows['b'], $home);
+cn_tick();
+check('long episode, notice pruned: resumed', [cn_contents('d'), cn_episodes()], [[$paused, $resumed, $paused, $paused, $resumed], []]);
+cn_settings(CN_MASK, true, $rows['b'], 0);
+cn_tick();
+
 // 10. The mask can no longer send (its corporation lost its last admin): the episode ends quietly
 $db->exec('UPDATE characters SET admin = 0 WHERE userID = 990081');
 cn_tick();
-check('no admin left: episode over, nothing posted', [cn_episodes(), cn_contents('d')], [[], [$paused, $resumed, $paused, $paused]]);
+check('no admin left: episode over, nothing posted', [cn_episodes(), cn_contents('d')], [[], [$paused, $resumed, $paused, $paused, $resumed, $paused]]);
 
 // Clean up
 foreach ([CN_MASK, CN_OTHER] as $mask) {

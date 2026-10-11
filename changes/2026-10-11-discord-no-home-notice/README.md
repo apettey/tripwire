@@ -35,7 +35,8 @@ silent would mostly hide a misconfiguration.
   enqueue in one transaction (`discord_enqueue_once`), so repeated passes or a second worker post nothing.
 - The episode ends when a home is set, chain kills are turned off or moved to another channel, or the mask/webhook can
   no longer send, or the webhook's URL is replaced in Mask Admin (`discord_chain_notice_forget_webhook`; the next pass
-  posts a new notice to the new channel). With a home now on the same channel and the notice sent or still queued: one
+  posts a new notice to the new channel). With a home now on the same channel and a notice that didn't fail (sent, queued, or its outbox row pruned after
+  7 days; a failed row is kept 14 days, after that a failed notice can't be told apart): one
   `chainResumed` message "Chain kills resumed for the **Corp** mask (home: J160650)." (the row delete is its claim).
   Otherwise (e.g. the notice failed) it ends silently. Removing the home again posts a new
   notice.
@@ -49,9 +50,10 @@ silent would mostly hide a misconfiguration.
   / "could not be sent"; "Chain kills paused since ..." once its outbox row is pruned). Failed notices are named in
   the Delivery list.
 - Tests: `discord/tests/discord_test.php` (+5: texts, no pings, escaping), new `discord/tests/chain_notice_flow_test.php`
-  (21 checks against the dev stack's MySQL, worker and `discord-mock`: no home → one notice; repeated ticks → no
+  (22 checks against the dev stack's MySQL, worker and `discord-mock`: no home → one notice; repeated ticks → no
   repeat; home set → resumed + reset; home removed again → new notice; chain kills off → nothing; channel moved;
-  webhook URL replaced; failed notice → no resumed; prune keeps the episode; mask that can no longer send), `app/js-test/fork/discord-notifications.test.js` (+3).
+  webhook URL replaced; failed notice → no resumed; prune keeps the episode; 8-day episode with its notice pruned →
+  resumed; mask that can no longer send), `app/js-test/fork/discord-notifications.test.js` (+3).
 - Docs: `docker/README.md#discord-notifications`.
 - Existing installs: every mask that has chain kills on without a home gets the notice once after the update.
 

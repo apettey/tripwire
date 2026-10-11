@@ -10,7 +10,7 @@
 //   - the episode ends when the mask gets a home, chain kills are turned off or moved to another channel, or the mask
 //     or its webhook can no longer send, or the webhook's URL is replaced (it may be another channel:
 //     discord_chain_notice_forget_webhook, public/discord.php): the row is deleted. When chain kills still go to that
-//     channel, now with a home, and its notice was sent (or is still queued), one 'chainResumed' message says so.
+//     channel, now with a home, and its notice did not fail (discord_chain_notice_delivered), one 'chainResumed' says so.
 //     Removing the home again later starts a new episode (a new notice).
 // Same rule as discord_chain_systems(): only "no home" (0) pauses chain kills. A home that has no live holes on the map
 // is still a chain of one system (kills there are posted), and a home ID that isn't a known system is dropped when the
@@ -72,12 +72,19 @@ function discord_chain_notice_poll(PDO $db, array $masks) {
     return $queued;
 }
 
-/** Whether an episode's 'chainPaused' notice reached the channel or still will (sent / queued): only then is "resumed"
-    posted (not after a notice that failed, expired or was never queued) */
+/**
+ * Whether an episode's 'chainPaused' notice reached the channel or still will: only then is "resumed" posted. The episode
+ * row and its notice are queued together (discord_enqueue_once), so no outbox row means it was pruned after it was
+ * handled: sent rows go after DISCORD_OUTBOX_KEEP_SENT (7) days, the usual fate of a long episode, so that counts as
+ * delivered. Only a notice whose row says 'failed' (Discord refused it, or it expired) gets no "resumed". Failed rows are
+ * pruned after DISCORD_OUTBOX_KEEP_FAILED (14) days; an episode that outlasts that after a failed notice gets a "resumed"
+ * without its notice (rare: a broken webhook ends the episode anyway, see discord_chain_notice_poll).
+ */
 function discord_chain_notice_delivered(PDO $db, $maskID, $webhookID, $since) {
     $stmt = $db->prepare("SELECT status FROM discord_outbox WHERE maskID = ? AND webhookID = ? AND kind = 'chainPaused' AND createdAt >= ? ORDER BY id DESC LIMIT 1");
     $stmt->execute([$maskID, (int) $webhookID, $since]);
-    return in_array($stmt->fetchColumn(), ['sent', 'queued'], true);
+    $status = $stmt->fetchColumn();
+    return $status === false || in_array($status, ['sent', 'queued'], true);
 }
 
 /** A webhook's URL was replaced (maybe another channel): forget its episode, the next pass posts a new notice there */
