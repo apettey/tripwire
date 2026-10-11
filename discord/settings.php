@@ -8,6 +8,7 @@
 //     corpKill:  {...same as chainKill}, corpLoss: {...same as chainKill},
 //     rally:     {enabled, webhookID, template (set / moved), templateClear (cleared), ping}   (discord/rally.php)
 //     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
+//     preserveMass: {enabled, webhookID, template (marked / changed), templateClear (cleared), ping, chainOnly}   (discord/preserve_mass.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
 //   homeSystemID: systemID or 0   (where the chain starts: chainKill counts only systems connected to it, discord/chain.php)
@@ -36,6 +37,8 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
             'rally' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['rally'], 'templateClear' => $templates['rallyClear'],
                 'ping' => '', 'enabledAt' => 0],
             'watchlist' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['watchlist'], 'ping' => '', 'enabledAt' => 0],
+            'preserveMass' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['preserveMass'], 'templateClear' => $templates['preserveMassClear'],
+                'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
@@ -136,6 +139,9 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             if (array_key_exists('maxJumps', $in)) $type['maxJumps'] = max(1, min(50, (int) $in['maxJumps']));
             if (array_key_exists('cooldownHours', $in)) $type['cooldownHours'] = max(1, min(48, (int) $in['cooldownHours']));
             if ($type['enabled'] && !$type['pingSystems']) { $errors[] = 'kspace: add at least one ping system'; $type['enabled'] = false; }
+        } elseif ($kind === 'preserveMass') {
+            // Only connections of the chain (connected to home, discord/chain.php) unless unticked
+            if (array_key_exists('chainOnly', $in)) $type['chainOnly'] = $in['chainOnly'] === true || $in['chainOnly'] === 1 || $in['chainOnly'] === '1' || $in['chainOnly'] === 'true';
         } elseif ($kind === 'rally' || $kind === 'watchlist') {
             // Nothing else: on/off, webhook, ping and the template(s); the watchlist's filters are in Mask Admin > Watchlist
         } else {

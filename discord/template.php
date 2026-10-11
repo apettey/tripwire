@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -39,6 +39,16 @@ function discord_placeholders() {
         'watchlist' => $common + ['filter' => 'name of the watchlist filter that matched', 'effect' => 'system effect, e.g. Wolf-Rayet (empty when none)',
             'details' => 'class and effect, e.g. "C5, Wolf-Rayet"', 'sig' => 'signature ID of the hole into the system, in the system it is off',
             'hole' => 'wormhole type of that signature (K162 when it is the exit side, empty when not scanned)', 'from' => 'system the hole is in'],
+        'preserveMass' => ['pings' => 'the ping field of this type', 'mask' => 'mask name',
+            'connection' => 'both ends with their chain labels, e.g. "AB · J163701 ↔ J152820" (the end closer to home first)',
+            'from' => 'the end closer to home, e.g. "AB · J163701"', 'to' => 'the other end, e.g. "J152820"',
+            'hole' => 'the hole\'s type seen from {from} (K162 when it was scanned on the other side, empty when unknown)',
+            'class' => 'class of {to}, e.g. C5 / HS', 'details' => 'hole and class, e.g. "K162, C5"', 'sig' => 'signature ID of the hole in {from}',
+            'mass' => 'mass: stable / destabilized / critical', 'life' => 'life: stable / EOL',
+            'who' => 'who marked, changed or cleared it', 'reason' => 'the reason given with the mark (empty without one)',
+            'withReason' => '": home static" when a reason is given, else empty', 'map' => 'Tripwire link to {from}',
+            'time' => 'when it was cleared, shown in each reader\'s own time zone (Discord timestamp)',
+            'mark' => 'cleared text: the mark message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {mark})'],
     ];
 }
 
@@ -129,6 +139,9 @@ function discord_default_templates() {
         'rally'      => "{pings} Fight here: **{labelSystem}** ({class}){withComp} — set by *{who}*\n{map}",
         'rallyClear' => "{rally}\nCleared by *{who}* at {time}",
         'watchlist'  => "{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}\n{map}",
+        // Preserve mass (discord/preserve_mass.php): marked or changed, and cleared (an edit of the mark message)
+        'preserveMass'      => "{pings} Preserve mass on **{connection}** ({details}) by *{who}*{withReason}\n{map}",
+        'preserveMassClear' => "{mark}\nCleared by *{who}* at {time}",
     ];
 }
 
@@ -212,6 +225,7 @@ function discord_field($name, $value, $inline = true) {
  */
 function discord_payload(array $ctx) {
     $kind = $ctx['kind'];
+    if ($kind === 'preserveMass') return discord_preserve_payload($ctx);   // discord/preserve_mass.php
     $values = [
         'pings' => $ctx['ping'] ?? '', 'mask' => $ctx['mask'] ?? '', 'system' => $ctx['system'] ?? '',
         'security' => isset($ctx['security']) ? discord_security_text($ctx['security']) : '', 'class' => $ctx['class'] ?? '',

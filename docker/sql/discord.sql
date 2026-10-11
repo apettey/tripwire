@@ -66,3 +66,16 @@ CREATE TABLE IF NOT EXISTS `discord_rally_message` (
   `systemID` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`maskID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- The live preserve mass message per (mask, wormhole), struck through when the mark is cleared (clearedAt)
+CREATE TABLE IF NOT EXISTS `discord_preserve_message` (
+  `maskID` decimal(12,1) NOT NULL,
+  `wormholeID` int NOT NULL,
+  `webhookID` int unsigned NOT NULL,
+  `messageID` varchar(32) NOT NULL,
+  `content` text NOT NULL,
+  `postedAt` datetime NOT NULL,
+  `clearedAt` datetime DEFAULT NULL,
+  PRIMARY KEY (`maskID`, `wormholeID`),
+  KEY `webhookID` (`webhookID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

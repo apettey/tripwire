@@ -75,6 +75,14 @@ function preserve_mass_set($mysql, $mask, $wormholeID, $setBy, $reason) {
 	if (!$stmt->execute()) throw new PDOException('Could not set preserve mass: ' . implode(' ', $stmt->errorInfo()));
 }
 
+/** One wormhole's flag as preserve_mass_list returns it, or null (not flagged, or its wormhole is gone) */
+function preserve_mass_get($mysql, $mask, $wormholeID) {
+	foreach (preserve_mass_list($mysql, $mask) as $flag) {
+		if ($flag['wormholeID'] === (int)$wormholeID) return $flag;
+	}
+	return null;
+}
+
 /** Remove the flag (no error when there is none) */
 function preserve_mass_clear($mysql, $mask, $wormholeID) {
 	$stmt = $mysql->prepare('DELETE FROM fork_preserve_mass WHERE maskID = :mask AND wormholeID = :wormholeID');

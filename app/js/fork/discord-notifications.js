@@ -4,14 +4,15 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass"],
 	LABELS: {
 		kspace: "New k-space near a ping system",
 		chainKill: "Any kill in our chain",
 		corpKill: "Kills by our corporation",
 		corpLoss: "Losses of our corporation",
 		rally: "Fight here",
-		watchlist: "Watchlist match"
+		watchlist: "Watchlist match",
+		preserveMass: "Preserve mass"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
@@ -19,10 +20,11 @@ const discordNotifications = {
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
 		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
-		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
+		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
+		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing."
 	},
-	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
-	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
+	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" (and \"Preserve mass\", unless you untick its chain option) only counts systems connected to it through live wormholes (not expired, not deleted).",
+	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass marks, while they are limited to the chain).",
 	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
@@ -96,7 +98,9 @@ const discordNotifications = {
 	/** Warning for settings with chain kills on and no home system ("" when fine) */
 	homeWarning: function(settings) {
 		const chain = settings && settings.types && settings.types.chainKill;
-		return chain && chain.enabled && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
+		const preserve = settings && settings.types && settings.types.preserveMass;
+		const needsHome = (chain && chain.enabled) || (preserve && preserve.enabled && preserve.chainOnly !== false);
+		return needsHome && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
 	},
 
 	removePingSystem: function(list, id) {
@@ -180,6 +184,9 @@ const discordNotifications = {
 			if (type.enabled && !type.webhookID) { errors.push(dn.LABELS[kind] + ": choose a webhook to turn it on"); }
 			if (kind === "rally") {
 				type.templateClear = String(v.templateClear || "").trim();
+			} else if (kind === "preserveMass") {
+				type.templateClear = String(v.templateClear || "").trim();
+				type.chainOnly = v.chainOnly !== false;
 			} else if (kind === "watchlist") {
 				// Only on/off, channel, ping and the text: the filters are in Mask Admin > Watchlist
 			} else if (kind === "kspace") {
@@ -253,7 +260,8 @@ const discordNotifications = {
 		};
 		return dn.previewHtml(data.preview)
 			+ titled("When it is cleared, the message becomes:", data.previewClear)
-			+ titled("When it moves after 30 seconds, a new message is posted and the old one becomes:", data.previewMoved);
+			+ titled("When it moves after 30 seconds, a new message is posted and the old one becomes:", data.previewMoved)
+			+ titled("When it is changed after 30 seconds, a new message is posted and the old one becomes:", data.previewChanged);
 	},
 
 	// ---- Server ----
@@ -335,6 +343,12 @@ const discordNotifications = {
 				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
 						+ "<div class='dn-small'>Replaces the fight message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. The system placeholders (<code>{system}</code>, <code>{label}</code>, <code>{labelSystem}</code>, <code>{was}</code>...) are the system the fight was on, when it is known. Nothing is sent when there is no fight message to edit.</div></td></tr>";
 				if (state.legacyRally && !t.enabled) { extra = "<tr><th></th><td><div class='dn-small dn-legacy'>" + esc(dn.LEGACY_RALLY) + "</div></td></tr>"; }
+			} else if (kind === "preserveMass") {
+				templateLabel = "Marked or changed:";
+				after = "<tr><th>Cleared:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
+						+ "<div class='dn-small'>Replaces the mark message (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{time}</code> shows in each reader's own time zone. Nothing is sent when there is no mark message to edit.</div></td></tr>";
+				extra = "<tr><th>Connections:</th><td><label title='Off: every marked connection of the mask is posted, also old fragments that no longer connect to home'><input type='checkbox' class='dn-chainOnly'"
+					+ (t.chainOnly !== false ? " checked" : "") + " /> only connections in our chain (connected to the home system above)</label></td></tr>";
 			} else if (kind === "watchlist") {
 				extra = "";
 			} else if (kind === "kspace") {
@@ -374,7 +388,7 @@ const discordNotifications = {
 		};
 		const outbox = state.outbox || {};
 		const failures = (outbox.failures || []).map(function(f) {
-			return "<li>" + esc(dn.LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
+			return "<li>" + esc(dn.LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind === "preserveMassEdit" ? dn.LABELS.preserveMass + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
 		}).join("");
 
 		return "<div class='dn-page'>"
@@ -426,7 +440,8 @@ const discordNotifications = {
 				minIsk: $t.find(".dn-minIsk").val(),
 				includeNpc: $t.find(".dn-includeNpc").prop("checked"),
 				excludePods: $t.find(".dn-excludePods").prop("checked"),
-				includeHighsec: $t.find(".dn-includeHighsec").prop("checked")
+				includeHighsec: $t.find(".dn-includeHighsec").prop("checked"),
+				chainOnly: $t.find(".dn-chainOnly").prop("checked")
 			};
 		});
 		return values;

@@ -117,6 +117,13 @@ function discord_sample_context($kind, $template, $ping, $maskName, $comp = null
 	if ($kind === 'rally') {
 		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot', 'comp' => $comp), 'discord_sample_label');
 	}
+	if ($kind === 'preserveMass') {
+		// A hole from AB · J163701 to J152820 (C5), scanned on the far side (K162 from here)
+		$ends = discord_preserve_ends(array('wormholeID' => 1, 'type' => 'H296', 'parent' => 'secondary', 'life' => 'stable', 'mass' => 'destab',
+			'a' => 31002012, 'b' => 31001880, 'aSig' => 'ABC123', 'bSig' => 'XYZ789'), function ($systemID) { return $systemID === 31002012 ? 'AB' : ''; });
+		return discord_preserve_context(array('action' => 'set', 'who' => 'Example Pilot', 'wormholeID' => 1) + $base,
+			array('setBy' => 'Example Pilot', 'reason' => 'home static, fleet still out'), $ends);
+	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
 			'effect' => 'Wolf-Rayet', 'region' => 'E-R00028', 'map' => discord_map_url(31001882), 'dotlan' => discord_dotlan_url(31001882),
@@ -199,6 +206,7 @@ try {
 					$stmt->execute(array($name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), $webhook['id']));
 					// A new URL may be another channel: the next rally change posts instead of editing the old message
 					discord_rally_forget_webhook($mysql, $webhook['id']);
+					discord_preserve_forget_webhook($mysql, $webhook['id']);
 				} else {
 					$stmt = $mysql->prepare('UPDATE discord_webhooks SET name = ?, updatedAt = UTC_TIMESTAMP() WHERE id = ?');
 					$stmt->execute(array($name, $webhook['id']));
@@ -261,6 +269,13 @@ try {
 				// And moved after 30 s: the old message is edited like this (fixed text), a new one is posted
 				$preview['previewMoved'] = discord_payload(array('moved' => true, 'previous' => $preview['preview']['content'])
 					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot', 'comp' => $comp), 'discord_sample_label_moved'));
+			} else if ($kind === 'preserveMass') {
+				// Cleared: the edit of the mark message; changed after 30 s: the old message becomes this (fixed text)
+				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
+				if ($templateClear === '') $templateClear = $defaults['types']['preserveMass']['templateClear'];
+				$preview['previewClear'] = discord_payload(array('previous' => $preview['preview']['content'], 'cleared' => true, 'who' => 'Other Pilot',
+					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context);
+				$preview['previewChanged'] = discord_payload(array('previous' => $preview['preview']['content'], 'changed' => true, 'who' => 'Other Pilot') + $context);
 			}
 			echo json_encode($preview);
 			exit();

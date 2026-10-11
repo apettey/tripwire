@@ -74,6 +74,20 @@ const DISCORD_DDL = [
       `systemID` int NOT NULL DEFAULT 0,
       PRIMARY KEY (`maskID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Preserve mass messages (discord/preserve_mass.php): the live one per (mask, wormhole) with its text as last
+    // posted, so changes within 30 s edit it and a clear strikes it through (clearedAt: when; a mark again within 30 s
+    // of it brings it back). Written only by the sender; pruned a day after the clear or 7 days after the post.
+    "CREATE TABLE IF NOT EXISTS `discord_preserve_message` (
+      `maskID` decimal(12,1) NOT NULL,
+      `wormholeID` int NOT NULL,
+      `webhookID` int unsigned NOT NULL,
+      `messageID` varchar(32) NOT NULL,
+      `content` text NOT NULL,
+      `postedAt` datetime NOT NULL,
+      `clearedAt` datetime DEFAULT NULL,
+      PRIMARY KEY (`maskID`, `wormholeID`),
+      KEY `webhookID` (`webhookID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
 function discord_ensure_schema(PDO $db) {

@@ -115,6 +115,7 @@ function dn_run() {
                 $lastPrune = $now;
                 [$expired, $deleted] = discord_outbox_prune($db);
                 if ($expired || $deleted) dn_log("outbox: expired $expired, deleted $deleted old messages");
+                discord_preserve_prune($db);   // old preserve mass messages are no longer edited
             }
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();
