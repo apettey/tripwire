@@ -498,9 +498,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		/** Settings turned the icon off (Save, Reset): the box goes, and the chain is redrawn without the icons */
+		let lastOn = null;
 		function applySettings() {
-			if (!isOn()) { close(); }
-			redrawChain();
+			const on = isOn();
+			if (!on) { close(); }
+			if (lastOn !== null && on !== lastOn) { redrawChain(); }	// only when the icons appear or go
+			lastOn = on;
 		}
 
 		// ---- Chain map hook: the icon on low-sec / null-sec systems ----
@@ -559,6 +562,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() {
 			installHook();
 			setupSettings();
+			lastOn = isOn();
 
 			const sel = "#" + sp.WIDGET_ID;
 			const $doc = $(document);
