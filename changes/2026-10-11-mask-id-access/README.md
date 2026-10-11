@@ -7,7 +7,8 @@
 Security fix: the active mask id a user picks was checked with PHP loose comparisons, while MySQL matches mask ids
 numerically, so a non-canonical spelling of a mask id could pass the check and still select another mask. A
 logged-in user could then read and write the signatures, notes and other data of custom masks, other characters'
-personal masks and other corporations' masks they had no access to.
+personal masks and other corporations' masks they had no access to. Separately, saving a note by id could change a
+note that belongs to another mask; it is now limited to the user's active mask.
 
 ## Settings
 
@@ -24,10 +25,15 @@ No toggle, because this is a security fix.
   so a bad mask stored in the preferences never reaches the session.
 - Upstream `verifyMask()` (`lib.inc.php`) canonicalises the id first, so `options.php` can no longer store a
   malformed mask id.
+- Notes (`public/comments.php`): saving an existing note first checks that the note belongs to the session mask and
+  answers 404 otherwise, so a note of another mask can no longer be overwritten or moved. New notes always get the
+  session mask; delete and sticky were already limited to the session mask.
 - REST API (`api/auth.php`) checked: its custom-mask query has an operator-precedence slip, but it only returns masks
   the account can access and the result is compared with the requested id, so it does not grant access to other
   masks; left unchanged. Covered by the new test.
 - Tests: `tests/mask_guard_test.php` (canonicaliser and access rules) and `tests/mask_access_test.php` (HTTP flow on
   the dev stack: malformed and other-owner mask ids through `options.php`, then `refresh.php` reads and
-  `comments.php` writes; member, personal, corporation and alliance masks still work; API).
-- Upstream files touched: `lib.inc.php` (2 lines in `verifyMask`), `public/login.php` (1 line).
+  `comments.php` writes; member, personal, corporation and alliance masks still work; another mask's notes can't be
+  saved, stickied or deleted by id while own notes can; API).
+- Upstream files touched: `lib.inc.php` (2 lines in `verifyMask`), `public/login.php` (1 line),
+  `public/comments.php` (2 lines in save).

@@ -48,6 +48,8 @@ if ($mode == 'save') {
 		exit();
 	}
 	$comment = sanitizeNoteHtml($comment);
+	// fork: an existing note may only be updated within the session mask (the upsert below would change any id)
+	if ($commentID) { $stmt = $mysql->prepare('SELECT 1 FROM comments WHERE id = :commentID AND maskID = :maskID'); $stmt->execute(array(':commentID' => $commentID, ':maskID' => $maskID)); if (!$stmt->fetchColumn()) { http_response_code(404); echo json_encode(array('result' => false, 'error' => 'Note not found')); exit(); } }
 	$query = 'INSERT INTO comments (id, systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
 				VALUES (:commentID, :systemID, :comment, NOW(), :createdByID, :createdByName, :modifiedByID, :modifiedByName, :maskID)
 				ON DUPLICATE KEY UPDATE

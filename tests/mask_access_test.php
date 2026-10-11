@@ -6,7 +6,7 @@
 // other characters' / corporations' masks) through options.php, then reads (refresh.php) and writes (comments.php):
 // it must only ever see and write its own corporation mask. A member of the custom mask still gets it (also from a
 // non-canonical spelling, which is canonicalised), and the dev character's own corporation / personal masks still work.
-// Also checks the REST API (public/api.php) mask check. Everything it creates is deleted at the end and the dev
+// Also: notes of another mask can't be changed by id through comments.php, and the REST API (public/api.php) mask check. Everything it creates is deleted at the end and the dev
 // user's preferences are put back.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
@@ -92,12 +92,14 @@ $cleanup();
 $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?, 991003, 2)')->execute([$victimCustom, $marker]);
 $db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, 991003, 2)')->execute([$victimCustom]);
 $sigIDs = [];
+$commentIDs = [];
 $sigStmt = $db->prepare("INSERT INTO signatures (signatureID, systemID, type, name, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES ('ABC123', ?, 'combat', ?, 72, 1, 'test', 1, 'test', ?)");
 $commentStmt = $db->prepare("INSERT INTO comments (systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID) VALUES (?, ?, NOW(), 1, 'test', 1, 'test', ?)");
 foreach ([$victimCustom, $victimPersonal, $victimCorp] as $mask) {
     $sigStmt->execute([$system, $marker, $mask]);
     $sigIDs[$mask] = (int) $db->lastInsertId();
     $commentStmt->execute([$system, "$marker secret of $mask", $mask]);
+    $commentIDs[$mask] = (int) $db->lastInsertId();
 }
 $ownCorp = $me['corporationID'] . '.2';
 $ownChar = $me['characterID'] . '.1';
@@ -200,7 +202,39 @@ check('access revoked: next write is not in the custom mask', $writtenTo($victim
 [, $sigs] = read_mask($jar, $system);
 check('access revoked: no custom mask signature', in_array($sigIDs[$victimCustom], $sigs, true), false);
 
-// 5. REST API (public/api.php, basic auth): another mask's data is refused, own corporation mask works.
+// 5. Notes of another mask can't be overwritten, moved, stickied or deleted by id; own notes still work.
+set_mask($jar, $ownCorp);
+$noteRow = function ($id) use ($db) {
+    $stmt = $db->prepare('SELECT systemID, comment, maskID, modifiedByID FROM comments WHERE id = ?');
+    $stmt->execute([$id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+};
+foreach ([$victimCustom, $victimPersonal, $victimCorp] as $victim) {
+    $id = $commentIDs[$victim];
+    $original = $noteRow($id);
+    [$status] = http('POST', 'comments.php', $jar, http_build_query(['mode' => 'save', 'commentID' => $id, 'systemID' => 30000142, 'comment' => "$marker overwritten"]));
+    check("note of $victim: save by id refused", $status, 404);
+    check("note of $victim: unchanged after save", $afterSave = $noteRow($id), $original);
+    http('POST', 'comments.php', $jar, http_build_query(['mode' => 'sticky', 'commentID' => $id, 'systemID' => 0]));
+    check("note of $victim: unchanged by sticky", $noteRow($id), $afterSave);
+    http('POST', 'comments.php', $jar, http_build_query(['mode' => 'delete', 'commentID' => $id]));
+    check("note of $victim: not deleted", $noteRow($id), $afterSave);
+}
+[$status, $out] = http('POST', 'comments.php', $jar, http_build_query(['mode' => 'save', 'systemID' => $system, 'comment' => "$marker own note"]));
+$ownID = (int) ($out['comment']['id'] ?? 0);
+check('own note: created', $status === 200 && $ownID > 0, true);
+check('own note: in the session mask', (float) ($noteRow($ownID)['maskID'] ?? 0), (float) $ownCorp);
+[$status] = http('POST', 'comments.php', $jar, http_build_query(['mode' => 'save', 'commentID' => $ownID, 'systemID' => $system, 'comment' => "$marker own note edited"]));
+check('own note: edit status', $status, 200);
+check('own note: edited', $noteRow($ownID)['comment'] ?? null, "$marker own note edited");
+http('POST', 'comments.php', $jar, http_build_query(['mode' => 'sticky', 'commentID' => $ownID, 'systemID' => 0]));
+check('own note: stickied', (int) ($noteRow($ownID)['systemID'] ?? -1), 0);
+http('POST', 'comments.php', $jar, http_build_query(['mode' => 'delete', 'commentID' => $ownID]));
+check('own note: deleted', $noteRow($ownID), false);
+[$status] = http('POST', 'comments.php', $jar, http_build_query(['mode' => 'save', 'commentID' => 999999999, 'systemID' => $system, 'comment' => "$marker unknown id"]));
+check('unknown note id: refused', $status, 404);
+
+// 6. REST API (public/api.php, basic auth): another mask's data is refused, own corporation mask works.
 $auth = "$user:$password";
 foreach (['991001.0', '991001.00', '991001.0abc', '991002.1', '991003.2', '991003.2x'] as $spelling) {
     [$status, , $raw] = http('GET', 'api.php?q=/signatures&maskID=' . rawurlencode($spelling), $jar, null, [], $auth);
