@@ -70,7 +70,7 @@ Fork features that need their own tables create them on first use with `CREATE T
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
 `fork_rally` / `fork_rally_discord_message` (chain map rally point, "Fight here", per mask with a copy of its fleet comp, and its live legacy Discord message, created by `public/rally.php`; the `comp*` columns are added to an older `fork_rally` the first time a fight point is set; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_fight_comps` (the [fleet comps](#fight-here) per mask, created by `public/fight.php`), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
-`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
+`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
 and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
@@ -205,7 +205,7 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
+tables and at most add rows to bounded queues the worker drains (single-kill lookups, back-fills, names, system stats). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
@@ -215,11 +215,12 @@ tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add 
 | `zkill/schema.php` | DDL of the tables below (`docker/sql/zkill.sql` is the reference copy) |
 | `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage and high-water mark, pruning |
 | `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
+| `zkill/lookup.php` | Single-kill lookup queue for [Smart notes](#smart-notes) kill cards: request (web), fetch one kill (worker) |
 | `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
 | `zkill/stats.php`, `zkill/threat.php` | Per-system zKillboard stats cache + queue, and the read side of System Threat behind `public/system_threat.php` (see [System stats](#system-stats-system-threat)) |
 | `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
-| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image) |
+| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image); also `lookup_test.php` (lookup queue and worker step on SQLite with a fake zKillboard / ESI) and `zkill_kill_endpoint_test.php` (`public/zkill_kill.php` against the dev database) |
 
 Data flow:
 
@@ -253,9 +254,11 @@ Data flow:
    stored as unresolvable. At most one rejection per pass, then name passes pause for 10 seconds: an invalid ID
    costs about three ESI errors and never blocks the queue. Names are re-resolved after 30 days (unresolvable ones
    after a day).
-4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
-   older than the retention, stale names.
+4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention (kills fetched for a note,
+   `source = 'lookup'`, are kept 7 days after they arrived), finished back-fill rows older than the retention, finished
+   lookups older than 7 days, stale names.
 5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
+6. **Single-kill lookups.** Interleaved with back-fills and stats (at most every other API slot while they wait): see [Smart notes](#smart-notes).
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -306,6 +309,24 @@ entry or `null`), `fetchedAt`, `statsStatus`, `pending`, `queueFull`, `local` (`
 `systemID` a `detail` object. Poll again while `pending` is true. Browser consumer: `app/js/fork/system-threat.js`
 (badges every 5 minutes and when the chain changes, the viewed system after 1 s; 6 s while pending, paused while the
 tab is hidden). Tests: `php zkill/tests/stats_test.php`.
+
+#### Smart notes
+
+System notes render zKillboard kill links as kill cards (`app/js/fork/smart-notes.js`, render time only: the stored
+note HTML is never changed). The card data comes from `public/zkill_kill.php` (logged-in users with a mask, GET only):
+`ids=<killID,...>` (at most 20) and/or `names=<id,...>` (at most 20 character / corporation / alliance IDs for chips).
+A kill in `zkill_killmails` is answered from there (names from `zkill_names`, unknown names queued, the card's
+red / green edge from the session's corporation and alliance, `KILL_REPORT_FRIENDLY_CORPORATIONS` and the active
+corporation / alliance mask). Any other kill is queued in `zkill_kill_lookup` (`zkill/lookup.php`) and answered
+`queued`; the browser asks again after 3, 10 and 30 seconds, then shows the plain link. Caps: 200 queued / running
+lookups per user, 2000 overall (above them: `full`, plain link). With `ZKILL_FEED_ENABLED=false` nothing is queued
+(`unavailable`). Name IDs above 32 bits are skipped; asked-for names are queued only while fewer than 200 names are
+pending. The worker's `zk_queues_run_one()` interleaves `zk_lookup_run_one()` with back-fills and stats (lookups first,
+but never twice in a row while other work waits), within the same `ZKILL_API_INTERVAL` budget and only while both
+zKillboard and ESI may be called: `https://zkillboard.com/api/killID/<id>/` for the hash, then ESI `/killmails/<id>/<hash>/`, stored with
+`source = 'lookup'` regardless of the retention and kept 7 days after it arrived. A failed lookup is retried after 10
+minutes, at most 3 attempts; a `running` lookup older than 5 minutes is queued again. The browser never calls
+zKillboard, Dotlan or EveWho; it only links to them and loads images from `images.evetech.net`.
 
 ### Discord notifications
 
@@ -361,6 +382,24 @@ means no watchlist messages (the page's warning names both types), and the home 
 baseline stamp (`fork_watchlist_baseline.stamp` = `enabledAt:updatedAt:homeSystemID`), so setting or moving home
 records the new chain's current matches without posting them. The in-app watchlist (pop-up, sound, marks) is not
 limited: it matches what each member's chain map draws.
+
+**Chain kills paused notice** (`discord/chain_notice.php`, no setting). While chain kills are on and the mask has no
+home system, `discord_notify.worker.php` posts one message to the chain kill channel (checked every 15 s with the
+k-space poll): "Chain kills are paused: no home system is set for the **Corp** mask. An admin can set it in Tripwire >
+Mask Admin > Discord." Once per episode and channel: the episode is a `discord_sent` row (kind `nohome`, ref
+`wh:<webhookID>`) that is also the notice's dedupe, so later passes post nothing; it is kept by the 7-day prune for as
+long as the episode lasts. The episode ends (row deleted) when the mask gets a home, chain kills are turned off or
+moved to another channel, the webhook's URL is replaced (it may be another channel: the next pass posts a new notice
+there), or the mask or its webhook can no longer send; if chain kills still go to that channel, now with a home, and
+the notice did not fail (sent, still queued, or its outbox row already pruned: sent rows go after 7 days; a failed
+notice gets no "resumed", unless the episode outlasts the 14 days failed rows are kept), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
+new episode. Same rule as the chain: only "no home" pauses chain kills (a home without live holes is a chain of one
+system, and an unknown home ID is dropped when the settings load). Both messages are fixed text with empty
+`allowed_mentions` (no pings, whatever the type's ping field says) and the mask name escaped. Mask Admin > Discord adds
+to its "Set a home system" warning when the notice was posted ("A notice was posted to the chain kills channel on
+2026-10-11 00:59 EVE time.", or "Chain kills paused since ..." once the notice's outbox row is pruned; `homeNotice` in
+`discord.php`'s answer). Test: `discord/tests/chain_notice_flow_test.php`
+(against the dev stack's MySQL, worker and `discord-mock`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
@@ -452,7 +491,8 @@ twice; `PATCH .../messages/<id>` edits (rally point), `GET /delete/<id>` makes l
 Unknown Message; `http://127.0.0.1:9095/messages` lists what was received and `/channel` shows the channel as a reader sees it (each message as last edited). Any 18-digit ID and 68-character token works, e.g.
 `https://discord.com/api/webhooks/111111111111111111/<68 characters>`. Fake a kill through the same path as the worker:
 `docker compose -f docker-compose.dev.yml exec -T app php docker/dev/discord-fake-kill.php <systemID> <loss|kill|neutral>`.
-Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` (`discord/tests/` and
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` and, against the
+running dev stack (worker + mock), `php discord/tests/chain_notice_flow_test.php` (`discord/tests/` and
 `discord/tools/` are not in the image).
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point

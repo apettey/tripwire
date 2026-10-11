@@ -112,6 +112,14 @@ describe('Discord notifications', function() {
 			assert.ok(/no chain kills or watchlist matches are posted/.test(dn.NO_HOME_BOTH));
 			assert.ok(/connected to your home system/.test(dn.HELP.watchlist) && /Watchlist match/.test(dn.HOME_HELP));
 		});
+		it('says what happened to the paused notice in the channel', function() {
+			assert.strictEqual(dn.homeNoticeText(null), '');
+			assert.strictEqual(dn.homeNoticeText(undefined), '');
+			assert.strictEqual(dn.homeNoticeText({ status: 'sent', at: '2026-10-11T12:34:56Z' }), 'A notice was posted to the chain kills channel on 2026-10-11 12:34 EVE time.');
+			assert.strictEqual(dn.homeNoticeText({ status: 'old', at: '2026-09-01T08:00:00Z' }), 'Chain kills paused since 2026-09-01 08:00 EVE time.');
+			assert.strictEqual(dn.homeNoticeText({ status: 'queued', at: '2026-10-11T12:34:56Z' }), 'A notice to the chain kills channel is waiting to be sent.');
+			assert.ok(/could not be sent/.test(dn.homeNoticeText({ status: 'failed', at: '2026-10-11T12:34:56Z' })));
+		});
 		it('is sent with the settings (0 = not set)', function() {
 			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: 31000880 })).settings.homeSystemID, 31000880);
 			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: '31000880' })).settings.homeSystemID, 31000880);
@@ -301,8 +309,13 @@ describe('Discord notifications', function() {
 				html = dn.pageHtml(state, s);
 				assert.ok(html.indexOf("data-system='0'>Not set</span>") > 0);
 				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME + '</p>') > 0);
+				// The notice posted to the channel for this episode, in the warning
+				const withNotice = Object.assign({}, state, { homeNotice: { status: 'sent', at: '2026-10-11T12:34:56Z' } });
+				assert.ok(dn.pageHtml(withNotice, s).indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME
+					+ " <span class='dn-home-notice'>A notice was posted to the chain kills channel on 2026-10-11 12:34 EVE time.</span></p>") > 0);
 				s.types.chainKill.enabled = false;
 				assert.ok(dn.pageHtml(state, s).indexOf(dn.NO_HOME) < 0);
+				assert.ok(dn.pageHtml(withNotice, s).indexOf('dn-home-notice') < 0);
 				s.types.watchlist.enabled = true;
 				html = dn.pageHtml(state, s);
 				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME_WATCHLIST + '</p>') > 0);
@@ -352,6 +365,10 @@ describe('Discord notifications', function() {
 		it('names a failed edit of an old rally message', function() {
 			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'rallyEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] }) });
 			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Fight here (old message) to #ops') > 0);
+		});
+		it('names a failed chain kills notice', function() {
+			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'chainPaused', webhook: '#kills', error: 'HTTP 500', createdAt: null }] }) });
+			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Chain kills paused notice to #kills') > 0);
 		});
 	});
 });

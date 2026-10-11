@@ -31,13 +31,13 @@ describe('EvE-Scout data', () => {
 				"id": 100,
 				"signatureID": "TVK-336",
 				"systemID": 31000005,
-				"type": "K162"
+				"type": "T458"
 			  },
 			  "child": {
 				"id": 200,
 				"signatureID": "IFN-322",
 				"systemID": 30003880,
-				"type": "T458",
+				"type": "K162",
 			  }
 			},
 			{
@@ -48,13 +48,13 @@ describe('EvE-Scout data', () => {
 				"id": 100,
 				"signatureID": "CVD-320",
 				"systemID": 31000005,
-				"type": "V898"
+				"type": "K162"
 			  },
 			  "child": {
 				"id": 201,
 				"signatureID": "AOX-264",
 				"systemID": 30003486,
-				"type": "K162",
+				"type": "V898",
 			  }
 			}], 'sigs');
 			assert.deepEqual(ids, { parentID: 100, nextChildID: 202 }, 'ids' );
@@ -69,13 +69,13 @@ describe('EvE-Scout data', () => {
 				"id": 200,
 				"signatureID": "TVK-336",
 				"systemID": 31000005,
-				"type": "K162"
+				"type": "T458"
 			  },
 			  "parent": {
 				"id": 100,
 				"signatureID": "IFN-322",
 				"systemID": 30003880,
-				"type": "T458",
+				"type": "K162",
 			  }
 			}], 'sigs');
 			assert.deepEqual(ids, { parentID: 100, nextChildID: 201 }, 'ids' );
@@ -90,13 +90,13 @@ describe('EvE-Scout data', () => {
 				"id": 200,
 				"signatureID": "CVD-320",
 				"systemID": 31000005,
-				"type": "V898"
+				"type": "K162"
 			  },
 			  "parent": {
 				"id": 100,
 				"signatureID": "AOX-264",
 				"systemID": 30003486,
-				"type": "K162",
+				"type": "V898",
 			  }
 			}], 'sigs');
 			assert.deepEqual(ids, { parentID: 100, nextChildID: 201 }, 'ids' );
