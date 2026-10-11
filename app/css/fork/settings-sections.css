@@ -1,0 +1,11 @@
+/* Settings dialog sections and "Find a setting" filter (fork-owned, see app/js/fork/settings-sections.js) */
+#fs-filter { margin: 0 0 6px 0; }
+#fs-filter #fs-filter-input { width: 100%; box-sizing: border-box; padding: 3px 6px; }
+#fs-filter .fs-filter-none { display: block; margin-top: 6px; color: #999; font-style: italic; }
+#fs-filter .fs-filter-none.hidden { display: none; }
+#dialog-options .fs-hint { font-size: 11px; color: #999; }
+
+/* While filtering: only matching rows and their sections, every matching section open */
+#optionsAccordion.fs-filtering > .fs-hidden,
+#optionsAccordion.fs-filtering tr.fs-hidden { display: none !important; }
+#optionsAccordion.fs-filtering > div.fs-match { display: block !important; }
