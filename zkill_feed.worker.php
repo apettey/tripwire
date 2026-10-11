@@ -213,7 +213,7 @@ function zkf_prune(PDO $db) {
 function zkf_tick(PDO $db) {
     static $lastNames = 0;
     try {
-        $line = zk_queues_run_one($db);   // kill lookups (Smart notes), back-fills, System Threat stats: zkill/lookup.php   // System Threat stats: only when no back-fill is waiting
+        $line = zk_queues_run_one($db);   // kill lookups (Smart notes), back-fills, System Threat stats: zkill/lookup.php
         if ($line !== null) zkf_log($line);
         if (time() - $lastNames >= ZKF_NAMES_EVERY) {
             $lastNames = time();

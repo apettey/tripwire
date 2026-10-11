@@ -267,7 +267,11 @@ foreach (array_keys($work) as $name) {
         return $name;
     };
 }
-zk_queues_run_one($db, ['lookup' => function () { return null; }, 'backfill' => function () { return null; }, 'stats' => function () { return null; }]);   // reset the turn
+$none = function () { return null; };
+$resetTurn = function () use ($db, $none) {   // a back-fill ran last: lookups go first next
+    zk_queues_run_one($db, ['lookup' => $none, 'backfill' => function () { return 'x'; }, 'stats' => $none]);
+};
+$resetTurn();
 for ($i = 0; $i < 10; $i++) zk_queues_run_one($db, $steps);
 check('queues: lookups alternate with back-fills and stats while they wait, then run back to back', $ran,
     ['lookup', 'backfill', 'lookup', 'backfill', 'lookup', 'stats', 'lookup', 'stats', 'lookup', 'lookup']);
@@ -275,6 +279,33 @@ $ran = [];
 $work = ['lookup' => 0, 'backfill' => 3, 'stats' => 1];
 for ($i = 0; $i < 5; $i++) zk_queues_run_one($db, $steps);
 check('queues: without lookups, back-fills then stats as before', $ran, ['backfill', 'backfill', 'backfill', 'stats']);
+
+// Like the real worker: ticks every 0.5 s, the zKillboard API is free only every 4th tick (ZKILL_API_INTERVAL), all
+// queues busy. Not-ready ticks return null from every step and must not hand the next free slot back to lookups.
+$ran = [];
+$work = ['lookup' => 1000, 'backfill' => 1000, 'stats' => 1000];
+$tick = 0;
+$limited = [];
+foreach ($steps as $name => $step) {
+    $limited[$name] = function ($db) use ($step, &$tick) { return $tick % 4 === 0 ? $step($db) : null; };
+}
+$resetTurn();
+for ($tick = 0; $tick < 40; $tick++) zk_queues_run_one($db, $limited);
+check('queues: rate-limited ticks keep the turn (10 free slots: 5 lookups, 5 back-fills)', array_count_values($ran), ['lookup' => 5, 'backfill' => 5]);
+check('queues: they alternate', array_slice($ran, 0, 4), ['lookup', 'backfill', 'lookup', 'backfill']);
+// Back-fills empty, stats waiting: stats get the other half
+$ran = [];
+$work = ['lookup' => 1000, 'backfill' => 0, 'stats' => 1000];
+$resetTurn();
+for ($tick = 0; $tick < 40; $tick++) zk_queues_run_one($db, $limited);
+check('queues: stats get every other free slot too', array_count_values($ran), ['lookup' => 5, 'stats' => 5]);
+// Everything empty for a while, then lookups only: they run in every free slot
+$ran = [];
+$work = ['lookup' => 0, 'backfill' => 0, 'stats' => 0];
+for ($tick = 0; $tick < 8; $tick++) zk_queues_run_one($db, $limited);
+$work['lookup'] = 1000;
+for ($tick = 0; $tick < 16; $tick++) zk_queues_run_one($db, $limited);
+check('queues: lookups alone take every free slot', $ran, ['lookup', 'lookup', 'lookup', 'lookup']);
 
 // Housekeeping: abandoned running rows go back in the queue
 $db = lookup_db();

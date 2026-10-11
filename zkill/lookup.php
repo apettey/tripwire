@@ -218,7 +218,9 @@ function zk_lookup_run_one(PDO $db) {
 /**
  * Worker: one step of the zKillboard API queues. Lookups (a note is open and waiting) go first, but after a lookup
  * the next step lets back-fills and stats go first, so a stream of lookups can at most take every other API slot
- * from the System Kill Feed and System Threat. With nothing else waiting, lookups run back to back.
+ * from the System Kill Feed and System Threat. With nothing else waiting, lookups run back to back. A pass in which no
+ * step ran (the zKillboard API isn't free yet, which is most ticks: the worker ticks every 0.5 s, the API allows one
+ * request per ZKILL_API_INTERVAL; or every queue is empty) keeps the turn, so back-fills and stats get the next free slot.
  * @param array|null $steps test hook: ['lookup' => callable, 'backfill' => callable, 'stats' => callable], each
  *                          callable($db) returning a log line or null (nothing done)
  * @return string|null log line of the step that ran
@@ -234,6 +236,5 @@ function zk_queues_run_one(PDO $db, ?array $steps = null) {
             return $line;
         }
     }
-    $lookupNext = true;   // nothing to do anywhere: lookups first again
-    return null;
+    return null;   // not ready or nothing to do: the turn stays as it is
 }
