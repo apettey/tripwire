@@ -645,7 +645,7 @@ const systemThreat = {
 	// ---- Threat & residents section: in the Intel panel, or in the system info panel when that is off ----
 
 	RESIDENTS_URL: "system_residents.php",
-	RESIDENTS_REFRESH_MS: 60000,	// other mask members' changes, with the detail polls
+	RESIDENTS_REFRESH_MS: 60000,	// other mask members' changes: re-read with the detail polls (every REFRESH_MS), not more than once a minute
 	COLLAPSED_KEY: "tripwire.threatResidents.collapsed",
 	DIALOG_ID: "dialog-systemResidents",
 
@@ -736,7 +736,7 @@ const systemThreat = {
 		if (!id || !systemThreat.$info().length) { return; }
 		if (document.hidden) { systemThreat.missed = true; return; }
 		if (systemThreat.detailXhr) { systemThreat.detailXhr.abort(); }
-		// Residents set by other mask members: with the detail polls, at most once a minute
+		// Residents set by other mask members: with the detail polls (every REFRESH_MS; while stats are pending not more than once a minute)
 		if (queue && Date.now() - (systemThreat.residentsAt || 0) >= systemThreat.RESIDENTS_REFRESH_MS) { systemThreat.fetchResidents(); }
 		const xhr = $.ajax({ url: systemThreat.URL, type: "GET", data: { systemID: id, queue: queue ? 1 : 0 },
 			dataType: "JSON", cache: false, timeout: 15000 });
@@ -768,10 +768,11 @@ const systemThreat = {
 		if (!id) { return; }
 		if (systemThreat.residentsXhr) { systemThreat.residentsXhr.abort(); }
 		systemThreat.residentsAt = Date.now();
+		const seq = systemThreat.residentsSeq || 0;
 		const xhr = $.ajax({ url: systemThreat.RESIDENTS_URL, type: "GET", data: { systemID: id }, dataType: "JSON", cache: false, timeout: 15000 });
 		systemThreat.residentsXhr = xhr;
 		xhr.done(function(response) {
-			if (id !== systemThreat.detailID) { return; }
+			if (id !== systemThreat.detailID || seq !== (systemThreat.residentsSeq || 0)) { return; }	// a save came after it
 			systemThreat.residentsSet = response && response.residents ? response.residents : null;
 			systemThreat.renderInfo();
 		}).always(function() {
@@ -870,7 +871,10 @@ const systemThreat = {
 			data.note = String($dialog.find(".threat-note-input").val() || "").slice(0, 200);
 		}
 		const $buttons = $dialog.parent().find(".threat-save, .threat-clear").prop("disabled", true).addClass("ui-state-disabled");
-		$.ajax({ url: systemThreat.RESIDENTS_URL, type: "POST", data: data, dataType: "JSON", timeout: 30000,
+		// A read started before this save must not overwrite its answer
+		if (systemThreat.residentsXhr) { systemThreat.residentsXhr.abort(); systemThreat.residentsXhr = null; }
+		systemThreat.residentsSeq = (systemThreat.residentsSeq || 0) + 1;
+		$.ajax({ url: systemThreat.RESIDENTS_URL, type: "POST", data: data, dataType: "JSON", timeout: 75000,
 			headers: { "X-Requested-With": "XMLHttpRequest" } }).done(function(response) {
 			if (id === systemThreat.detailID) {
 				systemThreat.residentsSet = response && response.residents ? response.residents : null;

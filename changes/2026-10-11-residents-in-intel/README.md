@@ -32,7 +32,8 @@ whole section wherever it is, including Set residents. Its text now says the Int
   residents dialog: quick picks from "Active here" (likely residents pre-ticked when nothing is set), exact names typed
   in, a note (200 characters), Save / Clear residents / Cancel. When residents are set, the body lists them with logo,
   [ticker], zKillboard link, note and "set by X, 3d ago"; "show activity" reveals the detected list. Residents are
-  read with the viewed system and re-read with its polls (at most once a minute) so other mask members' changes show.
+  read with the viewed system and re-read with its detail polls (every 5 minutes; while stats are
+  pending, not more than once a minute) so other mask members' changes show.
 - New `public/system_residents.php` + `system_residents.inc.php`: per mask and system, table `fork_system_residents`
   (created on first use, reference DDL `docker/sql/system-residents.sql`), session check, POST needs
   `X-Requested-With`, everything validated server-side (system IDs, entity kinds and IDs, at most 10, note cleaned).

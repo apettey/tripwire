@@ -41,10 +41,10 @@ function system_residents_ensure_table($mysql) {
 	}
 }
 
-/** Valid solar system ID (k-space, wormholes, Abyssal/void excluded) from a request value, or false */
+/** Valid solar system ID (k-space 30xxxxxx, wormholes 31xxxxxx; Abyssal / void 32xxxxxx are refused) from a request value, or false */
 function system_residents_system_id($value) {
 	if (is_int($value)) $value = (string)$value;
-	if (!is_string($value) || !preg_match('/^3[0-2][0-9]{6}$/', $value)) return false;
+	if (!is_string($value) || !preg_match('/^3[01][0-9]{6}$/', $value)) return false;
 	return (int)$value;
 }
 
@@ -122,7 +122,7 @@ function system_residents_resolve_names(array $names) {
 	$result = array('found' => array(), 'unknown' => array(), 'error' => null);
 	if (!$names) return $result;
 	[$status, $body] = esi_request('POST', SYSTEM_RESIDENTS_ESI . 'universe/ids/', array('Accept: application/json', 'Content-Type: application/json'),
-		json_encode(array_values($names)), 15);
+		json_encode(array_values($names)), 10);
 	if ($status !== 200) {
 		$result['error'] = $status === -1 ? (string)$body : 'ESI could not look up the names (' . ($status ? 'HTTP ' . $status : 'no answer') . ')';
 		return $result;
@@ -151,7 +151,7 @@ function system_residents_resolve_names(array $names) {
 /** Name and ticker of one corporation / alliance from ESI. @return ['name', 'ticker'] or null (unknown, or the ID is of another kind), or a string error */
 function system_residents_fetch_entity($kind, $id) {
 	$url = SYSTEM_RESIDENTS_ESI . ($kind === 'alliance' ? 'alliances/' : 'corporations/') . (int)$id . '/';
-	[$status, $body] = esi_request('GET', $url, array('Accept: application/json'), null, 10);
+	[$status, $body] = esi_request('GET', $url, array('Accept: application/json'), null, 5);
 	if ($status === 404 || $status === 400) return null;
 	if ($status !== 200) return $status === -1 ? (string)$body : 'ESI could not look up ' . $kind . ' ' . (int)$id . ' (' . ($status ? 'HTTP ' . $status : 'no answer') . ')';
 	$data = json_decode((string)$body, true);
@@ -163,11 +163,13 @@ function system_residents_fetch_entity($kind, $id) {
  * Entities to store: picks plus resolved names, each once, at most SYSTEM_RESIDENTS_MAX, with name and ticker from
  * $known (the entities stored so far, keyed "kind:id"), else the server's own caches ($local: callable(entities) =>
  * ["kind:id" => ['name', 'ticker']], names whose ESI category matched the kind), else ESI. When ESI can't be asked,
- * a cached name is enough (ticker '').
- * @return array ['entities' => [...], 'unknown' => [names], 'error' => text|null]
+ * a cached name is enough (ticker ''): ESI is asked only for entities without a cached name (picks the caches don't
+ * know, names typed in), so a save makes at most 1 + SYSTEM_RESIDENTS_MAX short ESI calls.
+ * @return array ['entities' => [...], 'unknown' => [names], 'error' => text|null, 'invalid' => true when the error is
+ *         the request's fault (unknown entity, too many), not ESI's]
  */
 function system_residents_resolve(array $picks, array $names, array $known = array(), ?callable $local = null) {
-	$out = array('entities' => array(), 'unknown' => array(), 'error' => null);
+	$out = array('entities' => array(), 'unknown' => array(), 'error' => null, 'invalid' => false);
 	$resolved = system_residents_resolve_names($names);
 	if ($resolved['error']) { $out['error'] = $resolved['error']; return $out; }
 	$out['unknown'] = $resolved['unknown'];
@@ -177,21 +179,23 @@ function system_residents_resolve(array $picks, array $names, array $known = arr
 		$key = $e['kind'] . ':' . $e['id'];
 		if (!isset($wanted[$key])) $wanted[$key] = $e;
 	}
-	if (count($wanted) > SYSTEM_RESIDENTS_MAX) { $out['error'] = 'At most ' . SYSTEM_RESIDENTS_MAX . ' corporations and alliances'; return $out; }
+	if (count($wanted) > SYSTEM_RESIDENTS_MAX) { $out['error'] = 'At most ' . SYSTEM_RESIDENTS_MAX . ' corporations and alliances'; $out['invalid'] = true; return $out; }
 	$cached = $local ? $local(array_values($wanted)) : array();
 	foreach ($wanted as $key => $e) {
 		if (isset($known[$key])) { $out['entities'][] = $known[$key]; continue; }
 		$have = isset($cached[$key]) && is_array($cached[$key]) ? $cached[$key] : array('name' => '', 'ticker' => '');
 		$name = system_residents_clean_text(isset($have['name']) ? $have['name'] : '', 100);
 		$ticker = system_residents_clean_ticker(isset($have['ticker']) ? $have['ticker'] : '');
+		$cachedName = $name !== '';
 		if ($name === '' && isset($e['name'])) $name = system_residents_clean_text($e['name'], 100);	// as /universe/ids spelled it
-		if ($name === '' || $ticker === '') {
+		if (!$cachedName) {
 			$info = system_residents_fetch_entity($e['kind'], $e['id']);
 			if (is_array($info)) {
 				$name = $info['name'];
 				$ticker = $info['ticker'];
 			} else if ($name === '') {
 				$out['error'] = is_string($info) ? $info : 'Unknown ' . $e['kind'] . ' ' . $e['id'];
+				$out['invalid'] = $info === null;
 				return $out;
 			}
 		}

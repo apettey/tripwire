@@ -76,7 +76,7 @@ try {
 			if ($resolved['unknown']) {
 				system_residents_fail(400, 'Not a corporation or alliance: ' . implode(', ', $resolved['unknown']), array('unknown' => $resolved['unknown']));
 			}
-			if ($resolved['error']) system_residents_fail(502, $resolved['error']);
+			if ($resolved['error']) system_residents_fail($resolved['invalid'] ? 400 : 502, $resolved['error']);	// 502: ESI failed
 			system_residents_set($mysql, $mask, $systemID, $resolved['entities'], isset($_POST['note']) ? $_POST['note'] : '', $setBy);
 		} else if ($mode === 'clear') {
 			system_residents_clear($mysql, $mask, $systemID);

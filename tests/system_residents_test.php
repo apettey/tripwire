@@ -22,7 +22,8 @@ function check($name, $actual, $expected) {
 check('system wormhole', system_residents_system_id('31002012'), 31002012);
 check('system k-space', system_residents_system_id('30000142'), 30000142);
 check('system int', system_residents_system_id(31000005), 31000005);
-check('system abyssal', system_residents_system_id('34000001'), false);
+check('system abyssal', system_residents_system_id('32000001'), false);
+check('system out of range', system_residents_system_id('34000001'), false);
 check('system short', system_residents_system_id('3100201'), false);
 check('system junk', system_residents_system_id('31002012x'), false);
 check('system array', system_residents_system_id(array('31002012')), false);
@@ -83,7 +84,7 @@ esi_transport(function($method, $url, $headers, $body) use (&$calls) {
 $r = system_residents_resolve(array(array('kind' => 'alliance', 'id' => 99700001)), array('deep space dwellers'));
 check('resolve: names and tickers from ESI', $r, array('entities' => array(
 	array('kind' => 'alliance', 'id' => 99700001, 'name' => 'Wanderers Collective', 'ticker' => 'WNDR'),
-	array('kind' => 'corporation', 'id' => 98700001, 'name' => 'Deep Space Dwellers', 'ticker' => 'DSD')), 'unknown' => array(), 'error' => null));
+	array('kind' => 'corporation', 'id' => 98700001, 'name' => 'Deep Space Dwellers', 'ticker' => 'DSD')), 'unknown' => array(), 'error' => null, 'invalid' => false));
 
 $r = system_residents_resolve(array(), array('No Such Corp', 'Somebody'));
 check('resolve: unknown names (characters do not count)', $r['unknown'], array('No Such Corp', 'Somebody'));
@@ -94,6 +95,7 @@ check('resolve: a name shared by a corporation and an alliance gives both', arra
 
 $r = system_residents_resolve(array(array('kind' => 'alliance', 'id' => 98700001)), array());
 check('resolve: an ID of another kind is refused', $r['error'], 'Unknown alliance 98700001');
+check('resolve: an unknown entity is a client error (400)', $r['invalid'], true);
 
 $r = system_residents_resolve(array(array('kind' => 'corporation', 'id' => 98700002)), array());
 check('resolve: ESI text is cleaned', $r['entities'], array(array('kind' => 'corporation', 'id' => 98700002, 'name' => 'Static <Hunters>', 'ticker' => '')));
@@ -103,17 +105,22 @@ $known = array('corporation:98700001' => array('kind' => 'corporation', 'id' => 
 $local = function($entities) { return array('alliance:99700001' => array('name' => 'Cached Alliance', 'ticker' => 'CA'), 'corporation:98700500' => array('name' => 'Cached Corp', 'ticker' => '')); };
 $r = system_residents_resolve(array(array('kind' => 'corporation', 'id' => 98700001), array('kind' => 'alliance', 'id' => 99700001), array('kind' => 'corporation', 'id' => 98700500)), array(), $known, $local);
 check('resolve: stored and cached entities', array_map(function($e) { return $e['name'] . '/' . $e['ticker']; }, $r['entities']), array('Stored/ST', 'Cached Alliance/CA', 'Cached Corp/'));
-check('resolve: ESI asked only for the missing ticker (and its failure is not fatal)', $calls, array('GET corporations/98700500/'));
+check('resolve: a cached name without ticker is enough, ESI is not asked', $calls, array());
 
 $r = system_residents_resolve(array(array('kind' => 'corporation', 'id' => 98700500)), array());
 check('resolve: ESI down without a cached name is an error', $r['error'], 'ESI could not look up corporation 98700500 (HTTP 503)');
+check('resolve: ESI down is an upstream error (502)', $r['invalid'], false);
 
 $many = array();
 for ($i = 1; $i <= SYSTEM_RESIDENTS_MAX + 1; $i++) $many[] = array('kind' => 'corporation', 'id' => 98700100 + $i);
-check('resolve: at most ' . SYSTEM_RESIDENTS_MAX, system_residents_resolve($many, array())['error'], 'At most ' . SYSTEM_RESIDENTS_MAX . ' corporations and alliances');
+$r = system_residents_resolve($many, array());
+check('resolve: at most ' . SYSTEM_RESIDENTS_MAX, $r['error'], 'At most ' . SYSTEM_RESIDENTS_MAX . ' corporations and alliances');
+check('resolve: too many is a client error', $r['invalid'], true);
 
 esi_transport(function() { return array(0, 'timeout', array()); });
-check('resolve: ESI unreachable for names', system_residents_resolve(array(), array('Deep Space Dwellers'))['error'], 'ESI could not look up the names (no answer)');
+$r = system_residents_resolve(array(), array('Deep Space Dwellers'));
+check('resolve: ESI unreachable for names', $r['error'], 'ESI could not look up the names (no answer)');
+check('resolve: ESI unreachable is an upstream error', $r['invalid'], false);
 esi_transport(null, true);
 
 // --- Storage, against the dev database ---

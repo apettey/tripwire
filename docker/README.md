@@ -336,7 +336,7 @@ GET `systemID=<id>`; POST (with `X-Requested-With: XMLHttpRequest`) `mode=set` w
 browser: names are resolved with ESI's public `POST /universe/ids`, then each entity's name and ticker come from the
 stored row, `zkill_names` and the system's `zkill_system_stats` top lists, else ESI's public `GET /corporations/{id}` /
 `/alliances/{id}` (through `esi/esi.inc.php`, so ESI pauses apply; only on Save). The browser re-reads the residents with
-the viewed system's polls (at most once a minute). Tests: `php tests/system_residents_test.php` (fake ESI; storage
+the viewed system's detail polls (every 5 minutes; while its stats are pending, not more than once a minute). Tests: `php tests/system_residents_test.php` (fake ESI; storage
 checks against the dev database).
 
 #### Smart notes
