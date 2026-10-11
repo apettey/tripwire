@@ -484,7 +484,7 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
   against the game data, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask.
 - The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
   makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
-  signature table). Each member turns these on or off in Settings > General Preferences > Watchlist.
+  signature table). Each member turns these on or off in Settings > Kills & Intel > Watchlist.
 - The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`. Both matchers pass the
   same cases, `watchlist/tests/cases.json` (mocha: `app/js-test/fork/watchlist.test.js`; PHP:
   `docker compose -f docker-compose.dev.yml exec -T app php watchlist/tests/watchlist_test.php`).

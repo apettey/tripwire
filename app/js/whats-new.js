@@ -152,12 +152,11 @@ const whatsNew = {
 			close: function() { whatsNew.markSeen(); }
 		});
 
-		// Settings > General Preferences row
-		const $row = $("<tr><th>What's new:</th><td><input type='button' id='whatsNewShow' value='Show' /> <span id='whatsNewVersion' class='whats-new-version-inline'></span></td></tr>");
-		$("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first().append($row);
-		if ($("#optionsAccordion").hasClass("ui-accordion")) {
-			$("#optionsAccordion").accordion("refresh");
-		}
+		// Settings > General row
+		forkSettings.register({
+			section: "general", order: 10, id: "whatsNewShow", type: "custom", label: "What's new:",
+			html: "<input type='button' id='whatsNewShow' value='Show' /> <span id='whatsNewVersion' class='whats-new-version-inline'></span>"
+		});
 		$(document).on("click", "#whatsNewShow", function(e) {
 			e.preventDefault();
 			whatsNew.open();

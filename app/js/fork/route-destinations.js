@@ -442,10 +442,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<thead><tr><th>Destination</th><th>Best exit from chain</th><th>Jumps</th><th>Map</th><th></th></tr></thead>"
 				+ "<tbody></tbody></table>"
 				+ "<p class='route-dest-note'>Jumps are gate jumps from the nearest k-space system on the current chain map, using your "
-				+ "K-space route selection (Settings &gt; General Preferences). Holes to unidentified systems (e.g. just \"Low-Sec\") can't be routed. "
+				+ "K-space route selection (Settings &gt; Routes &amp; Navigation). Holes to unidentified systems (e.g. just \"Low-Sec\") can't be routed. "
 				+ "On the map, a destination is attached to every exit within the \"Show Route as Blobs\" limit, or else to the nearest one. "
 				+ "A route through Thera or Turnur (EVE-Scout's connections) is shown instead when it has fewer jumps, gates plus the two holes "
-				+ "(Settings &gt; General Preferences &gt; Routes through). Its gate jumps keep strictly to your K-space route selection: "
+				+ "(Settings &gt; Routes &amp; Navigation &gt; Routes through). Its gate jumps keep strictly to your K-space route selection: "
 				+ "Prefer HS only goes through high-sec, Avoid NS / Avoid HS never through null-sec / high-sec.</p>"
 				+ "</div>"
 			);
@@ -483,16 +483,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 			updateButton();
 
-			// Settings > Chain Map Settings row (before the footnote row)
-			const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-			if ($table.length && !$("#routeDestinationsEdit").length) {
-				const $row = $("<tr><th>Destinations:</th><td><input type='button' id='routeDestinationsEdit' value='Edit' /></td></tr>");
-				const $footnote = $table.find("tr").last();
-				if ($footnote.find("td[colspan]").length) { $footnote.before($row); } else { $table.append($row); }
-				if ($("#optionsAccordion").hasClass("ui-accordion")) {
-					$("#optionsAccordion").accordion("refresh");
-				}
-			}
+			// Settings > Routes & Navigation row: a button that opens the Destinations window (no value of its own)
+			forkSettings.register({
+				section: "routes", order: 40, id: "routeDestinationsEdit", type: "custom", label: "Destinations:",
+				html: "<input type='button' id='routeDestinationsEdit' value='Edit' />"
+			});
 			$(document).on("click", "#routeDestinationsEdit", function(e) {
 				e.preventDefault();
 				open();

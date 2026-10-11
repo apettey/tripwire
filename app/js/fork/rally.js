@@ -297,36 +297,15 @@ const rally = {
 
 	setupSettings: function() {
 		if (typeof options === "undefined") { return; }
-		// Settings > Chain Map Settings row (before the renderer footnote); takes effect on Save like its neighbours
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#rallyDiscord-enabled").length) {
-			const $row = $("<tr><th>Rally point:</th><td><label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my rally changes to Discord</label>"
-				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord.</div></td></tr>");
-			const $footnote = $table.find("td[colspan]").last().closest("tr");
-			if ($footnote.length) { $row.insertBefore($footnote); } else { $table.append($row); }
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(options));
+		// Settings > Map Markers row; takes effect on Save like its neighbours (Reset = on)
+		forkSettings.register({
+			section: "markers", order: 50, id: "rallyDiscord-enabled", type: "custom", key: "rallyDiscord", label: "Rally point:",
+			keywords: "discord fight",
+			html: "<label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my rally changes to Discord</label>"
+				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord.</div>",
+			load: function(o) { $("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(o)); },
+			save: function(o) { o.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler saves the options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#rallyDiscord-enabled").length) { return; }
-			options.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") };
-		}, true);
-		// Settings > Reset: a missing key means on
-		if (typeof options.reset === "function" && !options.reset.rallyDiscordWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.rallyDiscord;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.rallyDiscordWrapped = true;
-			options.reset = wrapped;
-		}
 	},
 
 	init: function() {

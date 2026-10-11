@@ -450,35 +450,13 @@ const systemKillFeed = {
 	// ---- Settings ----
 
 	setupSettings: function() {
-		// Settings > General Preferences row; takes effect on Save like its neighbours
-		const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($table.length && !$("#systemKillFeed-enabled").length) {
-			$table.append("<tr><th>System kill feed:</th><td><label><input type='checkbox' id='systemKillFeed-enabled' /> Show the Kills panel for the viewed system</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#systemKillFeed-enabled").prop("checked", systemKillFeed.isOn());
+		// Settings > Kills & Intel row; takes effect on Save like its neighbours (Reset = on)
+		forkSettings.register({
+			section: "intel", order: 10, id: "systemKillFeed-enabled", type: "checkbox", key: "systemKillFeed",
+			label: "System kill feed:", text: "Show the Kills panel for the viewed system",
+			get: function() { return systemKillFeed.isOn(); },
+			set: function(o, on) { o.systemKillFeed = { enabled: on }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler runs options.apply() and saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#systemKillFeed-enabled").length) { return; }
-			options.systemKillFeed = { enabled: $("#systemKillFeed-enabled").prop("checked") };
-		}, true);
-
-		// Settings > Reset: a missing key means on. Wraps whatever reset is in place (registered after What's New's
-		// wrapper, which would otherwise keep this key).
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.systemKillFeedWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.systemKillFeed;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.systemKillFeedWrapped = true;
-			options.reset = wrapped;
-		}
 		// options.apply() runs on Save and Reset: add or remove the panel to match
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.systemKillFeedWrapped) {
 			const apply = options.apply;

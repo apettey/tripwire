@@ -410,41 +410,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 		}
 
-		// ---- Settings > General Preferences, under the Favourites panel's own row ----
+		// ---- Settings > Routes & Navigation, under the Favourites panel's own row ----
 		function setupSettings() {
-			if (!$("#favouritesRouteStrip-enabled").length) {
-				const row = "<tr><th></th><td><label><input type='checkbox' id='favouritesRouteStrip-enabled' /> Show routes as jump markers</label></td></tr>";
-				const $panelRow = $("#favouritesPanel-enabled").closest("tr");
-				if ($panelRow.length) {
-					$panelRow.after(row);
-				} else {
-					$("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first().append(row.replace("<th></th>", "<th>Favourites panel:</th>"));
-				}
-				if ($("#optionsAccordion").hasClass("ui-accordion")) { $("#optionsAccordion").accordion("refresh"); }
-			}
-			$(document).on("dialogopen", "#dialog-options", function() {
-				$("#favouritesRouteStrip-enabled").prop("checked", isOn());
+			// Takes effect on Save; Reset = on
+			forkSettings.register({
+				section: "routes", order: 51, id: "favouritesRouteStrip-enabled", type: "checkbox", key: "favouritesRouteStrip",
+				label: "", text: "Show routes as jump markers", keywords: "favourites panel",
+				get: function() { return isOn(); },
+				set: function(o, on) { o.favouritesRouteStrip = { enabled: on }; }
 			});
-			// Capture phase so the value is in place before upstream's Save handler applies and saves options
-			document.addEventListener("click", function(e) {
-				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-				if (!button || $.trim($(button).text()) !== "Save") { return; }
-				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#favouritesRouteStrip-enabled").length) { return; }
-				options.favouritesRouteStrip = { enabled: $("#favouritesRouteStrip-enabled").prop("checked") };
-			}, true);
-
-			// Settings > Reset: a missing key means on
-			if (typeof options.reset === "function" && !options.reset.routeStripWrapped) {
-				const reset = options.reset;
-				const wrapped = function() {
-					const result = reset.apply(this, arguments);
-					delete this.favouritesRouteStrip;
-					return result;
-				};
-				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-				wrapped.routeStripWrapped = true;
-				options.reset = wrapped;
-			}
 			// Save and Reset both end in options.apply(): the panel re-renders (or is re-added) there
 			if (typeof options.apply === "function" && !options.apply.routeStripWrapped) {
 				const apply = options.apply;

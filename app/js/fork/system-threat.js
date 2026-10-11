@@ -601,41 +601,19 @@ const systemThreat = {
 	// ---- Settings ----
 
 	setupSettings: function() {
-		// Chain Map Settings (badges) and General Preferences (info block) rows; take effect on Save like their neighbours
-		const $chain = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($chain.length && !$("#systemThreat-enabled").length) {
-			$chain.append("<tr><th>Threat badges:</th><td><label><input type='checkbox' id='systemThreat-enabled' /> Show recent kill activity on nodes</label></td></tr>");
-		}
-		const $general = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($general.length && !$("#systemResidents-enabled").length) {
-			$general.append("<tr><th>System threat &amp; residents:</th><td><label><input type='checkbox' id='systemResidents-enabled' /> Show threat and active corporations in the system info panel</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#systemThreat-enabled").prop("checked", systemThreat.enabled(options));
-			$("#systemResidents-enabled").prop("checked", systemThreat.residentsEnabled(options));
+		// Settings > Map Markers (badges) and Kills & Intel (info block); take effect on Save like their neighbours (Reset = on)
+		forkSettings.register({
+			section: "markers", order: 40, id: "systemThreat-enabled", type: "checkbox", key: "systemThreat",
+			label: "Threat badges:", text: "Show recent kill activity on nodes",
+			get: function(o) { return systemThreat.enabled(o); },
+			set: function(o, on) { o.systemThreat = { enabled: on }; }
 		});
-		// Capture phase so the values are in place before upstream's Save handler runs options.apply() and saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length) { return; }
-			if ($("#systemThreat-enabled").length) { options.systemThreat = { enabled: $("#systemThreat-enabled").prop("checked") }; }
-			if ($("#systemResidents-enabled").length) { options.systemResidents = { enabled: $("#systemResidents-enabled").prop("checked") }; }
-		}, true);
-
-		// Settings > Reset: a missing key means on
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.systemThreatWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.systemThreat;
-				delete this.systemResidents;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.systemThreatWrapped = true;
-			options.reset = wrapped;
-		}
+		forkSettings.register({
+			section: "intel", order: 30, id: "systemResidents-enabled", type: "checkbox", key: "systemResidents",
+			label: "System threat & residents:", text: "Show threat and active corporations in the system info panel",
+			get: function(o) { return systemThreat.residentsEnabled(o); },
+			set: function(o, on) { o.systemResidents = { enabled: on }; }
+		});
 		// options.apply() runs on Save and Reset (chain.redraw() follows there and re-decorates the nodes)
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.systemThreatWrapped) {
 			const apply = options.apply;

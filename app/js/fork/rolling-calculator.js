@@ -374,32 +374,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			owner.parse = wrapped;
 		});
 
-		// Settings > Chain Map Settings: "Rolling guidance" checkbox, applied on Save like the other chain settings
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#rollingCalc-enabled").length) {
-			$table.append("<tr><th>Rolling guidance:</th><td><label><input type='checkbox' id='rollingCalc-enabled' /> Show worst-case rolling in the mass dialog</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#rollingCalc-enabled").prop("checked", rollingCalc.enabled(options));
+		// Settings > Wormhole Jumps & Mass: "Rolling guidance", applied on Save like its neighbours (Reset = on)
+		forkSettings.register({
+			section: "jumps", order: 20, id: "rollingCalc-enabled", type: "checkbox", key: "rollingCalc",
+			label: "Rolling guidance:", text: "Show worst-case rolling in the mass dialog",
+			get: function(o) { return rollingCalc.enabled(o); },
+			set: function(o, on) { o.rollingCalc = { enabled: on }; }
 		});
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#rollingCalc-enabled").length) { return; }
-			options.rollingCalc = { enabled: $("#rollingCalc-enabled").prop("checked") };
-		}, true);
-
-		// Settings > Reset: back to on (a missing key means on)
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.rollingCalcWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.rollingCalc;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.rollingCalcWrapped = true;
-			options.reset = wrapped;
-		}
 	});
 }

@@ -554,9 +554,8 @@ const jumpPlanner = {
 			return list.map(function(o) { return "<label><input type='radio' name='" + name + "' value='" + esc(o[0]) + "' /> " + esc(o[1]) + "</label>"; }).join(" ");
 		};
 		const swatch = function(i, text) { return "<span class='jp-swatch' style='background: " + jumpPlanner.BAND_COLORS[i] + "'></span>" + esc(text); };
-		return "<h3 id='jumpPlanner-header'><a href='#'>Jump Planner</a></h3>"
-			+ "<div id='jumpPlanner-section'><table class='optionsTable jp-options' width='100%' cellpadding='1' cellspacing='0'>"
-			+ "<tr><th>Enable jump planner:</th><td>" + radios("jumpPlanner-enabled", [["1", "Yes"], ["0", "No"]]) + "</td></tr>"
+		// The rows of Settings > Jump Planner (the section itself comes from forkSettings.section)
+		return "<tr><th>Enable jump planner:</th><td>" + radios("jumpPlanner-enabled", [["1", "Yes"], ["0", "No"]]) + "</td></tr>"
 			+ "<tr><th>Jump ship:</th><td><select id='jumpPlanner-ship'>" + jumpPlanner.shipOptionsHtml(presets) + "</select>"
 			+ " <span class='jp-settings-error hidden'></span></td></tr>"
 			+ "<tr><th>Jump Drive Calibration:</th><td>" + radios("jumpPlanner-jdc", jumpPlanner.ROMAN.map(function(r, i) { return [String(i), r]; })) + "</td></tr>"
@@ -571,8 +570,7 @@ const jumpPlanner = {
 			+ "<tr><th>Mini-map shows:</th><td><span class='jp-dim'>out to</span> <input type='range' id='jumpPlanner-radius' min='7' max='15' step='1' /> <span id='jumpPlanner-radius-label'></span></td></tr>"
 			+ "<tr><th>Out-of-range systems:</th><td><label><input type='checkbox' id='jumpPlanner-showOut' /> Show greyed in mini-map</label></td></tr>"
 			+ "<tr><th>High-sec systems:</th><td><label><input type='checkbox' id='jumpPlanner-showHs' /> Show inside the range (no cyno there)</label></td></tr>"
-			+ "<tr><th>Trade-hub reach:</th><td>" + radios("jumpPlanner-hubs", [["1", "Show"], ["0", "Hide"]]) + "</td></tr>"
-			+ "</table></div>";
+			+ "<tr><th>Trade-hub reach:</th><td>" + radios("jumpPlanner-hubs", [["1", "Show"], ["0", "Hide"]]) + "</td></tr>";
 	}
 };
 
@@ -1032,42 +1030,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function setupSettings() {
-			const $accordion = $("#dialog-options #optionsAccordion");
-			if (!$accordion.length || $("#jumpPlanner-section").length) { return; }
-			// Built right away (so the feature can always be turned off); the ship list fills in from ships.json when
-			// Settings opens. Before "Personal Statistics" (the last section): the indexes other code uses stay put.
-			const $last = $accordion.children("h3").last();
-			if ($last.length) { $last.before(jp.settingsHtml(presets)); } else { $accordion.append(jp.settingsHtml(presets)); }
-			if ($accordion.hasClass("ui-accordion")) { $accordion.accordion("refresh"); }
+			// Its own Settings section after Routes & Navigation, built right away (so the feature can always be turned
+			// off); the ship list fills in from ships.json when Settings opens. Every open re-reads the stored values.
+			forkSettings.section("jumpPlanner", "Jump Planner", { after: "routes", id: "jumpPlanner-section", tableClass: "jp-options" });
+			forkSettings.register({
+				section: "jumpPlanner", id: "jumpPlanner", type: "custom", rows: jp.settingsHtml(presets),
+				keywords: "jump drive capital cyno",
+				load: function() { fillForm(current()); fillShips(); },
+				save: function() { store(readForm()); state.counts = {}; },
+				// Settings > Reset: back to defaults (a missing key means defaults)
+				reset: function(o) { delete o.jumpRange; resetPending = true; }
+			});
 			$(document).on("change", "#jumpPlanner-ship, input[name='jumpPlanner-jdc']", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-cap", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-radius", function() { $("#jumpPlanner-radius-label").text($(this).val() + " LY"); });
-			$(document).on("dialogopen", "#dialog-options", function() {
-				if (!$("#jumpPlanner-section").length) { return; }
-				fillForm(current());
-				fillShips();
-			});
-			// Capture phase so the values are in place before upstream's Save handler applies and saves options
-			document.addEventListener("click", function(e) {
-				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-				if (!button || $.trim($(button).text()) !== "Save") { return; }
-				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#jumpPlanner-section").length) { return; }
-				store(readForm());
-				state.counts = {};
-			}, true);
-			// Settings > Reset: back to defaults (a missing key means defaults)
-			if (typeof options.reset === "function" && !options.reset.jumpPlannerWrapped) {
-				const reset = options.reset;
-				const wrapped = function() {
-					const result = reset.apply(this, arguments);
-					delete this.jumpRange;
-					resetPending = true;
-					return result;
-				};
-				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-				wrapped.jumpPlannerWrapped = true;
-				options.reset = wrapped;
-			}
 			// Save and Reset both end in options.apply() (which redraws the chain): show/hide the panel to match
 			if (typeof options.apply === "function" && !options.apply.jumpPlannerWrapped) {
 				const apply = options.apply;

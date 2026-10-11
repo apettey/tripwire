@@ -236,6 +236,7 @@ const forkSettings = {
 		if (item.rendered) { return; }
 		const $section = forkSettings.ensureSection(item.section);
 		if (!$section || !$section.length) { return; }	// its section isn't declared yet: rendered when it is
+		if (item.rendered) { return; }	// creating the section just rendered it (with the others waiting for it)
 		item.rendered = true;
 		forkSettings.place($section, $(forkSettings.rowHtml(item)), item.order);
 		forkSettings.refresh();

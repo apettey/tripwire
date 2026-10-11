@@ -287,7 +287,7 @@ const favouritesPanel = {
 
 	/** Whether a route may pass through a system on its way (not as its start or destination): never Zarzakh
 	(its gates hold you for hours) or a system on the user's avoid list; in safe mode only high-sec.
-	@param ignore {<lower-case name>: true} (Settings > General Preferences > avoid list, when enabled) */
+	@param ignore {<lower-case name>: true} (Settings > Routes & Navigation > avoid list, when enabled) */
 	passable: function(system, safe, ignore) {
 		if (!system) { return false; }
 		const name = String(system.name || "");
@@ -572,7 +572,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		// Gate jumps from a system to everywhere (shortest or high-sec only), kept between draws: the gate map
 		// doesn't change, and favourites and the location change rarely
 		let distanceCache = {}, distanceCount = 0, distanceAvoid = "";
-		/** The user's avoid list (Settings > General Preferences), when switched on: {<lower-case name>: true} */
+		/** The user's avoid list (Settings > Routes & Navigation), when switched on: {<lower-case name>: true} */
 		function avoidList() {
 			const r = options.chain && options.chain.routeIgnore;
 			if (!r || !r.enabled || !Array.isArray(r.systems)) { return null; }
@@ -805,37 +805,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			render();
 		}
 
-		// ---- Settings > General Preferences ----
+		// ---- Settings > Routes & Navigation ----
 
 		function setupSettings() {
-			const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-			if ($table.length && !$("#favouritesPanel-enabled").length) {
-				$table.append("<tr><th>Favourites panel:</th><td><label><input type='checkbox' id='favouritesPanel-enabled' /> Show the Favourites panel</label></td></tr>");
-				if ($("#optionsAccordion").hasClass("ui-accordion")) { $("#optionsAccordion").accordion("refresh"); }
-			}
-			$(document).on("dialogopen", "#dialog-options", function() {
-				$("#favouritesPanel-enabled").prop("checked", isOn());
+			// Takes effect on Save; Reset deletes options.favoritesPanel (back to the defaults)
+			forkSettings.register({
+				section: "routes", order: 50, id: "favouritesPanel-enabled", type: "checkbox", key: "favoritesPanel",
+				label: "Favourites panel:", text: "Show the Favourites panel",
+				get: function() { return isOn(); },
+				set: function(o, on) { o.favoritesPanel = Object.assign({}, o.favoritesPanel || {}, { enabled: on }); }
 			});
-			// Capture phase so the value is in place before upstream's Save handler applies and saves options
-			document.addEventListener("click", function(e) {
-				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-				if (!button || $.trim($(button).text()) !== "Save") { return; }
-				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#favouritesPanel-enabled").length) { return; }
-				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, { enabled: $("#favouritesPanel-enabled").prop("checked") });
-			}, true);
-
-			// Settings > Reset: back to defaults (a missing key means defaults)
-			if (typeof options.reset === "function" && !options.reset.favouritesPanelWrapped) {
-				const reset = options.reset;
-				const wrapped = function() {
-					const result = reset.apply(this, arguments);
-					delete this.favoritesPanel;
-					return result;
-				};
-				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-				wrapped.favouritesPanelWrapped = true;
-				options.reset = wrapped;
-			}
 
 			// Save and Reset both end in options.apply(): show/hide the panel and refresh it then
 			if (!options.apply.favouritesPanelWrapped) {

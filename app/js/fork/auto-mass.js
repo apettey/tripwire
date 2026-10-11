@@ -505,35 +505,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				.fail(function() { if (typeof Notify !== "undefined") { Notify.trigger("Couldn't change the logged jump", "red"); } });
 		});
 
-		// --- Settings > Chain Map Settings ---
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#autoMass-enabled").length) {
-			$table.append("<tr><th>Jump mass:</th><td>" +
-				"<label><input type='checkbox' id='autoMass-enabled' /> Log my jumps with my fitted mass (ESI assets)</label><br/>" +
-				"<label><input type='checkbox' id='autoMass-prompt' /> Ask hot or cold after a jump</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#autoMass-enabled").prop("checked", autoMass.enabled(options));
-			$("#autoMass-prompt").prop("checked", !(options.autoMass && options.autoMass.prompt === false));
+		// --- Settings > Wormhole Jumps & Mass (takes effect on Save; Reset = on) ---
+		forkSettings.register({
+			section: "jumps", order: 10, id: "autoMass", type: "custom", key: "autoMass", label: "Jump mass:",
+			html: "<label><input type='checkbox' id='autoMass-enabled' /> Log my jumps with my fitted mass (ESI assets)</label><br/>" +
+				"<label><input type='checkbox' id='autoMass-prompt' /> Ask hot or cold after a jump</label>",
+			load: function(o) {
+				$("#autoMass-enabled").prop("checked", autoMass.enabled(o));
+				$("#autoMass-prompt").prop("checked", !(o.autoMass && o.autoMass.prompt === false));
+			},
+			save: function(o) {
+				o.autoMass = { enabled: $("#autoMass-enabled").prop("checked"), prompt: $("#autoMass-prompt").prop("checked") };
+			}
 		});
-		document.addEventListener("click", function(ev) {
-			const button = ev.target && ev.target.closest ? ev.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#autoMass-enabled").length) { return; }
-			options.autoMass = { enabled: $("#autoMass-enabled").prop("checked"), prompt: $("#autoMass-prompt").prop("checked") };
-		}, true);
-
-		// Settings > Reset: back to on (a missing key means on)
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.autoMassWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.autoMass;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.autoMassWrapped = true;
-			options.reset = wrapped;
-		}
 	});
 }

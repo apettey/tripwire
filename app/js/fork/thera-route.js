@@ -521,7 +521,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		tr.name = systemName;
 
-		// ---- Settings > General Preferences ----
+		// ---- Settings > Routes & Navigation ----
 
 		function settingsRowHtml() {
 			const ships = tr.SIZE_ORDER.map(function(s) {
@@ -540,45 +540,28 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function setupSettings() {
-			const $anchor = $("#chainRouteSecurity").closest("tr");
-			if ($anchor.length && !$("#theraRoute-row").length) {
-				$anchor.after(settingsRowHtml());
-				if ($("#optionsAccordion").hasClass("ui-accordion")) { $("#optionsAccordion").accordion("refresh"); }
-			}
-			$(document).on("dialogopen", "#dialog-options", function() {
-				const s = current();
-				$("#theraRoute-thera").prop("checked", s.thera);
-				$("#theraRoute-turnur").prop("checked", s.turnur);
-				$("#theraRoute-ship").val(s.shipSize);
-				$("#theraRoute-life").val(String(s.minHours));
+			// Under K-space route selection; takes effect on Save, Reset deletes the key (the defaults)
+			forkSettings.register({
+				section: "routes", order: 30, id: "theraRoute", type: "custom", rows: settingsRowHtml(), key: "theraRoute",
+				keywords: "eve-scout turnur",
+				load: function() {
+					const s = current();
+					$("#theraRoute-thera").prop("checked", s.thera);
+					$("#theraRoute-turnur").prop("checked", s.turnur);
+					$("#theraRoute-ship").val(s.shipSize);
+					$("#theraRoute-life").val(String(s.minHours));
+				},
+				save: function(o) {
+					const before = JSON.stringify(current());
+					o.theraRoute = {
+						thera: $("#theraRoute-thera").prop("checked"),
+						turnur: $("#theraRoute-turnur").prop("checked"),
+						shipSize: $("#theraRoute-ship").val(),
+						minHours: Number($("#theraRoute-life").val())
+					};
+					if (JSON.stringify(current()) !== before) { setTimeout(function() { refresh(); redrawChain(); }, 0); }
+				}
 			});
-			// Capture phase, so the value is in place before upstream's Save handler applies and saves options
-			document.addEventListener("click", function(e) {
-				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-				if (!button || $.trim($(button).text()) !== "Save") { return; }
-				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#theraRoute-row").length) { return; }
-				const before = JSON.stringify(current());
-				options.theraRoute = {
-					thera: $("#theraRoute-thera").prop("checked"),
-					turnur: $("#theraRoute-turnur").prop("checked"),
-					shipSize: $("#theraRoute-ship").val(),
-					minHours: Number($("#theraRoute-life").val())
-				};
-				if (JSON.stringify(current()) !== before) { setTimeout(function() { refresh(); redrawChain(); }, 0); }
-			}, true);
-
-			// Settings > Reset: back to the defaults (a missing key means defaults)
-			if (typeof options.reset === "function" && !options.reset.theraRouteWrapped) {
-				const reset = options.reset;
-				const wrapped = function() {
-					const result = reset.apply(this, arguments);
-					delete this.theraRoute;
-					return result;
-				};
-				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-				wrapped.theraRouteWrapped = true;
-				options.reset = wrapped;
-			}
 		}
 
 		$(function() {
