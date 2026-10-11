@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 66,
+      "date": "2026-10-11",
+      "title": "Raidable skyhooks panel",
+      "description": "A new movable panel lists the skyhooks that can be raided now or soon near your chain: the system, region, the nearest k-space system on your chain with the gate jumps from it, and the raid window in EVE time with a countdown. The blue button sets the gate route in game.\n\nChoose how far away to look, low-sec and/or null-sec, whether to show only open windows or those opening within a few hours, and how to sort. Turn the panel off or change the default distance in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-66-raidable-skyhooks.png",
+          "caption": "The Raidable skyhooks panel"
+        }
+      ]
+    },
+    {
       "pr": 65,
       "date": "2026-10-11",
       "title": "Routes avoid risky holes",
