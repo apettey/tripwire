@@ -606,8 +606,8 @@ the compact stats, `"q"` queued, `"f"` failed or `null` not looked up), `entitie
 and `queueFull`. The Intel panel (`app/js/fork/intel-pilots.js`) polls every 5 seconds while something is pending
 (for at most 5 minutes after opening a scan), then with the normal 30-second poll.
 
-**Outbound hosts:** `esi.evetech.net` and `zkillboard.com`, from the worker only. Settings per user: Settings > General
-Preferences > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
+**Outbound hosts:** `esi.evetech.net` and `zkillboard.com`, from the worker only. Settings per user: Settings > Kills
+& Intel > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
 database): `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/pilots_test.php`; mocha
 `app/js-test/fork/intel-pilots.test.js`.
 
