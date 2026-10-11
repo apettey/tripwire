@@ -77,8 +77,9 @@ describe('Loot buyers', () => {
 		const exits = [{ systemID: 11, holes: [0] }, { systemID: 12, holes: [1] }, { systemID: 11, holes: [2] }];
 		it('all exits once without hole filters', () => assert.deepStrictEqual(lootBuyers.usableExits(exits, null), [11, 12]));
 		it('drops exits whose way home is filtered, when others are clean', () => {
+			const saved = global.routeHoleFilters;
 			global.routeHoleFilters = { pickRoutes: routes => routes.filter(r => r.exit.holes[0] !== 0) };
-			try { assert.deepStrictEqual(lootBuyers.usableExits(exits, { 0: {} }), [12, 11]); } finally { delete global.routeHoleFilters; }
+			try { assert.deepStrictEqual(lootBuyers.usableExits(exits, { 0: {} }), [12, 11]); } finally { global.routeHoleFilters = saved; }
 		});
 		it('nothing to search from, no exits', () => assert.deepStrictEqual(lootBuyers.usableExits([], null), []));
 	});
