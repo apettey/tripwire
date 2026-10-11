@@ -1,0 +1,104 @@
+<?php
+// Fork-owned: tests for the per-pair automap lock (signatures.php automapLock/automapUnlock, adapted from
+// mogglemoss/tripwire 30738532) and for addSignature returning the new row's real id (09bcb40), against the dev
+// database. Uses its own test mask and removes everything it created.
+//   docker compose -f docker-compose.dev.yml exec -T app php tests/automap_dedupe_test.php
+if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
+
+$_SESSION = array('mask' => '999990021.0', 'userID' => 1, 'characterID' => 1, 'characterName' => 'test');
+$mask = $_SESSION['mask'];
+require_once(__DIR__ . '/../signatures.php');	// no $_POST on the CLI: only defines the classes and functions
+
+$failures = 0;
+$count = 0;
+function check($name, $actual, $expected) {
+	global $failures, $count;
+	$count++;
+	if ($actual !== $expected) {
+		$failures++;
+		fwrite(STDERR, "FAIL $name\n  expected: " . var_export($expected, true) . "\n  actual:   " . var_export($actual, true) . "\n");
+	}
+}
+function connect() {
+	return new PDO('mysql:host=' . getenv('DB_HOST') . ';dbname=' . getenv('DB_NAME') . ';charset=utf8mb4', getenv('DB_USER'), getenv('DB_PASSWORD'));
+}
+function cleanup($mysql, $mask) {
+	$mysql->prepare('DELETE FROM wormholes WHERE maskID = ?')->execute(array($mask));
+	$mysql->prepare('DELETE FROM signatures WHERE maskID = ?')->execute(array($mask));
+	$mysql->prepare('DELETE FROM statistics WHERE maskID = ?')->execute(array($mask));
+}
+
+$mysql = connect();
+cleanup($mysql, $mask);
+try {
+	$A = 31000101; $B = 31000102; $C = 31000103;
+
+	// addSignature returns the real id even though the statistics upsert follows the insert
+	list($ok, $sig, $msg) = addSignature(array('signatureID' => 'abc123', 'systemID' => $A, 'type' => 'data'), $mysql);
+	$stmt = $mysql->prepare('SELECT id FROM signatures WHERE signatureID = ? AND maskID = ?');
+	$stmt->execute(array('abc123', $mask));
+	$realId = (int)$stmt->fetchColumn();
+	check('addSignature ok', $ok, true);
+	check('addSignature id is the inserted row id (not 0)', $sig->id, $realId);
+	check('addSignature id positive', $realId > 0, true);
+
+	// No connection yet: lock held, nothing existing
+	$lock = automapLock(array('systemID' => $A), array('systemID' => $B), $mysql);
+	check('lock held', $lock['held'], true);
+	check('no existing connection', $lock['existing'], null);
+
+	// A second connection (another pilot's request) cannot take the same pair's lock while it is held
+	$other = connect();
+	$stmt = $other->prepare('SELECT GET_LOCK(?, 0)');
+	$stmt->execute(array($lock['name']));
+	check('second request blocked while the first holds the lock', (int)$stmt->fetchColumn(), 0);
+	$stmt = $other->prepare('SELECT GET_LOCK(?, 0)');
+	$stmt->execute(array(str_replace('.' . $B, '.' . $C, $lock['name'])));
+	check('a different pair is not blocked', (int)$stmt->fetchColumn(), 1);
+	automapUnlock($lock, $mysql);
+	$stmt = $other->prepare('SELECT GET_LOCK(?, 0)');
+	$stmt->execute(array($lock['name']));
+	check('second request gets the lock once released', (int)$stmt->fetchColumn(), 1);
+	$other->prepare('SELECT RELEASE_LOCK(?)')->execute(array($lock['name']));
+	$other = null;
+
+	// Same pair, either direction: the lock name is order independent
+	$lockReverse = automapLock(array('systemID' => $B), array('systemID' => $A), $mysql);
+	check('lock name independent of order', $lockReverse['name'], $lock['name']);
+	automapUnlock($lockReverse, $mysql);
+
+	// Add the connection the way the automap request does, then the next request finds it
+	list($ok1, $s1, $m1) = addSignature(array('systemID' => $A, 'type' => 'wormhole'), $mysql);
+	list($ok2, $s2, $m2) = addSignature(array('systemID' => $B, 'type' => 'wormhole'), $mysql);
+	list($okw, $wh, $mw) = addWormhole(array('initialID' => $s1->id, 'secondaryID' => $s2->id, 'type' => null, 'parent' => 'initial', 'life' => 'stable', 'mass' => 'stable'), $mysql);
+	check('connection added', $ok1 && $ok2 && $okw, true);
+	check('wormhole sig ids are real', $s1->id > 0 && $s2->id > $s1->id, true);
+
+	$lock = automapLock(array('systemID' => $A), array('systemID' => $B), $mysql);
+	check('existing connection found (A to B)', $lock['existing'], $wh->id);
+	automapUnlock($lock, $mysql);
+	$lock = automapLock(array('systemID' => $B), array('systemID' => $A), $mysql);
+	check('existing connection found (B to A)', $lock['existing'], $wh->id);
+	automapUnlock($lock, $mysql);
+	$lock = automapLock(array('systemID' => $A), array('systemID' => $C), $mysql);
+	check('other pair has no connection', $lock['existing'], null);
+	automapUnlock($lock, $mysql);
+
+	// Other mask: not seen
+	$_SESSION['mask'] = '999990022.0';
+	$lock = automapLock(array('systemID' => $A), array('systemID' => $B), $mysql);
+	check('other mask does not see the connection', $lock['existing'], null);
+	automapUnlock($lock, $mysql);
+	$_SESSION['mask'] = $mask;
+
+	// Missing system ids: no lock at all
+	check('no system ids, no lock', automapLock(array(), array('systemID' => $B), $mysql), null);
+	automapUnlock(null, $mysql);
+} catch (Throwable $e) {
+	$failures++;
+	fwrite(STDERR, 'ERROR ' . $e->getMessage() . "\n");
+}
+cleanup($mysql, $mask);
+
+echo ($failures ? "$failures of $count checks FAILED" : "all $count checks passed") . "\n";
+exit($failures ? 1 : 0);
