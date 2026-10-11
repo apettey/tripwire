@@ -14,10 +14,11 @@
 //   zkill/query.php       read helpers for endpoints (kills of systems in a window, since-cursor, coverage)
 //   zkill/stats.php       per-system zKillboard stats cache + queue (System Threat; web: request, worker: fetch)
 //   zkill/threat.php      read side of System Threat (local kill counts, residents, structure losses)
+//   zkill/lookup.php      single-kill lookup queue (Smart notes kill cards; web: request, worker: fetch one kill)
 //   zkill/system_ids.php  generated list of valid solar system IDs (zkill/tools/generate-system-ids.js)
 //
 // Tables: zkill_killmails (all kills, from the stream and back-fill), zkill_state, zkill_backfill, zkill_names,
-// zkill_system_stats (System Threat), plus Kill Reporting's zkill_kills (alert log, chain systems only, unchanged) and zkill_feed_state.
+// zkill_system_stats (System Threat), zkill_kill_lookup (Smart notes), plus Kill Reporting's zkill_kills (alert log, chain systems only, unchanged) and zkill_feed_state.
 
 require_once(__DIR__ . '/../esi/esi.inc.php');   // ESI_COMPATIBILITY_DATE (one date for every server ESI call)
 require_once(__DIR__ . '/http.php');
@@ -28,6 +29,7 @@ require_once(__DIR__ . '/names.php');
 require_once(__DIR__ . '/query.php');
 require_once(__DIR__ . '/stats.php');
 require_once(__DIR__ . '/threat.php');
+require_once(__DIR__ . '/lookup.php');
 
 const ZK_API_BASE  = 'https://zkillboard.com/api/';
 const ZK_ESI_BASE  = 'https://esi.evetech.net/';       // versionless routes, pinned with X-Compatibility-Date

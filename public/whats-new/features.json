@@ -13,6 +13,18 @@
       ]
     },
     {
+      "pr": 53,
+      "date": "2026-10-11",
+      "title": "Smart notes: kill cards and link chips",
+      "description": "zKillboard kill links in system notes now show as a compact kill card: ship, pilot and corporation, system, ISK value, age (EVE time in the tooltip) and the number of attackers, with a red edge for your losses and a green edge for your kills. zKillboard, Dotlan and EveWho links become small chips, long links are shortened, and system names written in a note (like J163701) become chips you can click to view that system. Your notes are not changed; editing shows the plain links as before.\n\nTurn it off in Settings > General Preferences > Smart notes.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-53-smart-notes.png",
+          "caption": "A kill card and link chips in a system note"
+        }
+      ]
+    },
+    {
       "pr": 52,
       "date": "2026-10-11",
       "title": "Jump planner: find a system",
