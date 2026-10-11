@@ -60,7 +60,7 @@ describe('Layout grid (Settings Save keeps the layout)', () => {
 	// Settings > Reset (options.reset(); options.apply()) do to the layout
 	describe('options.apply() (app/js/options.js)', () => {
 		const NAMES = ['window', '$', 'options', 'grid', 'init', 'localStorage', 'tripwire', 'guidance', 'chain', 'viewingSystemID', 'set_tracking_text'];
-		let saved, moves, stored, onScreen;
+		let saved, moves, stored, onScreen, posted;
 
 		const fake$ = () => {
 			const chainable = (sel) => {
@@ -79,7 +79,7 @@ describe('Layout grid (Settings Save keeps the layout)', () => {
 			$.each = (obj, fn) => { Object.keys(obj).forEach(k => fn.call(obj[k], k, obj[k])); };
 			$.map = (arr, fn) => (arr || []).map(v => fn(v));
 			$.inArray = (v, arr) => (arr || []).indexOf(v);
-			$.ajax = () => ({});
+			$.ajax = (o) => { posted = o; return {}; };
 			return $;
 		};
 
@@ -91,20 +91,24 @@ describe('Layout grid (Settings Save keeps the layout)', () => {
 			NAMES.forEach(n => { if (saved[n]) { Object.defineProperty(global, n, saved[n]); } else { delete global[n]; } });
 		});
 
-		/** Load options.js as a page would: the browser's copy of the options holds pageLoadGrid */
-		const loadPage = (pageLoadGrid) => {
+		/** Load options.js as a page would: the browser's copy of the options holds pageLoadGrid (or is `copy`) */
+		const loadPage = (pageLoadGrid, copy, server) => {
 			moves = {};
-			stored = pageLoadGrid ? JSON.stringify({ grid: pageLoadGrid }) : null;
+			posted = null;
+			stored = copy !== undefined ? JSON.stringify(copy) : pageLoadGrid ? JSON.stringify({ grid: pageLoadGrid }) : null;
 			delete global.grid;
 			global.window = global;
 			global.$ = fake$();
-			global.init = { userID: 1, characterID: 2, characterName: 'Dev', corporationID: 3, options: null };
+			global.init = { userID: 1, characterID: 2, characterName: 'Dev', corporationID: 3, options: server || null };
 			global.localStorage = { getItem: () => stored, setItem: (k, v) => { stored = v; } };
 			global.tripwire = undefined;
 			if (!global.guidance) { global.guidance = null; }	// the real one when guidance.test.js has loaded it (its afterEach uses it)
 			global.viewingSystemID = 30000142;
 			global.set_tracking_text = () => {};
 			include('app/js/options');
+			// layout-grid.js runs after options.js in the bundle and wraps its save, once
+			assert.equal(layoutGrid.wrapSave(options, () => global.grid), true);
+			assert.equal(layoutGrid.wrapSave(options, () => global.grid), false);
 			// layout.js: gridster is up after options.js, with the panels where options.apply() put them
 			onScreen = (pageLoadGrid || []).map(e => Object.assign({}, e));
 			global.grid = { $widgets: {}, serialize: () => onScreen.map(e => Object.assign({}, e)) };
@@ -151,6 +155,61 @@ describe('Layout grid (Settings Save keeps the layout)', () => {
 			options.apply();
 			assert.equal(options.uiscale, 1.0);
 			assert.deepEqual(ids(options.grid), ['chainWidget 1,7 12x6', 'systemKillFeedWidget 13,7 7x5', 'intelScansWidget 13,12 6x6']);
+		});
+
+		it('saves the layout after panels added by the fork apply hooks pushed their neighbours down', () => {
+			// Kills turned off and the page reloaded: Watchlist floated up into its place
+			loadPage([w('chainWidget', 1, 7, 21, 8), w('watchlistWidget', 1, 25, 7, 6)]);
+			options.grid = [w('chainWidget', 1, 7, 21, 8), w('watchlistWidget', 1, 25, 7, 6), w('systemKillFeedWidget', 1, 25, 7, 6)];
+			// Settings Save with Kills on again: like system-killfeed.js, the hook adds the panel after the inner apply,
+			// and gridster pushes Watchlist down
+			const inner = options.apply;
+			options.apply = function() {
+				const result = inner.apply(this, arguments);
+				onScreen = [w('chainWidget', 1, 7, 21, 8), w('systemKillFeedWidget', 1, 25, 7, 6), w('watchlistWidget', 1, 31, 7, 6)];
+				return result;
+			};
+			options.apply();
+			// options.grid was taken before the push
+			assert.deepEqual(ids(options.grid), ['chainWidget 1,7 21x8', 'watchlistWidget 1,25 7x6', 'systemKillFeedWidget 1,25 7x6']);
+			options.save();
+			const want = ['chainWidget 1,7 21x8', 'systemKillFeedWidget 1,25 7x6', 'watchlistWidget 1,31 7x6'];
+			assert.deepEqual(savedLayout(), want);
+			// The server gets the same, the usual way
+			assert.equal(posted.url, 'options.php');
+			assert.equal(posted.data.mode, 'set');
+			assert.deepEqual(ids(JSON.parse(posted.data.options).grid), want);
+		});
+
+		it('saves the rest of the options as before, and keeps the saved place of a panel turned off', () => {
+			loadPage(pageLoad);
+			options.uiscale = 1.25;
+			options.grid = [w('favouritesWidget', 14, 7, 7, 8)];
+			options.save();
+			const out = JSON.parse(stored);
+			assert.equal(out.uiscale, 1.25);
+			assert.equal(out.userID, 1);
+			assert.deepEqual(ids(out.grid), ['chainWidget 1,7 21x8', 'systemKillFeedWidget 1,35 7x6', 'intelScansWidget 1,29 6x6', 'favouritesWidget 14,7 7x8']);
+		});
+
+		it('stores options.grid unchanged before gridster is there', () => {
+			loadPage(pageLoad);
+			delete global.grid;
+			options.grid = [w('chainWidget', 2, 2)];
+			options.save();
+			assert.deepEqual(savedLayout(), ['chainWidget 2,2 7x6']);
+		});
+
+		[['browser copy with an empty object', { grid: {} }], ['browser copy with an empty array', { grid: [] }], ['no browser copy, server options without a grid key', null, { uiscale: 1 }]].forEach(([name, copy, server]) => {
+			it('Settings Save stores the layout on screen (' + name + ')', () => {
+				loadPage(null, copy, server);
+				onScreen = [w('chainWidget', 1, 7, 12, 6), w('systemKillFeedWidget', 13, 7, 7, 5)];
+				moves = {};
+				options.apply();
+				options.save();
+				assert.deepEqual(savedLayout(), ['chainWidget 1,7 12x6', 'systemKillFeedWidget 13,7 7x5']);
+				assert.deepEqual(moves['#systemKillFeedWidget'], { 'data-col': 13, 'data-row': 7, 'data-sizex': 7, 'data-sizey': 5 });
+			});
 		});
 
 		it('a browser without a copy of the options keeps the layout on screen too', () => {

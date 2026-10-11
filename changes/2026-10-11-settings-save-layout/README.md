@@ -27,6 +27,10 @@ No toggle: bug fix (nobody wants their layout undone by a Settings Save).
   `entries()` read the array, object and old `{oog}` layout forms and drop widgets being removed.
 - `options.apply()` (Settings Save and Reset, plus every fork panel's apply hook) uses that layout instead of the
   page-load copy once gridster is up. Page load is unchanged (the browser copy still places the panels).
+- `options.save()` is wrapped once (`layoutGrid.wrapSave`, installed by layout-grid.js, which runs after options.js) to
+  store the layout on screen too: a fork panel turned back on is added by its apply hook after `apply()` took the
+  layout, and pushes its neighbours down; without this the pre-push layout was saved (two panels on one spot, swapped
+  after a reload). Server save and localStorage are otherwise unchanged.
 - Settings > Reset still resets the settings but leaves the layout as it is on screen (it used to restore the
   page-load layout; the layout is a per-browser override that Reset was never meant to touch). The Jump planner still
   forgets its own place on Reset.
@@ -37,7 +41,11 @@ No toggle: bug fix (nobody wants their layout undone by a Settings Save).
 - Checked in the browser (own headless Chrome, port 8162): move/resize Kills, Intel, Favourites, chain map, Settings
   Save, reload — same layout; Jump planner resized then Save — kept; Kills, Chain kills, Intel, Favourites, Watchlist
   each off, Save, Save, on — back in the same place; Reset — layout unchanged, settings reset.
-- Tests: `app/js-test/fork/layout-grid.test.js` (13), including upstream `options.js` loaded with a stand-in jQuery
-  (Save keeps moved panels, a second Save, panel turned off, Reset, no browser copy); 4 of them fail without the fix.
+  Kills directly above Watchlist: Kills off, Save, reload (Watchlist floats up), Kills on, Save — stored layout matches
+  the screen (Kills, Watchlist under it), and the same after a reload.
+- Tests: `app/js-test/fork/layout-grid.test.js` (19), including upstream `options.js` loaded with a stand-in jQuery
+  (Save keeps moved panels, a second Save, panel turned off, Reset, a panel added by an apply hook after the inner
+  apply, the rest of the options and the server save unchanged, no gridster yet, empty `{}` / `[]` / missing browser
+  layout).
 - Upstream files touched: `app/js/options.js` (2 lines in `apply()`), `app/js/layout.js` (1 line), both marked
   `// fork`.

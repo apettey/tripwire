@@ -4,7 +4,8 @@ var layoutGrid = {
 	// (localStorage "tripwire_options"), then moves every panel to it and options.save() stores it. So a panel moved or
 	// resized with Customize layout since the page loaded jumped back (and the old layout was saved) on every Settings
 	// Save. options.apply() now asks layoutGrid.live() for the layout on screen and uses it instead (two lines marked
-	// "fork" in app/js/options.js). Keep `var layoutGrid` on the first line (the test helper strips it to define a global),
+	// "fork" in app/js/options.js), and options.save() is wrapped (wrapSave) to store the layout on screen as well: fork
+	// panels added or removed by their apply hooks, after options.grid was taken, push their neighbours around. Keep `var layoutGrid` on the first line (the test helper strips it to define a global),
 	// and keep it a var: options.js reads it on page load, before this file has run, where a const would throw.
 
 	/** The entries of a layout (options.grid: array, object, or the old {oog: ...} form) as a list. Never mutates. */
@@ -43,5 +44,33 @@ var layoutGrid = {
 	live: function(api, saved) {
 		if (!api || typeof api.serialize !== "function" || !api.$widgets) { return null; }
 		return layoutGrid.merge(api.serialize(), saved);
+	},
+
+	/**
+	 * Wrap opts.save (once) so every save first takes options.grid from the screen (layoutGrid.live), then saves as before.
+	 * @param opts the options object (global `options` from options.js)
+	 * @param getApi returns the gridster instance, or nothing while it isn't there
+	 */
+	wrapSave: function(opts, getApi) {
+		if (!opts || typeof opts.save !== "function" || opts.save.layoutGridWrapped) { return false; }
+		const save = opts.save;
+		const wrapped = function() {
+			try {
+				const live = layoutGrid.live(getApi ? getApi() : null, opts.grid);
+				if (live) { opts.grid = live; }
+			} catch (err) {
+				if (typeof console !== "undefined") { console.error("Layout grid: reading the layout failed", err); }
+			}
+			return save.apply(this, arguments);
+		};
+		Object.keys(save).forEach(function(k) { wrapped[k] = save[k]; });
+		wrapped.layoutGridWrapped = true;
+		opts.save = wrapped;
+		return true;
 	}
 };
+
+// options.js has run by now (it comes first in the bundle): wrap its save
+if (typeof window !== "undefined" && typeof options !== "undefined") {
+	layoutGrid.wrapSave(options, function() { return typeof grid !== "undefined" ? grid : null; });
+}
