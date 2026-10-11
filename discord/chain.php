@@ -17,11 +17,21 @@
 // EVE-Scout's Thera/Turnur connections that the chain map draws are not walked: they aren't in the mask's `wormholes` /
 // `signatures` tables (add the hole to the mask to make what's behind it count).
 //
-// discord/kills.php uses it for "Chain kills". It's written for any per-mask matcher (the Watchlist's Discord matcher
-// can switch to it): discord_chain_systems() for many masks at once (one query), discord_chain_systems_cached() for
+// discord/kills.php uses it for "Chain kills", discord/watchlist.php for "Watchlist match" (any per-mask matcher
+// can): discord_chain_systems() for many masks at once (one query), discord_chain_systems_cached() for
 // one mask with a DISCORD_CHAIN_CACHE seconds cache.
 
 const DISCORD_CHAIN_CACHE = 60;   // seconds a cached chain is reused (the kill notifications refresh every minute too)
+
+/**
+ * SQL condition: the wormhole row w with its signatures a (initialID) and b (secondaryID) is live at the time bound to
+ * its two "?" (date('Y-m-d H:i:s'), PHP's clock): the rule above without the real-system check. Shared with the
+ * Watchlist's Discord matcher (discord_watchlist_links), so both read "live" the same way.
+ */
+function discord_chain_live_sql() {
+    return "a.maskID = w.maskID AND a.type = 'wormhole' AND b.maskID = w.maskID AND b.type = 'wormhole'
+            AND (a.lifeLength = 0 OR a.lifeLeft >= ?) AND (b.lifeLength = 0 OR b.lifeLeft >= ?)";
+}
 
 /** The live wormhole links of some masks: maskID => [[systemA, systemB], ...] (see the rule above) */
 function discord_chain_links(PDO $db, array $maskIDs, $now = null) {
@@ -31,10 +41,9 @@ function discord_chain_links(PDO $db, array $maskIDs, $now = null) {
     $in = implode(',', array_fill(0, count($maskIDs), '?'));
     $stmt = $db->prepare("SELECT w.maskID AS maskID, a.systemID AS a, b.systemID AS b
         FROM wormholes w
-        INNER JOIN signatures a ON a.id = w.initialID AND a.maskID = w.maskID AND a.type = 'wormhole'
-        INNER JOIN signatures b ON b.id = w.secondaryID AND b.maskID = w.maskID AND b.type = 'wormhole'
-        WHERE w.maskID IN ($in) AND a.systemID >= 30000000 AND b.systemID >= 30000000
-            AND (a.lifeLength = 0 OR a.lifeLeft >= ?) AND (b.lifeLength = 0 OR b.lifeLeft >= ?)");
+        INNER JOIN signatures a ON a.id = w.initialID
+        INNER JOIN signatures b ON b.id = w.secondaryID
+        WHERE w.maskID IN ($in) AND a.systemID >= 30000000 AND b.systemID >= 30000000 AND " . discord_chain_live_sql());
     $stmt->execute(array_merge($maskIDs, [$at, $at]));
     // decimal(12,1) maskIDs come back as e.g. '98000001.2'; map them to the IDs asked for
     $byNumber = [];

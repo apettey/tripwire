@@ -51,7 +51,8 @@ const DISCORD_DDL = [
       KEY `createdAt` (`createdAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
     // Dedupe: what has been notified (or evaluated) per mask: 'kill:<type>' + killID, 'kspace' + 'sys:<id>'
-    // (cooldown) and 'kspace' + 'wh:<wormholeID>:<systemID>' (one look per connection). Pruned after 7 days.
+    // (cooldown) and 'kspace' + 'wh:<wormholeID>:<systemID>' (one look per connection). Pruned after 7 days, except
+    // 'nohome' + 'wh:<webhookID>' (chain kills paused, notice posted: discord/chain_notice.php), kept until it ends.
     "CREATE TABLE IF NOT EXISTS `discord_sent` (
       `maskID` decimal(12,1) NOT NULL,
       `kind` varchar(16) NOT NULL,
@@ -73,6 +74,20 @@ const DISCORD_DDL = [
       `postedAt` datetime NOT NULL,
       `systemID` int NOT NULL DEFAULT 0,
       PRIMARY KEY (`maskID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Preserve mass messages (discord/preserve_mass.php): the live one per (mask, wormhole) with its text as last
+    // posted, so changes within 30 s edit it and a clear strikes it through (clearedAt: when; a mark again within 30 s
+    // of it brings it back). Written only by the sender; pruned a day after the clear or 7 days after the post.
+    "CREATE TABLE IF NOT EXISTS `discord_preserve_message` (
+      `maskID` decimal(12,1) NOT NULL,
+      `wormholeID` int NOT NULL,
+      `webhookID` int unsigned NOT NULL,
+      `messageID` varchar(32) NOT NULL,
+      `content` text NOT NULL,
+      `postedAt` datetime NOT NULL,
+      `clearedAt` datetime DEFAULT NULL,
+      PRIMARY KEY (`maskID`, `wormholeID`),
+      KEY `webhookID` (`webhookID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 

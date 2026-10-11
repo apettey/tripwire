@@ -32,6 +32,8 @@
 #jumpPlannerWidget .jp-title { color: #e0b080; font-weight: bold; cursor: default; }
 #jumpPlannerWidget .jp-close { float: right; color: #aaa; }
 #jumpPlannerWidget .jp-close:hover { color: #fff; }
+#jumpPlannerWidget .jp-settings { float: right; margin-right: 8px; color: #aaa; cursor: pointer; }
+#jumpPlannerWidget .jp-settings:hover { color: #fff; }
 #jumpPlannerWidget .content {
 	display: flex;
 	flex-direction: column;
@@ -140,7 +142,52 @@
 .jp-hub-no { color: #8a939e; }
 .jp-dim { color: #8a939e; }
 
-.jp-list-wrap { flex: 1 1 auto; min-height: 40px; overflow-y: auto; margin: 6px 4px 0; }
+/* System search: one slim row above the list (input, then the result) */
+.jp-search { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin: 5px 4px 0; min-width: 0; }
+.jp-search-input {
+	flex: 0 0 130px;
+	box-sizing: border-box;
+	background: #23262b;
+	color: #eee;
+	border: 1px solid #444;
+	border-radius: 3px;
+	padding: 2px 5px;
+	font: inherit;
+}
+.jp-search-input:focus { outline: none; border-color: #5cc8f5; }
+.jp-search-input::placeholder { color: #707880; }
+.jp-search-result { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c8ccd0; }
+.jp-search-name { color: #fff; font-weight: bold; }
+.jp-search-ok { color: #5cc8f5; }
+.jp-search-jammed { color: #ff7b7b; }
+.jp-search-no { color: #e0b080; }
+.jp-search-menu {
+	position: absolute;
+	z-index: 4;
+	top: 100%;
+	left: 0;
+	min-width: 220px;
+	max-width: 100%;
+	margin: 2px 0 0;
+	padding: 2px 0;
+	list-style: none;
+	background: #1a1f25;
+	border: 1px solid #4a5662;
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.jp-search-menu li { padding: 2px 8px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.jp-search-menu li.active, .jp-search-menu li:hover { background: #2a3440; color: #fff; }
+.jp-search-wh { color: #c08cff; }
+.jp-search-menu li.jp-search-none { color: #8a939e; cursor: default; background: none; }
+.jp-list tr.jp-row-found td { background: #33281a; color: #fff; }
+.jp-list tr.jp-row-found td:first-child { box-shadow: inset 2px 0 #f0a030; }
+.jp-svg .jp-found-ring { fill: none; stroke: #f0a030; stroke-width: 2; pointer-events: none; }
+.jp-svg .jp-found-pulse { fill: none; stroke: #f0a030; stroke-width: 1.5; pointer-events: none; transform-box: fill-box; transform-origin: center; animation: jp-found-pulse 1.6s ease-out infinite; }
+@keyframes jp-found-pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(2.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .jp-svg .jp-found-pulse { animation: none; opacity: 0; } }
+
+.jp-list-wrap { flex: 1 1 auto; min-height: 40px; overflow-y: auto; margin: 4px 4px 0; }
 .jp-list { width: 100%; border-collapse: collapse; }
 .jp-list th { color: #8a939e; font-weight: normal; text-align: left; padding: 2px 4px; cursor: pointer; white-space: nowrap; position: sticky; top: 0; background: #0b0d10; }
 .jp-list th.active { color: #ddd; }
@@ -180,3 +227,47 @@
 .jp-options .jp-cap-label { color: #5cc8f5; font-weight: bold; }
 .jp-options input[type='range'] { vertical-align: middle; width: 140px; }
 .jp-state.jp-error, .jp-settings-error { color: #ff7b7b; }
+
+/* Get home mode: mode switch, start picker, route list, map overlay */
+.jp-modebar { display: flex; align-items: center; gap: 8px; padding: 0 4px 5px; }
+.jp-mode { display: inline-flex; border: 1px solid #444; border-radius: 3px; overflow: hidden; }
+.jp-mode button { background: transparent; color: #8a939e; border: 0; padding: 2px 8px; font: inherit; cursor: pointer; }
+.jp-mode button:hover { color: #fff; }
+.jp-mode button.active { background: #2a5a78; color: #fff; }
+.jp-home-name { margin-left: auto; color: #c08cff; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jp-from { position: relative; flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 5px 4px 0; }
+.jp-from-label { color: #8a939e; }
+.jp-from-box { position: relative; }
+.jp-from-input {
+	width: 130px;
+	box-sizing: border-box;
+	background: #23262b;
+	color: #eee;
+	border: 1px solid #444;
+	border-radius: 3px;
+	padding: 2px 5px;
+	font: inherit;
+}
+.jp-from-input:focus { outline: none; border-color: #5cc8f5; }
+.jp-from-input::placeholder { color: #707880; }
+.jp-quick { background: #1b2026; color: #c8ccd0; border: 1px solid #3b4652; border-radius: 3px; padding: 1px 7px; font: inherit; cursor: pointer; }
+.jp-quick:hover { color: #fff; border-color: #5cc8f5; }
+.jp-quick.active { background: #f0a030; border-color: #f0a030; color: #111; font-weight: bold; }
+.jp-home-list .jp-col-route { color: #d8e070; }
+.jp-home-list .jp-col-holes { color: #aaa; }
+.jp-home-list tr.jp-row-out td { color: #6b7178; }
+.jp-home-list tr.jp-row-out .jp-ls, .jp-home-list tr.jp-row-out .jp-ns { opacity: 0.6; }
+.jp-home-list tr.jp-home-warn td { padding: 0 4px 4px 14px; white-space: normal; font-size: 10px; }
+.jp-home-list tr.jp-home-row + tr.jp-home-warn td { border-top: 0; }
+.jp-home-list .jp-w-warn { color: #ffb347; margin-right: 10px; }
+.jp-home-list .jp-w-note { color: #8a939e; margin-right: 10px; }
+.jp-home-list tr.jp-row-out .jp-w-warn { color: #9a7a50; }
+.jp-svg .jp-hx polygon { stroke: #fff; stroke-width: 1.2; }
+.jp-svg .jp-hx-ok polygon { fill: #c08cff; }
+.jp-svg .jp-hx-no polygon { fill: #4a3d5c; stroke: #8a7a9e; }
+.jp-svg .jp-hx-sel polygon { stroke: #f0a030; stroke-width: 2; }
+.jp-svg .jp-l-hx { font-size: 10px; font-weight: bold; fill: #d9c2ff; pointer-events: none; paint-order: stroke; stroke: #080a0d; stroke-width: 3px; stroke-linejoin: round; }
+.jp-svg .jp-route { fill: none; stroke: #f0a030; stroke-width: 2; stroke-dasharray: 6 3; pointer-events: none; }
+.jp-svg .jp-route-mid { fill: #080a0d; stroke: #f0a030; stroke-width: 2; pointer-events: none; }
+.jp-svg .jp-l-mid { font-size: 10px; fill: #f0c080; pointer-events: none; paint-order: stroke; stroke: #080a0d; stroke-width: 3px; stroke-linejoin: round; }
+.jp-tip-route { color: #d8e070; }

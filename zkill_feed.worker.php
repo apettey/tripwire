@@ -6,7 +6,8 @@
 // pooled module in zkill/ (one HTTP client, rate limiter, set of tables). Per kill it
 //   - stores every kill in `zkill_killmails` (System Kill Feed and other readers, ZKILL_RETENTION_HOURS), and
 //   - stores kills in systems that are on someone's chain in `zkill_kills` (Kill Reporting's alert log, 24 h).
-// Between kills it drains the back-fill queue (zKillboard API, ZKILL_API_INTERVAL), then the per-system stats queue
+// Between kills it drains the single-kill lookup queue (Smart notes kill cards, at most every other API slot while
+// other work waits), the back-fill queue (zKillboard API, ZKILL_API_INTERVAL), then the per-system stats queue
 // (System Threat, same API budget), then pilot stats of shared local scans (lowest priority, intel/pilots.inc.php),
 // and the ESI queues: names, and the corporations / alliances of local scans.
 // Browsers never talk to zKillboard; they poll public/kills.php and public/system_kills.php, which read the tables.
@@ -216,7 +217,8 @@ function zkf_prune(PDO $db) {
 function zkf_tick(PDO $db) {
     static $lastNames = 0;
     try {
-        // One zKillboard API job: back-fill, else System Threat stats, else local pilot stats (lowest priority)
+        // One zKillboard API job: kill lookups / back-fills / System Threat stats (zkill/lookup.php), else local pilot
+        // stats (lowest priority): intel_zkill_api_step() in intel/pilots.inc.php
         $line = intel_zkill_api_step($db);
         if ($line !== null) zkf_log($line);
         if (time() - $lastNames >= ZKF_NAMES_EVERY) {

@@ -802,6 +802,7 @@ function intel_threat_run_one(PDO $db) {
     if (!intel_threat_enabled() || !zk_http_ready('zkillboard.com')) return null;
     if ($db->query("SELECT 1 FROM zkill_backfill WHERE status = 'queued' LIMIT 1")->fetchColumn()) return null;
     if ($db->query("SELECT 1 FROM zkill_system_stats WHERE status = 'queued' LIMIT 1")->fetchColumn()) return null;
+    if ($db->query("SELECT 1 FROM zkill_kill_lookup WHERE status = 'queued' LIMIT 1")->fetchColumn()) return null;
     $job = $db->query("SELECT characterID FROM fork_pilot_threat WHERE status = 'queued' ORDER BY requestedAt, characterID LIMIT 1")->fetchColumn();
     if ($job === false) return null;
     $characterID = (int) $job;
@@ -837,12 +838,11 @@ function intel_threat_run_one(PDO $db) {
 }
 
 /**
- * Worker: one zKillboard API job in priority order: back-fills (open panels), system stats (System Threat), then
+ * Worker: one zKillboard API job in priority order: kill lookups / back-fills / system stats (zk_queues_run_one), then
  * pilot stats (local threat). At most one request per call, within ZKILL_API_INTERVAL.
  */
 function intel_zkill_api_step(PDO $db) {
-    $line = zk_backfill_run_one($db);
-    if ($line === null) $line = zk_stats_run_one($db);
+    $line = zk_queues_run_one($db);   // kill lookups (Smart notes), back-fills, System Threat stats: zkill/lookup.php
     if ($line === null) $line = intel_threat_run_one($db);
     return $line;
 }

@@ -13,6 +13,78 @@
       ]
     },
     {
+      "pr": 60,
+      "date": "2026-10-11",
+      "title": "Discord: preserve mass marks",
+      "description": "Your corporation's Tripwire admins can now post preserve mass marks to Discord. When someone marks a connection \"preserve mass\", changes the reason or clears it, a message names the hole with its chain label, type and class, who marked it and why. Changes within 30 seconds edit the message, clearing the mark strikes it through without pinging anyone again, and holes that close are struck through automatically.\n\nSet it up in Mask Admin > Discord > Preserve mass: pick a channel and who to ping, and choose whether only connections in your home chain are posted. It's off until an admin turns it on; there is no personal setting, because a preserve mass mark is a warning for the whole corporation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-60-discord-preserve-mass.png",
+          "caption": "Mask Admin > Discord: the Preserve mass type and its preview"
+        }
+      ]
+    },
+    {
+      "pr": 58,
+      "date": "2026-10-11",
+      "title": "Watchlist pings only for your chain",
+      "description": "Watchlist matches are now posted to Discord only for systems connected to your home system (Mask Admin > Discord) through live wormholes, the same rule as \"Any kill in our chain\". Old chain fragments that are still on the map no longer ping, so admins will see fewer, more relevant messages.\n\nSet a home system in Mask Admin > Discord; until one is set, no watchlist matches are posted and the page shows a warning. The pop-up, sound and highlight in Tripwire are unchanged. There is no new setting: the Watchlist match notification keeps its own on/off in Mask Admin > Discord.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-58-watchlist-home-chain.png",
+          "caption": "Mask Admin > Discord warns when Watchlist match is on without a home system"
+        }
+      ]
+    },
+    {
+      "pr": 57,
+      "date": "2026-10-11",
+      "title": "Jump planner: Get home",
+      "description": "The Jump planner has a new Get home mode. Pick the system your jump ship is in (type a name, or click Jita, Amarr or your last start) and it lists the low-sec and null-sec exits on the chain you can reach in one or two jumps, with how many wormholes lie between each exit and home. Click Dest to set your destination to the first cyno system.\n\nIt warns when a wormhole on the way home is too small for your ship, is EOL or is low on mass. Switch between From exit and Get home at the top of the Jump planner.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-57-jump-planner-home.png",
+          "caption": "Get home from Amamake: routes into the chain's exits, with the wormholes back home"
+        }
+      ]
+    },
+    {
+      "pr": 56,
+      "date": "2026-10-11",
+      "title": "Discord: notice when chain kills are paused",
+      "description": "If \"Any kill in our chain\" is on but the mask has no home system, Tripwire can't tell which chain is yours and posts no chain kills. Instead of going quiet, it now posts one notice to that Discord channel saying chain kills are paused and where to set the home (Mask Admin > Discord). Once a home is set, it posts one line saying chain kills resumed.\n\nNobody is pinged by these messages, and the Mask Admin > Discord warning shows when the notice was posted. There is no setting for it: set a home system or turn chain kills off and it stops.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-56-discord-no-home-notice.png",
+          "caption": "The paused and resumed notices in the chain kills channel"
+        }
+      ]
+    },
+    {
+      "pr": 53,
+      "date": "2026-10-11",
+      "title": "Smart notes: kill cards and link chips",
+      "description": "zKillboard kill links in system notes now show as a compact kill card: ship, pilot and corporation, system, ISK value, age (EVE time in the tooltip) and the number of attackers, with a red edge for your losses and a green edge for your kills. zKillboard, Dotlan and EveWho links become small chips, long links are shortened, and system names written in a note (like J163701) become chips you can click to view that system. Your notes are not changed; editing shows the plain links as before.\n\nTurn it off in Settings > General Preferences > Smart notes.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-53-smart-notes.png",
+          "caption": "A kill card and link chips in a system note"
+        }
+      ]
+    },
+    {
+      "pr": 52,
+      "date": "2026-10-11",
+      "title": "Jump planner: find a system",
+      "description": "Type a system name in the new \"Find system…\" box in the Jump planner to see where it is in the list: its row is highlighted and scrolled to, and it is ringed on the mini-map. If it isn't listed, the box says why (high-sec, out of range, Pochven, cyno-jammed, …).\n\nThe planner's on/off switch is now also in Settings > General Preferences > Jump planner, and the gear in the panel opens its settings. Hide the search box in Settings > Jump Planner > System search.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-52-jump-planner-search.png",
+          "caption": "Finding O3Z5-G: its row and its spot on the mini-map"
+        }
+      ]
+    },
+    {
       "pr": 51,
       "date": "2026-10-11",
       "title": "Fight here: pick the fleet comp",

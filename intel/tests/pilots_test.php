@@ -314,6 +314,12 @@ $mysql->exec("UPDATE zkill_system_stats SET status = 'queued' WHERE systemID = "
 limiter_reset();
 check('priority: nothing while system stats are queued', [intel_threat_run_one($mysql), count($calls)], [null, 2]);
 $mysql->exec('DELETE FROM zkill_system_stats WHERE systemID = ' . TEST_STATS_SYSTEM);
+// Kill lookup (Smart notes) waiting: no pilot stats
+$mysql->exec("DELETE FROM zkill_kill_lookup WHERE killID = 999000001");
+$mysql->exec("INSERT INTO zkill_kill_lookup (killID, status, attempts, requestedBy, requestedAt) VALUES (999000001, 'queued', 0, 0, UTC_TIMESTAMP())");
+limiter_reset();
+check('priority: nothing while a kill lookup is queued', [intel_threat_run_one($mysql), count($calls)], [null, 2]);
+$mysql->exec('DELETE FROM zkill_kill_lookup WHERE killID = 999000001');
 // zKillboard paused (spacing, backoff, block)
 limiter_reset();
 zk_http_pause('zkillboard.com', microtime(true) + 60);

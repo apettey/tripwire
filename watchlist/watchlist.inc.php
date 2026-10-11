@@ -466,29 +466,14 @@ function watchlist_public_filters(array $filters) {
     }, $filters);
 }
 
-// ---- A mask's chain, from the database (the Discord type) ----
+// ---- A mask's chain, from the database (the Discord type; the query is discord_watchlist_links) ----
 
 /**
- * Every wormhole of a mask as a link between two real systems: [wormholeID, a, b, type (real type, null when only the
- * K162 side or nothing is known), size (from the type), aSig, bSig (signature IDs as typed), typedSide ('a' / 'b':
- * the side the real type was scanned on)].
- * a is the wormhole's initial signature's system, b the secondary's.
+ * One wormholes/signatures row as a link between two real systems: [wormholeID, a, b, type (real type, null when only
+ * the K162 side or nothing is known), size (from the type), aSig, bSig (signature IDs as typed), typedSide ('a' / 'b':
+ * the side the real type was scanned on)]. a is the wormhole's initial signature's system, b the secondary's (null when
+ * not known).
  */
-function watchlist_mask_links(PDO $db, $maskID, array $data) {
-    $stmt = $db->prepare("SELECT w.id AS wormholeID, w.type, w.parent,
-            a.systemID AS aSys, a.signatureID AS aSig, b.systemID AS bSys, b.signatureID AS bSig
-        FROM wormholes w
-        INNER JOIN signatures a ON a.id = w.initialID
-        INNER JOIN signatures b ON b.id = w.secondaryID
-        WHERE w.maskID = ?
-        ORDER BY w.id");
-    $stmt->execute([(string) $maskID]);
-    $links = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) $links[] = watchlist_link_from_row($row, $data);
-    return $links;
-}
-
-/** One wormholes/signatures row as a link (see watchlist_mask_links) */
 function watchlist_link_from_row(array $row, array $data) {
     $type = watchlist_type_code($row['type'] ?? null);
     if ($type === 'K162') $type = null;
