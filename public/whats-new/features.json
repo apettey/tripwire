@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 88,
+      "date": "2026-10-12",
+      "title": "Jump planner: smarter midpoints",
+      "description": "Get home now picks which systems to jump through like Dotlan does: fewest jumps first, then midpoints with an NPC station and no recent kills, skipping incursions and systems you avoid. Each route shows the waits between jumps and your jump fatigue on arrival.\n\nClick a midpoint in a route to see other systems you could jump to instead, and Use or Avoid them. Change the preferences, or pick Less fuel instead of Fewer jumps, in Settings > Jump Planner.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-88-jump-midpoints.jpg",
+          "caption": "Other systems to jump to, with station and kill info"
+        }
+      ]
+    },
+    {
       "pr": 86,
       "date": "2026-10-11",
       "title": "Jump planner: longer Get home routes and jump fuel",
