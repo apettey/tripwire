@@ -162,4 +162,48 @@ describe('Inline life / mass edits', () => {
 			assert.equal(sigInline.reanchor({ field: 'life', value: 'stable' }, Object.assign({}, wh, { mass: 'critical' }), true).action, 'keep');
 		});
 	});
+
+	describe('idsToReselect', () => {
+		const keep = { ids: ['11', '12'], until: 1000 };
+		it('returns only the kept ids that were newly inserted', () => assert.deepStrictEqual(sigInline.idsToReselect(keep, ['12', '99'], 500), ['12']));
+		it('nothing when no kept row was inserted', () => assert.deepStrictEqual(sigInline.idsToReselect(keep, ['99'], 500), []));
+		it('nothing once expired or cleared', () => {
+			assert.deepStrictEqual(sigInline.idsToReselect(keep, ['11'], 1000), []);
+			assert.deepStrictEqual(sigInline.idsToReselect(null, ['11'], 0), []);
+		});
+	});
+
+	describe('saveNow timeout', () => {
+		let notices, cell;
+		const KEYS = ['$', 'Notify', 'viewingSystemID', 'document', 'tripwire'];
+		const saved = {};
+		beforeEach(() => {
+			KEYS.forEach(k => { saved[k] = global[k]; });
+			notices = [];
+			cell = { className: 'stable', textContent: 'Stable', isConnected: true };
+			const chain = { removeClass() { return chain; }, addClass() { return chain; }, map() { return chain; }, get() { return []; } };
+			global.$ = () => chain;
+			global.Notify = { trigger: (m, c) => notices.push(m + '|' + c) };
+			global.viewingSystemID = 5;
+			global.document = { querySelector: () => cell };
+			global.tripwire = { client: { wormholes: { 7: JSON.parse(JSON.stringify(wh)) }, signatures: { 11: s1, 12: s2 } }, signatures: { undo: {} }, refresh: () => {} };
+		});
+		afterEach(() => { KEYS.forEach(k => { if (saved[k] === undefined) { delete global[k]; } else { global[k] = saved[k]; } }); sigInline.SAVE_TIMEOUT_MS = 15000; sigInline.queue = Promise.resolve(); });
+		it('a save that never settles fails after the timeout, restores the cell and frees the queue', async () => {
+			sigInline.SAVE_TIMEOUT_MS = 20;
+			const first = sigInline.setWormhole('7', { life: 'critical' });
+			const second = sigInline.setWormhole('7', { mass: 'destab' });
+			assert.equal(await first, 'failed');
+			assert.equal(cell.className, 'stable');
+			assert.equal(cell.textContent, 'Stable');
+			assert.ok(notices.some(n => /Could not save the life/.test(n) && /red/.test(n)));
+			assert.equal(await second, 'failed');	// it ran (and timed out too) instead of waiting forever
+			assert.equal(global.tripwire.signatures.undo[5], undefined);
+		});
+		it('a normal save records the undo entry', async () => {
+			global.tripwire.refresh = (m, d, success, always) => { success({ resultSet: [{ result: true }] }); always(); };
+			assert.equal(await sigInline.setWormhole('7', { life: 'critical' }), 'saved');
+			assert.equal(global.tripwire.signatures.undo[5].length, 1);
+		});
+	});
 });

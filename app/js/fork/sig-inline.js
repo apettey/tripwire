@@ -18,6 +18,8 @@ const sigInline = {
 		}
 	},
 
+	SAVE_TIMEOUT_MS: 15000,
+
 	KEY_FIELD: { l: "life", m: "mass" },
 
 	// ---- Pure logic (unit-tested) ----
@@ -100,6 +102,13 @@ const sigInline = {
 		return field ? { type: "open", field: field } : null;
 	},
 
+	/** Ids to re-select after a refresh: those of `keep.ids` that were newly inserted as rows (addedIds), while the
+	remembered selection is still fresh. */
+	idsToReselect: function(keep, addedIds, now) {
+		if (!keep || now >= keep.until) { return []; }
+		return keep.ids.filter(function(id) { return addedIds.indexOf(String(id)) >= 0; });
+	},
+
 	/** Next index of the focused chip (wraps) */
 	step: function(index, delta, count) {
 		return (((index + delta) % count) + count) % count;
@@ -157,7 +166,19 @@ const sigInline = {
 		});
 
 		return new Promise(function(resolve) {
-			let saved = false;
+			let saved = false, done = false, timer = null;
+			// Settle once: when the response never comes (the request hangs) the queue must not stay blocked
+			const finish = function() {
+				if (done) { return; }
+				done = true;
+				clearTimeout(timer);
+				before.forEach(function(b) {
+					$(b.cell).removeClass("sig-inline-saving");
+					if (!saved && b.cell.isConnected) { b.cell.className = b.cls; b.cell.textContent = b.text; }
+				});
+				if (!saved) { Notify.trigger("Could not save the " + def.title.toLowerCase() + " change", "red"); }
+				resolve(saved ? "saved" : "failed");
+			};
 			const success = function(data) {
 				if (data && data.resultSet && data.resultSet[0] && data.resultSet[0].result == true) {
 					saved = true;
@@ -170,15 +191,8 @@ const sigInline = {
 					try { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } catch (e) { /* storage unavailable */ }
 				}
 			};
-			const always = function() {
-				before.forEach(function(b) {
-					$(b.cell).removeClass("sig-inline-saving");
-					if (!saved && b.cell.isConnected) { b.cell.className = b.cls; b.cell.textContent = b.text; }
-				});
-				if (!saved) { Notify.trigger("Could not save the " + def.title.toLowerCase() + " change", "red"); }
-				resolve(saved ? "saved" : "failed");
-			};
-			tripwire.refresh("refresh", payload, success, always);
+			timer = setTimeout(finish, sigInline.SAVE_TIMEOUT_MS);
+			tripwire.refresh("refresh", payload, success, finish);
 		});
 	},
 
@@ -281,12 +295,21 @@ const sigInline = {
 
 	/** After upstream re-rendered the rows (the 10 s refresh replaces edited rows): follow the new cell,
 	say so if somebody changed the value meanwhile, close if the row is gone. */
-	onRowsChanged: function() {
-		const keep = sigInline.keepSelected;
-		if (keep && Date.now() < keep.until && !document.querySelector("#sigTable tbody tr.selected")) {
-			keep.ids.forEach(function(id) { $("#sigTable tbody tr[data-id='" + id + "']").addClass("selected"); });
+	onMutations: function(mutations) {
+		const added = [];
+		mutations.forEach(function(m) {
+			Array.prototype.forEach.call(m.addedNodes || [], function(n) { if (n.dataset && n.dataset.id) { added.push(String(n.dataset.id)); } });
+		});
+		const ids = sigInline.idsToReselect(sigInline.keepSelected, added, Date.now());
+		if (ids.length) {
+			ids.forEach(function(id) { $("#sigTable tbody tr[data-id='" + id + "']").addClass("selected"); });
 			sigInline.keepSelected = null;
+			$("#signaturesWidget").trigger("selected:change");
 		}
+		sigInline.onRowsChanged();
+	},
+
+	onRowsChanged: function() {
 		const p = sigInline.pop;
 		if (!p) { return; }
 		const row = document.querySelector("#sigTable tbody tr[data-id='" + p.sigID + "']");
@@ -388,6 +411,8 @@ const sigInline = {
 		document.addEventListener("mousedown", function(e) {
 			if (sigInline.pop && !sigInline.pop.el.contains(e.target) && !e.target.closest("#sigTable tbody td:nth-child(5), #sigTable tbody td:nth-child(6)")) { sigInline.close(true); }
 		}, true);
+		// Any click means the user chose a selection of their own
+		document.addEventListener("click", function() { sigInline.keepSelected = null; }, true);
 		// Scrolling (capture: scroll events do not bubble) would leave the popover behind its cell
 		document.addEventListener("scroll", function(e) {
 			if (sigInline.pop && !sigInline.pop.el.contains(e.target)) { sigInline.close(true); }
@@ -395,7 +420,7 @@ const sigInline = {
 		window.addEventListener("resize", function() { sigInline.onRowsChanged(); });
 		const tbody = document.querySelector("#sigTable > tbody");
 		if (tbody && typeof MutationObserver !== "undefined") {
-			new MutationObserver(sigInline.onRowsChanged).observe(tbody, { childList: true });
+			new MutationObserver(sigInline.onMutations).observe(tbody, { childList: true });
 		}
 	}
 };

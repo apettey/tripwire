@@ -50,3 +50,4 @@ key means on). Off means clicks on the cells and the L / M keys do nothing.
   L / M can be used repeatedly.
 - `cache/.gitignore` now ignores `esi-etag/` (runtime files that were once committed by accident).
 - New setting key `sigInline` added to the mask-defaults allow-list (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`, test count 26 to 27), as the allow-list test requires.
+- Round 2: a save that gets no response within 15 s counts as failed (cell restored, red notice) so the queue never blocks; the selection is restored only for rows newly inserted by the refresh, cleared by any click, and announces `selected:change`.
