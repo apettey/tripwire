@@ -297,8 +297,11 @@ function structures_get(PDO $db, $mask, $id, array $friendly) {
 
 /** Live and recently gone rows of a system. @return array ['structures' => [...], 'gone' => [...], 'hash' => md5] */
 function structures_list(PDO $db, $mask, $systemID, array $friendly) {
-    structures_prune($db);
-    $stmt = $db->prepare(structures_select() . " WHERE maskID = :mask AND systemID = :s ORDER BY kind = 'upwell' DESC, kind = 'starbase' DESC, typeName, name, id");
+    // No prune here (list is polled): rows a prune would delete are just not listed; writes prune
+    $stmt = $db->prepare(structures_select() . " WHERE maskID = :mask AND systemID = :s
+        AND (goneAt IS NULL OR goneAt >= UTC_TIMESTAMP() - INTERVAL " . (int) STRUCTURES_GONE_DAYS . " DAY)
+        AND NOT (kind = 'deployable' AND goneAt IS NULL AND lastSeenAt < UTC_TIMESTAMP() - INTERVAL " . (int) STRUCTURES_DEPLOYABLE_DAYS . " DAY)
+        ORDER BY kind = 'upwell' DESC, kind = 'starbase' DESC, typeName, name, id");
     $stmt->bindValue(':mask', $mask);
     $stmt->bindValue(':s', (int) $systemID, PDO::PARAM_INT);
     if (!$stmt->execute()) throw new PDOException('Could not read fork_structures');

@@ -23,9 +23,12 @@ function check($name, $actual, $expected) {
 const MASK_A = '999999993.1';
 const MASK_B = '999999993.2';
 const SYSTEM = 31001235;
+$keepRate = false;
 
 /** Run the endpoint in a separate PHP process. @return [status, decoded body] */
 function call($method, $params = [], $session = null, $xhr = true, $headers = []) {
+    global $mysql, $keepRate;
+    if (!$keepRate) $mysql->exec('DELETE FROM fork_structure_writes WHERE userID IN (900021, 900022)');
     $request = [
         'method' => $method,
         'get' => $method === 'GET' ? $params : [],
@@ -57,7 +60,6 @@ check('no session: 403', call('GET', [], [])[0], 403);
 check('GET without action: 400', call('GET', ['systemID' => SYSTEM])[0], 400);
 check('bad systemID: 400', call('GET', ['action' => 'list', 'systemID' => '12'])[0], 400);
 check('POST without X-Requested-With: 400', call('POST', ['action' => 'scan', 'systemID' => SYSTEM, 'text' => $dscan], null, false)[0], 400);
-check('POST from another origin: 403', call('POST', ['action' => 'scan', 'systemID' => SYSTEM, 'text' => $dscan], null, true, ['Origin' => 'https://evil.example', 'Host' => 'tripwire.example'])[0], 403);
 check('unknown action: 400', call('POST', ['action' => 'nope'])[0], 400);
 check('PUT: 405', call('PUT')[0], 405);
 
@@ -104,7 +106,29 @@ $mysql->exec("UPDATE fork_structures SET timerKind = 'armor', timerAt = UTC_TIME
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'note' => 'edited']);
 check('an edit clears an ended timer', [$body['structures'][0]['timerKind'], $body['structures'][0]['note']], [null, 'edited']);
 
+// A timer with seconds keeps them; editing an ended timer's row without touching the timer works (note only)
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'timerKind' => 'hull', 'timerAt' => gmdate('Y-m-d H:i:s', time() + 3605)]);
+check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 2, true);
+$mysql->exec("UPDATE fork_structures SET timerKind = 'armor', timerAt = UTC_TIMESTAMP() - INTERVAL 3 HOUR WHERE id = $id");
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'state' => 'online', 'note' => 'ended timer row']);
+check('editing a row with an ended timer is not blocked', [$status, $body['structures'][0]['state']], [200, 'online']);
+
+// --- Fresh database: the owner cache table may not exist yet ---
+$mysql->exec('DROP TABLE IF EXISTS fork_pilot_entities');
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'owner' => 'Some Corp']);
+check('owner on a database without fork_pilot_entities: 200, kept as text', [$status, $body['structures'][0]['ownerText']], [200, 'Some Corp']);
+
+// --- Lists don't prune, but hide what a prune would delete ---
+$mysql->exec("INSERT INTO fork_structures (maskID, systemID, typeID, typeName, kind, name, firstSeenAt, lastSeenAt, updatedAt) VALUES
+    (" . MASK_A . ", " . SYSTEM . ", 33474, 'Mobile Depot', 'deployable', 'old depot', UTC_TIMESTAMP() - INTERVAL 20 DAY, UTC_TIMESTAMP() - INTERVAL 20 DAY, UTC_TIMESTAMP())");
+$names = array_map(function ($r) { return $r['name']; }, call('GET', ['action' => 'list', 'systemID' => SYSTEM])[1]['structures']);
+check('a stale deployable is not listed', in_array('old depot', $names, true), false);
+check('...and a list does not delete it', (int) $mysql->query("SELECT COUNT(*) FROM fork_structures WHERE name = 'old depot'")->fetchColumn(), 1);
+call('POST', ['action' => 'update', 'id' => $id, 'seenNow' => '1']);
+check('a write prunes it', (int) $mysql->query("SELECT COUNT(*) FROM fork_structures WHERE name = 'old depot'")->fetchColumn(), 0);
+
 // --- Add ---
+check('add: a POS module is refused: 400', call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Warp Scrambling Battery'])[0], 400);
 [$status, $body] = call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Fortizar', 'name' => 'Fort Knox', 'state' => 'online']);
 check('add: row with type from types.json', [$status, $body['structures'][1]['typeID'], $body['structures'][1]['kind'], $body['structures'][1]['state']] , [200, 35833, 'upwell', 'online']);
 [$status, $body] = call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Unknown structure']);
@@ -123,8 +147,11 @@ check('a gone row cannot be edited: 404', call('POST', ['action' => 'update', 'i
 [$status, $body] = call('POST', ['action' => 'gone', 'id' => $id, 'state' => 'restore']);
 check('restore', [count($body['gone']), count($body['structures'])], [0, 4]);
 
+check('add: a Control Tower is fine', call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Caldari Control Tower'])[0], 200);
+
 // --- Rate limit: 20 writes a minute ---
 $mysql->exec('DELETE FROM fork_structure_writes WHERE userID = 900021');
+$keepRate = true;
 $statuses = [];
 for ($i = 0; $i < 22; $i++) $statuses[] = call('POST', ['action' => 'update', 'id' => $id, 'seenNow' => '1'])[0];
 check('21st write in a minute: 429', [count(array_filter($statuses, function ($s) { return $s === 200; })), $statuses[20]], [20, 429]);

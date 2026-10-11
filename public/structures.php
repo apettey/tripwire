@@ -12,8 +12,7 @@
 //				POST action=add&systemID=<id>&typeName=<name>[&typeID=][&name=][&owner=][&state=][&timerKind=&timerAt=][&note=]
 //				POST action=update&id=<id>[&owner= | &ownerID=&ownerType=][&state=][&timerKind=&timerAt=][&note=][&seenNow=1]
 //				POST action=gone&id=<id>&state=destroyed|removed|restore
-//				Every write needs X-Requested-With: XMLHttpRequest (and a same-origin Origin, if sent) and returns the
-//				system's list. Anyone with access to the mask may write. Every query filters on the session's mask.
+//				Every write needs X-Requested-With: XMLHttpRequest (like intel_scans.php) and returns the system's list. Anyone with access to the mask may write. Every query filters on the session's mask.
 //				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups).
 //***********************************************************
 $startTime = microtime(true);
@@ -57,16 +56,13 @@ function structures_id_param($value) {
 
 try {
 	structures_schema($mysql);
+	intel_pilots_schema($mysql);	// the owner cache (fork_pilot_entities) may not exist yet on a fresh database
 	$friendly = intel_friendly_ids($_SESSION, $mask);
 	$now = time();
 
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		if (strtolower(isset($_SERVER['HTTP_X_REQUESTED_WITH']) ? $_SERVER['HTTP_X_REQUESTED_WITH'] : '') !== 'xmlhttprequest') {
 			structures_fail(400, 'Missing X-Requested-With header');
-		}
-		if (!empty($_SERVER['HTTP_ORIGIN'])) {
-			$originHost = strtolower((string) parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST) . (parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_PORT) ? ':' . parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_PORT) : ''));
-			if ($originHost !== strtolower(isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')) structures_fail(403, 'Cross-origin request refused');
 		}
 		$action = isset($_POST['action']) ? $_POST['action'] : '';
 		if (!in_array($action, array('scan', 'add', 'update', 'gone'), true)) structures_fail(400, 'Unknown action');
@@ -80,6 +76,7 @@ try {
 			$systemID = $existing['systemID'];
 		}
 		if (!structures_rate_ok($mysql, $userID)) structures_fail(429, 'Too many changes in the last minute, try again shortly');
+		structures_prune($mysql);	// on writes only; list hides what a prune would delete
 
 		if ($action === 'scan') {
 			$text = isset($_POST['text']) ? $_POST['text'] : '';
@@ -110,7 +107,8 @@ try {
 			if (strcasecmp($typeName, 'Unknown structure') !== 0) {
 				$info = structures_type_info(isset($_POST['typeID']) && $_POST['typeID'] !== '' ? (int) $_POST['typeID'] : null, $typeName);
 				if (!$info) structures_fail(400, 'Not a structure type');
-				[$typeID, $typeName, $kind] = $info;
+				[$typeID, $typeName, $kind, $tower] = $info;
+				if ($kind === 'starbase' && !$tower) structures_fail(400, 'POS modules are not stored: add the Control Tower');
 			} else {
 				$typeName = 'Unknown structure';
 			}

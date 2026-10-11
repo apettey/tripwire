@@ -634,7 +634,7 @@ POS towers and deployables recorded for the viewed system, with owner, state and
 (one chip per owner: ours / hostile / unresolved, plus corporations System Threat saw in kills here). Structures come
 from the d-scan dialog (a "Save structures to ..." section, with "Save structures only" for no 24 h scan) or are added
 by hand. Data is per mask and system, not per chain: it stays when the system leaves the chain.
-`public/structures.php` (`list` / `scan` / `add` / `update` / `gone`, same session / mask / `X-Requested-With` / Origin
+`public/structures.php` (`list` / `scan` / `add` / `update` / `gone`, same session / mask / `X-Requested-With`
 rules as `intel_scans.php`; at most 20 writes per user per minute, 200 live rows per mask and system) uses
 `structures/structures.inc.php` and creates `fork_structures` / `fork_structure_writes` on first use (DDL in that file,
 reference copy `docker/sql/structures.sql`). Owners are looked up only in the cache of the pilot lookups

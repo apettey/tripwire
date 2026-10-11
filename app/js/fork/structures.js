@@ -135,6 +135,11 @@ const structures = {
 			+ " " + structures.pad2(d.getUTCHours()) + ":" + structures.pad2(d.getUTCMinutes());
 	},
 
+	/** "2026-10-12 18:30:15", what is sent to the server (second precision) */
+	formatEveFull: function(ms) {
+		return structures.formatEve(ms) + ":" + structures.pad2(new Date(ms).getUTCSeconds());
+	},
+
 	formatLocal: function(ms) {
 		const d = new Date(ms);
 		return structures.pad2(d.getHours()) + ":" + structures.pad2(d.getMinutes());
@@ -142,7 +147,8 @@ const structures = {
 
 	/**
 	 * Timer input: an EVE time "2026.10.12 18:30", ISO (UTC unless it has an offset), or a countdown read off the game:
-	 * "1d 4h 20m", "2h14", "4:20:00" (hours:minutes:seconds), "1:30" (hours:minutes).
+	 * "1d 4h 20m", "2h14", "4:20:00" (hours:minutes:seconds). A bare "18:30" is an EVE clock time: today, or tomorrow
+	 * when that has passed. Seconds are kept.
 	 * @return {ms} or {error}
 	 */
 	parseTime: function(text, nowMs) {
@@ -160,8 +166,17 @@ const structures = {
 			}
 			return { ms: ms };
 		}
-		m = /^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(s);
-		if (m) { return { ms: nowMs + ((parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 60 + (m[3] ? parseInt(m[3], 10) : 0)) * 1000 }; }
+		m = /^(\d{1,2}):(\d{2})$/.exec(s);
+		if (m) {
+			const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+			if (h > 23 || mi > 59) { return { error: "That is not a valid time" }; }
+			const d = new Date(nowMs);
+			let ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, mi, 0);
+			if (ms < nowMs) { ms += 86400000; }
+			return { ms: ms, clock: true };
+		}
+		m = /^(\d{1,3}):(\d{2}):(\d{2})$/.exec(s);
+		if (m) { return { ms: nowMs + ((parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 60 + parseInt(m[3], 10)) * 1000 }; }
 		m = /^(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m(?:in)?)?\s*(?:(\d+)\s*s)?$/i.exec(s) || /^(?:(\d+)\s*d)?\s*(\d+)\s*h\s*(\d{1,2})()$/i.exec(s);
 		if (m && (m[1] || m[2] || m[3] || m[4])) {
 			const n = function(v) { return v ? parseInt(v, 10) : 0; };
@@ -203,6 +218,51 @@ const structures = {
 		if (s < 3600) { return Math.floor(s / 60) + "m"; }
 		if (s < 86400) { return Math.floor(s / 3600) + "h"; }
 		return Math.floor(s / 86400) + "d";
+	},
+
+	/**
+	 * What to send for the add / edit form: only the fields the user changed (so an unchanged ended timer is not
+	 * range-checked again, and the server's timer -> state mapping applies unless the state was changed too).
+	 * @param row the stored row, or null for a new structure; v {owner, state, note, tkind, tat}
+	 * @return {params} or {error}
+	 */
+	formDiff: function(row, v, nowMs) {
+		const params = {};
+		const curOwner = row ? (row.ownerID ? (row.ownerTicker || row.ownerName || "") : (row.ownerText || "")) : "";
+		if (v.owner !== curOwner) { params.owner = v.owner; }
+		if (v.state !== (row ? row.state : "unknown")) { params.state = v.state; }
+		if (v.note !== (row ? row.note : "")) { params.note = v.note; }
+		const curKind = row && row.timerKind ? row.timerKind : "";
+		const curTat = row && row.timerAt ? structures.formatEve(row.timerAt * 1000).replace(/-/g, ".") : "";
+		if (v.tkind !== curKind || v.tat !== curTat) {
+			params.timerKind = v.tkind;
+			if (v.tkind) {
+				if (!String(v.tat).trim()) { return { error: "Enter when the timer ends" }; }
+				if (v.tat !== curTat) {
+					const t = structures.parseTime(v.tat, nowMs);
+					const err = t.error || structures.timerRangeError(t.ms, nowMs);
+					if (err) { return { error: err }; }
+					params.timerAt = structures.formatEveFull(t.ms);
+				}
+			}
+		}
+		return { params: params };
+	},
+
+	/**
+	 * Where a new panel goes: right of the existing widgets from row 1 when that fits the window, else below them.
+	 * @param widgets [{col, row, size_x, size_y}], availableCols grid columns that fit (optional)
+	 */
+	defaultPlacement: function(widgets, availableCols) {
+		let maxCol = 0, maxRow = 0;
+		(widgets || []).forEach(function(w) {
+			if (!w) { return; }
+			maxCol = Math.max(maxCol, (Number(w.col) || 1) + (Number(w.size_x) || 1) - 1);
+			maxRow = Math.max(maxRow, (Number(w.row) || 1) + (Number(w.size_y) || 1) - 1);
+		});
+		const size = structures.SIZE;
+		if (availableCols && maxCol && maxCol + size.x > availableCols) { return { col: 1, row: maxRow + 1, size_x: size.x, size_y: size.y }; }
+		return { col: maxCol + 1, row: 1, size_x: size.x, size_y: size.y };
 	},
 
 	// ---- Residents strip ----
@@ -518,7 +578,7 @@ const structures = {
 		xhr.done(function(response) {
 			if (id !== structures.systemID) { return; }
 			structures.absorb(response);
-			if (!response.unchanged || !structures.editing) { structures.renderPanel(); }
+			structures.renderPanel();
 		}).fail(function(x, status) {
 			if (status === "abort") { return; }
 			structures.error = "Could not load structures" + (x && x.status ? " (HTTP " + x.status + ")" : "");
@@ -543,6 +603,29 @@ const structures = {
 		});
 	},
 
+	/** The open form's typed values and focus, so a re-render (poll, another row's action) does not lose them */
+	captureForm: function($w) {
+		const $f = $w.find(".str-form");
+		if (!$f.length) { return null; }
+		const vals = {};
+		$f.find("input, select").each(function() { vals[this.className] = $(this).val(); });
+		const a = document.activeElement;
+		const focus = a && $f[0].contains(a) ? { cls: a.className, start: a.selectionStart, end: a.selectionEnd } : null;
+		return { "for": $f.attr("data-for"), vals: vals, focus: focus, error: $f.find(".str-f-error").html() };
+	},
+
+	restoreForm: function($w, cap) {
+		const $f = $w.find(".str-form");
+		if (!cap || !$f.length || $f.attr("data-for") !== cap["for"]) { return; }
+		$f.find("input, select").each(function() { if (cap.vals[this.className] !== undefined) { $(this).val(cap.vals[this.className]); } });
+		$f.find(".str-f-error").html(cap.error || "");
+		structures.updatePreview($f);
+		if (cap.focus) {
+			const el = $f.find("." + String(cap.focus.cls).split(" ")[0])[0];
+			if (el) { el.focus(); try { el.setSelectionRange(cap.focus.start, cap.focus.end); } catch (e) { /* not a text field */ } }
+		}
+	},
+
 	renderPanel: function() {
 		const $w = structures.$widget();
 		if (!$w.length) { return; }
@@ -550,7 +633,7 @@ const structures = {
 		const id = structures.systemID;
 		$w.find(".str-system").text(id ? structures.systemName(id) : "");
 		$w.find(".str-count").text(structures.headerText(structures.rows, nowSec));
-		if (structures.editing) { return; }	// don't pull a form from under the typing hand; the poll re-renders after Save / Cancel
+		const cap = structures.editing ? structures.captureForm($w) : null;
 		const $content = $w.find(".content");
 		const scroll = $content.scrollTop();
 		$w.find(".str-body").html(structures.panelHtml({
@@ -558,23 +641,13 @@ const structures = {
 			showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error, loaded: structures.loaded
 		}));
 		$content.scrollTop(scroll);
+		structures.restoreForm($w, cap);
 	},
 
-	/** Render even while a form is open (after Save / Cancel / opening one) */
 	redraw: function() {
-		const editing = structures.editing;
-		structures.editing = null;
 		structures.renderPanel();
-		structures.editing = editing;
-		if (editing) {
-			const nowSec = structures.nowSec();
-			const $w = structures.$widget();
-			$w.find(".str-body").html(structures.panelHtml({
-				rows: structures.rows, gone: structures.gone, nowSec: nowSec, highlight: structures.highlight, editing: editing, moreID: structures.moreID,
-				showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error, loaded: structures.loaded
-			}));
-			structures.updatePreview($w.find(".str-form"));
-		}
+		const $f = structures.$widget().find(".str-form");
+		if ($f.length) { structures.updatePreview($f); }
 	},
 
 	rowByID: function(id) {
@@ -593,19 +666,15 @@ const structures = {
 		$p.removeClass("str-bad").text("ends " + structures.formatEve(t.ms) + " EVE (your time " + structures.formatLocal(t.ms) + ")");
 	},
 
-	/** Form fields to POST params; null (with the error shown) when invalid */
+	/** The form's changed fields as POST params; null (with the error shown) when invalid */
 	formParams: function($form) {
-		const params = { owner: $.trim($form.find(".str-f-owner").val()), state: $form.find(".str-f-state").val(), note: $.trim($form.find(".str-f-note").val()) };
-		const kind = $form.find(".str-f-tkind").val();
-		params.timerKind = kind;
-		if (kind) {
-			const nowMs = structures.nowSec() * 1000;
-			const t = structures.parseTime($form.find(".str-f-tat").val(), nowMs);
-			const err = t.error || structures.timerRangeError(t.ms, nowMs);
-			if (err) { $form.find(".str-f-error").text(err); return null; }
-			params.timerAt = structures.formatEve(t.ms);
-		}
-		return params;
+		const id = $form.attr("data-for");
+		const r = structures.formDiff(id === "new" ? null : structures.rowByID(parseInt(id, 10)), {
+			owner: $.trim($form.find(".str-f-owner").val()), state: $form.find(".str-f-state").val(), note: $.trim($form.find(".str-f-note").val()),
+			tkind: $form.find(".str-f-tkind").val(), tat: $.trim($form.find(".str-f-tat").val())
+		}, structures.nowSec() * 1000);
+		if (r.error) { $form.find(".str-f-error").text(r.error); return null; }
+		return r.params;
 	},
 
 	bindPanel: function() {
@@ -654,6 +723,10 @@ const structures = {
 			structures.redraw();
 		}).on("input change", sel + " .str-form .str-f-tat, " + sel + " .str-form .str-f-tkind", function() {
 			structures.updatePreview($(this).closest(".str-form"));
+		}).on("click", sel + " .str-pick", function(e) {
+			e.preventDefault();
+			const p = structures.pending;
+			if (p) { structures.submitForm($(sel + " .str-form"), Object.assign({}, p.params, { owner: "", ownerID: $(this).attr("data-id"), ownerType: $(this).attr("data-type") })); }
 		}).on("click", sel + " .str-f-cancel", function() {
 			structures.editing = null;
 			structures.redraw();
@@ -671,6 +744,7 @@ const structures = {
 			} else {
 				params.action = "update";
 				params.id = id;
+				if (Object.keys(params).length === 2) { structures.editing = null; structures.redraw(); return; }	// nothing changed
 			}
 			structures.submitForm($form, params);
 		});
@@ -684,10 +758,7 @@ const structures = {
 					return "<a href='#' class='str-pick' data-id='" + c[0] + "' data-type='" + structures.escape(c[1]) + "'>[" + structures.escape(c[3]) + "] " + structures.escape(c[2]) + " (" + structures.escape(c[1]) + ")</a>";
 				}).join(" ");
 				$form.find(".str-f-error").html("Several match, pick one: " + html);
-				$form.off("click.pick").on("click.pick", ".str-pick", function(e) {
-					e.preventDefault();
-					structures.submitForm($form, Object.assign({}, params, { owner: "", ownerID: $(this).attr("data-id"), ownerType: $(this).attr("data-type") }));
-				});
+				structures.pending = { params: params };
 				return;
 			}
 			if (response && response.systemID === structures.systemID) { structures.absorb(response); }
@@ -715,6 +786,14 @@ const structures = {
 
 	gridster: function() { return typeof systemKillFeed !== "undefined" ? systemKillFeed.gridster() : null; },
 
+	/** Grid columns that fit in the window (widget_base_dimensions + margins), as the Favourites panel does */
+	availableCols: function(g) {
+		const o = (g && g.options) || {};
+		const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
+		const zoom = parseFloat($("body").css("zoom")) || 1;
+		return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
+	},
+
 	addWidget: function() {
 		const g = structures.gridster();
 		if (!g || structures.$widget().length) { return; }
@@ -726,7 +805,7 @@ const structures = {
 		const opts = structures.opts();
 		const pos = structures.rememberedPosition(opts)
 			|| systemKillFeed.savedPosition(opts ? opts.grid : null, structures.WIDGET_ID)
-			|| systemKillFeed.defaultPosition(others, $(window).width(), size);
+			|| structures.defaultPlacement(others, structures.availableCols(g));
 		if (opts && opts.structures && opts.structures.position) { delete opts.structures.position; }
 		const $w = g.add_widget(structures.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
 		$w.stop(true, true);
@@ -796,6 +875,8 @@ const structures = {
 		$dialog.find(".str-dlg").remove();
 		const $only = $dialog.parent().find(".str-save-only");
 		$only.hide();
+		// With the Intel panel turned off the dialog is only here to save structures: no scan is shared
+		$dialog.parent().find(".intel-share").toggle(intelScans.enabled(intelScans.opts()));
 		if (!structures.enabled(structures.opts())) { return; }
 		const text = String($dialog.find(".intel-text").val() || "");
 		if (text !== structures.dlgText) { structures.dlgText = text; structures.dlgChecked = {}; structures.dlgMaster = true; }
@@ -811,6 +892,10 @@ const structures = {
 		const $dialog = $("#" + intelScans.DIALOG_ID);
 		if (!$dialog.find(".str-dlg-all").prop("checked")) { return []; }
 		return $dialog.find(".str-dlg-row:checked").map(function() { return parseInt($(this).attr("data-i"), 10); }).get();
+	},
+
+	errorText: function(x, fallback) {
+		return x && x.responseJSON && x.responseJSON.error ? x.responseJSON.error : fallback + (x && x.status ? " (HTTP " + x.status + ")" : "");
 	},
 
 	/** Save the checked structures of the dialog (server parses the text again); returns the request or null */
@@ -835,8 +920,13 @@ const structures = {
 		intelScans.renderPreview.structuresWrapped = true;
 		const share = intelScans.share;
 		intelScans.share = function() {
-			if (structures.enabled(structures.opts())) { structures.saveFromDialog(); }
-			return share.apply(this, arguments);
+			const self = this, args = arguments;
+			const req = structures.enabled(structures.opts()) ? structures.saveFromDialog() : null;
+			if (!req) { return share.apply(self, args); }
+			// Structures first; a failure (limit, validation) stays in the dialog and nothing is shared
+			req.done(function() { share.apply(self, args); }).fail(function(x) {
+				$("#" + intelScans.DIALOG_ID).find(".intel-error").text(structures.errorText(x, "Could not save the structures"));
+			});
 		};
 		const openDialog = intelScans.openDialog;
 		intelScans.openDialog = function() {
@@ -848,13 +938,18 @@ const structures = {
 				if (Array.isArray(buttons)) {
 					buttons.unshift({ text: "Save structures only", "class": "str-save-only", click: function() {
 						const req = structures.saveFromDialog();
-						if (req) { req.always(function() { $dialog.dialog("close"); }); }
+						if (req) {
+							req.done(function() { $dialog.dialog("close"); }).fail(function(x) {
+								$dialog.find(".intel-error").text(structures.errorText(x, "Could not save the structures"));
+							});
+						}
 					} });
 					$dialog.dialog("option", "buttons", buttons);
 				}
 				$dialog.on("change", ".str-dlg-all", function() { structures.dlgMaster = $(this).prop("checked"); structures.renderDialogSection(); })
 					.on("change", ".str-dlg-row", function() { structures.dlgChecked[parseInt($(this).attr("data-i"), 10)] = $(this).prop("checked"); structures.renderDialogSection(); });
 			}
+			$dialog.find(".intel-error").text("");
 			structures.dlgText = "";
 			structures.renderDialogSection();
 			return result;

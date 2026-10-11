@@ -71,10 +71,22 @@ describe('Structures', () => {
 		it('parses countdowns read off the game', () => {
 			assert.equal(structures.parseTime('1d 4h 20m', NOW).ms, NOW + ((24 + 4) * 60 + 20) * 60000);
 			assert.equal(structures.parseTime('4:20:00', NOW).ms, NOW + (4 * 60 + 20) * 60000);
-			assert.equal(structures.parseTime('1:30', NOW).ms, NOW + 90 * 60000);
+			assert.equal(structures.parseTime('1d 4h', NOW).ms, NOW + 28 * 3600000);
+			assert.equal(structures.parseTime('4:20:07', NOW).ms, NOW + (4 * 3600 + 20 * 60 + 7) * 1000);	// seconds are kept
+			assert.equal(structures.parseTime('1h 2m 3s', NOW + 500).ms, NOW + 500 + 3723000);
 			assert.equal(structures.parseTime('2h14', NOW).ms, NOW + 134 * 60000);
 			assert.equal(structures.parseTime('45m', NOW).ms, NOW + 45 * 60000);
 			assert.equal(structures.parseTime('90 s', NOW).ms, NOW + 90000);
+		});
+		it('a bare HH:MM is an EVE clock time, today or tomorrow', () => {
+			assert.deepEqual(structures.parseTime('18:30', NOW), { ms: Date.UTC(2026, 9, 11, 18, 30), clock: true });	// NOW is 12:00
+			assert.equal(structures.parseTime('9:05', NOW).ms, Date.UTC(2026, 9, 12, 9, 5));	// passed today: tomorrow
+			assert.equal(structures.parseTime('12:00', NOW).ms, NOW);
+			assert.ok(structures.parseTime('24:00', NOW).error);
+			assert.ok(structures.parseTime('12:75', NOW).error);
+		});
+		it('sends second precision', () => {
+			assert.equal(structures.formatEveFull(Date.UTC(2026, 9, 12, 8, 5, 9)), '2026-10-12 08:05:09');
 		});
 		it('refuses garbage and impossible dates', () => {
 			['', '   ', 'soon', '2026-02-31 10:00', '2026-13-01 10:00', '2026-10-12 25:00', 'abc 4h'].forEach((t) => {
@@ -86,6 +98,42 @@ describe('Structures', () => {
 			assert.ok(structures.timerRangeError(NOW - 7200001, NOW));
 			assert.equal(structures.timerRangeError(NOW + 2592000000, NOW), '');
 			assert.ok(structures.timerRangeError(NOW + 2592000001, NOW));
+		});
+	});
+
+	describe('form changes', () => {
+		const stored = row({ ownerID: 11, ownerType: 'corporation', ownerName: 'Home Corp', ownerTicker: 'HOME', state: 'reinforced',
+			timerKind: 'armor', timerAt: NOW_S - 3 * 3600, note: 'n' });
+		const same = { owner: 'HOME', state: 'reinforced', note: 'n', tkind: 'armor', tat: structures.formatEve((NOW_S - 3 * 3600) * 1000).replace(/-/g, '.') };
+		it('an untouched form sends nothing, so an ended timer is not range-checked again', () => {
+			assert.deepEqual(structures.formDiff(stored, same, NOW), { params: {} });
+		});
+		it('sends only what changed', () => {
+			assert.deepEqual(structures.formDiff(stored, Object.assign({}, same, { note: 'x' }), NOW), { params: { note: 'x' } });
+			assert.deepEqual(structures.formDiff(stored, Object.assign({}, same, { owner: '' }), NOW), { params: { owner: '' } });
+		});
+		it('a new timer is sent without the state, so the server maps it (armor -> reinforced)', () => {
+			const r = structures.formDiff(row({ state: 'online' }), { owner: '', state: 'online', note: '', tkind: 'armor', tat: '2h14m' }, NOW);
+			assert.deepEqual(Object.keys(r.params).sort(), ['timerAt', 'timerKind']);
+			assert.equal(r.params.timerAt, '2026-10-11 14:14:00');
+		});
+		it('clearing the timer, a timer without a time, a bad timer', () => {
+			assert.deepEqual(structures.formDiff(stored, Object.assign({}, same, { tkind: '', tat: '' }), NOW), { params: { timerKind: '' } });
+			assert.ok(structures.formDiff(row(), { owner: '', state: 'online', note: '', tkind: 'hull', tat: '' }, NOW).error);
+			assert.ok(structures.formDiff(row(), { owner: '', state: 'online', note: '', tkind: 'hull', tat: '2026.10.01 10:00' }, NOW).error);
+		});
+		it('a new structure sends the state only when it is not the default', () => {
+			assert.deepEqual(structures.formDiff(null, { owner: 'HSTL', state: 'unknown', note: '', tkind: '', tat: '' }, NOW), { params: { owner: 'HSTL' } });
+			assert.equal(structures.formDiff(null, { owner: '', state: 'online', note: '', tkind: '', tat: '' }, NOW).params.state, 'online');
+		});
+	});
+
+	describe('default placement', () => {
+		it('right of the existing widgets when it fits, else below them', () => {
+			const widgets = [{ col: 1, row: 1, size_x: 7, size_y: 6 }, { col: 8, row: 1, size_x: 7, size_y: 6 }];
+			assert.deepEqual(structures.defaultPlacement(widgets, 30), { col: 15, row: 1, size_x: 4, size_y: 3 });
+			assert.deepEqual(structures.defaultPlacement(widgets, 17), { col: 1, row: 7, size_x: 4, size_y: 3 });
+			assert.deepEqual(structures.defaultPlacement([], 17), { col: 1, row: 1, size_x: 4, size_y: 3 });
 		});
 	});
 
