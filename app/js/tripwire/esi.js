@@ -467,6 +467,12 @@ tripwire.esi = function() {
     this.esi.parse = function(characters) {
         for (characterID in tripwire.esi.characters) {
             if (!(characterID in characters)) {
+                // fork: the server drops a character whose token was refused (revoked, invalid_grant). Say so
+                // instead of letting tracking stop silently. A character the user just removed is already gone from the list.
+                var gone = tripwire.esi.characters[characterID];
+                if (gone && gone.characterName && $("#tracking .tracking-clone[data-characterid='" + characterID + "']").length) {
+                    Notify.trigger(gone.characterName + "'s EVE token was refused. Link the character again to keep tracking.", "yellow", 15000, "esi-dropped-" + characterID);
+                }
                 delete tripwire.esi.characters[characterID];
                 tracking.remove(characterID);
                 if (options.tracking.active == characterID) {
