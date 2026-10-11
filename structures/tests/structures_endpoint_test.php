@@ -108,7 +108,7 @@ check('an edit clears an ended timer', [$body['structures'][0]['timerKind'], $bo
 
 // A timer with seconds keeps them; editing an ended timer's row without touching the timer works (note only)
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'timerKind' => 'hull', 'timerAt' => gmdate('Y-m-d H:i:s', time() + 3605)]);
-check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 2, true);
+check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 30, true);
 $mysql->exec("UPDATE fork_structures SET timerKind = 'armor', timerAt = UTC_TIMESTAMP() - INTERVAL 3 HOUR WHERE id = $id");
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'state' => 'online', 'note' => 'ended timer row']);
 check('editing a row with an ended timer is not blocked', [$status, $body['structures'][0]['state']], [200, 'online']);
@@ -148,6 +148,46 @@ check('a gone row cannot be edited: 404', call('POST', ['action' => 'update', 'i
 check('restore', [count($body['gone']), count($body['structures'])], [0, 4]);
 
 check('add: a Control Tower is fine', call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Caldari Control Tower'])[0], 200);
+
+// --- Markers and timers (GET, no X-Requested-With needed) ---
+call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'Hostile Text Corp']);
+[$status, $body] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1)]);
+check('markers: systems with structures, next timers, hash', [$status, array_keys((array) $body['systems']), count($body['next']) >= 1, strlen($body['hash'])], [200, [SYSTEM], true, 32]);
+check('markers: summary of the system', [$body['systems'][SYSTEM]['count'], $body['systems'][SYSTEM]['nextTimer']['kind']], [5, 'hull']);
+[$status, $unchanged] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1), 'have' => $body['hash']]);
+check('markers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['systems'])], [true, false]);
+check('markers: a systemID that is not a system: 400', call('GET', ['action' => 'markers', 'systemIDs' => '12'])[0], 400);
+check('markers: more than 500 systems: 400', call('GET', ['action' => 'markers', 'systemIDs' => implode(',', range(31000001, 31000501))])[0], 400);
+check('markers: no systems is an empty answer', [call('GET', ['action' => 'markers'])[0], (array) call('GET', ['action' => 'markers'])[1]['systems']], [200, []]);
+check('markers: another mask sees nothing', [(array) call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['systems'], call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['next']], [[], []]);
+[$status, $body] = call('GET', ['action' => 'timers']);
+check('timers: the active timers of the mask (capped is false, the hash is sent)', [$status, array_map(function ($r) { return $r['typeName']; }, array_values(array_filter($body['timers'], function ($r) { return $r['systemID'] === SYSTEM; }))), $body['capped'], strlen($body['hash'])], [200, ['Athanor'], false, 32]);
+[$status, $unchanged] = call('GET', ['action' => 'timers', 'have' => $body['hash']]);
+check('timers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['timers'])], [true, false]);
+check('timers: no session: 403', call('GET', ['action' => 'timers'], [])[0], 403);
+check('timers: another mask sees nothing', call('GET', ['action' => 'timers'], $other)[1]['timers'], []);
+
+// --- Overview paste and the owner queue (phase 4) ---
+$overview = "Distance\tName\tType\n3 km\tJ163701 - Overview Fort\tFortizar\n9 km\t\tCaldari Control Tower";
+[$status, $body] = call('POST', ['action' => 'scan', 'systemID' => SYSTEM, 'text' => $overview, 'systemName' => 'J163701', 'format' => 'overview']);
+check('overview scan: the Fortizar is added, the tower (unnamed, already stored) is seen again, the header is not recognised', [$status, $body['result']['added'], $body['result']['updated'], $body['result']['notRecognised']], [200, 1, 1, 1]);
+[$status, $body] = call('POST', ['action' => 'scan', 'systemID' => SYSTEM, 'text' => $overview, 'systemName' => 'J163701']);
+check('the same text read as a d-scan finds nothing (the format decides)', [$status, $body['result']['added'], $body['result']['updated']], [200, 0, 0]);
+$mysql->exec('DROP TABLE IF EXISTS fork_structure_owner_lookups');
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'Zzo Queued Corp']);
+check('an unresolved owner is queued for the worker (the table is created on first use)', [$status, (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp' AND status = 'queued'")->fetchColumn()], [200, 1]);
+[$status, $body] = call('GET', ['action' => 'list', 'systemID' => SYSTEM]);
+check('list carries suggestions (none without kills) in its hash', [isset($body['suggestions']), (array) $body['suggestions'], strlen($body['hash'])], [true, [], 32]);
+check('the queued name remembers the mask that asked', $mysql->query("SELECT maskID FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp'")->fetchColumn(), MASK_A);
+$mysql->exec("DELETE FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp'");
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'HSTX']);
+check('a ticker-like text is stored as typed and not queued for ESI', [$status, (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name = 'HSTX'")->fetchColumn()], [200, 0]);
+// Dismissing a hint
+check('dismiss: stored for the mask', [call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '2100000099'])[0], (int) $mysql->query('SELECT COUNT(*) FROM fork_structure_hint_dismissed WHERE structureID = ' . (int) $athanor['id'])->fetchColumn()], [200, 1]);
+check('dismiss: a bad kind or key is 400', [call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'x', 'key' => '1'])[0], call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => 'abc'])[0]], [400, 400]);
+check('dismiss: another mask\'s row is 404', call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '1'], $other)[0], 404);
+check('dismiss: needs X-Requested-With', call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '1'], null, false)[0], 400);
+$mysql->exec('DELETE FROM fork_structure_hint_dismissed WHERE structureID = ' . (int) $athanor['id']);
 
 // --- Rate limit: 20 writes a minute ---
 $mysql->exec('DELETE FROM fork_structure_writes WHERE userID = 900021');

@@ -1,6 +1,46 @@
 {
   "features": [
     {
+      "pr": 82,
+      "date": "2026-10-11",
+      "title": "Smarter structure input",
+      "description": "Owners you type by corporation name are now looked up automatically. The Structures panel suggests a likely owner (HSTL?) and a possible destroyed? from kills in the system, which you confirm with one click or hide with the small x. You can also paste a copied overview selection into the d-scan dialog (the paste icon in the Structures panel) to save its structures.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-82-structure-hints.png",
+          "caption": "Owner and destroyed hints in the Structures panel"
+        },
+        {
+          "src": "whats-new/img/pr-82-structure-overview.png",
+          "caption": "An overview selection pasted into the d-scan dialog"
+        }
+      ]
+    },
+    {
+      "pr": 81,
+      "date": "2026-10-11",
+      "title": "Structure timer reminders",
+      "description": "Mask admins can turn on Structure timers in Mask Admin > Discord to get a Discord reminder 24 hours, 1 hour and 15 minutes before a structure timer ends, and when it ends. In Tripwire you also get a pop-up and a sound at 15 minutes and at the end; turn that off in Settings > Kills & Intel > Timer alerts.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-81-structure-reminders.png",
+          "caption": "The pop-up when a structure timer is close"
+        }
+      ]
+    },
+    {
+      "pr": 83,
+      "date": "2026-10-11",
+      "title": "Structure timers on the map and in one list",
+      "description": "The Structures panel has a new clock button that lists every structure timer of your mask, soonest first, with Hostile only and Hide ended filters. Systems with structures or a timer in the next 48 hours get small icons on the chain map, the system info shows a one-line summary, and residents set by hand now appear first in the panel's residents strip. Turn the map icons off in Settings > Map Markers > Structure & timer icons; the panel itself is under Settings > Kills & Intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-83-structure-timers.png",
+          "caption": "The Timers view of the Structures panel"
+        }
+      ]
+    },
+    {
       "pr": 79,
       "date": "2026-10-11",
       "title": "Nearest loot buyers",

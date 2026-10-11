@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass', 'rolling'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass', 'rolling', 'structureTimer'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -59,6 +59,13 @@ function discord_placeholders() {
             'time' => 'EVE time (UTC), e.g. 19:08: when rolling started; in the done text, when it was cleared or found gone',
             'outcome' => 'done text: "Rolled by Kytus" after Rolled (closed), "Hole closed" when the hole vanished from the map, else "Done"',
             'mark' => 'done text: the rolling message as it was last posted, struck through, without its pings and link line (put in front of the done text when it doesn\'t use {mark})'],
+        'structureTimer' => ['pings' => 'the ping field of this type', 'mask' => 'mask name', 'system' => 'system name',
+            'chainLabel' => 'where it is, in brackets: its chain label "(AB)", "(home)", "(in chain)" or "(not in chain)"',
+            'structure' => 'the structure\'s name (its type when it has none)', 'type' => 'structure type, e.g. Astrahus',
+            'owner' => 'owner, e.g. "[HSTL] Hostile Haulers" ("unknown owner" when not set)', 'timer' => 'Armor timer / Hull timer / POS timer / ...',
+            'endsEve' => 'when the timer ends, EVE time (UTC), e.g. 2026-10-12 18:30', 'endsRelative' => 'the same moment as a live Discord countdown, e.g. "in 15 minutes"',
+            'lead' => 'which reminder: "in 24h", "in 1h", "in 15m" or "now"', 'setBy' => 'who entered the timer', 'note' => 'the structure\'s note (empty without one)',
+            'map' => 'Tripwire link to the system'],
     ];
 }
 
@@ -155,6 +162,8 @@ function discord_default_templates() {
         // Rolling (discord/rolling.php): only the hole, its system and the EVE time; done / hole gone (an edit of the mark)
         'rolling'      => '{pings} Rolling **{name}** in **{system}** — {time} EVE',
         'rollingClear' => "{mark}\n{outcome} at {time} EVE",
+        // Structure timers (discord/structure_timers.php): one reminder per lead
+        'structureTimer' => "{pings} \u{23F0} {timer} {lead}: {type} \"{structure}\" ({owner}) in {system} {chainLabel}, ends {endsEve} EVE ({endsRelative})",
     ];
 }
 
@@ -240,6 +249,7 @@ function discord_payload(array $ctx) {
     $kind = $ctx['kind'];
     if ($kind === 'preserveMass') return discord_preserve_payload($ctx);   // discord/preserve_mass.php
     if ($kind === 'rolling') return discord_rolling_payload($ctx);   // discord/rolling.php
+    if ($kind === 'structureTimer') return discord_structure_timer_payload($ctx);   // discord/structure_timers.php
     if ($kind === 'chainPaused' || $kind === 'chainResumed') return discord_chain_notice_payload($ctx);   // discord/chain_notice.php
     $values = [
         'pings' => $ctx['ping'] ?? '', 'mask' => $ctx['mask'] ?? '', 'system' => $ctx['system'] ?? '',

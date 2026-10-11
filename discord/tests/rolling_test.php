@@ -50,7 +50,7 @@ check('settings: independent of preserve mass', $s['types']['preserveMass']['ena
 check('type: only when on with a webhook', [discord_rolling_type($s) !== null, discord_rolling_type(discord_settings_defaults())], [true, null]);
 check('placeholders', array_keys(discord_placeholders()['rolling']), ['pings', 'mask', 'name', 'system', 'to', 'class', 'sig', 'connection', 'who', 'note',
     'withNote', 'map', 'time', 'outcome', 'mark']);
-check('a kind of its own, the last', DISCORD_KINDS[count(DISCORD_KINDS) - 1], 'rolling');
+check('a kind of its own, before structureTimer', DISCORD_KINDS[count(DISCORD_KINDS) - 2], 'rolling');
 
 // --- what changed ---
 $f = function ($who, $note = '') { return ['wormholeID' => 1, 'setByID' => 1, 'setBy' => $who, 'setAt' => 1, 'note' => $note]; };
