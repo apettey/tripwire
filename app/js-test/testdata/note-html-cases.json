@@ -1,0 +1,19 @@
+[
+	{"name": "plain text and basic formatting kept", "input": "<b>hi</b> <i>there</i>", "contains": ["<b>hi</b>", "<i>there</i>"]},
+	{"name": "script removed, text kept", "input": "a<script>alert(1)</script>b", "notContains": ["<script", "</script"], "contains": ["a", "b"]},
+	{"name": "onerror with space before equals", "input": "<img src=x onerror =alert(1)>", "notContains": ["onerror"], "contains": ["<img"]},
+	{"name": "upper-case ONERROR", "input": "<img src=x ONERROR=alert(1)>", "notContains": ["onerror"]},
+	{"name": "onerror with newline and tab", "input": "<img src=x\nonerror\t=\nalert(1)>", "notContains": ["onerror"]},
+	{"name": "unknown on* handler", "input": "<div onpointerover=\"alert(1)\">x</div>", "notContains": ["onpointerover", "alert"], "contains": ["x"]},
+	{"name": "javascript: href", "input": "<a href=\"javascript:alert(1)\">x</a>", "notContains": ["javascript:", "href"], "contains": ["x"]},
+	{"name": "javascript: href with leading whitespace", "input": "<a href=\" JaVaScRiPt:alert(1)\">x</a>", "notContains": ["javascript:"]},
+	{"name": "data: img src", "input": "<img src=\"data:text/html,<script>alert(1)</script>\">", "notContains": ["data:", "<script"]},
+	{"name": "http and https links kept", "input": "<a href=\"https://zkillboard.com/kill/1/\">k</a><a href=\"http://example.com/\">e</a>", "contains": ["href=\"https://zkillboard.com/kill/1/\"", "href=\"http://example.com/\""]},
+	{"name": "forbidden wrapper does not smuggle a child", "input": "<section><img src=x onerror=alert(1)></section>", "notContains": ["onerror", "<section"]},
+	{"name": "iframe and object removed", "input": "<iframe src=\"https://evil.example/\"></iframe><object data=x></object>", "notContains": ["<iframe", "<object"]},
+	{"name": "svg onload", "input": "<svg onload=alert(1)><circle/></svg>", "notContains": ["onload", "<svg"]},
+	{"name": "comment dropped", "input": "x<!-- <script>alert(1)</script> -->y", "notContains": ["<!--", "<script"]},
+	{"name": "style with url() dropped", "input": "<span style=\"background:url(javascript:alert(1))\">x</span>", "notContains": ["url(", "javascript"], "contains": ["x"]},
+	{"name": "style keeps colour", "input": "<span style=\"color: #ff0000; position: fixed\">x</span>", "contains": ["color: #ff0000"], "notContains": ["position"]},
+	{"name": "class and id dropped", "input": "<div class=\"sn\" id=\"a\" data-x=\"1\">x</div>", "notContains": ["class=", "id=", "data-x"], "contains": ["x"]}
+]

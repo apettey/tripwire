@@ -17,6 +17,7 @@ if(!isset($_SESSION['userID'])) {
 require_once('../config.php');
 require_once('../settings.php');
 require_once('../db.inc.php');
+require_once('../note-html.inc.php');
 
 header('Content-Type: application/json');
 /**
@@ -284,7 +285,7 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 	$stmt->bindValue(':maskID', $maskID);
 	$stmt->execute();
 	while ($row = $stmt->fetchObject()) {
-		$output['comments'][] = array('id' => $row->id, 'comment' => $row->comment, 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
+		$output['comments'][] = array('id' => $row->id, 'comment' => sanitizeNoteHtml($row->comment), 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
 	}
 } else if ((isset($_REQUEST['mode']) && ($_REQUEST['mode'] == 'refresh')) || $refresh['sigUpdate'] == true || $refresh['chainUpdate'] == true) {
 	$signatureCount 	= isset($_REQUEST['signatureCount']) ? $_REQUEST['signatureCount'] : null;
@@ -354,7 +355,7 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 		$stmt->bindValue(':maskID', $maskID);
 		$stmt->execute();
 		while ($row = $stmt->fetchObject()) {
-			$output['comments'][] = array('id' => $row->id, 'comment' => $row->comment, 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
+			$output['comments'][] = array('id' => $row->id, 'comment' => sanitizeNoteHtml($row->comment), 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
 		}
 	}
 }

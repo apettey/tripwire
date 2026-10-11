@@ -21,6 +21,7 @@ if(!isset($_SESSION['userID'])) {
 
 require_once('../config.php');
 require_once('../db.inc.php');
+require_once('../note-html.inc.php');
 
 header('Content-Type: application/json');
 
@@ -34,6 +35,13 @@ $mode = 		isset($_REQUEST['mode']) ? $_REQUEST['mode'] : null;
 $output = 		null;
 
 if ($mode == 'save') {
+	// Notes are shared stored content: clean them on the way in as well as on the way out (refresh.php).
+	if (!noteHtmlSanitizerAvailable()) {
+		http_response_code(503);
+		echo json_encode(array('result' => false, 'error' => 'PHP DOM extension is required to save notes.'));
+		exit();
+	}
+	$comment = sanitizeNoteHtml($comment);
 	$query = 'INSERT INTO comments (id, systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
 				VALUES (:commentID, :systemID, :comment, NOW(), :createdByID, :createdByName, :modifiedByID, :modifiedByName, :maskID)
 				ON DUPLICATE KEY UPDATE
