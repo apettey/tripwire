@@ -233,6 +233,12 @@ describe('Structures', () => {
 			const panel = structures.panelHtml({ rows: [row()], gone: [], nowSec: NOW_S, highlight: null, editing: null, moreID: 1, showGone: false, extraCorps: [], types: types, error: '', loaded: true, suggestions: { 1: sugg } });
 			assert.ok(panel.includes('https://zkillboard.com/kill/777/'));
 		});
+		it('both hints have a dismiss x that names the hint (corporation ID / kill ID)', () => {
+			const html = structures.rowHtml(row({ id: 4 }), NOW_S, null, sugg);
+			assert.ok(html.includes("class='str-sugg-x' data-id='4' data-kind='owner' data-key='22'"));
+			assert.ok(html.includes("class='str-sugg-x' data-id='4' data-kind='destroyed' data-key='777'"));
+			assert.ok(structures.rowHtml(row(), NOW_S, null, { destroyed: [777, NOW_S - 60] }).indexOf("data-kind='owner'") < 0);
+		});
 		it('nothing without hints', () => {
 			const html = structures.rowHtml(row(), NOW_S, null, undefined);
 			assert.ok(!html.includes('str-sugg'));

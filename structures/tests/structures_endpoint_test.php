@@ -178,7 +178,16 @@ $mysql->exec('DROP TABLE IF EXISTS fork_structure_owner_lookups');
 check('an unresolved owner is queued for the worker (the table is created on first use)', [$status, (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp' AND status = 'queued'")->fetchColumn()], [200, 1]);
 [$status, $body] = call('GET', ['action' => 'list', 'systemID' => SYSTEM]);
 check('list carries suggestions (none without kills) in its hash', [isset($body['suggestions']), (array) $body['suggestions'], strlen($body['hash'])], [true, [], 32]);
+check('the queued name remembers the mask that asked', $mysql->query("SELECT maskID FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp'")->fetchColumn(), MASK_A);
 $mysql->exec("DELETE FROM fork_structure_owner_lookups WHERE name = 'Zzo Queued Corp'");
+[$status, $body] = call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'HSTX']);
+check('a ticker-like text is stored as typed and not queued for ESI', [$status, (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name = 'HSTX'")->fetchColumn()], [200, 0]);
+// Dismissing a hint
+check('dismiss: stored for the mask', [call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '2100000099'])[0], (int) $mysql->query('SELECT COUNT(*) FROM fork_structure_hint_dismissed WHERE structureID = ' . (int) $athanor['id'])->fetchColumn()], [200, 1]);
+check('dismiss: a bad kind or key is 400', [call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'x', 'key' => '1'])[0], call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => 'abc'])[0]], [400, 400]);
+check('dismiss: another mask\'s row is 404', call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '1'], $other)[0], 404);
+check('dismiss: needs X-Requested-With', call('POST', ['action' => 'dismiss', 'id' => $athanor['id'], 'kind' => 'owner', 'key' => '1'], null, false)[0], 400);
+$mysql->exec('DELETE FROM fork_structure_hint_dismissed WHERE structureID = ' . (int) $athanor['id']);
 
 // --- Rate limit: 20 writes a minute ---
 $mysql->exec('DELETE FROM fork_structure_writes WHERE userID = 900021');

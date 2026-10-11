@@ -122,6 +122,24 @@
 			],
 			"modules": 0,
 			"notRecognised": 0
+		},
+		{
+			"name": "a corporation / alliance ticker column is not the name",
+			"systemName": "J163701",
+			"lines": [
+				"9 km\tCaldari Control Tower\tHSTL",
+				"[ABC]\t3 km\tMobile Depot",
+				"4 km\tJ163701 - Fort\tAstrahus\t<PL>",
+				"6 km\tAstrahus\tHOME\tSuper Long Alliance Name\tJ163701 - Second"
+			],
+			"structures": [
+				[16213, "Caldari Control Tower", "starbase", "", 9, "", "", false],
+				[33474, "Mobile Depot", "deployable", "", 3, "", "", false],
+				[35832, "Astrahus", "upwell", "J163701 - Fort", 4, "J163701", "Fort", false],
+				[35832, "Astrahus", "upwell", "J163701 - Second", 6, "J163701", "Second", false]
+			],
+			"modules": 0,
+			"notRecognised": 0
 		}
 	]
 }

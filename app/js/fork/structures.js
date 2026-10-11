@@ -125,7 +125,7 @@ const structures = {
 			let name = "";
 			let withDash = false;
 			cells.forEach(function(cell, i) {
-				if (i === typeAt || i === kmAt || cell === "" || cell === "-") { return; }
+				if (i === typeAt || i === kmAt || cell === "" || cell === "-" || /^[\[<(]?[A-Z0-9][A-Z0-9.\-]{1,4}[\]>)]?$/.test(cell)) { return; }	// not a ticker column
 				const dash = cell.indexOf(" - ") >= 0;
 				if ((dash && !withDash) || (dash === withDash && Array.from(cell).length > Array.from(name).length)) { name = cell; withDash = dash; }
 			});
@@ -426,16 +426,22 @@ const structures = {
 		if (!c || row.ownerID || row.ownerText) { return ""; }
 		const label = c[3] || c[2];
 		const also = sugg.owner.length > 1 ? " (also: " + sugg.owner.slice(1).map(function(o) { return o[3] || o[2]; }).join(", ") + ")" : "";
-		return "<a href='#' class='str-sugg str-sugg-owner' data-id='" + row.id + "' data-owner='" + parseInt(c[0], 10) + "' data-type='" + esc(c[1]) + "' title='"
+		return "<span class='str-sugg-chip'><a href='#' class='str-sugg str-sugg-owner' data-id='" + row.id + "' data-owner='" + parseInt(c[0], 10) + "' data-type='" + esc(c[1]) + "' title='"
 			+ esc("Possible owner: " + c[2] + (c[3] ? " [" + c[3] + "]" : "") + " lost " + c[4] + " " + row.typeName + (c[4] === 1 ? "" : "s") + " here (from kills)" + also + ". Click to set it as the owner.") + "'>"
-			+ esc(label) + "?</a>";
+			+ esc(label) + "?</a>" + structures.dismissHtml(row.id, "owner", parseInt(c[0], 10)) + "</span>";
+	},
+
+	/** The small x of a hint chip: hide this hint (kind owner: key = corporation ID, destroyed: key = kill ID) */
+	dismissHtml: function(id, kind, key) {
+		return "<a href='#' class='str-sugg-x' data-id='" + parseInt(id, 10) + "' data-kind='" + structures.escape(kind) + "' data-key='" + parseInt(key, 10) + "' title='Hide this hint'>&#10005;</a>";
 	},
 
 	deadHintHtml: function(row, sugg, nowSec) {
 		const k = sugg && sugg.destroyed;
 		if (!k) { return ""; }
-		return "<a href='#' class='str-sugg str-sugg-dead' data-id='" + row.id + "' title='" + structures.escape("Destroyed? A " + row.typeName + " was killed here " + structures.age(nowSec - k[1])
-			+ (structures.age(nowSec - k[1]) === "now" ? "" : " ago") + " (kill " + k[0] + ", see More). Click to mark it destroyed; it can be undone for 30 days.") + "'>" + structures.icon("dead") + "</a>";
+		return "<span class='str-sugg-chip str-sugg-chip-dead'><a href='#' class='str-sugg str-sugg-dead' data-id='" + row.id + "' title='" + structures.escape("Destroyed? A " + row.typeName + " was killed here " + structures.age(nowSec - k[1])
+			+ (structures.age(nowSec - k[1]) === "now" ? "" : " ago") + " (kill " + k[0] + ", see More). Click to mark it destroyed; it can be undone for 30 days.") + "'>" + structures.icon("dead") + "</a>"
+			+ structures.dismissHtml(row.id, "destroyed", k[0]) + "</span>";
 	},
 
 	rowHtml: function(row, nowSec, highlight, sugg) {
@@ -851,6 +857,10 @@ const structures = {
 			e.preventDefault();
 			// Same request as picking the owner in the edit form: the server checks the entity against its cache
 			structures.write({ action: "update", id: rowID(this), ownerID: $(this).attr("data-owner"), ownerType: $(this).attr("data-type") });
+		}).on("click", sel + " .str-sugg-x", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			structures.write({ action: "dismiss", id: $(this).attr("data-id"), kind: $(this).attr("data-kind"), key: $(this).attr("data-key") });
 		}).on("click", sel + " .str-sugg-dead", function(e) {
 			e.preventDefault();
 			structures.write({ action: "gone", id: rowID(this), state: "destroyed" });

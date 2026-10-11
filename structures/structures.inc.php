@@ -97,7 +97,17 @@ function structures_prune(PDO $db) {
     $a = $db->exec('DELETE FROM fork_structures WHERE goneAt IS NOT NULL AND goneAt < UTC_TIMESTAMP() - INTERVAL ' . (int) STRUCTURES_GONE_DAYS . ' DAY');
     $b = $db->exec("DELETE FROM fork_structures WHERE kind = 'deployable' AND goneAt IS NULL AND lastSeenAt < UTC_TIMESTAMP() - INTERVAL " . (int) STRUCTURES_DEPLOYABLE_DAYS . ' DAY');
     if ($a === false || $b === false) throw new PDOException('Could not prune fork_structures');
+    try {   // dismissed hints of structures that are gone
+        $db->exec('DELETE d FROM fork_structure_hint_dismissed d LEFT JOIN fork_structures s ON s.id = d.structureID WHERE s.id IS NULL');
+    } catch (PDOException $error) {
+        if ((string) $error->getCode() !== '42S02') throw $error;
+    }
     return $a + $b;
+}
+
+/** A corporation / alliance ticker column of an overview: 2-5 capitals, digits, dots or dashes, optionally in [] <> () */
+function structures_ticker_like($cell) {
+    return preg_match('/^[\[<(]?[A-Z0-9][A-Z0-9.\-]{1,4}[\]>)]?$/', (string) $cell) === 1;
 }
 
 // ---- Types and parsing ----
@@ -201,7 +211,7 @@ function structures_parse_overview($text, $systemName = null) {
         $name = '';
         $withDash = false;
         foreach ($cells as $i => $cell) {
-            if ($i === $typeAt || $i === $kmAt || $cell === '' || $cell === '-') continue;
+            if ($i === $typeAt || $i === $kmAt || $cell === '' || $cell === '-' || structures_ticker_like($cell)) continue;
             $dash = strpos($cell, ' - ') !== false;
             if (($dash && !$withDash) || ($dash === $withDash && mb_strlen($cell, 'UTF-8') > mb_strlen($name, 'UTF-8'))) { $name = $cell; $withDash = $dash; }
         }
@@ -445,14 +455,60 @@ function structures_markers(PDO $db, $mask, array $systemIDs, array $friendly, $
 
 const STRUCTURES_SUGGEST_DAYS = 30;   // killmails looked at (the pooled zKillboard feed keeps its own, shorter, window)
 const STRUCTURES_SUGGEST_OWNERS = 2;  // owner candidates per structure
+const STRUCTURES_HINT_KINDS = ['owner', 'destroyed'];
+
+const STRUCTURES_HINT_DDL = 'CREATE TABLE IF NOT EXISTS fork_structure_hint_dismissed (
+    structureID int unsigned NOT NULL,
+    kind varchar(12) NOT NULL,
+    hintKey varchar(32) NOT NULL,
+    dismissedBy varchar(100) DEFAULT NULL,
+    dismissedAt datetime NOT NULL,
+    PRIMARY KEY (structureID, kind, hintKey)
+) DEFAULT CHARSET=utf8mb4';
+
+function structures_hint_schema(PDO $db) {
+    if ($db->exec(STRUCTURES_HINT_DDL) === false) throw new PDOException('Could not create fork_structure_hint_dismissed: ' . implode(' ', $db->errorInfo()));
+}
+
+/** Hide one hint of a structure for everybody on the mask (kind 'owner': hintKey = the corporation ID, 'destroyed': the kill ID). */
+function structures_hint_dismiss(PDO $db, $structureID, $kind, $key, $by) {
+    if (!in_array($kind, STRUCTURES_HINT_KINDS, true) || !preg_match('/^[0-9]{1,20}$/', (string) $key)) return false;
+    structures_hint_schema($db);
+    $stmt = $db->prepare('INSERT INTO fork_structure_hint_dismissed (structureID, kind, hintKey, dismissedBy, dismissedAt) VALUES (:id, :k, :h, :by, UTC_TIMESTAMP())
+        ON DUPLICATE KEY UPDATE dismissedBy = VALUES(dismissedBy), dismissedAt = VALUES(dismissedAt)');
+    $stmt->bindValue(':id', (int) $structureID, PDO::PARAM_INT);
+    $stmt->bindValue(':k', $kind);
+    $stmt->bindValue(':h', (string) $key);
+    $stmt->bindValue(':by', $by === null ? null : mb_substr((string) $by, 0, 100, 'UTF-8'));
+    return $stmt->execute();
+}
+
+/** Dismissed hints of these structures: "<id>:<kind>:<key>" => true. Empty without the table. */
+function structures_hints_dismissed(PDO $db, array $ids) {
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    if (!$ids) return [];
+    try {
+        $out = [];
+        foreach ($db->query('SELECT structureID, kind, hintKey FROM fork_structure_hint_dismissed WHERE structureID IN (' . implode(',', $ids) . ')')->fetchAll(PDO::FETCH_NUM) as [$id, $kind, $key]) {
+            $out[$id . ':' . $kind . ':' . $key] = true;
+        }
+        return $out;
+    } catch (PDOException $error) {
+        if ((string) $error->getCode() === '42S02') return [];
+        throw $error;
+    }
+}
 
 /**
  * Hints from the structure / starbase losses the pooled zKillboard feed stored for the system (zkill_killmails; only the
- * database is read, nothing is fetched). Never applied by themselves: the panel shows them as clickable chips.
+ * database is read, nothing is fetched). Never applied by themselves: the panel shows them as clickable chips, each with a
+ * dismiss (fork_structure_hint_dismissed, shared by the mask).
  *  - 'destroyed': a kill of this structure's type here after the row was first seen (and, when the owner is known, of that
- *    owner): "was it killed?" -> [killID, killTime]
+ *    owner): "was it killed?" -> [killID, killTime]. A kill is offered to at most one structure: the rows of its type that
+ *    could be the victim are ranked, owner match first, then the least recently seen, and the best one gets it (three
+ *    Athanors and one kill: one hint).
  *  - 'owner' (rows without an owner): the corporations that lost this type of structure here, most losses first, only those
- *    whose name the entity cache knows (others are queued for the worker, so they show up on a later poll):
+ *    whose name the entity cache knows (others are queued for the worker once, so they show up on a later poll):
  *    [[id, 'corporation', name, ticker, losses]]
  * @param array $live structures_list()['structures']
  * @return array rowID => ['destroyed' => [killID, killTime] (optional), 'owner' => [...] (optional)]; rows without a hint are left out
@@ -474,36 +530,46 @@ function structures_suggestions(PDO $db, $systemID, array $live, $now) {
         throw $error;
     }
     if (!$kills) return [];
+    $dismissed = structures_hints_dismissed($db, array_map(function ($r) { return $r['id']; }, $live));
     $out = [];
-    $corps = [];
-    foreach ($live as $r) {
-        if ($r['typeID'] === null) continue;
-        $own = array_values(array_filter($kills, function ($k) use ($r) { return (int) $k['victimShipTypeID'] === (int) $r['typeID']; }));
-        if (!$own) continue;
-        $hint = [];
-        foreach ($own as $k) {   // newest first
-            if ((int) $k['killTime'] <= (int) $r['firstSeenAt']) continue;
+    $byID = [];
+    foreach ($live as $r) $byID[(int) $r['id']] = $r;
+
+    // Destroyed?: every kill (newest first) goes to the best row of its type that could be its victim
+    foreach ($kills as $k) {
+        $best = null;
+        foreach ($live as $r) {
+            if ($r['typeID'] === null || (int) $r['typeID'] !== (int) $k['victimShipTypeID'] || isset($out[(int) $r['id']]['destroyed'])) continue;
+            if ((int) $k['killTime'] <= (int) $r['firstSeenAt'] || isset($dismissed[$r['id'] . ':destroyed:' . $k['killID']])) continue;
+            $matches = false;
             if ($r['ownerID'] !== null) {
                 $victim = $r['ownerType'] === 'alliance' ? $k['victimAllianceID'] : $k['victimCorporationID'];
                 if ($victim === null || (int) $victim !== (int) $r['ownerID']) continue;
+                $matches = true;
             }
-            $hint['destroyed'] = [(int) $k['killID'], (int) $k['killTime']];
-            break;
+            // owner match first, then the one not seen for longest (a structure seen on a scan after the kill is still there)
+            if ($best === null || ($matches && !$best[0]) || ($matches === $best[0] && (int) $r['lastSeenAt'] < (int) $best[1]['lastSeenAt'])) $best = [$matches, $r];
         }
-        if ($r['ownerID'] === null) {
-            $count = [];
-            foreach ($own as $k) {
-                $c = $k['victimCorporationID'];
-                if ($c === null || (function_exists('intel_is_npc_corp') && intel_is_npc_corp((int) $c))) continue;
-                $count[(int) $c] = ($count[(int) $c] ?? 0) + 1;   // keeps first-seen (newest) order for ties
-            }
-            arsort($count);
-            $ids = array_slice(array_keys($count), 0, STRUCTURES_SUGGEST_OWNERS);
-            if ($ids) { $hint['owner_ids'] = $ids; foreach ($ids as $c) $corps[$c] = true; $hint['owner_n'] = $count; }
-        }
-        if ($hint) $out[(int) $r['id']] = $hint;
+        if ($best) $out[(int) $best[1]['id']]['destroyed'] = [(int) $k['killID'], (int) $k['killTime']];
     }
-    // Names and tickers of the candidate corporations from the entity cache; the unknown ones are queued for the worker
+
+    // Possible owner for rows without one
+    $corps = [];
+    $candidates = [];
+    foreach ($live as $r) {
+        if ($r['typeID'] === null || $r['ownerID'] !== null) continue;
+        $count = [];
+        foreach ($kills as $k) {
+            if ((int) $k['victimShipTypeID'] !== (int) $r['typeID']) continue;
+            $c = $k['victimCorporationID'];
+            if ($c === null || (function_exists('intel_is_npc_corp') && intel_is_npc_corp((int) $c)) || isset($dismissed[$r['id'] . ':owner:' . $c])) continue;
+            $count[(int) $c] = ($count[(int) $c] ?? 0) + 1;   // keeps first-seen (newest) order for ties
+        }
+        arsort($count);
+        $ids = array_slice(array_keys($count), 0, STRUCTURES_SUGGEST_OWNERS);
+        if ($ids) { $candidates[(int) $r['id']] = [$ids, $count]; foreach ($ids as $c) $corps[$c] = true; }
+    }
+    // Names and tickers of the candidate corporations from the entity cache; unknown ones are queued once (INSERT IGNORE: no write on later polls)
     $known = [];
     if ($corps) {
         try {
@@ -511,22 +577,21 @@ function structures_suggestions(PDO $db, $systemID, array $live, $now) {
             foreach ($db->query("SELECT id, name, ticker FROM fork_pilot_entities WHERE kind = 'corporation' AND name IS NOT NULL AND id IN ($in)")->fetchAll(PDO::FETCH_ASSOC) as $e) {
                 $known[(int) $e['id']] = [(string) $e['name'], (string) $e['ticker']];
             }
-            $missing = array_diff_key($corps, $known);
-            if ($missing && function_exists('intel_queue_entities')) intel_queue_entities($db, array_fill_keys(array_keys($missing), 'corporation'));
+            $missing = array_keys(array_diff_key($corps, $known));
+            if ($missing) {
+                $values = implode(',', array_fill(0, count($missing), "(?, 'corporation', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())"));
+                $db->prepare("INSERT IGNORE INTO fork_pilot_entities (id, kind, status, requestedAt, wantedAt) VALUES $values")->execute($missing);
+            }
         } catch (PDOException $error) {
             if ((string) $error->getCode() !== '42S02') throw $error;
         }
     }
-    foreach ($out as $id => &$hint) {
-        if (isset($hint['owner_ids'])) {
-            $list = [];
-            foreach ($hint['owner_ids'] as $c) if (isset($known[$c])) $list[] = [$c, 'corporation', $known[$c][0], $known[$c][1], (int) $hint['owner_n'][$c]];
-            if ($list) $hint['owner'] = $list;
-        }
-        unset($hint['owner_ids'], $hint['owner_n']);
-        if (!$hint) unset($out[$id]);
+    foreach ($candidates as $id => [$ids, $count]) {
+        $list = [];
+        foreach ($ids as $c) if (isset($known[$c])) $list[] = [$c, 'corporation', $known[$c][0], $known[$c][1], (int) $count[$c]];
+        if ($list) $out[$id]['owner'] = $list;
     }
-    unset($hint);
+    ksort($out);
     return $out;
 }
 

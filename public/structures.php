@@ -13,6 +13,7 @@
 //				POST action=add&systemID=<id>&typeName=<name>[&typeID=][&name=][&owner=][&state=][&timerKind=&timerAt=][&note=]
 //				POST action=update&id=<id>[&owner= | &ownerID=&ownerType=][&state=][&timerKind=&timerAt=][&note=][&seenNow=1]
 //				POST action=gone&id=<id>&state=destroyed|removed|restore
+//				POST action=dismiss&id=<id>&kind=owner|destroyed&key=<corporation ID | kill ID>   -> hide that hint of the structure for the mask
 //				GET  action=markers&systemIDs=<id,id,...>[&have=<hash>]
 //				                                              -> per system on the map {count, hostile, types, owners, lastSeen, nextTimer}
 //				                                                 and the mask's next 20 timers (chain map markers, in-app alerts)
@@ -72,7 +73,7 @@ try {
 			structures_fail(400, 'Missing X-Requested-With header');
 		}
 		$action = isset($_POST['action']) ? $_POST['action'] : '';
-		if (!in_array($action, array('scan', 'add', 'update', 'gone'), true)) structures_fail(400, 'Unknown action');
+		if (!in_array($action, array('scan', 'add', 'update', 'gone', 'dismiss'), true)) structures_fail(400, 'Unknown action');
 		$systemID = null;
 
 		if ($action === 'scan' || $action === 'add') {
@@ -131,7 +132,7 @@ try {
 				$id = structures_insert($mysql, $mask, $systemID, $typeID, $typeName, $kind, $changes, $by);
 				structures_update($mysql, $mask, $id, array_diff_key($changes, array('name' => 1, 'state' => 1, 'note' => 1)), $by);
 				$output['added'] = $id;
-				structures_queue_owner_text($mysql, $changes);
+				structures_queue_owner_text($mysql, $changes, $mask);
 			}
 		} else if ($action === 'update') {
 			[$changes, $error, $choices] = structures_changes($mysql, $_POST, $now, $existing);
@@ -145,8 +146,11 @@ try {
 				}
 				$seen = isset($_POST['seenNow']) && $_POST['seenNow'] === '1';
 				if (!structures_update($mysql, $mask, $existing['id'], $changes, $by, $seen)) structures_fail(404, 'Not found');
-				structures_queue_owner_text($mysql, $changes);
+				structures_queue_owner_text($mysql, $changes, $mask);
 			}
+		} else if ($action === 'dismiss') {
+			// Hide a hint (owner / destroyed?) of this structure for the whole mask
+			if (!structures_hint_dismiss($mysql, $existing['id'], isset($_POST['kind']) ? $_POST['kind'] : '', isset($_POST['key']) ? $_POST['key'] : '', $by)) structures_fail(400, 'Invalid hint');
 		} else {
 			$state = isset($_POST['state']) ? $_POST['state'] : '';
 			if (!in_array($state, array('destroyed', 'removed', 'restore'), true)) structures_fail(400, 'Invalid state');
