@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 57,
+      "date": "2026-10-11",
+      "title": "Jump planner: Get home",
+      "description": "The Jump planner has a new Get home mode. Pick the system your jump ship is in (type a name, or click Jita, Amarr or your last start) and it lists the low-sec and null-sec exits on the chain you can reach in one or two jumps, with how many wormholes lie between each exit and home. Click Dest to set your destination to the first cyno system.\n\nIt warns when a wormhole on the way home is too small for your ship, is EOL or is low on mass. Switch between From exit and Get home at the top of the Jump planner.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-57-jump-planner-home.png",
+          "caption": "Get home from Amamake: routes into the chain's exits, with the wormholes back home"
+        }
+      ]
+    },
+    {
       "pr": 56,
       "date": "2026-10-11",
       "title": "Discord: notice when chain kills are paused",
