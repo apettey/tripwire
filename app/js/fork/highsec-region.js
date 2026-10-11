@@ -165,35 +165,13 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 	$(function() {
 		if (typeof chain !== "undefined") { highsecRegion.install(chain); }
 
-		// Settings > Chain Map Settings. Takes effect on Save (upstream Save runs options.apply() -> chain.redraw(),
-		// then options.save(), which persists options.highsecRegion); Close discards it.
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#highsecRegion-enabled").length) {
-			$table.append("<tr><th>High-sec region:</th><td><label><input type='checkbox' id='highsecRegion-enabled' /> " +
-				"Show region instead of hole type on high-sec exits</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#highsecRegion-enabled").prop("checked", highsecRegion.enabled(options));
+		// Settings > Map Markers. Takes effect on Save (upstream Save runs options.apply() -> chain.redraw(), then
+		// options.save(), which persists options.highsecRegion); Close discards it; Reset = on (upstream then redraws).
+		forkSettings.register({
+			section: "markers", order: 20, id: "highsecRegion-enabled", type: "checkbox", key: "highsecRegion",
+			label: "High-sec region:", text: "Show region instead of hole type on high-sec exits",
+			get: function(o) { return highsecRegion.enabled(o); },
+			set: function(o, on) { o.highsecRegion = { enabled: on }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler applies and saves options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#highsecRegion-enabled").length) { return; }
-			options.highsecRegion = { enabled: $("#highsecRegion-enabled").prop("checked") };
-		}, true);
-
-		// Settings > Reset: a missing key means on (upstream Reset then runs options.apply(), which redraws)
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.highsecRegionWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.highsecRegion;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.highsecRegionWrapped = true;
-			options.reset = wrapped;
-		}
 	});
 }

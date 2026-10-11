@@ -225,7 +225,7 @@ describe('jumpPlanner', () => {
 		it('settings section', () => {
 			noRawHtml(jumpPlanner.settingsHtml([{ key: 'group-1', label: EVIL, ships: [EVIL], baseLy: 3 }]));
 		});
-		it('settings: the System search row in the section, the on/off row for General Preferences', () => {
+		it('settings: the System search row in the section, the on/off row for Routes & Navigation', () => {
 			const html = jumpPlanner.settingsHtml(PRESETS);
 			assert.ok(/System search:/.test(html) && /name='jumpPlanner-search' value='1'/.test(html) && /name='jumpPlanner-search' value='0'/.test(html));
 			assert.ok(/name='jumpPlanner-enabled' value='1'/.test(html));

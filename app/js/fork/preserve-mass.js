@@ -398,33 +398,13 @@ const preserveMass = {
 
 	setupSettings: function() {
 		if (typeof options === "undefined") { return; }
-		// Settings > Chain Map Settings row; takes effect on Save like its neighbours (upstream Save redraws the chain)
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#preserveMass-enabled").length) {
-			$table.append("<tr><th>Preserve mass:</th><td><label><input type='checkbox' id='preserveMass-enabled' /> Show preserve-mass markers on connections</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#preserveMass-enabled").prop("checked", preserveMass.enabled(options));
+		// Settings > Map Markers; takes effect on Save like its neighbours (upstream Save redraws the chain), Reset = on
+		forkSettings.register({
+			section: "markers", order: 30, id: "preserveMass-enabled", type: "checkbox", key: "preserveMass",
+			label: "Preserve mass:", text: "Show preserve-mass markers on connections",
+			get: function(o) { return preserveMass.enabled(o); },
+			set: function(o, on) { o.preserveMass = { enabled: on }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler applies and saves the options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#preserveMass-enabled").length) { return; }
-			options.preserveMass = { enabled: $("#preserveMass-enabled").prop("checked") };
-		}, true);
-		// Settings > Reset: back to on (a missing key means on)
-		if (typeof options.reset === "function" && !options.reset.preserveMassWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.preserveMass;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.preserveMassWrapped = true;
-			options.reset = wrapped;
-		}
 	},
 
 	/** Draw the markers wherever size-tags draws (it hooks every renderer, draw and collapse) */

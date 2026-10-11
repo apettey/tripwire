@@ -177,35 +177,13 @@ const sigAge = {
 	// ---- Settings ----
 
 	setupSettings: function() {
-		// Settings > General Preferences row (next to the other signature settings); takes effect on Save
-		const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($table.length && !$("#sigAge-enabled").length) {
-			$table.append("<tr><th>Colour signatures by age:</th><td><label><input type='checkbox' id='sigAge-enabled' /> " +
-				"Tint sigs not updated for 4.5 h (holes 12 h) and 24 h</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#sigAge-enabled").prop("checked", sigAge.enabled(options));
+		// Settings > Signatures row; takes effect on Save (Reset = on)
+		forkSettings.register({
+			section: "signatures", order: 40, id: "sigAge-enabled", type: "checkbox", key: "sigAge",
+			label: "Colour signatures by age:", text: "Tint sigs not updated for 4.5 h (holes 12 h) and 24 h",
+			get: function(o) { return sigAge.enabled(o); },
+			set: function(o, on) { o.sigAge = { enabled: on }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler runs options.apply() and saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#sigAge-enabled").length) { return; }
-			options.sigAge = { enabled: $("#sigAge-enabled").prop("checked") };
-		}, true);
-
-		// Settings > Reset: a missing key means on
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.sigAgeWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.sigAge;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.sigAgeWrapped = true;
-			options.reset = wrapped;
-		}
 		// options.apply() runs on Save and Reset
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.sigAgeWrapped) {
 			const apply = options.apply;

@@ -384,19 +384,17 @@ const killReporting = {
 				+ "<td><button type='button' class='kill-reporting-test' title='Test this sound'>&#9654;</button></td>"
 				+ "</tr>";
 		}).join("");
-		return "<h3 id='killReporting-header'><a href='#'>Kill Reporting</a></h3>"
-			+ "<div id='killReporting-section'>"
-			+ "<table class='optionsTable' width='100%' cellpadding='1' cellspacing='0'>"
-			+ "<tr><th>Kill sounds:</th><td><label><input type='checkbox' id='killReporting-enabled' /> Play kill sounds for kills in the chain</label></td></tr>"
-			+ "<tr><th>Pop-ups:</th><td><label><input type='checkbox' id='killReporting-popup' /> Show a pop-up for each kill</label></td></tr>"
-			+ "<tr><th>Gank size:</th><td><label>Gank = more than <input type='number' id='killReporting-threshold' min='1' max='50' step='1' /> pilots</label></td></tr>"
-			+ "</table>"
-			+ "<table class='kill-reporting-sounds' width='100%' cellpadding='1' cellspacing='0'>"
-			+ "<tr><th>Event</th><th>Sound</th><th>Volume</th><th></th></tr>"
-			+ rows
-			+ "</table>"
-			+ "<p class='kill-reporting-note'>Kills come from zKillboard and can arrive a minute or more after they happen.</p>"
-			+ "</div>";
+		// Settings > Kill Reporting: the rows of its options table, and the sounds table + note shown under it
+		return {
+			rows: "<tr><th>Kill sounds:</th><td><label><input type='checkbox' id='killReporting-enabled' /> Play kill sounds for kills in the chain</label></td></tr>"
+				+ "<tr><th>Pop-ups:</th><td><label><input type='checkbox' id='killReporting-popup' /> Show a pop-up for each kill</label></td></tr>"
+				+ "<tr><th>Gank size:</th><td><label>Gank = more than <input type='number' id='killReporting-threshold' min='1' max='50' step='1' /> pilots</label></td></tr>",
+			sounds: "<table class='kill-reporting-sounds' width='100%' cellpadding='1' cellspacing='0'>"
+				+ "<tr><th>Event</th><th>Sound</th><th>Volume</th><th></th></tr>"
+				+ rows
+				+ "</table>"
+				+ "<p class='kill-reporting-note'>Kills come from zKillboard and can arrive a minute or more after they happen.</p>"
+		};
 	},
 
 	updateDescriptions: function() {
@@ -436,12 +434,18 @@ const killReporting = {
 	},
 
 	setupSettings: function() {
-		const $accordion = $("#dialog-options #optionsAccordion");
-		if (!$accordion.length || $("#killReporting-section").length) { return; }
-		// Before "Personal Statistics" (the last section), so the indexes other code uses for the first three stay put
-		const $last = $accordion.children("h3").last();
-		if ($last.length) { $last.before(killReporting.settingsHtml()); } else { $accordion.append(killReporting.settingsHtml()); }
-		if ($accordion.hasClass("ui-accordion")) { $accordion.accordion("refresh"); }
+		if ($("#killReporting-section").length) { return; }
+		// Its own Settings section after Kills & Intel. Every open re-reads the stored settings, so Close discards
+		// unsaved changes; Reset deletes the key (back to the defaults).
+		const html = killReporting.settingsHtml();
+		const $section = forkSettings.section("killReporting", "Kill Reporting", { after: "intel", id: "killReporting-section" });
+		forkSettings.register({
+			section: "killReporting", id: "killReporting", type: "custom", rows: html.rows, key: "killReporting",
+			keywords: "sound volume pop-up gank",
+			load: function() { killReporting.fillForm(killReporting.current()); },
+			save: function(o) { o.killReporting = killReporting.readForm(); }
+		});
+		if ($section) { $section.append(html.sounds); }
 
 		$(document).on("input change", "#killReporting-section .kill-reporting-vol", function() {
 			$(this).siblings(".kill-reporting-vol-label").text($(this).val() + "%");
@@ -469,34 +473,9 @@ const killReporting = {
 			}
 		});
 
-		// Every open re-reads the stored settings, so Close discards unsaved changes
-		$(document).on("dialogopen", "#dialog-options", function() {
-			killReporting.fillForm(killReporting.current());
-		});
 		$(document).on("dialogclose", "#dialog-options", function() {
 			if (killReporting.preview) { killReporting.preview.pause(); killReporting.preview = null; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler applies and saves options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#killReporting-section").length) { return; }
-			options.killReporting = killReporting.readForm();
-		}, true);
-
-		// Settings > Reset: back to defaults (a missing key means defaults). Wraps whatever reset is in place
-		// (What's New already wraps it to keep keys that have no default).
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.killReportingWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.killReporting;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.killReportingWrapped = true;
-			options.reset = wrapped;
-		}
 	},
 
 	init: function() {

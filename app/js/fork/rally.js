@@ -216,7 +216,7 @@ const rally = {
 		return state.age + Math.max(0, ((now || Date.now()) - state.receivedAt) / 1000);
 	},
 
-	// ---- Settings (Settings > Chain Map Settings > Fight here) ----
+	// ---- Settings (Settings > Map Markers > Fight here) ----
 	// Discord (server side: public/rally.php; the channel is the "Fight here" type corp admins set up in Mask Admin >
 	// Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK)
 	DISCORD_COMMAND: "rallyDiscord",
@@ -382,43 +382,28 @@ const rally = {
 
 	setupSettings: function() {
 		if (typeof options === "undefined") { return; }
-		// Settings > Chain Map Settings row (before the renderer footnote); takes effect on Save like its neighbours
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#rallyDiscord-enabled").length) {
-			const $row = $("<tr><th>Fight here:</th><td>"
-				+ "<label title='The fight point, its fleet comp, who set it and when, above the chain map. The system is marked on the map either way.'><input type='checkbox' id='fightBanner-enabled' /> Show the fight banner in the chain map header</label><br/>"
+		// Settings > Map Markers row; takes effect on Save like its neighbours (Reset = on for both)
+		forkSettings.register({
+			section: "markers", order: 50, id: "fightHere", type: "custom", label: "Fight here:",
+			keywords: "rally discord banner comp",
+			html: "<label title='The fight point, its fleet comp, who set it and when, above the chain map. The system is marked on the map either way.'><input type='checkbox' id='fightBanner-enabled' /> Show the fight banner in the chain map header</label><br/>"
 				+ "<label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my fight changes to Discord</label>"
-				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord and the fleet comps in Mask Admin &gt; Fight here.</div></td></tr>");
-			const $footnote = $table.find("td[colspan]").last().closest("tr");
-			if ($footnote.length) { $row.insertBefore($footnote); } else { $table.append($row); }
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(options));
-			$("#fightBanner-enabled").prop("checked", rally.bannerEnabled(options));
-		});
-		// Capture phase so the value is in place before upstream's Save handler saves the options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#rallyDiscord-enabled").length) { return; }
-			options.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") };
-			options.fightBanner = { enabled: $("#fightBanner-enabled").prop("checked") };
-			setTimeout(rally.renderBanner, 0);
-		}, true);
-		// Settings > Reset: a missing key means on
-		if (typeof options.reset === "function" && !options.reset.rallyDiscordWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.rallyDiscord;
-				delete this.fightBanner;
+				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord and the fleet comps in Mask Admin &gt; Fight here.</div>",
+			load: function(o) {
+				$("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(o));
+				$("#fightBanner-enabled").prop("checked", rally.bannerEnabled(o));
+			},
+			save: function(o) {
+				o.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") };
+				o.fightBanner = { enabled: $("#fightBanner-enabled").prop("checked") };
 				setTimeout(rally.renderBanner, 0);
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.rallyDiscordWrapped = true;
-			options.reset = wrapped;
-		}
+			},
+			reset: function(o) {
+				delete o.rallyDiscord;
+				delete o.fightBanner;
+				setTimeout(rally.renderBanner, 0);
+			}
+		});
 	},
 
 	init: function() {

@@ -525,22 +525,13 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			legend.attr("data-tooltip", tip.replace("</table>", sizeTags.legendRow() + "</table>"));
 		}
 
-		// Settings > Chain Map Settings: "Hole size tags" checkbox. Like the other chain settings it takes
-		// effect on the dialog's Save (upstream Save then runs options.apply() -> chain.redraw() and options.save(),
-		// which persists options.sizeTags); Close/Cancel discards it and every open re-reads the stored value.
-		const $table = $("#dialog-options #optionsAccordion > div").eq(1).find("table.optionsTable").first();
-		if ($table.length && !$("#sizeTags-enabled").length) {
-			$table.append("<tr><th>Hole size tags:</th><td><label><input type='checkbox' id='sizeTags-enabled' /> Show max ship size on connections</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#sizeTags-enabled").prop("checked", sizeTags.enabled(options));
+		// Settings > Map Markers: "Hole size tags". Takes effect on Save (upstream Save then runs options.apply() ->
+		// chain.redraw() and options.save()); Close discards it; Reset turns it back on.
+		forkSettings.register({
+			section: "markers", order: 10, id: "sizeTags-enabled", type: "checkbox", key: "sizeTags",
+			label: "Hole size tags:", text: "Show max ship size on connections",
+			get: function(o) { return sizeTags.enabled(o); },
+			set: function(o, on) { o.sizeTags = { enabled: on }; }
 		});
-		// Capture phase so the value is in place before upstream's Save handler applies and saves options
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#sizeTags-enabled").length) { return; }
-			options.sizeTags = { enabled: $("#sizeTags-enabled").prop("checked") };
-		}, true);
 	});
 }

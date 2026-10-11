@@ -1067,7 +1067,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function adminPageHtml() {
 			return "<div class='wl-admin'>"
 				+ "<h2 class='wl-admin-title'>Watchlist</h2>"
-				+ "<p class='wl-small'>Filters for everyone on this mask: when a system on the chain map matches one, they get a pop-up and a sound (each member can turn those off in Settings &gt; General Preferences), and the system, the hole into it and its signature are marked. To post matches to Discord, turn on <b>Watchlist match</b> in Mask Admin &gt; Discord: only systems connected to the home system set there are posted, not old chain fragments.</p>"
+				+ "<p class='wl-small'>Filters for everyone on this mask: when a system on the chain map matches one, they get a pop-up and a sound (each member can turn those off in Settings &gt; Kills &amp; Intel &gt; Watchlist), and the system, the hole into it and its signature are marked. To post matches to Discord, turn on <b>Watchlist match</b> in Mask Admin &gt; Discord: only systems connected to the home system set there are posted, not old chain fragments.</p>"
 				+ "<p class='wl-admin-error dn-bad hidden'></p>"
 				+ "<div class='wl-toolbar'><input type='button' class='wl-new' value='New filter' /> <span class='wl-count wl-small'></span></div>"
 				+ "<ul class='wl-list'></ul>"
@@ -1275,59 +1275,40 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 		wl.openEditor = openEditor;
 
-		// ---- Settings > General Preferences ----
+		// ---- Settings > Kills & Intel ----
 
 		function setupSettings() {
-			const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-			if ($table.length && !$("#watchlist-enabled").length) {
-				const sounds = wl.SOUNDS.map(function(id) {
-					const tone = typeof killReporting !== "undefined" ? killReporting.tones.filter(function(t) { return t.id === id; })[0] : null;
-					return "<option value='" + id + "'>" + wl.escape(tone ? tone.label : id) + "</option>";
-				}).join("");
-				$table.append("<tr><th>Watchlist:</th><td>"
-					+ "<label><input type='checkbox' id='watchlist-enabled' /> Show the Watchlist panel</label><br/>"
+			const sounds = wl.SOUNDS.map(function(id) {
+				const tone = typeof killReporting !== "undefined" ? killReporting.tones.filter(function(t) { return t.id === id; })[0] : null;
+				return "<option value='" + id + "'>" + wl.escape(tone ? tone.label : id) + "</option>";
+			}).join("");
+			// Takes effect on Save; Reset deletes the key (everything back to the defaults, a missing key means on)
+			forkSettings.register({
+				section: "intel", order: 50, id: "watchlist", type: "custom", key: "watchlist", label: "Watchlist:",
+				html: "<label><input type='checkbox' id='watchlist-enabled' /> Show the Watchlist panel</label><br/>"
 					+ "<label><input type='checkbox' id='watchlist-popups' /> Pop-up for a new match</label><br/>"
 					+ "<label><input type='checkbox' id='watchlist-markers' /> Mark matches on the chain map and signatures</label><br/>"
-					+ "<label><input type='checkbox' id='watchlist-sound-on' /> Sound for a new match:</label> <select id='watchlist-sound'>" + sounds + "</select>"
-					+ "</td></tr>");
-				if ($("#optionsAccordion").hasClass("ui-accordion")) { $("#optionsAccordion").accordion("refresh"); }
-			}
-			$(document).on("dialogopen", "#dialog-options", function() {
-				const s = current();
-				$("#watchlist-enabled").prop("checked", s.enabled);
-				$("#watchlist-popups").prop("checked", s.popups);
-				$("#watchlist-markers").prop("checked", s.markers);
-				$("#watchlist-sound-on").prop("checked", s.soundEnabled);
-				$("#watchlist-sound").val(s.sound);
+					+ "<label><input type='checkbox' id='watchlist-sound-on' /> Sound for a new match:</label> <select id='watchlist-sound'>" + sounds + "</select>",
+				load: function() {
+					const s = current();
+					$("#watchlist-enabled").prop("checked", s.enabled);
+					$("#watchlist-popups").prop("checked", s.popups);
+					$("#watchlist-markers").prop("checked", s.markers);
+					$("#watchlist-sound-on").prop("checked", s.soundEnabled);
+					$("#watchlist-sound").val(s.sound);
+				},
+				save: function(o) {
+					const kept = {};
+					if (o.watchlist && o.watchlist.position) { kept.position = o.watchlist.position; }
+					o.watchlist = Object.assign(kept, {
+						enabled: $("#watchlist-enabled").prop("checked"),
+						popups: $("#watchlist-popups").prop("checked"),
+						markers: $("#watchlist-markers").prop("checked"),
+						soundEnabled: $("#watchlist-sound-on").prop("checked"),
+						sound: $("#watchlist-sound").val()
+					});
+				}
 			});
-			// Capture phase so the values are in place before upstream's Save handler applies and saves options
-			document.addEventListener("click", function(e) {
-				const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-				if (!button || $.trim($(button).text()) !== "Save") { return; }
-				if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#watchlist-enabled").length) { return; }
-				const kept = {};
-				if (options.watchlist && options.watchlist.position) { kept.position = options.watchlist.position; }
-				options.watchlist = Object.assign(kept, {
-					enabled: $("#watchlist-enabled").prop("checked"),
-					popups: $("#watchlist-popups").prop("checked"),
-					markers: $("#watchlist-markers").prop("checked"),
-					soundEnabled: $("#watchlist-sound-on").prop("checked"),
-					sound: $("#watchlist-sound").val()
-				});
-			}, true);
-
-			// Settings > Reset: everything back to the defaults (a missing key means on)
-			if (typeof options.reset === "function" && !options.reset.watchlistWrapped) {
-				const reset = options.reset;
-				const wrapped = function() {
-					const result = reset.apply(this, arguments);
-					delete this.watchlist;
-					return result;
-				};
-				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-				wrapped.watchlistWrapped = true;
-				options.reset = wrapped;
-			}
 
 			// Save and Reset both end in options.apply(): show/hide the panel and mark again
 			if (!options.apply.watchlistWrapped) {

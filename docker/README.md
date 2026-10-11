@@ -518,7 +518,7 @@ while a fight point is set. A mask without comps keeps the old one-click entry (
 fight's system). Everyone on the mask sees the system in the comp's colour (no comp: the old green), the
 route to it, and a banner in the chain map header: "Fight here: AB · J163701 (C5, 2 jumps) · Armor HACs · set by
 Chribba · 4 min ago ✕" (the chain label as the Discord message shows it, `discord_chain_label`; the comp's note in
-its tooltip; ✕ clears it). Members can hide the banner (Settings > Chain Map Settings > Fight here,
+its tooltip; ✕ clears it). Members can hide the banner (Settings > Map Markers > Fight here,
 `options.fightBanner.enabled`, on by default); the system stays marked.
 
 - **Comps** (Mask Admin > Fight here, `public/fight.php`, `fight/fight.inc.php`): the corporation's Tripwire admins
@@ -606,8 +606,8 @@ the compact stats, `"q"` queued, `"f"` failed or `null` not looked up), `entitie
 and `queueFull`. The Intel panel (`app/js/fork/intel-pilots.js`) polls every 5 seconds while something is pending
 (for at most 5 minutes after opening a scan), then with the normal 30-second poll.
 
-**Outbound hosts:** `esi.evetech.net` and `zkillboard.com`, from the worker only. Settings per user: Settings > General
-Preferences > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
+**Outbound hosts:** `esi.evetech.net` and `zkillboard.com`, from the worker only. Settings per user: Settings > Kills
+& Intel > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
 database): `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/pilots_test.php`; mocha
 `app/js-test/fork/intel-pilots.test.js`.
 
@@ -629,7 +629,7 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
   against the game data, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask.
 - The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
   makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
-  signature table). Each member turns these on or off in Settings > General Preferences > Watchlist.
+  signature table). Each member turns these on or off in Settings > Kills & Intel > Watchlist.
 - The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`, only in the chain
   connected to the mask's home system (Mask Admin > Discord; see "Home system" under
   [Discord notifications](#discord-notifications)); the in-app pop-up, sound and marks cover everything on the

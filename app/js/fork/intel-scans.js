@@ -1020,52 +1020,36 @@ const intelScans = {
 	// ---- Settings ----
 
 	setupSettings: function() {
-		const $general = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($general.length && !$("#intelScans-enabled").length) {
-			$general.append("<tr><th>D-scan &amp; local intel:</th><td>"
-				+ "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
+		// Settings > Kills & Intel; takes effect on Save, Reset deletes the key (on, with the defaults)
+		forkSettings.register({
+			section: "intel", order: 40, id: "intelScans", type: "custom", key: "intelScans", label: "D-scan & local intel:",
+			keywords: "dscan paste",
+			html: "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-pasteDetect' /> Open the d-scan dialog when you paste a d-scan anywhere (Ctrl+V)</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-affiliation' /> Group local scans by alliance and corporation</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-threat' /> Show zKillboard threat of pilots in local scans</label><br/>"
 				+ "<label>Fresh for <input type='number' id='intelScans-fresh' min='1' max='1440' style='width: 4em;' /> min</label>, "
-				+ "<label>on grid within <input type='number' id='intelScans-grid' min='1' max='1000000' style='width: 6em;' /> km</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			const opts = intelScans.opts();
-			$("#intelScans-enabled").prop("checked", intelScans.enabled(opts));
-			$("#intelScans-pasteDetect").prop("checked", intelScans.pasteDetect(opts));
-			$("#intelScans-affiliation").prop("checked", typeof intelPilots === "undefined" || intelPilots.affiliation(opts));
-			$("#intelScans-threat").prop("checked", typeof intelPilots === "undefined" || intelPilots.threat(opts));
-			$("#intelScans-fresh").val(intelScans.freshMinutes(opts));
-			$("#intelScans-grid").val(intelScans.gridKm(opts));
+				+ "<label>on grid within <input type='number' id='intelScans-grid' min='1' max='1000000' style='width: 6em;' /> km</label>",
+			load: function() {
+				const opts = intelScans.opts();
+				$("#intelScans-enabled").prop("checked", intelScans.enabled(opts));
+				$("#intelScans-pasteDetect").prop("checked", intelScans.pasteDetect(opts));
+				$("#intelScans-affiliation").prop("checked", typeof intelPilots === "undefined" || intelPilots.affiliation(opts));
+				$("#intelScans-threat").prop("checked", typeof intelPilots === "undefined" || intelPilots.threat(opts));
+				$("#intelScans-fresh").val(intelScans.freshMinutes(opts));
+				$("#intelScans-grid").val(intelScans.gridKm(opts));
+			},
+			save: function(o) {
+				const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked"),
+					affiliation: $("#intelScans-affiliation").prop("checked"), threat: $("#intelScans-threat").prop("checked") };
+				if (o.intelScans && o.intelScans.position) { settings.position = o.intelScans.position; }
+				const fresh = parseInt($("#intelScans-fresh").val(), 10);
+				const grid = parseInt($("#intelScans-grid").val(), 10);
+				if (fresh >= 1 && fresh <= 1440) { settings.freshMinutes = fresh; }
+				if (grid >= 1 && grid <= 1000000) { settings.gridKm = grid; }
+				o.intelScans = settings;
+			}
 		});
-		// Capture phase so the values are in place before upstream's Save handler runs options.apply() and saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#intelScans-enabled").length) { return; }
-			const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked"),
-				affiliation: $("#intelScans-affiliation").prop("checked"), threat: $("#intelScans-threat").prop("checked") };
-			if (options.intelScans && options.intelScans.position) { settings.position = options.intelScans.position; }
-			const fresh = parseInt($("#intelScans-fresh").val(), 10);
-			const grid = parseInt($("#intelScans-grid").val(), 10);
-			if (fresh >= 1 && fresh <= 1440) { settings.freshMinutes = fresh; }
-			if (grid >= 1 && grid <= 1000000) { settings.gridKm = grid; }
-			options.intelScans = settings;
-		}, true);
-
-		// Settings > Reset: a missing key means on with the defaults
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.intelScansWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.intelScans;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.intelScansWrapped = true;
-			options.reset = wrapped;
-		}
 		// options.apply() runs on Save and Reset
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.intelScansWrapped) {
 			const apply = options.apply;

@@ -330,36 +330,16 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return ret;
 		};
 
-		// ---- Settings > General Preferences: "Return bookmark pop-up" (takes effect on Save) ----
-		const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($table.length && !$("#jumpReturn-mode").length) {
-			$table.append("<tr><th>Return bookmark pop-up:</th><td><select id='jumpReturn-mode'>" +
-				"<option value='first'>Only when I'm first through</option>" +
-				"<option value='always'>After every jump</option>" +
-				"<option value='off'>Off</option></select></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			$("#jumpReturn-mode").val(jumpReturn.modeFor(opts()));
+		// ---- Settings > Wormhole Jumps & Mass: "Return bookmark pop-up" (takes effect on Save; Reset = on, first-only) ----
+		forkSettings.register({
+			section: "jumps", order: 30, id: "jumpReturn-mode", type: "select", key: "jumpReturn",
+			label: "Return bookmark pop-up:",
+			choices: [["first", "Only when I'm first through"], ["always", "After every jump"], ["off", "Off"]],
+			get: function() { return jumpReturn.modeFor(opts()); },
+			set: function(o, mode) {
+				o.jumpReturn = jumpReturn.optionsForMode(mode);
+				if (!o.jumpReturn.enabled) { hidePanel(); }
+			}
 		});
-		// Capture phase so the value is in place before upstream's Save handler saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#jumpReturn-mode").length) { return; }
-			options.jumpReturn = jumpReturn.optionsForMode($("#jumpReturn-mode").val());
-			if (!options.jumpReturn.enabled) { hidePanel(); }
-		}, true);
-		// Settings > Reset: a missing key means on, first-only
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.jumpReturnWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.jumpReturn;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.jumpReturnWrapped = true;
-			options.reset = wrapped;
-		}
 	});
 }
