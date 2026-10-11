@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ESI = 'https://esi.evetech.net/latest';
+const ESI = 'https://esi.evetech.net';
 const USER_AGENT = 'Tripwire fork intel type generator (one-off static data build)';
 
 // Categories whose types can show up on d-scan and are worth naming

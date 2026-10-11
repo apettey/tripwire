@@ -21,6 +21,8 @@ $stateFile = tempnam(sys_get_temp_dir(), 'esi-test-');
 esi_limit_state_file($stateFile);
 function reset_state() { global $stateFile; file_put_contents($stateFile, ''); }
 reset_state();
+$etagDir = sys_get_temp_dir() . "/esi-etag-test-" . getmypid();
+esi_etag_dir($etagDir);
 
 // --- URL helpers ---
 check('date format', (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', ESI_COMPATIBILITY_DATE), true);
@@ -47,7 +49,7 @@ $d = esi_limit_decision($url, 429, ['x-ratelimit-group' => 'char-detail', 'retry
 check('429: per-character group pause', $d['pauses'], ['group:char-detail:90000001' => 90]);
 $d = esi_limit_decision($url, 429, ['x-ratelimit-group' => 'char-detail', 'retry-after' => '90'], false);
 check('429 unauthenticated: group pause', $d['pauses'], ['group:char-detail' => 90]);
-$d = esi_limit_decision('https://esi.evetech.net/latest/fw/systems/', 429, [], false);
+$d = esi_limit_decision('https://esi.evetech.net/fw/systems/', 429, [], false);
 check('429 without headers: route pause, default length', $d['pauses'], ['route:fw/systems' => ESI_DEFAULT_PAUSE]);
 $d = esi_limit_decision($url, 429, ['retry-after' => '99999'], false);
 check('pause is capped', $d['pauses'], ['route:characters/{id}/roles' => ESI_MAX_PAUSE]);
@@ -88,7 +90,7 @@ esi_transport(function ($method, $url, $headers, $body) use (&$sent, &$replies) 
 });
 
 $replies[] = [200, '[]', []];
-[$status] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/', ['Accept: application/json']);
+[$status] = esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept: application/json']);
 check('request: sent', [$status, count($sent)], [200, 1]);
 check('request: compatibility date header', in_array('X-Compatibility-Date: ' . ESI_COMPATIBILITY_DATE, $sent[0][2], true), true);
 
@@ -100,9 +102,9 @@ check('before: non-ESI URL untouched', [esi_before_request('https://login.eveonl
 
 // 429 pauses the route: the next request isn't sent, other routes still go
 $replies[] = [429, '{"error":"too many"}', ['retry-after' => '120']];
-esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
+esi_request('GET', 'https://esi.evetech.net/fw/systems/');
 $before = count($sent);
-[$status, $error] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
+[$status, $error] = esi_request('GET', 'https://esi.evetech.net/fw/systems/');
 check('paused: not sent', [$status, count($sent)], [-1, $before]);
 check('paused: says why', strpos($error, 'retry in') !== false, true);
 [$status] = esi_request('GET', 'https://esi.evetech.net/v4/corporations/1/');
@@ -135,18 +137,18 @@ reset_state();
 $stale = tempnam(sys_get_temp_dir(), 'esi-stale-');
 file_put_contents($stale, '[{"old":true}]');
 $replies[] = [200, '[{"new":true}]', []];
-$stream = esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', $stale);
+$stream = esi_open_url('https://esi.evetech.net/fw/systems/?datasource=tranquility', $stale);
 check('open: fresh body', stream_get_contents($stream), '[{"new":true}]');
 check('open: date as header', in_array('X-Compatibility-Date: ' . ESI_COMPATIBILITY_DATE, end($sent)[2], true), true);
 $replies[] = [503, 'down', []];
-$stream = esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', $stale);
+$stream = esi_open_url('https://esi.evetech.net/fw/systems/?datasource=tranquility', $stale);
 check('open: error => stale cache', stream_get_contents($stream), '[{"old":true}]');
 $replies[] = [429, '', ['retry-after' => '60']];
-esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', $stale);
+esi_open_url('https://esi.evetech.net/fw/systems/?datasource=tranquility', $stale);
 $before = count($sent);
-$stream = esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', $stale);
+$stream = esi_open_url('https://esi.evetech.net/fw/systems/?datasource=tranquility', $stale);
 check('open: paused => stale cache, not sent', [stream_get_contents($stream), count($sent)], ['[{"old":true}]', $before]);
-check('open: paused, no cache => false', esi_open_url('https://esi.evetech.net/latest/fw/systems/?datasource=tranquility', null), false);
+check('open: paused, no cache => false', esi_open_url('https://esi.evetech.net/fw/systems/?datasource=tranquility', null), false);
 
 // A damaged or foreign state file never breaks ESI calls
 foreach (['{"routes":5,"pauses":"x"}', '[1,2]', '"text"', '{"pauses":{"*":"soon"},"routes":{"status":7}}', 'not json'] as $junk) {
@@ -169,8 +171,8 @@ esi_limit_state_file(sys_get_temp_dir() . '/no-such-dir-' . getmypid() . '/esi-l
 $replies[] = [429, '', ['retry-after' => '60']];
 $replies[] = [429, '', ['retry-after' => '60']];
 $replies[] = [420, '', []];
-[$s1] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
-[$s2] = esi_request('GET', 'https://esi.evetech.net/latest/fw/systems/');
+[$s1] = esi_request('GET', 'https://esi.evetech.net/fw/systems/');
+[$s2] = esi_request('GET', 'https://esi.evetech.net/fw/systems/');
 [$s3] = esi_request('GET', 'https://esi.evetech.net/v4/corporations/1/');
 check('unwritable state: requests still sent', [$s1, $s2, $s3], [429, 429, 420]);
 $lines = array_values(array_filter(explode("\n", (string) file_get_contents($log)), function ($l) { return strpos($l, 'ESI:') !== false; }));
@@ -180,7 +182,72 @@ ini_set('error_log', $previousLog === false ? '' : $previousLog);
 @unlink($log);
 esi_limit_state_file($stateFile);
 
+// --- ETags: If-None-Match, 304 => stored body as a 200 ---
+reset_state();
+$etagUrl = 'https://esi.evetech.net/corporations/1/';
+$sent = [];
+$replies = [[200, '{"name":"A"}', ['etag' => '"abc"', 'content-type' => 'application/json']]];
+[$status, $body] = esi_request('GET', $etagUrl, ['Accept: application/json']);
+check('etag: first request has no If-None-Match', [$status, $body, in_array('If-None-Match: "abc"', $sent[0][2], true)], [200, '{"name":"A"}', false]);
+$replies = [[304, '', ['etag' => '"abc"']]];
+[$status, $body, $respHeaders] = esi_request('GET', $etagUrl, ['Accept: application/json']);
+check('etag: second request sends If-None-Match', in_array('If-None-Match: "abc"', end($sent)[2], true), true);
+check('etag: 304 becomes the stored 200', [$status, $body, $respHeaders['content-type'] ?? null], [200, '{"name":"A"}', 'application/json']);
+$replies = [[200, '{"name":"B"}', ['etag' => '"def"']]];
+esi_request('GET', $etagUrl);
+$replies = [[304, '', []]];
+[$status, $body] = esi_request('GET', $etagUrl);
+check('etag: a new 200 replaces the stored body', [$status, $body, in_array('If-None-Match: "def"', end($sent)[2], true)], [200, '{"name":"B"}', true]);
+$replies = [[500, 'oops', []]];
+[$status, $body] = esi_request('GET', $etagUrl);
+check('etag: errors pass through', [$status, $body], [500, 'oops']);
+$replies = [[304, '', []]];
+[$status] = esi_request('GET', 'https://esi.evetech.net/corporations/2/');
+check('etag: a 304 without a stored copy is not turned into a 200', [$status, in_array('If-None-Match: "def"', end($sent)[2], true)], [304, false]);
+$replies = [[200, '{}', ['etag' => '"p"']]];
+esi_request('POST', 'https://esi.evetech.net/universe/names/', [], '[1]');
+check('etag: POST is never stored', count(glob($etagDir . '/*.json')), 1);
+// Authenticated responses are per access token
+$replies = [[200, '{"roles":["x"]}', ['etag' => '"r1"']]];
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer one']);
+$replies = [[200, '{}', []]];
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer two']);
+check('etag: another token does not get the stored ETag', in_array('If-None-Match: "r1"', end($sent)[2], true), false);
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer one']);
+check('etag: the same token does', in_array('If-None-Match: "r1"', end($sent)[2], true), true);
+// Non-ESI URLs and pruning
+check('etag: only ESI urls', esi_etag_load('https://example.com/x'), null);
+// Immutable per-ID routes are never stored
+$before = count(glob($etagDir . '/*.json'));
+$replies = [[200, '{"k":1}', ['etag' => '"k"']], [200, '{"k":1}', ['etag' => '"k"']]];
+esi_request('GET', 'https://esi.evetech.net/killmails/1/abc/');
+esi_request('GET', 'https://esi.evetech.net/universe/types/587/');
+check('etag: killmails and types are not stored', [count(glob($etagDir . '/*.json')), esi_etag_load('https://esi.evetech.net/killmails/1/abc/')], [$before, null]);
+// Language / compatibility date are part of the key
+$replies = [[200, '{}', ['etag' => '"l"']]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: de']);
+$replies = [[200, '{}', []]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: en']);
+check('etag: language is part of the key', in_array('If-None-Match: "l"', end($sent)[2], true), false);
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['accept-language: DE']);
+check('etag: header names and values are case-insensitive', in_array('If-None-Match: "l"', end($sent)[2], true), true);
+$replies = [[200, '{}', []]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: de', 'X-Compatibility-Date: 2020-01-01']);
+check('etag: compatibility date is part of the key', in_array('If-None-Match: "l"', end($sent)[2], true), false);
+// Pruning: hourly via a marker file, old entries and stray temp files
+file_put_contents($etagDir . '/stray.tmp', 'x');
+foreach (glob($etagDir . '/*.json') as $f) touch($f, time() - ESI_ETAG_MAX_AGE - 10);
+touch($etagDir . '/stray.tmp', time() - 7200);
+esi_etag_prune();
+check('prune: skipped while the marker is fresh', count(glob($etagDir . '/*.json')) > 0, true);
+touch($etagDir . '/.pruned', time() - 7200);
+esi_etag_prune();
+check('prune: old entries and stray temp files go', [glob($etagDir . '/*.json'), glob($etagDir . '/*.tmp')], [[], []]);
+
 esi_transport(null, true);
+foreach (array_merge(glob($etagDir . '/*') ?: [], glob($etagDir . '/.pruned') ?: []) as $f) @unlink($f);
+@unlink($etagDir . '/.pruned');
+@rmdir($etagDir);
 @unlink($stale);
 @unlink($stateFile);
 

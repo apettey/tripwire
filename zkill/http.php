@@ -94,8 +94,8 @@ function zk_http_record($host, $status, array $headers) {
     $state[$host] = $entry;
 }
 
-function zk_http_options($url, $method, $body, $timeout) {
-    $headers = ['Accept: application/json'];
+function zk_http_options($url, $method, $body, $timeout, array $extraHeaders = []) {
+    $headers = array_merge(['Accept: application/json'], $extraHeaders);
     if (zk_http_host($url) === 'esi.evetech.net') $headers[] = 'X-Compatibility-Date: ' . ZK_ESI_COMPATIBILITY_DATE;
     $options = [
         CURLOPT_RETURNTRANSFER => true,
@@ -148,22 +148,31 @@ function zk_http_request($method, $url, $body = null, $wait = true, $timeout = 3
         usleep((int) ceil($delay * 1e6));
     }
     zk_http_reserve($host);
+    // ESI GETs: send the stored ETag; a 304 comes back as the stored 200 (see esi/esi.inc.php)
+    $extra = [];
+    $entry = $method === 'GET' && esi_is_url($url) ? esi_etag_prepare($url, $extra) : null;
     $transport = zk_http_transport();
     if ($transport) {
-        [$status, $response, $headers] = $transport($method, $url, $body);
+        [$status, $response, $headers] = $transport($method, $url, $body, $extra);
         zk_http_record($host, $status, $headers);
-        return [$status, $response, $headers];
+        return zk_http_etag_finish($method, $url, $entry, $status, $response, $headers);
     }
     $headers = [];
     $curl = curl_init($url);
-    curl_setopt_array($curl, zk_http_options($url, $method, $body, $timeout));
+    curl_setopt_array($curl, zk_http_options($url, $method, $body, $timeout, $extra));
     curl_setopt($curl, CURLOPT_HEADERFUNCTION, zk_http_header_collector($headers));
     $response = curl_exec($curl);
     $status = $response === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     $error = $response === false ? curl_error($curl) : '';
     curl_close($curl);
     zk_http_record($host, $status, $headers);
-    return [$status, $response === false ? $error : $response, $headers];
+    return zk_http_etag_finish($method, $url, $entry, $status, $response === false ? $error : $response, $headers);
+}
+
+/** ESI GET: 304 => stored 200, 200 => remember its ETag; everything else passes through */
+function zk_http_etag_finish($method, $url, $entry, $status, $body, array $headers) {
+    if ($method !== 'GET' || !esi_is_url($url)) return [$status, $body, $headers];
+    return esi_etag_finish($url, [], $entry, $status, $body, $headers);
 }
 
 function zk_http_get($url, $wait = true, $timeout = 30) {

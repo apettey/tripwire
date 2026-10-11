@@ -46,7 +46,7 @@ tripwire.esi = function() {
             }
 
             const xhr = $.ajax({
-                url: baseUrl + "/v1/characters/"+ characterID +"/location/?" + $.param({"token": character.accessToken, "user_agent": userAgent}),
+                url: baseUrl + "/characters/"+ characterID +"/location/?" + $.param({"token": character.accessToken, "user_agent": userAgent}),
                 // headers: {"Authorization": "Bearer "+ character.accessToken, "X-User-Agent": userAgent},
                 type: "GET",
                 dataType: "JSON",
@@ -130,7 +130,7 @@ tripwire.esi = function() {
             }
 
             const xhr = $.ajax({
-                url: baseUrl + "/v1/characters/"+ characterID +"/ship/?" + $.param({"token": character.accessToken, "user_agent": userAgent}),
+                url: baseUrl + "/characters/"+ characterID +"/ship/?" + $.param({"token": character.accessToken, "user_agent": userAgent}),
                 // headers: {"Authorization": "Bearer "+ character.accessToken, "X-User-Agent": userAgent},
                 type: "GET",
                 dataType: "JSON",
@@ -223,7 +223,7 @@ tripwire.esi = function() {
 
     this.esi.typeLookup = function(typeID, reference) {
         const xhr = $.ajax({
-            url: baseUrl + "/v3/universe/types/"+ typeID +"/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/universe/types/"+ typeID +"/?" + $.param({"user_agent": userAgent}),
             // headers: {"X-User-Agent": userAgent},
             type: "GET",
             dataType: "JSON",
@@ -237,7 +237,7 @@ tripwire.esi = function() {
 
     this.esi.stationLookup = function(stationID, reference) {
         const xhr = $.ajax({
-            url: baseUrl + "/v2/universe/stations/"+ stationID +"/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/universe/stations/"+ stationID +"/?" + $.param({"user_agent": userAgent}),
             // headers: {"X-User-Agent": userAgent},
             type: "GET",
             dataType: "JSON",
@@ -253,7 +253,7 @@ tripwire.esi = function() {
         clear_waypoints = clear_waypoints ? clear_waypoints : false;
         beginning = beginning ? beginning : false;
         const xhr = $.ajax({
-            url: baseUrl + "/v2/ui/autopilot/waypoint/?" + $.param({destination_id: destinationID, clear_other_waypoints: clear_waypoints, add_to_beginning: beginning}),
+            url: baseUrl + "/ui/autopilot/waypoint/?" + $.param({destination_id: destinationID, clear_other_waypoints: clear_waypoints, add_to_beginning: beginning}),
             headers: {"Authorization": "Bearer "+ tripwire.esi.characters[characterID].accessToken, "X-User-Agent": userAgent},
             type: "POST",
             dataType: "JSON"
@@ -266,7 +266,7 @@ tripwire.esi = function() {
 
     this.esi.showInfo = function(targetID, characterID) {
         const xhr = $.ajax({
-            url: baseUrl + "/v1/ui/openwindow/information/?" + $.param({target_id: targetID}),
+            url: baseUrl + "/ui/openwindow/information/?" + $.param({target_id: targetID}),
             headers: {"Authorization": "Bearer "+ tripwire.esi.characters[characterID].accessToken, "X-User-Agent": userAgent},
             type: "POST",
             dataType: "JSON"
@@ -279,7 +279,7 @@ tripwire.esi = function() {
 
     this.esi.characterStatus = function(characterID, reference) {
         const xhr = $.ajax({
-            url: baseUrl + "/v2/characters/" + characterID + "/online/?" + $.param({"token": tripwire.esi.characters[characterID].accessToken, "user_agent": userAgent}),
+            url: baseUrl + "/characters/" + characterID + "/online/?" + $.param({"token": tripwire.esi.characters[characterID].accessToken, "user_agent": userAgent}),
             // headers: {"Authorization": "Bearer "+ tripwire.esi.characters[characterID].accessToken, "X-User-Agent": userAgent},
             type: "GET",
             dataType: "JSON",
@@ -293,7 +293,7 @@ tripwire.esi = function() {
 
     this.esi.eveStatus = function() {
         const xhr = $.ajax({
-            url: baseUrl + "/v1/status/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/status/?" + $.param({"user_agent": userAgent}),
             // headers: {"X-User-Agent": userAgent},
             type: "GET",
             dataType: "JSON"
@@ -306,7 +306,7 @@ tripwire.esi = function() {
 
     this.esi.idLookup = function(eveIDs) {
         const xhr = $.ajax({
-            url: baseUrl + "/v2/universe/names/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/universe/names/?" + $.param({"user_agent": userAgent}),
             type: "POST",
             dataType: "JSON",
             contentType: "application/json",
@@ -322,7 +322,7 @@ tripwire.esi = function() {
     this.esi.characterLookup = function(eveID, reference, async) {
         var async = typeof(async) !== 'undefined' ? async : true;
         const xhr = $.ajax({
-            url: baseUrl + "/latest/characters/" + eveID + "/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/characters/" + eveID + "/?" + $.param({"user_agent": userAgent}),
             type: "GET",
             dataType: "JSON",
             async: async,
@@ -338,7 +338,7 @@ tripwire.esi = function() {
     this.esi.corporationLookup = function(eveID, reference, async) {
         var async = typeof(async) !== 'undefined' ? async : true;
         const xhr = $.ajax({
-            url: baseUrl + "/v4/corporations/" + eveID + "/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/corporations/" + eveID + "/?" + $.param({"user_agent": userAgent}),
             type: "GET",
             dataType: "JSON",
             async: async,
@@ -354,7 +354,7 @@ tripwire.esi = function() {
     this.esi.allianceLookup = function(eveID, reference, async) {
         var async = typeof(async) !== 'undefined' ? async : true;
         const xhr = $.ajax({
-            url: baseUrl + "/v3/alliances/" + eveID + "/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/alliances/" + eveID + "/?" + $.param({"user_agent": userAgent}),
             type: "GET",
             dataType: "JSON",
             async: async,
@@ -369,7 +369,7 @@ tripwire.esi = function() {
 
     this.esi.search = function(searchString, categories, strict) {
         const xhr = $.ajax({
-            url: baseUrl + "/latest/characters/" + tripwire.esi.oauth.subject + "/search/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/characters/" + tripwire.esi.oauth.subject + "/search/?" + $.param({"user_agent": userAgent}),
             headers: {"Authorization": "Bearer "+ tripwire.esi.oauth.accessToken},
             type: "GET",
             dataType: "JSON",
@@ -384,7 +384,7 @@ tripwire.esi = function() {
 
     this.esi.universeJumps = function() {
         const xhr = $.ajax({
-            url: baseUrl + "/v1/universe/system_jumps/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/universe/system_jumps/?" + $.param({"user_agent": userAgent}),
             type: "GET",
             dataType: "JSON"
         });
@@ -396,7 +396,7 @@ tripwire.esi = function() {
 
     this.esi.universeKills = function() {
         const xhr = $.ajax({
-            url: baseUrl + "/v2/universe/system_kills/?" + $.param({"user_agent": userAgent}),
+            url: baseUrl + "/universe/system_kills/?" + $.param({"user_agent": userAgent}),
             type: "GET",
             dataType: "JSON"
         });
