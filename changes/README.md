@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-11 | [Jump mass prompt no longer covers the return bookmark](2026-10-11-jump-return-notice-overlap/README.md) | While the Return bookmark panel is open, jBox notices (the jump mass "Log as" prompt and others) move down below it instead of covering its copy button; fork CSS/JS only, no toggle |
 | 2026-10-11 | [Stacked PRs](2026-10-11-stacked-prs/README.md) | Features and fixes stack on the newest open PR (branch from and target its branch; `main` only when nothing is open), merged bottom-up, so parallel PRs stop conflicting; tripwire-feature skill + AGENTS.md §5; docs only |
 | 2026-10-11 | [Mute button](2026-10-11-sound-mute-button/README.md) | Speaker button next to Settings mutes all Tripwire sounds (kill reporting, watchlist) in one click, per user (`options.soundMute`), synced across tabs; Settings > Kill Reporting tests still play; Settings > General > Mute button hides it (and unmutes) |
 | 2026-10-11 | [Structures panel](2026-10-11-structures/README.md) | Small icon-heavy Structures panel per system (type icon, owner ticker, state icon, timer countdown, last seen) with a residents strip (one chip per owner, ours/hostile, plus corps seen in kills); filled from the d-scan dialog ("Save structures") or added by hand; per mask, kept when the system leaves the chain, 30-day undo; `public/structures.php`, `structures/`, `fork_structures`; Settings > Kills & Intel > Structures panel |
