@@ -32,12 +32,12 @@ function _EveScoutSignatureConnection() {
 						id: ids.parentID,
 						systemID: systemID,
 						signatureID: eveScoutLink.in_signature,
-						type: eveScoutLink.wh_exits_outward ? eveScoutLink.wh_type : 'K162'
+						type: eveScoutLink.wh_exits_outward ? 'K162' : eveScoutLink.wh_type	// fork: parent.* is the far (in_system) sig, as in chain-map.js
 					},	child: {
 						id: ids.nextChildID++,
 						systemID: eveScoutLink.in_system_id,
 						signatureID: eveScoutLink.out_signature,
-						type: eveScoutLink.wh_exits_outward ? 'K162' : eveScoutLink.wh_type
+						type: eveScoutLink.wh_exits_outward ? eveScoutLink.wh_type : 'K162'	// fork: child.* is the sig in our (hub) system
 					}
 				}, nodeDefaults));
 			} else if(eveScoutLink.in_system_id == systemID) { // Connection to this hole
@@ -46,12 +46,12 @@ function _EveScoutSignatureConnection() {
 						id: ids.parentID,
 						systemID: systemID,
 						signatureID: eveScoutLink.out_signature,
-						type: eveScoutLink.wh_exits_outward ? 'K162' : eveScoutLink.wh_type
+						type: eveScoutLink.wh_exits_outward ? eveScoutLink.wh_type : 'K162'	// fork: parent.* is the far (hub) sig
 					},	child: {
 						id: ids.nextChildID++,
 						systemID: eveScoutLink.out_system_id,
 						signatureID: eveScoutLink.in_signature,
-						type: eveScoutLink.wh_exits_outward ? eveScoutLink.wh_type : 'K162'
+						type: eveScoutLink.wh_exits_outward ? 'K162' : eveScoutLink.wh_type	// fork: child.* is the sig in our (in_system) system
 					}
 				}, nodeDefaults));				
 			}
