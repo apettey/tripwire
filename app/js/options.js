@@ -84,12 +84,14 @@ var options = new function() {
 
 	// Applies settings
 	this.apply = function() {
+		var forkGrid = typeof layoutGrid !== "undefined" ? layoutGrid.live(typeof grid !== "undefined" ? grid : null, this.grid) : null; // fork: the layout on screen wins over the page-load copy (app/js/fork/layout-grid.js)
 		// Local browser overrides
 		if (localOptions) {
             for (key in localOverrides) {
                 this[localOverrides[key]] = localOptions[localOverrides[key]];
 			}
 		}
+		if (forkGrid) { this.grid = layoutGrid.merge(forkGrid, this.grid); } // fork
 
 		// Grid layout (detect old IGB setting options)
 		if (this.grid.hasOwnProperty("oog") && Object.keys(this.grid.oog||{}).length) {
