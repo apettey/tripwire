@@ -99,6 +99,19 @@ describe('Discord notifications', function() {
 			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { chainKill: { enabled: false } } }), '');
 			assert.ok(/Set a home system so Tripwire knows which chain is yours/.test(dn.NO_HOME));
 		});
+		it('warns when watchlist matches are on without a home, naming what is not posted', function() {
+			const s = (home, chain, watchlist) => ({ homeSystemID: home, types: { chainKill: { enabled: chain }, watchlist: { enabled: watchlist } } });
+			assert.strictEqual(dn.homeWarning(s(0, false, true)), dn.NO_HOME_WATCHLIST);
+			assert.strictEqual(dn.homeWarning(s(0, true, true)), dn.NO_HOME_BOTH);
+			assert.strictEqual(dn.homeWarning(s(0, true, false)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(0, false, false)), '');
+			assert.strictEqual(dn.homeWarning(s(31000880, true, true)), '');
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { watchlist: { enabled: true } } }), dn.NO_HOME_WATCHLIST);
+			assert.strictEqual(dn.homeWarning(null), '');
+			assert.ok(/no watchlist matches are posted/.test(dn.NO_HOME_WATCHLIST));
+			assert.ok(/no chain kills or watchlist matches are posted/.test(dn.NO_HOME_BOTH));
+			assert.ok(/connected to your home system/.test(dn.HELP.watchlist) && /Watchlist match/.test(dn.HOME_HELP));
+		});
 		it('says what happened to the paused notice in the channel', function() {
 			assert.strictEqual(dn.homeNoticeText(null), '');
 			assert.strictEqual(dn.homeNoticeText(undefined), '');
@@ -303,6 +316,12 @@ describe('Discord notifications', function() {
 				s.types.chainKill.enabled = false;
 				assert.ok(dn.pageHtml(state, s).indexOf(dn.NO_HOME) < 0);
 				assert.ok(dn.pageHtml(withNotice, s).indexOf('dn-home-notice') < 0);
+				s.types.watchlist.enabled = true;
+				html = dn.pageHtml(state, s);
+				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME_WATCHLIST + '</p>') > 0);
+				assert.ok(html.indexOf("<div class='dn-small dn-bad'>" + dn.NO_HOME_WATCHLIST + '</div>') > 0);
+				s.types.watchlist.enabled = false;
+				assert.ok(dn.pageHtml(state, s).indexOf('dn-home-warning') < 0);
 			} finally {
 				global.appData = saved;
 			}

@@ -3,7 +3,7 @@
 //
 // Long-running CLI process (supervisord [program:discord-notify]); the only process that calls Discord. It
 //   - polls the chain maps for new k-space connections near the ping systems (discord/kspace.php) every 15 s,
-//   - matches the watchlist filters against the chain maps of masks with that type on (discord/watchlist.php), every 15 s,
+//   - matches the watchlist filters against the chain connected to home of masks with that type on (discord/watchlist.php), every 15 s,
 //   - posts one notice to the chain kill channel while chain kills are on without a home system (discord/chain_notice.php), every 15 s,
 //   - sends the outbox (discord/dispatch.php): every second, at most 20 messages / 5 s per pass,
 //   - prunes the outbox and dedupe tables every 10 minutes.

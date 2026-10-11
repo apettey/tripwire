@@ -965,6 +965,80 @@ foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
 }
 check('kill label: placeholders listed', [isset(discord_placeholders()['chainKill']['labelSystem']), isset(discord_placeholders()['corpLoss']['label'])], [true, true]);
 
+// --- watchlist matches use the same chain (discord_watchlist_poll against SQLite: live holes walked from home) ---
+$wp = new PDO('sqlite::memory:');
+$wp->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$wp->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$wp->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, maskID TEXT, lifeLeft TEXT, lifeLength INTEGER)");
+$wp->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, type TEXT, parent TEXT, maskID TEXT)");
+$wp->exec('CREATE TABLE fork_watchlist (maskID TEXT PRIMARY KEY, filters TEXT, updatedBy TEXT, updatedAt TEXT)');
+$wp->exec('CREATE TABLE fork_watchlist_baseline (maskID TEXT, filterID TEXT, stamp TEXT, createdAt TEXT, PRIMARY KEY (maskID, filterID))');
+$wp->exec('CREATE TABLE fork_watchlist_seen (maskID TEXT, filterID TEXT, systemID INTEGER, wormholeID INTEGER, createdAt TEXT, PRIMARY KEY (maskID, filterID, systemID, wormholeID))');
+$wp->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT,
+    status TEXT, attempts INTEGER DEFAULT 0, nextAttemptAt TEXT, createdAt TEXT, sentAt TEXT, lastError TEXT DEFAULT '')");
+$wpMask = '98000001.2';
+$wp->prepare('INSERT INTO fork_watchlist VALUES (?, ?, ?, ?)')->execute([$wpMask, json_encode([['id' => 'c2', 'name' => 'Any C2', 'enabled' => true,
+    'conditions' => ['classes' => ['C2']], 'updatedAt' => 100, 'updatedBy' => 'test']]), 'test', '2026-10-11 00:00:00']);
+$wpSig = 0; $wpHole = 0;
+// A hole of the mask from $from to $to with $life seconds left on both sides; returns its wormhole id
+$wpLink = function ($from, $to, $life = 3600) use ($wp, $wpMask, &$wpSig, &$wpHole, $chNow) {
+    $ids = [];
+    foreach ([$from, $to] as $system) {
+        $ids[] = $id = ++$wpSig;
+        $wp->prepare("INSERT INTO signatures VALUES (?, ?, ?, 'wormhole', ?, ?, 86400)")->execute([$id, 'abc' . $id, $system, $wpMask, date('Y-m-d H:i:s', $chNow + $life)]);
+    }
+    $wp->prepare("INSERT INTO wormholes VALUES (?, ?, ?, '????', 'initial', ?)")->execute([++$wpHole, $ids[0], $ids[1], $wpMask]);
+    return $wpHole;
+};
+$wpSettings = function ($home) {
+    $s = discord_settings_defaults(98000001);
+    $s['homeSystemID'] = $home;
+    $s['types']['watchlist'] = ['enabled' => true, 'webhookID' => 1, 'enabledAt' => 1000] + $s['types']['watchlist'];
+    return $s;
+};
+// One worker poll; the systems queued by it
+$wpPoll = function ($home, $now = null) use ($wp, $wpMask, $wpSettings, $chNow) {
+    $before = (int) $wp->query('SELECT COALESCE(MAX(id), 0) FROM discord_outbox')->fetchColumn();
+    discord_watchlist_poll($wp, [$wpMask => $wpSettings($home)], $now ?? $chNow);
+    $stmt = $wp->prepare('SELECT data FROM discord_outbox WHERE id > ? ORDER BY id');
+    $stmt->execute([$before]);
+    return array_map(function ($d) { return json_decode($d, true)['system']; }, $stmt->fetchAll(PDO::FETCH_COLUMN));
+};
+// Home J115405 (31002238, a C5) - J150627 (C2); an old fragment J121745 - J141438 (C2s) that nothing connects to home
+$wpLink(31002238, 31000702);
+$wpLink(31000703, 31000704);
+check('watchlist poll: no home set: nothing posted or recorded', [$wpPoll(0), (int) $wp->query('SELECT COUNT(*) FROM fork_watchlist_seen')->fetchColumn()], [[], 0]);
+$wpLink(31002238, 31000705);   // a new C2 off home: still no home set, still nothing
+check('watchlist poll: no home set: a new match is not posted either', $wpPoll(0), []);
+check('watchlist poll: home set: the chain is the baseline (not posted)', $wpPoll(31002238), []);
+$wpLink(31000704, 31000706);   // a new C2 in the detached fragment
+$wpLink(31000702, 31000707);   // a new C2 on the home chain
+check('watchlist poll: home chain match posted, detached fragment not', $wpPoll(31002238), ['J103924']);
+check('watchlist poll: the fragment is not recorded', (int) $wp->query('SELECT COUNT(*) FROM fork_watchlist_seen WHERE systemID IN (31000703, 31000704, 31000706)')->fetchColumn(), 0);
+$wpLink(31000707, 31000703, 600);   // the fragment gets connected (a hole with 10 minutes left)
+check('watchlist poll: the fragment connected to home while it still matches: posted then', $wpPoll(31002238), ['J121745', 'J141438', 'J130709']);
+check('watchlist poll: once', $wpPoll(31002238), []);
+$wpLink(31000706, 31000708);   // behind the joint
+check('watchlist poll: after the joint hole expired, what is behind it is not posted', $wpPoll(31002238, $chNow + 601), []);
+$wpLink(31000705, 31000709);   // the home chain still counts
+check('watchlist poll: ... the home chain still is', $wpPoll(31002238, $chNow + 601), ['J123555']);
+// The hole named in the message: the live one of the chain, not an older expired one into the same system
+$wpLink(31000709, 31000710, 300);   // expires at +300
+$wpLink(31000705, 31000710);
+$wpData = function () use ($wp) { return json_decode($wp->query('SELECT data FROM discord_outbox ORDER BY id DESC LIMIT 1')->fetchColumn(), true); };
+check('watchlist poll: a new system reached by an expired and a live hole names the live one', [$wpPoll(31002238, $chNow + 601), $wpData()['from']],
+    [['J151125'], 'J214929']);
+// Posted, cut off, filter saved (re-baseline), reconnected while its holes stay: not posted again
+$cut = $wpLink(31000709, 31000711);
+$wpLink(31000711, 31000712);
+check('watchlist poll: posted', $wpPoll(31002238, $chNow + 601), ['J123412', 'J112309']);
+$wp->exec("DELETE FROM signatures WHERE id IN (SELECT initialID FROM wormholes WHERE id = $cut) OR id IN (SELECT secondaryID FROM wormholes WHERE id = $cut)");
+$wp->exec("DELETE FROM wormholes WHERE id = $cut");
+$wp->prepare('UPDATE fork_watchlist SET filters = ?')->execute([json_encode([['id' => 'c2', 'name' => 'Any C2 (renamed)', 'enabled' => true,
+    'conditions' => ['classes' => ['C2']], 'updatedAt' => 200, 'updatedBy' => 'test']])]);
+check('watchlist poll: cut off, filter saved: nothing', $wpPoll(31002238, $chNow + 601), []);
+$wpLink(31000709, 31000711);
+check('watchlist poll: posted, cut off, filter saved, reconnected: not posted again', $wpPoll(31002238, $chNow + 601), []);
 // --- chain kills paused / resumed notice (discord/chain_notice.php; the flow against MySQL: chain_notice_flow_test.php) ---
 $np = discord_payload(['kind' => 'chainPaused', 'mask' => 'Corp']);
 check('notice: paused text, nobody pinged, no embed', $np, ['username' => 'Tripwire',

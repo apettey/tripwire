@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 58,
+      "date": "2026-10-11",
+      "title": "Watchlist pings only for your chain",
+      "description": "Watchlist matches are now posted to Discord only for systems connected to your home system (Mask Admin > Discord) through live wormholes, the same rule as \"Any kill in our chain\". Old chain fragments that are still on the map no longer ping, so admins will see fewer, more relevant messages.\n\nSet a home system in Mask Admin > Discord; until one is set, no watchlist matches are posted and the page shows a warning. The pop-up, sound and highlight in Tripwire are unchanged. There is no new setting: the Watchlist match notification keeps its own on/off in Mask Admin > Discord.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-58-watchlist-home-chain.png",
+          "caption": "Mask Admin > Discord warns when Watchlist match is on without a home system"
+        }
+      ]
+    },
+    {
       "pr": 57,
       "date": "2026-10-11",
       "title": "Jump planner: Get home",

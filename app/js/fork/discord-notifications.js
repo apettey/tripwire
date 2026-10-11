@@ -19,10 +19,12 @@ const discordNotifications = {
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
 		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
-		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
+		watchlist: "A system connected to your home system (above) through live wormholes matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. Old chain fragments no longer connected to home are not posted; a system there is posted if it gets connected again while it still matches. What is already on the chain when you turn this on (or save or turn on a filter, or change the home system) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking."
 	},
-	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
+	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" only count systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
+	NO_HOME_WATCHLIST: "Set a home system so Tripwire knows which chain is yours. Until then no watchlist matches are posted.",
+	NO_HOME_BOTH: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills or watchlist matches are posted.",
 	// The one notice the worker posts to the chain kill channel while there is no home (discord/chain_notice.php)
 	NOTICE_LABELS: { chainPaused: "Chain kills paused notice", chainResumed: "Chain kills resumed notice" },
 	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
@@ -95,10 +97,13 @@ const discordNotifications = {
 		return { id: Number(id), error: null };
 	},
 
-	/** Warning for settings with chain kills on and no home system ("" when fine) */
+	/** Warning for settings with chain kills or watchlist matches on and no home system ("" when fine) */
 	homeWarning: function(settings) {
-		const chain = settings && settings.types && settings.types.chainKill;
-		return chain && chain.enabled && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
+		const types = (settings && settings.types) || {};
+		const chain = !!(types.chainKill && types.chainKill.enabled), watchlist = !!(types.watchlist && types.watchlist.enabled);
+		if (Number(settings && settings.homeSystemID) > 0 || !(chain || watchlist)) { return ""; }
+		const dn = discordNotifications;
+		return chain && watchlist ? dn.NO_HOME_BOTH : chain ? dn.NO_HOME : dn.NO_HOME_WATCHLIST;
 	},
 
 	/** What happened to the "chain kills are paused" notice of this episode ({status, at} from discord.php, or null): "" when none */
