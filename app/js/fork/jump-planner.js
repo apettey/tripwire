@@ -548,6 +548,18 @@ const jumpPlanner = {
 		return out;
 	},
 
+	/** scrollTop that puts a row (top and height in the scrolled content) in the middle of the box below a sticky header */
+	centerScrollTop: function(rowTop, rowHeight, headHeight, boxHeight) {
+		const visible = Math.max(0, boxHeight - headHeight);
+		return Math.max(0, Math.round(rowTop - headHeight - Math.max(0, (visible - rowHeight) / 2)));
+	},
+
+	/** "8.03 LY" next to a range of 8.0: two decimals when one would not show that it is beyond the range */
+	beyondText: function(ly, range) {
+		const one = Number(ly).toFixed(1);
+		return (Number(one) <= Number(range) ? Number(ly).toFixed(2) : one) + " LY";
+	},
+
 	/** The one-line search result (HTML, escaped). result searchStatus() output; sort {key, dir} */
 	searchResultHtml: function(result, sort) {
 		if (!result) { return ""; }
@@ -559,7 +571,7 @@ const jumpPlanner = {
 			case "listed": {
 				const by = (jumpPlanner.SORT_NAMES[sort && sort.key] || "LY") + (sort && sort.dir === -1 ? " (reversed)" : "");
 				cls = result.row && result.row.blocked ? "jp-search-jammed" : "jp-search-ok";
-				text = "#" + result.rank + " of " + result.total + " by " + esc(by)
+				text = "#" + result.rank + " of " + result.total + " listed, by " + esc(by)
 					+ (result.row && result.row.blocked ? " · cyno-jammed, no normal cyno" : result.row && result.row.jammed ? " · marked cyno-jammed" : "");
 				break;
 			}
@@ -568,7 +580,7 @@ const jumpPlanner = {
 			case "pochven": text = withLy("Pochven, no cyno can be lit"); break;
 			case "zarzakh": text = withLy("Zarzakh, no cyno can be lit"); break;
 			case "hs": text = withLy("high-sec, can't light a cyno"); break;
-			case "range": text = "out of range: " + esc(ly) + " <span class='jp-dim'>(range " + esc(jumpRange.formatLy(result.range).replace(" LY", "")) + ")</span>"; break;
+			case "range": text = "out of range: " + esc(jumpPlanner.beyondText(result.ly, result.range)) + " <span class='jp-dim'>(range " + esc(jumpRange.formatLy(result.range).replace(" LY", "")) + ")</span>"; break;
 			case "lowsec": text = withLy("low-sec, but Low-sec targets are off in Settings"); break;
 			case "nullsec": text = withLy("null-sec, but Null-sec targets are off in Settings"); break;
 			case "jammed": text = withLy("cyno-jammed (hidden by your setting)"); break;
@@ -718,7 +730,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			hideTip: null,
 			last: null,			// {ctx, model, mapModel} of the last render
 			// System search (this page only): the picked system, the suggestions, and whether to scroll to it on the next render
-			search: { id: null, matches: [], active: -1, scroll: false },
+			search: { id: null, matches: [], active: -1, scroll: false, refocusing: false },
 			$search: null			// the search row, kept across renders so typing isn't lost
 		};
 
@@ -1013,7 +1025,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<a href='#' class='jp-copy-list'>Copy list</a></div>");
 			$body.find(".jp-list-wrap").scrollTop(scroll || 0);
 			if (s.search) { $body.find(".jp-list-wrap").before($search); }
-			if (searchFocus) { $search.find(".jp-search-input")[0].focus({ preventScroll: true }); }
+			if (searchFocus) {
+				// Only moved: keep the suggestions and the highlighted one as they are (the focus handler leaves them alone)
+				state.search.refocusing = true;
+				try { $search.find(".jp-search-input")[0].focus({ preventScroll: true }); } finally { state.search.refocusing = false; }
+			}
 			showSearch();
 			if (state.pinnedID) { showTip(state.pinnedID); } else if (state.search.id) { showTip(state.search.id); }
 		}
@@ -1027,7 +1043,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		// ---- System search ----
 
 		function resetSearch() {
-			state.search = { id: null, matches: [], active: -1, scroll: false };
+			state.search = { id: null, matches: [], active: -1, scroll: false, refocusing: false };
 			state.$search = null;
 		}
 
@@ -1058,12 +1074,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!state.search.scroll || !$row.length) { return; }
 			state.search.scroll = false;
 			// Inside the list's own scroll box (not the page): the row in the middle, below the sticky header
+			// Layout px only (offsetTop / offsetHeight / clientHeight), not getBoundingClientRect: with Settings > UI Scale
+			// (body zoom) those are scaled while scrollTop isn't. The table is the scroll box's only child, at its top.
 			const wrap = $w.find(".jp-list-wrap")[0];
-			const rowBox = $row[0].getBoundingClientRect(), wrapBox = wrap.getBoundingClientRect();
 			const head = $w.find(".jp-list thead")[0];
-			const headH = head ? head.getBoundingClientRect().height : 0;
-			const top = wrap.scrollTop + rowBox.top - wrapBox.top - headH;
-			wrap.scrollTop = Math.max(0, top - Math.max(0, (wrap.clientHeight - headH - rowBox.height) / 2));
+			wrap.scrollTop = jp.centerScrollTop($row[0].offsetTop, $row[0].offsetHeight, head ? head.offsetHeight : 0, wrap.clientHeight);
 		}
 
 		function closeMenu() {
@@ -1370,6 +1385,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// System search: suggestions while typing; arrows move, Enter picks, Escape closes the list, then clears
 			$doc.on("input", sel + " .jp-search-input", function() { searchInput($(this).val()); });
 			$doc.on("focus", sel + " .jp-search-input", function() {
+				if (state.search.refocusing) { return; }	// render() moving it: not a new search
 				const text = $(this).val();
 				if ($.trim(text) && !(state.search.id && text === name(state.search.id))) { searchInput(text); }
 			});

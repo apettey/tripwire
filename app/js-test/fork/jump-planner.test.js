@@ -311,8 +311,8 @@ describe('jumpPlanner', () => {
 			const byName = jumpPlanner.sortRows(m.rows, 'name', -1);
 			const r2 = jumpPlanner.searchStatus(sid('Auga'), c, m, byName);
 			assert.strictEqual(r2.rank, byName.findIndex(x => x.name === 'Auga') + 1);
-			assert.ok(/#\d+ of 81 by System \(reversed\)/.test(jumpPlanner.searchResultHtml(r2, { key: 'name', dir: -1 })));
-			assert.ok(/Auga<\/span> — <span class='jp-search-ok'>#1 of 81 by LY/.test(jumpPlanner.searchResultHtml(r, sort)));
+			assert.ok(/#\d+ of 81 listed, by System \(reversed\)/.test(jumpPlanner.searchResultHtml(r2, { key: 'name', dir: -1 })));
+			assert.ok(/Auga<\/span> — <span class='jp-search-ok'>#1 of 81 listed, by LY/.test(jumpPlanner.searchResultHtml(r, sort)));
 			assert.strictEqual(status('Amamake').status, 'exit');
 		});
 		it('why not listed: high-sec, W-space, Pochven, Zarzakh', () => {
@@ -344,6 +344,10 @@ describe('jumpPlanner', () => {
 			const marked = status('Auga', {}, { jammed });
 			assert.deepStrictEqual([marked.status, marked.row.blocked], ['listed', true]);
 			assert.ok(/cyno-jammed, no normal cyno/.test(jumpPlanner.searchResultHtml(marked, sort)));
+			// The total is the rows listed (jammed ones too), worded so it doesn't read as the footer's "in range"
+			const c = ctx({}, { jammed }); const m = jumpPlanner.model(c);
+			assert.deepStrictEqual([m.counts.inRange, marked.total], [80, 81]);
+			assert.ok(/#1 of 81 listed, by LY · cyno-jammed/.test(jumpPlanner.searchResultHtml(marked, sort)));
 			const ls = status('Auga', { lowsec: false });
 			assert.strictEqual(ls.status, 'lowsec');
 			assert.ok(/low-sec, but Low-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(ls, sort)));
@@ -353,6 +357,20 @@ describe('jumpPlanner', () => {
 			const nsOff = jumpPlanner.searchStatus(nsIn.id, offCtx, offModel, offModel.rows);
 			assert.strictEqual(nsOff.status, 'nullsec');
 			assert.ok(/null-sec, but Null-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(nsOff, sort)));
+		});
+		it('just beyond the range: two decimals, so it does not read "8.0 LY (range 8.0)"', () => {
+			assert.strictEqual(jumpPlanner.beyondText(8.03, 8), '8.03 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.049, 8), '8.05 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.06, 8), '8.1 LY');
+			assert.strictEqual(jumpPlanner.beyondText(9.34, 8), '9.3 LY');
+			const html = jumpPlanner.searchResultHtml({ id: 1, name: 'X', status: 'range', ly: 8.03, range: 8, total: 0 }, sort);
+			assert.ok(/out of range: 8.03 LY <span class='jp-dim'>\(range 8.0\)/.test(html), html);
+		});
+		it('scrolls the picked row to the middle of the list, below the sticky header (layout px)', () => {
+			// row 40 px into the table, 18 high; header 20; box 160 -> visible 140, centred: 40 - 20 - (140 - 18) / 2 = -41 -> 0
+			assert.strictEqual(jumpPlanner.centerScrollTop(40, 18, 20, 160), 0);
+			assert.strictEqual(jumpPlanner.centerScrollTop(2000, 18, 20, 160), 2000 - 20 - 61);
+			assert.strictEqual(jumpPlanner.centerScrollTop(500, 18, 20, 10), 480);
 		});
 		it('escapes the system name in the result and the suggestions', () => {
 			const sys = {}; sys[30000001] = { name: EVIL, security: 0.3, regionID: 1 };
