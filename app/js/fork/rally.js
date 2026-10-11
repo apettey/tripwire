@@ -171,10 +171,15 @@ const rally = {
 
 		const onMap = rally.systemsOnMap(rows);
 		info.startSystemID = rally.pickStart(onMap, locations.tracked, locations.viewing, rally.rootSystem(rows));
-		const route = rally.routeTo(rally.systemConnections(rows, lines), info.startSystemID, target);
+		const connections = rally.systemConnections(rows, lines);
+		const hf = typeof routeHoleFilters !== "undefined" && routeHoleFilters.contextFor ? routeHoleFilters.contextFor(lines) : null;	// avoid EOL / crit / ... holes
+		const found = hf ? routeHoleFilters.route(connections, info.startSystemID, target, hf) : null;
+		const route = hf ? (found && found.path) : rally.routeTo(connections, info.startSystemID, target);
 		if (route) {
 			info.jumps = route.length;
 			info.lineIndexes = route;
+			info.holeNote = found ? found.note : "";
+			if (found) { routeHoleFilters.markLines(lines, found.marks); }
 			route.forEach(function(index) {
 				const line = lines[index];
 				if (line && Array.isArray(line[2]) && line[2].indexOf(rally.ROUTE_CLASS) < 0) {
@@ -191,7 +196,7 @@ const rally = {
 		if (!info || !info.onMap) { return "not on this map"; }
 		if (info.jumps === null || info.jumps === undefined) { return "no route"; }
 		if (info.jumps === 0) { return "you are here"; }
-		return info.jumps + (info.jumps == 1 ? " jump" : " jumps");
+		return info.jumps + (info.jumps == 1 ? " jump" : " jumps") + (info.holeNote ? " \u26a0 " + info.holeNote.replace(/^No route avoiding [^\u2014]*\u2014 this one /, "") : "");
 	},
 
 	/** Fight point data from the server -> state ({systemID: null} when there is none) */

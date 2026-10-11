@@ -193,8 +193,9 @@ const favouritesRouteStrip = {
 				const where = lookup(step.sigSystemID);
 				title += " · warp to " + (step.sig || "?") + " in " + (where && where.name ? where.name : "?") + (step.hole ? " · " + step.hole : "");
 			}
+			if (info.warn) { title += " \u00b7 Warning: " + info.warn; }	// a hole the route had to use although it is filtered (routeHoleFilters)
 			const colour = kind === "hub" && hubName && rs.HUB_COLOURS[hubName] ? rs.HUB_COLOURS[hubName] : style.colour;
-			return { kind: kind, systemID: step.to, colour: colour, systemKind: kind === "hub" && hubName ? "hub-" + hubName.toLowerCase() : style.kind, title: title };
+			return { kind: kind, systemID: step.to, colour: colour, systemKind: kind === "hub" && hubName ? "hub-" + hubName.toLowerCase() : style.kind, title: title, warn: !!info.warn };
 		});
 	},
 
@@ -260,7 +261,7 @@ const favouritesRouteStrip = {
 				const shown = titles.length > 12 ? titles.slice(0, 6).concat(["…"], titles.slice(-6)) : titles;
 				return "<span class='fav-mk-gap' title='" + esc(m.gap + " more jumps:\n" + shown.join("\n")) + "'>…+" + m.gap + "</span>";
 			}
-			return "<i class='fav-mk fav-mk-" + esc(m.kind) + " fav-mk-" + esc(m.systemKind) + "' style='--fav-mk:" + esc(m.colour) + "' title='" + esc(m.title) + "'></i>";
+			return "<i class='fav-mk fav-mk-" + esc(m.kind) + " fav-mk-" + esc(m.systemKind) + (m.warn ? " fav-mk-warn" : "") + "' style='--fav-mk:" + esc(m.colour) + "' title='" + esc(m.title) + "'></i>";
 		}).join("");
 	}
 };
@@ -292,8 +293,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return pathCache[key];
 		}
 
+		let activeMarks = {};	// the plan's hops through filtered holes (routeHoleFilters): {lineIndex: [reason]}
 		function hole(step) {
 			const info = { label: "", thirdParty: !!snapshot.thirdParty[step.lineIndex] };
+			if (activeMarks[step.lineIndex] && typeof routeHoleFilters !== "undefined") { info.warn = routeHoleFilters.marksText(activeMarks[step.lineIndex]); }
 			const wh = tripwire.client && tripwire.client.wormholes ? tripwire.client.wormholes[snapshot.lineWormholes[step.lineIndex]] : null;
 			if (wh && tripwire.client.signatures) {
 				const a = tripwire.client.signatures[wh.initialID], b = tripwire.client.signatures[wh.secondaryID];
@@ -326,6 +329,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!flags.route) { return null; }
 			const plan = (fp.lastRoutes[id] || {})[flags.route];
 			const steps = rs.steps(plan, snapshot.start, id, gatePath, snapshot.connections);
+			activeMarks = (plan && plan.holeMarks) || {};
 			return steps ? rs.markers(steps, lookup, regionName, hole) : null;
 		}
 

@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 65,
+      "date": "2026-10-11",
+      "title": "Routes avoid risky holes",
+      "description": "Routes through your chain (Favourites, Destinations and Fight here) now go round holes that are EOL, at critical mass, too small for your ship, marked preserve mass, or being rolled. If there is no other way, you still get the route with the fewest risky holes, with a one-line warning and an orange ring on those hops.\n\nTick One-way in the Favourites panel or Destinations window when you are not coming back, and EOL and critical holes are allowed again. Choose what routes avoid in Settings > Routes & Navigation > Routes avoid.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-65-route-hole-filters.png",
+          "caption": "No way round: the route with the fewest risky holes is used and they are flagged"
+        }
+      ]
+    },
+    {
       "pr": 63,
       "date": "2026-10-11",
       "title": "Rolling: show which holes we are rolling",

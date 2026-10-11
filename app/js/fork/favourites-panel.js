@@ -337,7 +337,8 @@ const favouritesPanel = {
 			rows: rows, lines: lines, start: start, chain: chain, exits: exits || [], distances: distances, systems: systems || {}, ignore: ignore || null,
 			connections: rally.systemConnections(rows, lines).filter(function(c) { return !(dropScout && favouritesPanel.isScoutLine(lines[c[3]])); }),
 			startOnChain: !!(start && chain[String(start)]),
-			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start]))
+			startKSpace: !!(start && favouritesPanel.isKSpace((systems || {})[start])),
+			holeFilters: typeof routeHoleFilters !== "undefined" && routeHoleFilters.contextFor ? routeHoleFilters.contextFor(lines) : null	// avoid EOL / crit / ... holes
 		};
 	},
 
@@ -368,7 +369,9 @@ const favouritesPanel = {
 		let best = null;
 		const consider = function(c) {
 			c.total = c.gatesIn + c.holes + c.gatesOut;
-			if (!best || c.total < best.total || (c.total === best.total && c.holes < best.holes)) { best = c; }
+			// A route that avoids the filtered holes (routeHoleFilters) beats one that doesn't; then fewest jumps
+			const dirtier = best && (best.holeBad > 0) !== (c.holeBad > 0);
+			if (!best || (dirtier ? !(c.holeBad > 0) : (c.total < best.total || (c.total === best.total && c.holes < best.holes)))) { best = c; }
 		};
 
 		if (fromStart && fromStart[id] !== undefined) {
@@ -388,10 +391,12 @@ const favouritesPanel = {
 		});
 		entries.forEach(function(entry) {
 			targets.forEach(function(target) {
-				const path = rally.routeTo(ctx.connections, entry.systemID, target.systemID);
+				const found = ctx.holeFilters ? routeHoleFilters.route(ctx.connections, entry.systemID, target.systemID, ctx.holeFilters) : null;
+				const path = ctx.holeFilters ? (found && found.path) : rally.routeTo(ctx.connections, entry.systemID, target.systemID);
 				if (!path || !path.length) { return; }	// no wormholes used: a gate route, covered by "direct"
 				consider({ kind: "chain", gatesIn: entry.gates, holes: path.length, gatesOut: target.gates,
-					entrySystemID: entry.systemID, exitSystemID: target.systemID, lineIndexes: path });
+					entrySystemID: entry.systemID, exitSystemID: target.systemID, lineIndexes: path,
+					holeMarks: found ? found.marks : {}, holeBad: found ? found.bad : 0, holeNote: found ? found.note : "" });
 			});
 		});
 		if (!best) { return { status: "no-route", mode: mode }; }
@@ -425,6 +430,7 @@ const favouritesPanel = {
 			return function(row, node) { return !row.destination && !favouritesPanel.isCalcRow(row) && favouritesPanel.toID(node.systemID) === systemID; };
 		};
 		plan.lineIndexes.forEach(addLine);
+		if (plan.holeMarks && typeof routeHoleFilters !== "undefined") { routeHoleFilters.markLines(lines, plan.holeMarks); }
 		if (plan.kind === "scout") {	// through Thera/Turnur: the chain's wormholes, and EVE-Scout links if the tab draws them
 			lines.forEach(function(line, index) { if (line && (plan.scoutLineIDs || []).indexOf(line[3]) >= 0) { addLine(index); } });
 			return;
@@ -632,7 +638,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<i class='fav-remove' data-icon='times' title='Remove " + esc(system.name) + " from favourites'></i>"
 				+ "</span>"
 				+ scoutLine(info)
+				+ holeNote(info)
 				+ "</li>";
+		}
+
+		/** Second line of a row whose route had to use EOL / critical / ... holes (routeHoleFilters): the one-line note */
+		function holeNote(info) {
+			const plan = info ? info[info.mode] : null;
+			if (!plan || !plan.holeNote) { return ""; }
+			return "<span class='fav-hole-note' title='" + fp.escape(plan.holeNote) + "'>&#9888; " + fp.escape(plan.holeNote) + "</span>";
 		}
 
 		/** Second line of a row routed through Thera/Turnur: the systems and signatures to warp to */
@@ -727,6 +741,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<input type='submit' value='Add' />"
 				+ "</form>"
 				+ "<ul class='fav-list'></ul>"
+				+ (typeof routeHoleFilters !== "undefined" ? "<div class='fav-oneway'>" + routeHoleFilters.toggleHtml(routeHoleFilters.oneWay()) + "</div>" : "")
 				+ "</div>"
 				+ "</li>";
 		}
