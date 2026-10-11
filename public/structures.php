@@ -56,7 +56,6 @@ function structures_id_param($value) {
 
 try {
 	structures_schema($mysql);
-	intel_pilots_schema($mysql);	// the owner cache (fork_pilot_entities) may not exist yet on a fresh database
 	$friendly = intel_friendly_ids($_SESSION, $mask);
 	$now = time();
 
@@ -76,6 +75,8 @@ try {
 			$systemID = $existing['systemID'];
 		}
 		if (!structures_rate_ok($mysql, $userID)) structures_fail(429, 'Too many changes in the last minute, try again shortly');
+		// The owner cache (fork_pilot_entities) may not exist yet on a fresh database: only owner changes need it
+		if (isset($_POST['owner']) || isset($_POST['ownerID'])) intel_pilots_schema($mysql);
 		structures_prune($mysql);	// on writes only; list hides what a prune would delete
 
 		if ($action === 'scan') {

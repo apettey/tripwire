@@ -148,7 +148,7 @@ const structures = {
 	/**
 	 * Timer input: an EVE time "2026.10.12 18:30", ISO (UTC unless it has an offset), or a countdown read off the game:
 	 * "1d 4h 20m", "2h14", "4:20:00" (hours:minutes:seconds). A bare "18:30" is an EVE clock time: today, or tomorrow
-	 * when that has passed. Seconds are kept.
+	 * when it is more than 2 hours past. Seconds are kept.
 	 * @return {ms} or {error}
 	 */
 	parseTime: function(text, nowMs) {
@@ -172,7 +172,7 @@ const structures = {
 			if (h > 23 || mi > 59) { return { error: "That is not a valid time" }; }
 			const d = new Date(nowMs);
 			let ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, mi, 0);
-			if (ms < nowMs) { ms += 86400000; }
+			if (ms < nowMs - structures.TIMER_PAST_S * 1000) { ms += 86400000; }	// more than 2 h ago: it means tomorrow
 			return { ms: ms, clock: true };
 		}
 		m = /^(\d{1,3}):(\d{2}):(\d{2})$/.exec(s);
@@ -533,6 +533,7 @@ const structures = {
 	moreID: null,
 	showGone: false,
 	xhr: null,
+	notice: "",
 
 	opts: function() { return typeof options !== "undefined" ? options : null; },
 	isSystem: function(id) { id = parseInt(id, 10); return id >= 30000000 && id < 33000000; },
@@ -633,12 +634,25 @@ const structures = {
 		const id = structures.systemID;
 		$w.find(".str-system").text(id ? structures.systemName(id) : "");
 		$w.find(".str-count").text(structures.headerText(structures.rows, nowSec));
+		// The edited row was removed (by someone else): close the form and say so
+		if (typeof structures.editing === "number" && !structures.rowByID(structures.editing)) {
+			structures.editing = null;
+			structures.notice = "This structure was removed by someone else";
+		}
+		// While the form has focus only the numbers move (header, timers, ages); the rest is rebuilt when focus leaves
+		const $form = $w.find(".str-form");
+		if (structures.editing && $form.length && $form[0].contains(document.activeElement)) {
+			structures.rows.forEach(function(r) {
+				$w.find(".str-row[data-id='" + r.id + "']:not(.str-gonerow)").replaceWith(structures.rowHtml(r, nowSec, structures.highlight));
+			});
+			return;
+		}
 		const cap = structures.editing ? structures.captureForm($w) : null;
 		const $content = $w.find(".content");
 		const scroll = $content.scrollTop();
 		$w.find(".str-body").html(structures.panelHtml({
 			rows: structures.rows, gone: structures.gone, nowSec: nowSec, highlight: structures.highlight, editing: structures.editing, moreID: structures.moreID,
-			showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error, loaded: structures.loaded
+			showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
 		}));
 		$content.scrollTop(scroll);
 		structures.restoreForm($w, cap);
@@ -680,8 +694,12 @@ const structures = {
 	bindPanel: function() {
 		const sel = "#" + structures.WIDGET_ID;
 		const rowID = function(el) { return parseInt($(el).closest("[data-id]").attr("data-id"), 10); };
-		$(document).on("click", sel + " .str-add", function(e) {
+		$(document).on("focusout", sel + " .str-form", function() {
+			// Focus left the form: bring the panel up to date (rows changed meanwhile)
+			setTimeout(function() { if (structures.editing && !$(sel + " .str-form").find(":focus").length) { structures.redraw(); } }, 0);
+		}).on("click", sel + " .str-add", function(e) {
 			e.preventDefault();
+			structures.notice = "";
 			if (structures.types() === null && typeof intelScans !== "undefined") { intelScans.loadTypes(); }
 			structures.editing = structures.editing === "new" ? null : "new";
 			structures.redraw();
@@ -696,6 +714,7 @@ const structures = {
 		}).on("click", sel + " .str-edit", function(e) {
 			e.preventDefault();
 			const id = rowID(this);
+			structures.notice = "";
 			structures.editing = structures.editing === id ? null : id;
 			structures.moreID = null;
 			structures.redraw();
@@ -921,11 +940,17 @@ const structures = {
 		const share = intelScans.share;
 		intelScans.share = function() {
 			const self = this, args = arguments;
+			const $dialog = $("#" + intelScans.DIALOG_ID);
+			const $buttons = $dialog.parent().find(".intel-share, .str-save-only");
 			const req = structures.enabled(structures.opts()) ? structures.saveFromDialog() : null;
 			if (!req) { return share.apply(self, args); }
+			$buttons.prop("disabled", true).addClass("ui-state-disabled");
 			// Structures first; a failure (limit, validation) stays in the dialog and nothing is shared
-			req.done(function() { share.apply(self, args); }).fail(function(x) {
-				$("#" + intelScans.DIALOG_ID).find(".intel-error").text(structures.errorText(x, "Could not save the structures"));
+			req.done(function() {
+				if ($dialog.dialog("isOpen")) { share.apply(self, args); }
+			}).fail(function(x) {
+				$dialog.find(".intel-error").text(structures.errorText(x, "Could not save the structures"));
+				$buttons.prop("disabled", false).removeClass("ui-state-disabled");
 			});
 		};
 		const openDialog = intelScans.openDialog;
@@ -939,8 +964,11 @@ const structures = {
 					buttons.unshift({ text: "Save structures only", "class": "str-save-only", click: function() {
 						const req = structures.saveFromDialog();
 						if (req) {
+							const $buttons = $dialog.parent().find(".intel-share, .str-save-only");
+							$buttons.prop("disabled", true).addClass("ui-state-disabled");
 							req.done(function() { $dialog.dialog("close"); }).fail(function(x) {
 								$dialog.find(".intel-error").text(structures.errorText(x, "Could not save the structures"));
+								$buttons.prop("disabled", false).removeClass("ui-state-disabled");
 							});
 						}
 					} });

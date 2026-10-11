@@ -80,7 +80,10 @@ describe('Structures', () => {
 		});
 		it('a bare HH:MM is an EVE clock time, today or tomorrow', () => {
 			assert.deepEqual(structures.parseTime('18:30', NOW), { ms: Date.UTC(2026, 9, 11, 18, 30), clock: true });	// NOW is 12:00
-			assert.equal(structures.parseTime('9:05', NOW).ms, Date.UTC(2026, 9, 12, 9, 5));	// passed today: tomorrow
+			assert.equal(structures.parseTime('9:05', NOW).ms, Date.UTC(2026, 9, 12, 9, 5));	// more than 2 h past: tomorrow
+			assert.equal(structures.parseTime('10:30', NOW).ms, Date.UTC(2026, 9, 11, 10, 30));	// just elapsed: still today
+			assert.equal(structures.parseTime('10:00', NOW).ms, Date.UTC(2026, 9, 11, 10, 0));	// exactly 2 h: today
+			assert.equal(structures.parseTime('9:59', NOW).ms, Date.UTC(2026, 9, 12, 9, 59));
 			assert.equal(structures.parseTime('12:00', NOW).ms, NOW);
 			assert.ok(structures.parseTime('24:00', NOW).error);
 			assert.ok(structures.parseTime('12:75', NOW).error);
