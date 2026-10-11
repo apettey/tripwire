@@ -122,6 +122,7 @@ tripwire.pasteSignatures = function() {
         for (var i in paste) {
             var scanner = rowParse(paste[i]);
 
+            if (scanner.id && sigAnomalies.skipRow(scanner, options)) continue; // fork: Settings > Signatures > Anomalies = Don't import
             if (scanner.id) {
                 var signature = $.map(tripwire.client.signatures, function(signature) { if (signature.signatureID && signature.signatureID.toUpperCase() == scanner.id[0] + scanner.id[1] && signature.systemID == viewingSystemID) return signature; })[0];
                 if (signature) {
@@ -161,12 +162,13 @@ tripwire.pasteSignatures = function() {
 							undo.push(tripwire.client.signatures[signature.id]);
 						}
                     // Make sure we are only updating when we have new info (we never turn wormholes into regular signatures)
-                    } else if (signature.type != "wormhole" && ((scanner.type && scanner.type.toLowerCase() != signature.type) || (scanner.name && scanner.name != signature.name))) {
+                    } else if (signature.type != "wormhole" && ((scanner.type && scanner.type.toLowerCase() != signature.type) || (scanner.name && scanner.name != signature.name) || sigAnomalies.needsMark(scanner, signature, options))) {
                         payload.signatures.update.push({
                             "id": signature.id,
                             "systemID": viewingSystemID,
                             "type": scanner.type || 'unknown',
                             "name": scanner.name,
+                            "bookmark": sigAnomalies.marker(scanner),
                             "lifeLength": options.signatures.pasteLife * 60 * 60
                         });
                         undo.push(tripwire.client.signatures[signature.id]);
@@ -202,6 +204,7 @@ tripwire.pasteSignatures = function() {
                             "systemID": viewingSystemID,
                             "type": scanner.type || 'unknown',
                             "name": scanner.name,
+                            "bookmark": sigAnomalies.marker(scanner),
                             "lifeLength": options.signatures.pasteLife * 60 * 60
                         });
                     }
@@ -271,7 +274,7 @@ tripwire.pasteSignatures = function() {
             for (var i in tripwire.client.signatures) {
                 var signature = tripwire.client.signatures[i];
 
-                if (signature.systemID == viewingSystemID && signature.signatureID && $.inArray(signature.signatureID.toLowerCase(), pasteIDs) === -1 && signature.signatureID !== "???") {
+                if (signature.systemID == viewingSystemID && signature.signatureID && $.inArray(signature.signatureID.toLowerCase(), pasteIDs) === -1 && signature.signatureID !== "???" && !sigAnomalies.keepOnFullPaste(signature, options)) {
                     if (signature.type == "wormhole") {
                         var wormhole = $.map(tripwire.client.wormholes, function(wormhole) { if (wormhole.initialID == signature.id || wormhole.secondaryID == signature.id) return wormhole; })[0] || {};
                         var otherSignature = wormhole.id ? (signature.id == wormhole.initialID ? tripwire.client.signatures[wormhole.secondaryID] : tripwire.client.signatures[wormhole.initialID]) : {};
