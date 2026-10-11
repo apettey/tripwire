@@ -434,7 +434,7 @@ const killReporting = {
 	},
 
 	setupSettings: function() {
-		if (typeof forkSettings === "undefined" || $("#killReporting-section").length) { return; }
+		if ($("#killReporting-section").length) { return; }
 		// Its own Settings section after Kills & Intel. Every open re-reads the stored settings, so Close discards
 		// unsaved changes; Reset deletes the key (back to the defaults).
 		const html = killReporting.settingsHtml();

@@ -29,6 +29,7 @@ const forkSettings = {
 	],
 
 	TYPES: ["checkbox", "select", "custom"],
+	FOOTNOTE_ORDER: 1e9,	// an upstream section's footnote row sorts after every registered row
 
 	extraSections: [],	// [{key, title, after, id, tableClass}] from forkSettings.section()
 	items: [],			// registered settings, in registration order
@@ -89,6 +90,12 @@ const forkSettings = {
 		if (def.type === "select" && !Array.isArray(def.choices)) { throw new Error(name + "choices [[value, text], ...] are required"); }
 		if (def.type === "custom" && !def.html && !def.rows) { throw new Error(name + "html (cell) or rows (<tr>s) is required"); }
 		if (def.reset !== undefined && typeof def.reset !== "function") { throw new Error(name + "reset must be a function"); }
+		// A row that stores something but has neither would keep its value through Settings > Reset
+		// (a button-only custom row, without save, stores nothing)
+		const stores = def.type !== "custom" || typeof def.save === "function";
+		if (stores && !def.key && typeof def.reset !== "function") {
+			console.warn(name + "no key or reset(options): Settings > Reset won't restore its default");
+		}
 		const item = Object.assign({}, def);
 		item.order = typeof def.order === "number" ? def.order : 1000;
 		item.seq = forkSettings.seq++;
@@ -114,6 +121,11 @@ const forkSettings = {
 	 */
 	register: function(def) {
 		const item = forkSettings.normalize(def);
+		const existing = forkSettings.items.filter(function(i) { return i.id === item.id; })[0];
+		if (existing) {
+			console.warn("forkSettings.register(" + item.id + "): already registered, ignored");
+			return existing;
+		}
 		forkSettings.items.push(item);
 		forkSettings.ready(function() { forkSettings.render(item); });
 		return item;
@@ -160,6 +172,54 @@ const forkSettings = {
 			if (typeof item.reset === "function") { forkSettings.call(item, "reset", [opts]); }
 			else if (item.key) { delete opts[item.key]; }
 		});
+	},
+
+	/**
+	 * Settings > Reset: wrap opts.reset so it ends by removing the fork's keys (resetAll). Must be the outermost
+	 * wrapper: What's New's wrapper keeps every key without an upstream default and puts them back after the
+	 * inner reset, which would undo resetAll if it wrapped us. Called at start-up and again on every Reset click,
+	 * so a wrapper added later (whatever the script order) ends up inside ours.
+	 */
+	wrapReset: function(opts) {
+		if (!opts || typeof opts.reset !== "function" || opts.reset === forkSettings.resetWrapper) { return; }
+		const inner = opts.reset;
+		const wrapped = function() {
+			const result = inner.apply(this, arguments);
+			forkSettings.resetAll(this);
+			return result;
+		};
+		Object.keys(inner).forEach(function(k) { wrapped[k] = inner[k]; });
+		forkSettings.resetWrapper = wrapped;
+		opts.reset = wrapped;
+	},
+
+	/** Index of the first of `orders` greater than `order` (a row goes before it), or -1 (append) */
+	insertIndex: function(orders, order) {
+		for (let i = 0; i < orders.length; i++) { if (orders[i] > order) { return i; } }
+		return -1;
+	},
+
+	/** Nearest section before `key` in display order that is on the page (present(key) is true), or null */
+	previousSection: function(keys, key, present) {
+		for (let i = keys.indexOf(key) - 1; i >= 0; i--) { if (present(keys[i])) { return keys[i]; } }
+		return null;
+	},
+
+	/**
+	 * What the filter shows. sections = [{title, rows: [text], extra: text outside the rows (buttons, notes)}].
+	 * A title match shows the whole section; otherwise only matching rows, and the section if any row or its
+	 * extra text matches. Returns {found, sections: [{show, rows: [bool]}]}.
+	 */
+	filterPlan: function(sections, query) {
+		let found = false;
+		const plan = sections.map(function(s) {
+			const all = forkSettings.matches(s.title, query);
+			const rows = s.rows.map(function(text) { return all || forkSettings.matches(text, query); });
+			const show = all || rows.indexOf(true) >= 0 || forkSettings.matches(s.extra, query);
+			found = found || show;
+			return { show: show, rows: rows };
+		});
+		return { found: found, sections: plan };
 	},
 
 	/** Settings filter: every word of the query appears in the text (case-insensitive) */
@@ -220,12 +280,9 @@ const forkSettings = {
 		const $div = $("<div></div>").attr({ id: id, "data-fs-section": key })
 			.append($("<table class='optionsTable' width='100%' cellpadding='1' cellspacing='0'></table>").addClass(def.tableClass || ""));
 		// After the nearest section before it (in display order) that is on the page
-		const keys = forkSettings.order();
-		let $prev = $();
-		for (let i = keys.indexOf(key) - 1; i >= 0 && !$prev.length; i--) {
-			$prev = $acc.children("div[data-fs-section='" + keys[i] + "']");
-		}
-		if ($prev.length) { $prev.after($h3, $div); } else { $acc.prepend($h3, $div); }
+		const sectionDiv = function(k) { return $acc.children("div[data-fs-section='" + k + "']"); };
+		const prev = forkSettings.previousSection(forkSettings.order(), key, function(k) { return sectionDiv(k).length > 0; });
+		if (prev) { sectionDiv(prev).after($h3, $div); } else { $acc.prepend($h3, $div); }
 		forkSettings.refresh();
 		// Rows registered for this section before it existed
 		forkSettings.items.forEach(function(item) { if (item.section === key && !item.rendered) { forkSettings.render(item); } });
@@ -245,8 +302,9 @@ const forkSettings = {
 	/** Put a tbody into a section's table by its order (upstream's own rows stay first) */
 	place: function($section, $tbody, order) {
 		const $table = $section.find("table.optionsTable").first();
-		const $after = $table.children("tbody.fs-item").filter(function() { return Number($(this).attr("data-fs-order")) > order; }).first();
-		if ($after.length) { $after.before($tbody); } else { $table.append($tbody); }
+		const $items = $table.children("tbody.fs-item");
+		const i = forkSettings.insertIndex($items.map(function() { return Number($(this).attr("data-fs-order")); }).get(), order);
+		if (i >= 0) { $items.eq(i).before($tbody); } else { $table.append($tbody); }
 	},
 
 	refresh: function() {
@@ -267,6 +325,12 @@ const forkSettings = {
 			if (!$div.length) { return; }
 			$div.attr("data-fs-section", s.key);
 			if (s.title) { $div.prev("h3").find("a").text(s.title); }
+			// A footnote row (e.g. Chain Map's "*: No effect in old org chart renderer") stays last, under fork rows
+			const $last = $div.find("table.optionsTable").first().find("tr").last();
+			if ($last.children("td[colspan]").length && !$last.find("input, select").length) {
+				const $tbody = $("<tbody class='fs-item fs-footnote'></tbody>").attr("data-fs-order", forkSettings.FOOTNOTE_ORDER);
+				$last.closest("table").append($tbody.append($last));
+			}
 		});
 
 		forkSettings.UPSTREAM_ROWS.forEach(function(r) {
@@ -307,19 +371,13 @@ const forkSettings = {
 			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || typeof options === "undefined") { return; }
 			forkSettings.saveAll(options, forkSettings.domIO);
 		}, true);
-		// Settings > Reset. Wraps the reset in place at page load, i.e. outside What's New's wrapper (whats-new.js
-		// loads first), which keeps keys without an upstream default; this then removes the fork's own keys.
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.forkSettingsWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				forkSettings.resetAll(this);
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.forkSettingsWrapped = true;
-			options.reset = wrapped;
-		}
+		// Settings > Reset removes the fork's keys: wrap now, and again (capture phase) on a click on either Reset
+		// button (Settings' and its confirmation's), so our wrapper is outermost whatever wrapped reset since
+		if (typeof options !== "undefined") { forkSettings.wrapReset(options); }
+		document.addEventListener("click", function(e) {
+			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
+			if (button && $.trim($(button).text()) === "Reset" && typeof options !== "undefined") { forkSettings.wrapReset(options); }
+		}, true);
 	},
 
 	// ---- "Find a setting" filter ----
@@ -330,6 +388,18 @@ const forkSettings = {
 			+ "<span class='fs-filter-none hidden'>No setting matches</span></div>");
 		$("#optionsAccordion").before($box);
 		$(document).on("input", "#fs-filter-input", function() { forkSettings.filter($(this).val()); });
+		// While filtering every matching section is shown open: a header click would only change the accordion's
+		// hidden state (and so which section is open once the filter is cleared), so ignore it
+		$("#optionsAccordion").on("accordionbeforeactivate", function() { return !$(this).hasClass("fs-filtering"); });
+	},
+
+	/** Text of a section outside its rows, found by the filter too: buttons, notes, other tables */
+	extraText: function(div) {
+		const $clone = $(div).clone();
+		$clone.find("table.optionsTable").first().remove();
+		$clone.find("select, option, script, style").remove();
+		const values = $clone.find("input[type='button'], input[type='submit'], button").map(function() { return $(this).val(); }).get();
+		return $clone.text() + " " + values.join(" ");
 	},
 
 	/** Text a row is found by: its heading, labels and notes (not the choices of its selects) */
@@ -347,22 +417,22 @@ const forkSettings = {
 		$acc.find(".fs-hidden").removeClass("fs-hidden");
 		$acc.children(".fs-match").removeClass("fs-match");
 		$acc.toggleClass("fs-filtering", q !== "");
-		let found = q === "";
+		let found = true;
 		if (q) {
-			$acc.children("h3").each(function() {
-				const $h3 = $(this);
-				const $div = $h3.next("div");
-				const all = forkSettings.matches($h3.text(), q);
-				let any = all;
-				$div.find("table.optionsTable").first().children("tbody").children("tr").each(function() {
-					const hit = all || forkSettings.matches(forkSettings.rowText(this), q);
-					$(this).toggleClass("fs-hidden", !hit);
-					any = any || hit;
-				});
-				$h3.toggleClass("fs-hidden", !any);
-				$div.toggleClass("fs-hidden", !any).toggleClass("fs-match", any);
-				found = found || any;
+			const sections = $acc.children("h3").map(function() {
+				const $div = $(this).next("div");
+				return { $h3: $(this), $div: $div, $rows: $div.find("table.optionsTable").first().children("tbody").children("tr") };
+			}).get();
+			const plan = forkSettings.filterPlan(sections.map(function(s) {
+				return { title: s.$h3.text(), rows: s.$rows.map(function() { return forkSettings.rowText(this); }).get(), extra: forkSettings.extraText(s.$div) };
+			}), q);
+			sections.forEach(function(s, i) {
+				const p = plan.sections[i];
+				s.$rows.each(function(r) { $(this).toggleClass("fs-hidden", !p.rows[r]); });
+				s.$h3.toggleClass("fs-hidden", !p.show);
+				s.$div.toggleClass("fs-hidden", !p.show).toggleClass("fs-match", p.show);
 			});
+			found = plan.found;
 		}
 		$("#fs-filter .fs-filter-none").toggleClass("hidden", found);
 	}

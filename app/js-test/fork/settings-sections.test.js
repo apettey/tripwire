@@ -111,6 +111,138 @@ describe('forkSettings', () => {
 		});
 	});
 
+	describe('register guards', () => {
+		function capture(fn) {
+			const warn = console.warn, seen = [];
+			console.warn = m => seen.push(String(m));
+			try { fn(); } finally { console.warn = warn; }
+			return seen;
+		}
+		it('the same id twice is ignored (first one kept)', () => {
+			let second;
+			const first = forkSettings.register(checkbox('a', 'a'));
+			const seen = capture(() => { second = forkSettings.register(checkbox('a', 'other', { order: 1 })); });
+			assert.strictEqual(second, first);
+			assert.strictEqual(forkSettings.items.length, 1);
+			assert.ok(/already registered/.test(seen[0]));
+		});
+		it('warns when a stored setting would survive Reset (no key, no reset)', () => {
+			const seen = capture(() => {
+				forkSettings.register(checkbox('noKey', undefined));
+				forkSettings.register({ section: 'x', id: 'save', type: 'custom', html: '<i></i>', save: () => {} });
+				forkSettings.register({ section: 'x', id: 'button', type: 'custom', html: '<input type="button" />' });
+				forkSettings.register(checkbox('own', undefined, { reset: () => {} }));
+			});
+			assert.deepStrictEqual(seen.map(m => /no key or reset/.test(m) && m.match(/\((\w+)\)/)[1]), ['noKey', 'save']);
+		});
+	});
+
+	describe('Settings > Reset with What\'s New\'s wrapper', () => {
+		// options.js's reset (throws on keys without a default) and whats-new.js's wrapper (keeps those keys)
+		function makeOptions() {
+			const opts = {
+				chain: { renderer: 'orgChart' }, whatsNew: { lastSeenPR: 50 },
+				sizeTags: { enabled: false }, jumpRange: { ship: 'x' },
+				reset: function() {
+					for (const x in this) {
+						if (typeof this[x] !== 'function') { this[x] = JSON.parse(JSON.stringify(this.reset.defaults[x])); }
+					}
+				}
+			};
+			opts.reset.defaults = { chain: { renderer: 'radial' } };
+			return opts;
+		}
+		function whatsNewWrap(opts) {
+			const reset = opts.reset;
+			opts.reset = function() {
+				const kept = {};
+				for (const key of Object.keys(this)) {
+					if (typeof this[key] !== 'function' && !(key in reset.defaults)) { kept[key] = this[key]; delete this[key]; }
+				}
+				const result = reset.apply(this, arguments);
+				Object.assign(this, kept);
+				return result;
+			};
+			opts.reset.defaults = reset.defaults;
+		}
+		beforeEach(() => {
+			forkSettings.register(checkbox('sizeTags-enabled', 'sizeTags'));
+			forkSettings.register({ section: 'jumpPlanner', id: 'jp', type: 'custom', rows: '<tr></tr>', save: () => {}, reset: o => { delete o.jumpRange; } });
+		});
+		const expected = { chain: { renderer: 'radial' }, whatsNew: { lastSeenPR: 50 } };
+		it('What\'s New wrapped first (the bundle order): fork keys go, What\'s New\'s state stays', () => {
+			const opts = makeOptions();
+			whatsNewWrap(opts);
+			forkSettings.wrapReset(opts);
+			opts.reset();
+			assert.deepStrictEqual(JSON.parse(JSON.stringify(opts)), expected);
+		});
+		it('What\'s New wrapped after us: the wrap on the Reset click puts ours outside again', () => {
+			const opts = makeOptions();
+			forkSettings.wrapReset(opts);
+			whatsNewWrap(opts);
+			forkSettings.wrapReset(opts);	// what the Reset click does
+			opts.reset();
+			assert.deepStrictEqual(JSON.parse(JSON.stringify(opts)), expected);
+		});
+		it('without that, a later wrapper would put the fork keys back (why the click re-wraps)', () => {
+			const opts = makeOptions();
+			forkSettings.wrapReset(opts);
+			whatsNewWrap(opts);
+			opts.reset();
+			assert.deepStrictEqual(opts.sizeTags, { enabled: false });
+		});
+		it('wrapping twice in a row is a no-op and keeps reset.defaults', () => {
+			const opts = makeOptions();
+			forkSettings.wrapReset(opts);
+			const once = opts.reset;
+			forkSettings.wrapReset(opts);
+			assert.strictEqual(opts.reset, once);
+			assert.deepStrictEqual(opts.reset.defaults, { chain: { renderer: 'radial' } });
+		});
+	});
+
+	describe('placement', () => {
+		it('a row goes before the first higher order (footnotes sort last), else at the end', () => {
+			assert.strictEqual(forkSettings.insertIndex([10, 20, forkSettings.FOOTNOTE_ORDER], 15), 1);
+			assert.strictEqual(forkSettings.insertIndex([10, 20, forkSettings.FOOTNOTE_ORDER], 1000), 2);
+			assert.strictEqual(forkSettings.insertIndex([10, 20], 20), -1);
+			assert.strictEqual(forkSettings.insertIndex([], 5), -1);
+		});
+		it('a new section goes after the nearest earlier section on the page', () => {
+			forkSettings.section('jumpPlanner', 'Jump Planner', { after: 'routes' });
+			const keys = forkSettings.order();
+			const onPage = k => ['account', 'chain', 'general', 'stats'].indexOf(k) >= 0;
+			assert.strictEqual(forkSettings.previousSection(keys, 'jumpPlanner', onPage), 'chain');
+			assert.strictEqual(forkSettings.previousSection(keys, 'jumpPlanner', k => k === 'routes' || onPage(k)), 'routes');
+			assert.strictEqual(forkSettings.previousSection(keys, 'account', onPage), null);
+		});
+	});
+
+	describe('filter plan', () => {
+		const sections = [
+			{ title: 'Account Settings', rows: ['Username: dev', 'Characters:'], extra: 'Change Username Change Password' },
+			{ title: 'Map Markers', rows: ['Hole size tags: Show max ship size', 'Preserve mass: Show preserve-mass markers'], extra: '' },
+			{ title: 'Wormhole Jumps & Mass', rows: ['Jump mass:', 'Return bookmark pop-up:'], extra: '' }
+		];
+		it('shows matching rows and their sections', () => {
+			const p = forkSettings.filterPlan(sections, 'mass');
+			assert.deepStrictEqual(p.sections.map(s => s.show), [false, true, true]);
+			assert.deepStrictEqual(p.sections[1].rows, [false, true]);
+			assert.deepStrictEqual(p.sections[2].rows, [true, true]);	// title match: the whole section
+			assert.ok(p.found);
+		});
+		it('text outside the rows (buttons) shows the section', () => {
+			const p = forkSettings.filterPlan(sections, 'password');
+			assert.deepStrictEqual(p.sections.map(s => s.show), [true, false, false]);
+			assert.deepStrictEqual(p.sections[0].rows, [false, false]);
+		});
+		it('nothing found', () => {
+			const p = forkSettings.filterPlan(sections, 'zzz');
+			assert.ok(!p.found && p.sections.every(s => !s.show));
+		});
+	});
+
 	describe('sections', () => {
 		it('built-in order', () => {
 			assert.deepStrictEqual(forkSettings.order(),
@@ -139,7 +271,7 @@ describe('forkSettings', () => {
 		it('escapes plain-text labels and choices', () => {
 			const html = forkSettings.rowHtml(forkSettings.normalize({
 				section: 'markers', id: 'x', type: 'select', label: '<b>L</b>', hint: 'a & b', choices: [['v"', '<i>']],
-				get: () => 1, set: () => {}, order: 5, keywords: 'k<'
+				get: () => 1, set: () => {}, key: 'x', order: 5, keywords: 'k<'
 			}));
 			assert.ok(!/<b>|<i>/.test(html), html);
 			assert.ok(/&lt;b&gt;L/.test(html) && /a &amp; b/.test(html) && /v&quot;/.test(html) && /data-fs-keywords='k&lt;'/.test(html));
