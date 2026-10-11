@@ -90,3 +90,14 @@
 .str-dlg-warn { color: #ffc040; }
 .str-dlg-note { color: #8f9ba3; }
 .str-save-only[style*="display: none"] { display: none !important; }
+
+/* Hints from stored kills (never applied by themselves): a dashed owner chip "TICK?" and a "destroyed?" icon */
+.str-sugg { text-decoration: none; }
+.str-sugg-chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 3px; border: 1px dashed rgba(255, 176, 96, 0.8); border-radius: 6px; font-weight: normal; font-style: normal; }
+.str-sugg-chip:hover { background: rgba(255, 150, 40, 0.18); }
+.str-sugg-chip-dead { flex: none; border-color: rgba(255, 122, 90, 0.7); padding: 0 2px; }
+.str-sugg-owner { color: #ffb060 !important; }
+.str-sugg-dead { color: #ff7a5a !important; line-height: 0; }
+.str-sugg-dead:hover { color: #fff !important; }
+.str-sugg-x { color: #8f9ba3 !important; font-size: 8px; line-height: 14px; }
+.str-sugg-x:hover { color: #fff !important; }

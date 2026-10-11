@@ -32,6 +32,7 @@ require('config.php');
 require_once(__DIR__ . '/zkill/zkill.inc.php');
 require_once(__DIR__ . '/discord/discord.inc.php');   // Discord notifications: kills are queued from the stream below
 require_once(__DIR__ . '/intel/pilots.inc.php');      // Local scans: corporations / alliances (ESI) and pilot threat (zKillboard)
+require_once(__DIR__ . '/structures/owners.inc.php'); // Structures: owner names typed in the Structures panel (ESI /universe/ids)
 date_default_timezone_set('UTC');
 
 const ZKF_BASE_URL         = 'https://r2z2.zkillboard.com/ephemeral/';
@@ -225,7 +226,7 @@ function zkf_tick(PDO $db) {
             $lastNames = time();
             $resolved = zk_names_resolve($db, ZKF_NAMES_REQUESTS);
             if ($resolved) zkf_log("resolved $resolved names");
-            foreach ([intel_lookups_run($db), intel_affiliation_run($db, ZKF_PILOTS_REQUESTS)] as $line) {
+            foreach ([intel_lookups_run($db), intel_affiliation_run($db, ZKF_PILOTS_REQUESTS), structures_owner_run($db)] as $line) {
                 if ($line !== null) zkf_log($line);
             }
         }

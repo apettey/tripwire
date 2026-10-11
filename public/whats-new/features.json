@@ -1,6 +1,22 @@
 {
   "features": [
     {
+      "pr": 82,
+      "date": "2026-10-11",
+      "title": "Smarter structure input",
+      "description": "Owners you type by corporation name are now looked up automatically. The Structures panel suggests a likely owner (HSTL?) and a possible destroyed? from kills in the system, which you confirm with one click or hide with the small x. You can also paste a copied overview selection into the d-scan dialog (the paste icon in the Structures panel) to save its structures.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-82-structure-hints.png",
+          "caption": "Owner and destroyed hints in the Structures panel"
+        },
+        {
+          "src": "whats-new/img/pr-82-structure-overview.png",
+          "caption": "An overview selection pasted into the d-scan dialog"
+        }
+      ]
+    },
+    {
       "pr": 81,
       "date": "2026-10-11",
       "title": "Structure timer reminders",

@@ -93,6 +93,52 @@ const structures = {
 	},
 
 	/**
+	 * Structures of a copied overview selection (tab-separated, the columns the pilot chose; best effort). The first cell that
+	 * is exactly a structure type name is the type, the first cell that reads as a distance the distance, and the name is the
+	 * longest other cell, preferring those containing " - "; a name equal to the type name is no name. Mirrors
+	 * structures_parse_overview (shared fixtures). Same result shape as parseScan, plus overview: true.
+	 */
+	parseOverview: function(text, types, systemName) {
+		const out = [];
+		let modules = 0;
+		let other = 0;
+		intelScans.lines(text).forEach(function(line) {
+			const cells = line.split("\t").map(function(c) { return intelScans.cleanField(c); });
+			let typeAt = -1;
+			let info = null;
+			cells.some(function(cell, i) {
+				if (cell === "") { return false; }
+				const found = structures.classify(null, cell, types);
+				if (found && found.typeName.toLowerCase() === cell.toLowerCase()) { typeAt = i; info = found; return true; }
+				return false;
+			});
+			if (!info) { other++; return; }
+			if (info.kind === "starbase" && !info.tower) { modules++; return; }
+			let km = null;
+			let kmAt = -1;
+			cells.some(function(cell, i) {
+				if (i === typeAt || cell === "") { return false; }
+				const v = intelScans.parseDistanceKm(cell);
+				if (v !== null) { km = v; kmAt = i; return true; }
+				return false;
+			});
+			let name = "";
+			let withDash = false;
+			cells.forEach(function(cell, i) {
+				if (i === typeAt || i === kmAt || cell === "" || cell === "-" || /^[\[<(]?[A-Z0-9][A-Z0-9.\-]{1,4}[\]>)]?$/.test(cell)) { return; }	// not a ticker column
+				const dash = cell.indexOf(" - ") >= 0;
+				if ((dash && !withDash) || (dash === withDash && Array.from(cell).length > Array.from(name).length)) { name = cell; withDash = dash; }
+			});
+			if (name.toLowerCase() === info.typeName.toLowerCase()) { name = ""; }
+			const split = structures.splitName(name);
+			const wrong = info.kind === "upwell" && !!split.prefix && !!systemName && /^J[0-9]{6}$/.test(split.prefix)
+				&& split.prefix.toLowerCase() !== String(systemName).toLowerCase();
+			out.push({ typeID: info.typeID, typeName: info.typeName, kind: info.kind, name: name, km: km, prefix: split.prefix, rest: split.rest, wrong: wrong });
+		});
+		return { structures: out, modules: modules, notRecognised: other, invalid: 0, overview: true };
+	},
+
+	/**
 	 * Match scanned structures with stored rows: [{id, restore}] per incoming row (id null = new).
 	 * existing: [{id, typeID, name, removed}] (live rows and removed ones, not destroyed); incoming: [{typeID, name}].
 	 * Rules: same type and full name (case-insensitive); same type and name without the system prefix; unnamed rows
@@ -333,7 +379,8 @@ const structures = {
 		abandoned: "<path d='M3 3L9 9M9 3L3 9' stroke='currentColor' fill='none' stroke-width='1.6' stroke-linecap='round'/>",
 		unknown: "<path d='M4.4 4.6A1.7 1.7 0 1 1 6.6 6.2C6.1 6.5 6 6.8 6 7.4M6 9.4V9.6' stroke='currentColor' fill='none' stroke-width='1.4' stroke-linecap='round'/>",
 		paste: "<rect x='2.5' y='2.5' width='7' height='8.5' rx='1' fill='none' stroke='currentColor' stroke-width='1.2'/><path d='M4.5 2.5V1.3H7.5V2.5M4.5 6H7.5M4.5 8.2H7.5' stroke='currentColor' fill='none' stroke-width='1.1'/>",
-		clock: "<circle cx='6' cy='6' r='4.6' fill='none' stroke='currentColor' stroke-width='1.2'/><path d='M6 3.2V6L8 7.2' stroke='currentColor' fill='none' stroke-width='1.2' stroke-linecap='round'/>"
+		clock: "<circle cx='6' cy='6' r='4.6' fill='none' stroke='currentColor' stroke-width='1.2'/><path d='M6 3.2V6L8 7.2' stroke='currentColor' fill='none' stroke-width='1.2' stroke-linecap='round'/>",
+		dead: "<circle cx='6' cy='6' r='4.6' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='2 1.2'/><path d='M4 4L8 8M8 4L4 8' stroke='currentColor' fill='none' stroke-width='1.3' stroke-linecap='round'/>"
 	},
 
 	icon: function(name, extraClass, title) {
@@ -369,7 +416,35 @@ const structures = {
 		return lines.join("\n");
 	},
 
-	rowHtml: function(row, nowSec, highlight) {
+	/**
+	 * Hints from kills the feed stored here (never applied by themselves): {owner: [[id, type, name, ticker, losses]], destroyed: [killID, killTime]}.
+	 * The owner chip shows the likeliest candidate, the destroyed icon asks "was it killed?".
+	 */
+	ownerHintHtml: function(row, sugg) {
+		const esc = structures.escape;
+		const c = sugg && sugg.owner && sugg.owner[0];
+		if (!c || row.ownerID || row.ownerText) { return ""; }
+		const label = c[3] || c[2];
+		const also = sugg.owner.length > 1 ? " (also: " + sugg.owner.slice(1).map(function(o) { return o[3] || o[2]; }).join(", ") + ")" : "";
+		return "<span class='str-sugg-chip'><a href='#' class='str-sugg str-sugg-owner' data-id='" + row.id + "' data-owner='" + parseInt(c[0], 10) + "' data-type='" + esc(c[1]) + "' title='"
+			+ esc("Possible owner: " + c[2] + (c[3] ? " [" + c[3] + "]" : "") + " lost " + c[4] + " " + row.typeName + (c[4] === 1 ? "" : "s") + " here (from kills)" + also + ". Click to set it as the owner.") + "'>"
+			+ esc(label) + "?</a>" + structures.dismissHtml(row.id, "owner", parseInt(c[0], 10)) + "</span>";
+	},
+
+	/** The small x of a hint chip: hide this hint (kind owner: key = corporation ID, destroyed: key = kill ID) */
+	dismissHtml: function(id, kind, key) {
+		return "<a href='#' class='str-sugg-x' data-id='" + parseInt(id, 10) + "' data-kind='" + structures.escape(kind) + "' data-key='" + parseInt(key, 10) + "' title='Hide this hint'>&#10005;</a>";
+	},
+
+	deadHintHtml: function(row, sugg, nowSec) {
+		const k = sugg && sugg.destroyed;
+		if (!k) { return ""; }
+		return "<span class='str-sugg-chip str-sugg-chip-dead'><a href='#' class='str-sugg str-sugg-dead' data-id='" + row.id + "' title='" + structures.escape("Destroyed? A " + row.typeName + " was killed here " + structures.age(nowSec - k[1])
+			+ (structures.age(nowSec - k[1]) === "now" ? "" : " ago") + " (kill " + k[0] + ", see More). Click to mark it destroyed; it can be undone for 30 days.") + "'>" + structures.icon("dead") + "</a>"
+			+ structures.dismissHtml(row.id, "destroyed", k[0]) + "</span>";
+	},
+
+	rowHtml: function(row, nowSec, highlight, sugg) {
 		const esc = structures.escape;
 		const t = structures.timerStatus(row, nowSec);
 		const seen = nowSec - row.lastSeenAt;
@@ -381,10 +456,12 @@ const structures = {
 		const url = structures.typeIconUrl(row.typeID);
 		html += url ? "<img class='str-type' src='" + esc(url) + "' alt='' width='18' height='18' loading='lazy' />" : "<span class='str-type str-type-unk'>?</span>";
 		html += "<span class='str-tname'>" + esc(row.typeName) + "</span>";
-		html += "<span class='str-owner str-side-" + (row.ownerID ? esc(row.side) : "unknown") + (!row.ownerID && owner ? " str-unres" : "") + "'>" + esc(owner || "–") + "</span>";
+		const ownerHint = structures.ownerHintHtml(row, sugg);
+		html += "<span class='str-owner str-side-" + (row.ownerID ? esc(row.side) : "unknown") + (!row.ownerID && owner ? " str-unres" : "") + "'>" + (ownerHint || esc(owner || "–")) + "</span>";
 		html += "<span class='str-state str-st-" + esc(row.state) + "'>" + structures.icon(state[1], "", state[0]) + "</span>";
 		html += "<span class='str-timer" + (t.phase === "none" ? "" : " str-t-" + t.phase + (t.urgent ? " str-urgent" : "")) + "'>"
 			+ (t.phase === "none" ? "" : structures.icon("clock") + esc(t.text)) + "</span>";
+		html += structures.deadHintHtml(row, sugg, nowSec);
 		html += "<span class='str-seen" + (seen > structures.STALE_S ? " str-stale" : seen > structures.OLD_S ? " str-old" : "") + "'>" + esc(structures.age(seen)) + "</span>";
 		html += "<span class='str-actions'>"
 			+ "<a href='#' class='str-edit' title='Edit owner, state, timer, note'>&#9998;</a>"
@@ -465,10 +542,12 @@ const structures = {
 			html += "<div class='str-empty'>" + (s.loaded ? "No structures recorded. Paste a d-scan (Ctrl+V) or add one with +." : "Loading…") + "</div>";
 		}
 		s.rows.forEach(function(row) {
-			html += structures.rowHtml(row, s.nowSec, s.highlight);
+			html += structures.rowHtml(row, s.nowSec, s.highlight, s.suggestions ? s.suggestions[row.id] : null);
 			if (s.editing === row.id) { html += structures.formHtml(row, s.nowSec, s.types); }
 			if (s.moreID === row.id) {
-				html += "<div class='str-more-row'><a href='#' class='str-remove' data-id='" + row.id + "'>Remove this entry (not here any more)</a></div>";
+				const dead = s.suggestions && s.suggestions[row.id] ? s.suggestions[row.id].destroyed : null;
+				html += "<div class='str-more-row'><a href='#' class='str-remove' data-id='" + row.id + "'>Remove this entry (not here any more)</a>"
+					+ (dead ? " &middot; <a href='https://zkillboard.com/kill/" + parseInt(dead[0], 10) + "/' target='_blank' rel='noopener noreferrer'>the kill on zKillboard</a>" : "") + "</div>";
 			}
 		});
 		if (s.gone && s.gone.length) {
@@ -507,7 +586,8 @@ const structures = {
 		let wrong = {};
 		scan.structures.forEach(function(r) { if (r.wrong) { wrong[r.prefix] = (wrong[r.prefix] || 0) + 1; } });
 		let html = "<div class='str-dlg'><label class='str-dlg-master'><input type='checkbox' class='str-dlg-all'" + (master ? " checked" : "") + " /> Save structures to "
-			+ esc(systemName || "this system") + " (" + scan.structures.length + ")</label><ul class='str-dlg-list'>";
+			+ esc(systemName || "this system") + " (" + scan.structures.length + ")</label>"
+			+ (scan.overview ? "<div class='str-dlg-note'>Read from an overview selection (type, name and distance found by their content): check the rows.</div>" : "") + "<ul class='str-dlg-list'>";
 		let saveCount = 0;
 		scan.structures.forEach(function(r, i) {
 			const on = checked[i] !== undefined ? !!checked[i] : !r.wrong;
@@ -554,6 +634,7 @@ const structures = {
 	xhr: null,
 	notice: "",
 	view: "system",		// "system" (this system's structures) or "timers" (the board of every active timer of the mask)
+	sugg: {},			// hints from stored kills per structure id (never applied by themselves), from the list response
 	setRes: null,		// residents set by hand for this system (system_residents.php), see setResidents()
 	setResAt: 0,
 
@@ -608,6 +689,7 @@ const structures = {
 			structures.rows = response.structures || [];
 			structures.gone = response.gone || [];
 			structures.hash = response.hash || "";
+			structures.sugg = response.suggestions && !Array.isArray(response.suggestions) ? response.suggestions : {};
 		}
 		structures.loaded = true;
 		structures.error = "";
@@ -710,7 +792,7 @@ const structures = {
 			const live = {};
 			structures.rows.forEach(function(r) {
 				live[r.id] = true;
-				$w.find(".str-row[data-id='" + r.id + "']:not(.str-gonerow)").replaceWith(structures.rowHtml(r, nowSec, structures.highlight));
+				$w.find(".str-row[data-id='" + r.id + "']:not(.str-gonerow)").replaceWith(structures.rowHtml(r, nowSec, structures.highlight, structures.sugg[r.id]));
 			});
 			$w.find(".str-row:not(.str-gonerow)").each(function() { if (!live[$(this).attr("data-id")]) { $(this).remove(); } });
 			return;
@@ -720,7 +802,7 @@ const structures = {
 		const scroll = $content.scrollTop();
 		$w.find(".str-body").html(structures.panelHtml({
 			rows: structures.rows, gone: structures.gone, nowSec: nowSec, highlight: structures.highlight, editing: structures.editing, moreID: structures.moreID,
-			showGone: structures.showGone, extraCorps: structures.threatCorps(), setResidents: structures.setResidents(), types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
+			showGone: structures.showGone, extraCorps: structures.threatCorps(), setResidents: structures.setResidents(), suggestions: structures.sugg, types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
 		}));
 		structures.notice = "";	// shown once
 		$content.scrollTop(scroll);
@@ -771,6 +853,17 @@ const structures = {
 			if (structures.types() === null && typeof intelScans !== "undefined") { intelScans.loadTypes(); }
 			structures.editing = structures.editing === "new" ? null : "new";
 			structures.redraw();
+		}).on("click", sel + " .str-sugg-owner", function(e) {
+			e.preventDefault();
+			// Same request as picking the owner in the edit form: the server checks the entity against its cache
+			structures.write({ action: "update", id: rowID(this), ownerID: $(this).attr("data-owner"), ownerType: $(this).attr("data-type") });
+		}).on("click", sel + " .str-sugg-x", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			structures.write({ action: "dismiss", id: $(this).attr("data-id"), kind: $(this).attr("data-kind"), key: $(this).attr("data-key") });
+		}).on("click", sel + " .str-sugg-dead", function(e) {
+			e.preventDefault();
+			structures.write({ action: "gone", id: rowID(this), state: "destroyed" });
 		}).on("click", sel + " .str-board", function(e) {
 			e.preventDefault();
 			structures.setView(structures.view === "timers" ? "system" : "timers");
@@ -951,7 +1044,7 @@ const structures = {
 		const id = parseInt(systemID, 10);
 		if (id !== structures.systemID) {
 			structures.systemID = structures.isSystem(id) ? id : null;
-			structures.rows = []; structures.gone = []; structures.hash = ""; structures.loaded = false; structures.setRes = null; structures.setResAt = 0;
+			structures.rows = []; structures.gone = []; structures.hash = ""; structures.loaded = false; structures.setRes = null; structures.setResAt = 0; structures.sugg = {};
 			structures.editing = null; structures.moreID = null; structures.highlight = null; structures.showGone = false;
 			structures.renderPanel();
 			if (structures.systemID) { structures.fetchSetResidents(); }
@@ -977,7 +1070,12 @@ const structures = {
 		const text = String($dialog.find(".intel-text").val() || "");
 		const types = intelScans.types;
 		if (!text.trim() || !types || intelScans.detectKind(text) !== "dscan") { return null; }
-		return structures.parseScan(text, types, structures.systemName(intelScans.dialogSystemID));
+		const systemName = structures.systemName(intelScans.dialogSystemID);
+		const scan = structures.parseScan(text, types, systemName);
+		// A copied overview selection has the columns of the pilot's choice: when it gives more structures than the d-scan
+		// reading (a real d-scan gives the same number, so it stays a d-scan), it is an overview
+		const overview = structures.parseOverview(text, types, systemName);
+		return overview.structures.length > scan.structures.length ? overview : scan;
 	},
 
 	renderDialogSection: function() {
@@ -993,6 +1091,7 @@ const structures = {
 		if (text !== structures.dlgText) { structures.dlgText = text; structures.dlgChecked = {}; structures.dlgMaster = true; }
 		const scan = structures.dialogScan();
 		if (!scan || !scan.structures.length) { return; }
+		if (scan.overview) { $dialog.parent().find(".intel-share").hide(); }	// an overview is not a d-scan: nothing to share with the Intel panel
 		const view = structures.dialogHtml(scan, structures.existingForDialog(), structures.dlgChecked, structures.dlgMaster, structures.systemName(intelScans.dialogSystemID));
 		$dialog.find(".intel-preview").append(view.html);
 		$only.show().prop("disabled", view.saveCount === 0).toggleClass("ui-state-disabled", view.saveCount === 0);
@@ -1015,7 +1114,10 @@ const structures = {
 		if (!keep.length) { return null; }
 		const systemID = intelScans.dialogSystemID;
 		const text = String($("#" + intelScans.DIALOG_ID).find(".intel-text").val() || "");
-		return structures.post({ action: "scan", systemID: systemID, text: text, keep: JSON.stringify(keep), systemName: structures.systemName(systemID) }).done(function(response) {
+		const scan = structures.dialogScan();
+		const params = { action: "scan", systemID: systemID, text: text, keep: JSON.stringify(keep), systemName: structures.systemName(systemID) };
+		if (scan && scan.overview) { params.format = "overview"; }
+		return structures.post(params).done(function(response) {
 			if (response && response.systemID === structures.systemID) { structures.absorb(response); structures.redraw(); }
 		});
 	},
