@@ -1,4 +1,39 @@
-/* Raidable skyhooks panel (fork-owned, see app/js/fork/skyhooks-panel.js) */
+/* Raidable skyhooks box (fork-owned, see app/js/fork/skyhooks-panel.js) */
+
+/* Skyhook icon on low-sec / null-sec systems: the node's top-right corner like the Jump planner's ring, just left of it
+   (top-left: threat badge, bottom-right: intel dot) */
+#chainMap .sky-icon {
+	position: absolute;
+	z-index: 2;
+	top: -9px;
+	right: 5px;
+	width: 14px;
+	height: 14px;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: #3a2a0c;
+	border: 1px solid #f0b34a;
+	color: #f0b34a;
+	cursor: pointer;
+	line-height: 0;
+}
+#chainMap .node:has(> .nodeIcons > div > i[data-icon='user']:not(.invisible)) > .sky-icon { top: -19px; }
+#chainMap .sky-icon:hover { background: #66490f; color: #fff; border-color: #fff; }
+#chainMap .sky-icon svg { display: block; }
+#chainMap .radial-map .top-level > .sky-icon { top: -6px; right: 14px; }
+
+#skyhooksWidget .controls .sky-close {
+	float: right;
+	cursor: pointer;
+	color: #888;
+}
+
+#skyhooksWidget .controls .sky-close:hover {
+	color: #FFF;
+}
 
 #skyhooksWidget .controls .sky-title {
 	color: #CCC;

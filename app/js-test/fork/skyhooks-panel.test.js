@@ -13,9 +13,9 @@ const S = saved => skyhooksPanel.settings(saved);
 
 describe('Skyhooks panel', () => {
 	describe('settings', () => {
-		it('defaults', () => assert.deepEqual(S(undefined), { enabled: true, maxJumps: 10, low: true, null: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
-		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, maxJumps: 5, low: false, null: true, window: 'now', soonHours: 4, sort: 'start' }),
-			{ enabled: false, maxJumps: 5, low: false, null: true, window: 'now', soonHours: 4, sort: 'start' }));
+		it('defaults', () => assert.deepEqual(S(undefined), { enabled: true, clickOpen: true, maxJumps: 10, low: true, null: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
+		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, clickOpen: false, maxJumps: 5, low: false, null: true, window: 'now', soonHours: 4, sort: 'start' }),
+			{ enabled: false, clickOpen: false, maxJumps: 5, low: false, null: true, window: 'now', soonHours: 4, sort: 'start' }));
 		it('0 means any distance', () => assert.equal(S({ maxJumps: 0 }).maxJumps, 0));
 		it('rejects nonsense', () => assert.deepEqual(S({ maxJumps: -3, window: 'x', soonHours: 'abc', sort: 5 }), S({})));
 		it('string numbers from a select', () => assert.equal(S({ maxJumps: '15' }).maxJumps, 15));
@@ -226,6 +226,45 @@ describe('Skyhooks panel', () => {
 			assert.ok(/unavailable/.test(e.text));
 		});
 		it('without the flag, an empty list is "none"', () => assert.equal(skyhooksPanel.emptyState(0, [{}], S({}), false).kind, 'none'));
+	});
+
+	describe('chain map icon', () => {
+		const sys = { 10: { name: 'Tama', security: 0.28, regionID: 10000033 }, 11: { name: 'Jita', security: 0.95, regionID: 10000002 },
+			12: { name: 'Null', security: -0.4, regionID: 10000012 }, 13: { name: 'J123', security: -0.99, regionID: 11000001, class: [3] },
+			14: { name: 'Zarzakh', security: -1, regionID: 10000070 }, 15: { name: 'Pochven', security: -0.4, regionID: 10000070, factionID: 500026 }, 16: {} };
+		const row = (v, systemID, f, extra) => Object.assign({ c: [{ v: v, systemID: systemID, f: f || "<div class='node'><div class='nodeIcons'></div></div>" }, { v: null }] }, extra || {});
+		it('low-sec and null-sec systems', () => {
+			assert.equal(skyhooksPanel.isLowNull(10, sys[10]), true);
+			assert.equal(skyhooksPanel.isLowNull(12, sys[12]), true);
+		});
+		it('not high-sec, w-space, Zarzakh, Pochven or unknown', () => {
+			[11, 13, 14, 15, 16].forEach(id => assert.equal(skyhooksPanel.isLowNull(id, sys[id]), false, String(id)));
+			assert.equal(skyhooksPanel.isLowNull(99, null), false);
+			assert.equal(skyhooksPanel.isLowNull(0, sys[10]), false);
+		});
+		it('icon carries the system and an escaped title', () => {
+			const h = skyhooksPanel.iconHtml(10, "<b>\"x\"</b>");
+			assert.ok(h.indexOf("data-sky-system='10'") > 0);
+			assert.ok(h.indexOf("<b>") < 0);
+		});
+		it('inserted before the icon row, once', () => {
+			const html = "<div class='node'><div class='nodeIcons'></div></div>";
+			const once = skyhooksPanel.insertIcon(html, skyhooksPanel.iconHtml(10, 'Tama'));
+			assert.ok(once.indexOf("sky-icon") < once.indexOf("nodeIcons"));
+			assert.equal(skyhooksPanel.insertIcon(once, skyhooksPanel.iconHtml(10, 'Tama')), once);
+			assert.equal(skyhooksPanel.insertIcon("<div></div>", "x"), "<div></div>");
+		});
+		it('decorate: only real low/null-sec rows, each id reported once', () => {
+			const result = { map: { rows: [row('a', 10), row('b', 11), row('c', 12), row('d', 10), row('dest-1', 12), row('e', 12, null, { destination: {} }),
+				row('f', 12, null, { pathHome: [{ path: [1] }] }), row('g', 13)] } };
+			const ids = skyhooksPanel.decorate(result, sys);
+			assert.deepEqual(ids, [10, 12]);
+			assert.deepEqual(result.map.rows.map(r => r.c[0].f.indexOf('sky-icon') >= 0), [true, false, true, true, false, false, false, false]);
+		});
+		it('decorate survives garbage', () => {
+			assert.deepEqual(skyhooksPanel.decorate(null, sys), []);
+			assert.deepEqual(skyhooksPanel.decorate({ map: { rows: [null, {}, { c: [] }] } }, sys), []);
+		});
 	});
 
 	describe('default placement', () => {

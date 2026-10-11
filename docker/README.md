@@ -206,7 +206,7 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 ### Raidable skyhooks
 
-The Raidable skyhooks panel reads `public/skyhooks.php`, which serves one server-wide copy of ESI's public
+The Raidable skyhooks box (opened from the skyhook icon on low-sec / null-sec chain systems) reads `public/skyhooks.php`, which serves one server-wide copy of ESI's public
 `GET /skyhooks/raidable` (`skyhooks.inc.php`, cache in `cache/skyhooks.json`). Browsers never call ESI for it: the
 route's rate-limit group allows only 30 requests per 15 minutes per IP. The server asks ESI at most once per 5
 minutes (exclusive `flock`, so concurrent requests don't stampede; after an error not again for 60 s), sends
