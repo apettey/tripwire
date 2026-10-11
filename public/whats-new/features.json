@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 67,
+      "date": "2026-10-11",
+      "title": "How to roll this hole",
+      "description": "The mass dialog now tells you how to roll a hole: a numbered list of passes for a battleship (or medium) roller crew, each marked safe, may collapse or will collapse, so nobody is sent out on a pass that could strand them. The ship buttons are coloured the same way, the jump log shows a running total and what is left, and the dialog refreshes itself while open.\n\nPress Rolled (closed) when you are done and the Discord rolling message says who rolled it. Set your roller ships or turn the recommendation off in Settings > Wormhole Jumps & Mass > Roller ships.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-67-rolling-plan.png",
+          "caption": "How to roll this hole in the mass dialog"
+        }
+      ]
+    },
+    {
       "pr": 66,
       "date": "2026-10-11",
       "title": "Raidable skyhooks",
