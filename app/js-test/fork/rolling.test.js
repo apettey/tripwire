@@ -75,6 +75,14 @@ describe('Rolling', () => {
 			assert.strictEqual(holeRolling.passesText(Object.assign(flag(5), { passes: 0, massKg: 0 })), '');
 			assert.strictEqual(holeRolling.tooltipText(flag(5)).indexOf('pass'), -1);
 		});
+		it('jump logs are read for new holes at once, then at most every 30 s, failures included', () => {
+			const now = 1e6, ms = holeRolling.PASSES_MS;
+			assert.deepStrictEqual(holeRolling.passesDue(['5', '7'], {}, {}, now), ['5', '7']);
+			assert.deepStrictEqual(holeRolling.passesDue(['5', '7'], { 5: now - 1000 }, {}, now), ['7']);
+			assert.deepStrictEqual(holeRolling.passesDue(['5', '7'], { 5: now - ms - 1, 7: now - ms + 1 }, {}, now), ['5']);
+			assert.deepStrictEqual(holeRolling.passesDue(['5'], { 5: now - ms - 1 }, { 5: true }, now), []);
+			assert.deepStrictEqual(holeRolling.passesDue(undefined, undefined, undefined, now), []);
+		});
 		it('passes are merged into the flags and count as a change', () => {
 			const map = holeRolling.toMap([flag(5), flag(7)]);
 			const merged = holeRolling.withPasses(map, { 5: { passes: 2, massKg: 10e6 } });

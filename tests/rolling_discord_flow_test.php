@@ -215,7 +215,7 @@ $db->prepare('DELETE FROM wormholes WHERE id = ?')->execute([$doomed]);
 $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'rollGone']);
 check('hole gone: the prune pass queues one clear', [discord_rolling_clear_gone($db), discord_rolling_clear_gone($db)], [1, 0]);
 pm_flush();
-check('hole gone: "Rolled by" the pilot who started it, nobody pinged', channel('hole gone from the map'), [[$struck . "\nRolled by " . discord_escape($who) . " at HH:MM EVE", true, true]]);
+check('hole gone: "Hole closed" + who was rolling it, nobody pinged', channel('hole gone from the map'), [[$struck . "\nHole closed at HH:MM EVE (rolling by " . discord_escape($who) . ")", true, true]]);
 $db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'rollGone']);
 check('hole gone: not again (the message is struck now)', discord_rolling_clear_gone($db), 0);
 

@@ -378,6 +378,13 @@ describe('Rolling calculator', () => {
 			assert.equal(r.steps.length, 0);
 			assert.ok(/Too little mass left for a battleship to go out safely: use a lighter ship out \(under 150kt\)/.test(r.warning), r.warning);
 		});
+		it('an empty or crit hole: no ship can go out, no "under 0kt"', () => {
+			[rec(0, 50), rec(0.4, 30)].forEach(r => {
+				assert.equal(r.outcome, 'too-light');
+				assert.equal(r.warning, 'No ship can safely go out: the hole may close on any jump.');
+			});
+			assert.ok(/under 5kt/.test(rec(5, 30, { cold: kt(6), hot: kt(9) }).warning));
+		});
 		it('names the roller in the warning', () => assert.ok(/for a medium to go/.test(rec(10, 12, { cold: kt(15), hot: kt(60), rollerName: 'medium' }).warning)));
 		it('goes out cold when the cold pass is safe', () => {
 			const r = rec(250, 400, { cold: kt(100), hot: kt(200) });
@@ -454,6 +461,20 @@ describe('Rolling calculator', () => {
 			assert.equal(rollingCalc.passLog([{ mass: kt(5000) }], kt(1000))[0].left, 0);
 			assert.equal(rollingCalc.passLog([{ mass: kt(5) }], 0)[0].left, null);
 			assert.deepEqual(rollingCalc.passLog([], kt(1)), []);
+		});
+	});
+
+	describe('jumpRowFlags', () => {
+		it('jump rows first, then the summary and total rows', () => {
+			const ids = ['', '', '', 'small-mass', 'medium-mass', 'large-mass', ''];
+			assert.deepEqual(rollingCalc.jumpRowFlags(ids, 3), [true, true, true, false, false, false, false]);
+		});
+		it('no jumps: nothing is a jump row, even the unnamed total row', () => {
+			assert.deepEqual(rollingCalc.jumpRowFlags(['small-mass', 'medium-mass', 'large-mass', ''], 0), [false, false, false, false]);
+		});
+		it('never counts a summary row, whatever the count says', () => {
+			assert.deepEqual(rollingCalc.jumpRowFlags(['', 'small-mass'], 5), [true, false]);
+			assert.deepEqual(rollingCalc.jumpRowFlags(undefined, 2), []);
 		});
 	});
 

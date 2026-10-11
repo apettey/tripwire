@@ -6,7 +6,7 @@
 
 Builds on the rolling calculator, auto mass logging and hole rolling (#63): the mass dialog now says *how* to
 roll a hole (a numbered, colour-coded step list), shows a running total in the jump log, stays current while open, and
-the rolling Discord message says "Rolled by X" when the hole is closed.
+the rolling Discord message says "Rolled by X" for Rolled (closed), "Hole closed (rolling by X)" when it vanishes.
 
 ## Before / After
 
@@ -41,9 +41,9 @@ toggle: it is the existing mask-wide Rolling type (Mask Admin > Discord).
 - **Higgs**: checked, nothing to add. Every manual mass entry (ship buttons, Custom mass) has a Higgs toggle that doubles
   the pass, and fitted ships carry their Higgs rig (`x: 2` in `fit-mass-data.js`).
 - **Discord**: new `mode=rolled` on `public/rolling.php` ("Stop rolling" link now has a second link, "Rolled (closed)").
-  The rolling message is struck through + "Rolled by X at HH:MM EVE". A hole deleted while flagged (the worker's
-  gone-hole pass) now says "Rolled by <who started it>" instead of "Hole collapsed"; plain "Stop rolling" is unchanged
-  ("Done"). No new table or template: `{outcome}` is now "Rolled by X" in those cases.
+  The rolling message is struck through + "Rolled by X at HH:MM EVE" for the explicit "Rolled (closed)" button only. A hole that
+  vanishes while flagged (rolled, collapsed or expired: we cannot tell) now says "Hole closed at HH:MM EVE (rolling by <who started it>)"
+  instead of "Hole collapsed"; plain "Stop rolling" is unchanged ("Done"). No new table or template.
 
 Tests: `app/js-test/fork/rolling-calculator.test.js`, `rolling.test.js`, `discord/tests/rolling_test.php`,
 `tests/rolling_discord_flow_test.php` (end to end).

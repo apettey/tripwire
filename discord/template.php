@@ -57,7 +57,7 @@ function discord_placeholders() {
             'who' => 'who marked, changed or cleared it', 'note' => 'the note given with the mark (empty without one)',
             'withNote' => '": closing it" when a note is given, else empty', 'map' => 'Tripwire link to {system}',
             'time' => 'EVE time (UTC), e.g. 19:08: when rolling started; in the done text, when it was cleared or found gone',
-            'outcome' => 'done text: "Rolled by Kytus" when the hole was rolled (closed), "Hole collapsed" when it was gone already, else "Done"',
+            'outcome' => 'done text: "Rolled by Kytus" after Rolled (closed), "Hole closed" when the hole vanished from the map, else "Done"',
             'mark' => 'done text: the rolling message as it was last posted, struck through, without its pings and link line (put in front of the done text when it doesn\'t use {mark})'],
     ];
 }

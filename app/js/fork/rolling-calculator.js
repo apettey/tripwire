@@ -150,6 +150,18 @@ const rollingCalc = {
 	BATTLESHIP_HOLE_KG: 300e6,	// a hole that takes at least this per jump passes battleships
 	MAX_STEPS: 12,
 	LIVE_MS: 10000,	// how often an open mass dialog looks for new passes
+	LIVE_TIMEOUT_MS: 15000,
+	SUMMARY_ROW_IDS: ['small-mass', 'medium-mass', 'large-mass'],
+
+	/** Which rows of the mass table body are jump rows. The dialog adds one row per parsed jump first, then the
+		summary rows (small / medium / large by id, and a total row without one).
+		@param ids the id of each tbody row in order @param jumpCount number of jumps in the log
+		@return array of booleans */
+	jumpRowFlags: function(ids, jumpCount) {
+		return (ids || []).map(function(id, i) {
+			return i < jumpCount && rollingCalc.SUMMARY_ROW_IDS.indexOf(id) < 0;
+		});
+	},
 
 	/** Roller ships for a hole: {name, cold, hot} in kg.
 		@param maxJumpKg the hole type's jump mass limit; a hole under 300kt (medium and small holes) gets the medium roller
@@ -201,7 +213,8 @@ const rollingCalc = {
 			const kind = cold < lo ? 'cold' : hot < lo ? 'hot' : null;
 			if (!kind) {
 				result.outcome = 'too-light';
-				result.warning = 'Too little mass left for a ' + (p.rollerName || 'battleship') + ' to go out safely: use a lighter ship out (under ' +
+				result.warning = lo < 1e6 ? 'No ship can safely go out: the hole may close on any jump.' :
+					'Too little mass left for a ' + (p.rollerName || 'battleship') + ' to go out safely: use a lighter ship out (under ' +
 					rollingCalc.formatKt(lo, 'floor') + ') or accept the risk of being stranded.';
 				return result;
 			}
@@ -549,11 +562,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				if (!$d.dialog("isOpen")) { stopLive(); return; }
 				if (liveBusy || document.hidden || state.fingerprint === null || !rollingCalc.enabled(typeof options !== "undefined" ? options : undefined)) { return; }
 				liveBusy = true;
-				$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: $d.data("id") }, dataType: "JSON" }).done(function(data) {
+				$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: $d.data("id") }, dataType: "JSON", timeout: rollingCalc.LIVE_TIMEOUT_MS }).done(function(data) {
 					if (!data || !data.jumps || !$d.dialog("isOpen")) { return; }
 					if (JSON.stringify(data.jumps) === state.fingerprint) { return; }
 					const open = $d.dialog("option", "open");
-					if (typeof open === "function") { open.call($d[0]); }	// the dialog's own refresh: reloads the log and re-renders
+					if (typeof open !== "function") { return; }
+					// The dialog's own refresh, fed with this response instead of fetching mass.php again (synchronous, so no flash)
+					const real = $.ajax;
+					$.ajax = function(settings) {
+						if (settings && settings.url === "mass.php") { return $.Deferred().resolve(data).promise(); }
+						return real.apply(this, arguments);
+					};
+					try { open.call($d[0]); } finally { $.ajax = real; }
 				}).always(function() { liveBusy = false; });
 			} catch (e) {
 				liveBusy = false;
@@ -573,11 +593,13 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 						"<th class='rolling-log-head' data-tooltip='Mass through the hole up to and including this pass'>Total</th>" +
 						"<th class='rolling-log-head' data-tooltip='Worst case: the lightest this hole can be (-10%) minus the total'>Left</th>");
 				}
+				const $rows = $table.find("tbody tr");
+				const isJump = rollingCalc.jumpRowFlags($rows.map(function() { return this.id; }).get(), log.length);
 				let i = 0;
-				$table.find("tbody tr").each(function() {
+				$rows.each(function(n) {
 					const $row = $(this);
 					$row.children(".rolling-log-cell").remove();
-					const entry = $row.is("[class^='mass-']") ? log[i++] : null;
+					const entry = isJump[n] ? log[i++] : null;
 					$row.append("<td class='rolling-log-cell'>" + (entry ? rollingCalc.formatKt(entry.total) : "") + "</td>" +
 						"<td class='rolling-log-cell'>" + (entry && entry.left !== null ? "&ge;&nbsp;" + rollingCalc.formatKt(entry.left, "floor") : "") + "</td>");
 				});

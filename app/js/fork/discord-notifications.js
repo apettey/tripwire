@@ -372,7 +372,7 @@ const discordNotifications = {
 			} else if (kind === "rolling") {
 				templateLabel = "Rolling:";
 				after = "<tr><th>Done:</th><td><textarea class='dn-templateClear' rows='1'>" + esc(t.templateClear) + "</textarea>"
-						+ "<div class='dn-small'>Replaces the rolling message when rolling is done or the hole is gone from the map (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{outcome}</code> is \"Rolled by Kytus\" (Rolled (closed), or the hole was deleted while flagged), \"Hole collapsed\" or \"Done\", <code>{time}</code> the EVE time it happened. Nothing is sent when there is no rolling message to edit.</div></td></tr>";
+						+ "<div class='dn-small'>Replaces the rolling message when rolling is done or the hole is gone from the map (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{outcome}</code> is \"Rolled by Kytus\" (after Rolled (closed)), \"Hole closed\" (the hole vanished from the map; \" (rolling by Kytus)\" is added) or \"Done\", <code>{time}</code> the EVE time it happened. Nothing is sent when there is no rolling message to edit.</div></td></tr>";
 				extra = "<tr><th>Connections:</th><td><label title='Off: every connection of the mask marked rolling is posted, also old fragments that no longer connect to home'><input type='checkbox' class='dn-chainOnly'"
 					+ (t.chainOnly !== false ? " checked" : "") + " /> only connections in our chain (connected to the home system above)</label></td></tr>";
 			} else if (kind === "watchlist") {

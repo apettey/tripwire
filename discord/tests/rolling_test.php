@@ -113,24 +113,24 @@ $struck = '~~Rolling **A** in **J163701** — 19:08 EVE~~';
 check('done: struck through + "Done at" the EVE time it was cleared, nobody pinged', discord_payload(['previous' => $live] + $done),
     ['content' => "$struck\nDone at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
 $gone = discord_payload(['previous' => $live] + discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null));
-check('gone: struck through + "Hole collapsed at", nobody pinged', $gone, ['content' => "$struck\nHole collapsed at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
-// Rolled (closed): "Stop rolling > Rolled (closed)", or the hole deleted while flagged (the worker)
+check('gone: struck through + "Hole closed at", nobody pinged', $gone, ['content' => "$struck\nHole closed at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
+// Rolled (closed): "Stop rolling > Rolled (closed)" only; a hole that vanished while flagged is "Hole closed ... (rolling by X)"
 $rolledData = discord_rolling_data($type, 0, 'Corp', 42, 'clear', 'Aashai', null, false, 2000, true);
 check('data: rolled', [$rolledData['rolled'], $data['rolled'], discord_rolling_data($type, 0, 'Corp', 42, 'clear', 'Aashai', null, true, 2000)['rolled']], [true, false, false]);
 $rolledByUser = discord_rolling_context(['action' => 'clear', 'who' => 'Aashai', 'rolled' => true] + $base, null, $ends);
 check('context: rolled', [$rolledByUser['cleared'], $rolledByUser['rolled'], $done['rolled']], [true, true, false]);
 check('rolled: struck through + "Rolled by" who at the EVE time, nobody pinged', discord_payload(['previous' => $live] + $rolledByUser),
     ['content' => "$struck\nRolled by Aashai at 19:31 EVE", 'allowed_mentions' => ['parse' => []]]);
-$rolledGone = discord_rolling_context(['action' => 'clear', 'gone' => true, 'rolled' => true, 'who' => 'Kytus Bos'] + $base, null, null);
-check('rolled: a deleted hole is rolled by the pilot who started it', discord_payload(['previous' => $live] + $rolledGone)['content'], "$struck\nRolled by Kytus Bos at 19:31 EVE");
-$rolledUnknown = discord_rolling_context(['action' => 'clear', 'gone' => true, 'rolled' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null);
-check('rolled: nobody known: no "by"', discord_payload(['previous' => $live] + $rolledUnknown)['content'], "$struck\nRolled at 19:31 EVE");
+$rolledGone = discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => 'Kytus Bos'] + $base, null, null);
+check('gone: a vanished hole names who was rolling it, not "Rolled"', discord_payload(['previous' => $live] + $rolledGone)['content'], "$struck\nHole closed at 19:31 EVE (rolling by Kytus Bos)");
+$rolledUnknown = discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null);
+check('gone: nobody known: no "rolling by"', discord_payload(['previous' => $live] + $rolledUnknown)['content'], "$struck\nHole closed at 19:31 EVE");
 check('rolled: the name cannot ping or format', discord_payload(['previous' => $live] + discord_rolling_context(['action' => 'clear', 'rolled' => true, 'who' => '@everyone **x**'] + $base, null, $ends))['content'],
     "$struck\nRolled by @\u{200B}everyone \\*\\*x\\*\\* at 19:31 EVE");
 check('rolled: a plain clear is still Done', discord_payload(['previous' => $live] + $done)['content'], "$struck\nDone at 19:31 EVE");
 check('done: a custom text sees who (the gone who too)', [discord_payload(['previous' => 'M', 'templateClear' => '{mark} {outcome} ({who})'] + $done)['content'],
     discord_payload(['previous' => 'M', 'templateClear' => '{outcome} ({who})'] + discord_rolling_context(['action' => 'clear', 'gone' => true, 'who' => DISCORD_ROLLING_GONE_WHO] + $base, null, null))['content']],
-    ['~~M~~ Done (Aashai)', "~~M~~\nHole collapsed (Tripwire \\(the hole is gone from the map\\))"]);
+    ['~~M~~ Done (Aashai)', "~~M~~\nHole closed (Tripwire \\(the hole is gone from the map\\))"]);
 check('done: a text without {mark} still strikes the message; its pings are dropped', discord_payload(['previous' => $live, 'templateClear' => '{pings} @here {outcome} <@&111111111111111111>'] + $done)['content'],
     "$struck\nDone");
 check('done: only {mark} is the default', discord_payload(['previous' => 'M', 'templateClear' => '{mark}'] + $done)['content'], "~~M~~\nDone at 19:31 EVE");

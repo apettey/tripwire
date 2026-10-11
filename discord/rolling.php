@@ -14,7 +14,7 @@
 //     marked again within DISCORD_ROLLING_WINDOW seconds of that clear: the struck message is edited back;
 //   - a hole gone from the map (rolled, collapsed, deleted) with a live message: the worker queues a clear for it once
 //     (discord_rolling_clear_gone, every 10 minutes), {who} "Tripwire (the hole is gone from the map)", {outcome}
-//     "Hole collapsed" instead of "Done".
+//     "Hole closed" instead of "Done".
 // The texts are short on purpose: the hole's name, the system it is in and the EVE time (UTC, "HH:MM"; the game's
 // clock, which is what rollers talk in, unlike the reader-local Discord timestamps of the other types).
 //   mark:    "{pings} Rolling **{name}** in **{system}** — {time} EVE"      {time}: when rolling started
@@ -112,15 +112,15 @@ function discord_rolling_setter(PDO $db, $maskID, $wormholeID) {
  * Worker, with the outbox prune: queue a clear for every live message whose hole is gone (most often: it was rolled),
  * so the channel doesn't keep marks that look live. Once per message: the claim ('rollGone' + wormholeID in
  * discord_sent, kept 7 days like the messages) is written with the outbox row. The message is struck through with the
- * cleared text, {outcome} "Hole collapsed", {who} DISCORD_ROLLING_GONE_WHO, nobody pinged. Returns the number queued.
+ * cleared text, {outcome} "Hole closed" + " (rolling by <who started it>)", nobody pinged. Returns the number queued.
  */
 function discord_rolling_clear_gone(PDO $db) {
     $queued = 0;
     foreach (discord_rolling_gone($db) as [$maskID, $wormholeID]) {
         $claim = function () use ($db, $maskID, $wormholeID) { return discord_dedupe_once($db, $maskID, 'rollGone', (string) $wormholeID); };
-        // A live message means the hole was flagged when it went: it was rolled ("Rolled by <who started it>")
+        // A live message means the hole was flagged when it went (it may have been rolled, collapsed or expired): "Hole closed (rolling by <who started it>)"
         $setter = discord_rolling_setter($db, $maskID, $wormholeID);
-        if (discord_rolling_enqueue($db, $maskID, $wormholeID, 'clear', $setter !== '' ? $setter : DISCORD_ROLLING_GONE_WHO, $claim, true, true) !== null) $queued++;
+        if (discord_rolling_enqueue($db, $maskID, $wormholeID, 'clear', $setter !== '' ? $setter : DISCORD_ROLLING_GONE_WHO, $claim, true) !== null) $queued++;
     }
     return $queued;
 }
@@ -142,7 +142,7 @@ function discord_rolling_flag(PDO $db, $maskID, $wormholeID) {
 /**
  * Message context of a row (pure). $flag: the flag as stored now (discord_rolling_flag; false = unknown: a clear is
  * still shown as cleared, a set can't be shown, null). $ends: the hole now (discord_preserve_ends) or null when it is
- * gone (then the ends kept with the row, and a clear says "Hole collapsed"). $chain: the mask's chain (systemID =>
+ * gone (then the ends kept with the row, and a clear says "Hole closed"). $chain: the mask's chain (systemID =>
  * true) when the type is limited to it, null when it isn't. inChain says whether a *new* message may be posted.
  */
 function discord_rolling_context(array $data, $flag, $ends, $chain = null) {
@@ -157,7 +157,7 @@ function discord_rolling_context(array $data, $flag, $ends, $chain = null) {
     if (!$flag) {
         // Only name who cleared it when this row was the clear (a set whose flag is gone by now was cleared by someone else)
         $who = ($data['action'] ?? '') === 'clear' && ($data['who'] ?? '') !== '' ? $data['who'] : 'someone';
-        return $base + ['cleared' => true, 'gone' => !empty($data['gone']) || $ends === null, 'rolled' => !empty($data['rolled']), 'who' => $who, 'note' => '', 'setAt' => 0, 'inChain' => false];
+        return $base + ['cleared' => true, 'gone' => !empty($data['gone']) || $ends === null, 'rolled' => !empty($data['rolled']), 'goneBy' => !empty($data['gone']), 'who' => $who, 'note' => '', 'setAt' => 0, 'inChain' => false];
     }
     $systems = $base['ends']['systems'] ?? [];
     $inChain = $chain === null || (bool) array_filter($systems, function ($id) use ($chain) { return isset($chain[(int) $id]); });
@@ -170,14 +170,21 @@ function discord_rolling_eve_time($unix) {
     return gmdate('H:i', (int) $unix);
 }
 
-/** The {outcome} text of a cleared message (plain text, escaped by the renderer): "Rolled by Kytus" when the hole was rolled
-    (closed: "Stop rolling > Rolled", or the hole was deleted while flagged), "Hole collapsed" when it was already gone, else "Done" */
+/** The pilot a cleared context names, '' when there is none (nobody, "someone", or the worker's own name) */
+function discord_rolling_known_who(array $ctx) {
+    $who = (string) ($ctx['who'] ?? '');
+    return $who !== 'someone' && $who !== DISCORD_ROLLING_GONE_WHO ? $who : '';
+}
+
+/** The {outcome} text of a cleared message (plain text, escaped by the renderer): "Rolled by Kytus" when someone pressed
+    "Stop rolling > Rolled (closed)", "Hole closed" when the hole vanished from the map (the worker appends " (rolling by X)"),
+    else "Done" */
 function discord_rolling_outcome(array $ctx) {
     if (!empty($ctx['rolled'])) {
-        $who = (string) ($ctx['who'] ?? '');
-        return $who !== '' && $who !== 'someone' && $who !== DISCORD_ROLLING_GONE_WHO ? 'Rolled by ' . $who : 'Rolled';
+        $who = discord_rolling_known_who($ctx);
+        return $who !== '' ? 'Rolled by ' . $who : 'Rolled';
     }
-    return !empty($ctx['gone']) ? 'Hole collapsed' : 'Done';
+    return !empty($ctx['gone']) ? 'Hole closed' : 'Done';
 }
 
 /** Placeholder values of a context (escaped by discord_render unless listed in the raw keys) */
@@ -238,6 +245,8 @@ function discord_rolling_payload(array $ctx) {
     if ($cleared) {
         $content = discord_render($ctx['templateClear'] ?? '', $values, $raw);
         if ($content === '' || $content === $marker) $content = discord_render($defaults['rollingClear'], $values, $raw);
+        // A hole that vanished while flagged (rolled, collapsed or expired: we can't tell): who started rolling it
+        if (!empty($ctx['goneBy']) && empty($ctx['rolled']) && discord_rolling_known_who($ctx) !== '') $content .= ' (rolling by ' . discord_escape(discord_rolling_known_who($ctx)) . ')';
     } else {
         $content = discord_render('Changed by *{who}* at {time} EVE', $values, $raw);
     }

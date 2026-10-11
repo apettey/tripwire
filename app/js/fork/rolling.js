@@ -277,32 +277,39 @@ const holeRolling = {
 		return (hull + (j.prop ? (hull > 500e6 ? 500e6 : 50e6) : 0)) * (j.higgs ? 2 : 1);
 	},
 
-	/** Read the jump log of every flagged hole (at most every PASSES_MS) for the marker tooltip's "N passes, X kt through" */
+	/** Flagged holes whose jump log is due: never tried, or last tried over PASSES_MS ago (a failed try counts as a try, so
+		a failing mass.php is not hammered); holes already being read are left out.
+		@param tried {id: ms of the last attempt} @param busy {id: true} */
+	passesDue: function(ids, tried, busy, now) {
+		return (ids || []).filter(function(id) {
+			return !(busy && busy[id]) && !(tried && tried[id] && now - tried[id] < holeRolling.PASSES_MS);
+		});
+	},
+
+	passesTried: {},	// by wormhole id: ms of the last attempt
+	passesBusy: {},		// by wormhole id: a request is out
+
+	/** Read the jump logs of the flagged holes that are due, for the marker tooltip's "N passes, X kt through".
+		Only while the markers are on (the line is part of their tooltip). */
 	refreshPasses: function() {
+		if (!holeRolling.enabled(holeRolling.options())) { return; }
 		const ids = Object.keys(holeRolling.flags);
+		Object.keys(holeRolling.passesTried).forEach(function(id) { if (ids.indexOf(id) < 0) { delete holeRolling.passesTried[id]; delete holeRolling.passInfo[id]; } });
 		const now = Date.now();
-		const fresh = ids.some(function(id) { return !holeRolling.passInfo[id]; });
-		if (!ids.length || holeRolling.passesBusy || (!fresh && now - (holeRolling.passesAt || 0) < holeRolling.PASSES_MS)) { return; }
-		holeRolling.passesBusy = true;
-		holeRolling.passesAt = now;
-		const info = {};
-		let left = ids.length;
-		const done = function() {
-			if (--left > 0) { return; }
-			holeRolling.passesBusy = false;
-			holeRolling.passInfo = info;
-			const next = holeRolling.withPasses(holeRolling.flags, info);
-			if (holeRolling.changed(holeRolling.flags, next)) {
-				holeRolling.flags = next;
-				preserveMass.refreshMap();
-			}
-		};
-		ids.forEach(function(id) {
-			$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: id }, dataType: "JSON" })
+		holeRolling.passesDue(ids, holeRolling.passesTried, holeRolling.passesBusy, now).forEach(function(id) {
+			holeRolling.passesTried[id] = now;
+			holeRolling.passesBusy[id] = true;
+			$.ajax({ url: "mass.php", type: "POST", data: { wormholeID: id }, dataType: "JSON", timeout: 15000 })
 				.done(function(data) {
-					if (data && data.jumps && typeof rollingCalc !== "undefined") { info[id] = rollingCalc.summarisePasses(data.jumps, holeRolling.rowMass); }
+					if (!data || !data.jumps || typeof rollingCalc === "undefined") { return; }
+					holeRolling.passInfo[id] = rollingCalc.summarisePasses(data.jumps, holeRolling.rowMass);
+					const next = holeRolling.withPasses(holeRolling.flags, holeRolling.passInfo);
+					if (holeRolling.changed(holeRolling.flags, next)) {
+						holeRolling.flags = next;
+						preserveMass.refreshMap();
+					}
 				})
-				.always(done);
+				.always(function() { delete holeRolling.passesBusy[id]; });
 		});
 	},
 
