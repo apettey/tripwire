@@ -511,7 +511,7 @@ while a fight point is set. A mask without comps keeps the old one-click entry (
 fight's system). Everyone on the mask sees the system in the comp's colour (no comp: the old green), the
 route to it, and a banner in the chain map header: "Fight here: AB · J163701 (C5, 2 jumps) · Armor HACs · set by
 Chribba · 4 min ago ✕" (the chain label as the Discord message shows it, `discord_chain_label`; the comp's note in
-its tooltip; ✕ clears it). Members can hide the banner (Settings > Chain Map Settings > Fight here,
+its tooltip; ✕ clears it). Members can hide the banner (Settings > Map Markers > Fight here,
 `options.fightBanner.enabled`, on by default); the system stays marked.
 
 - **Comps** (Mask Admin > Fight here, `public/fight.php`, `fight/fight.inc.php`): the corporation's Tripwire admins

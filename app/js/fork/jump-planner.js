@@ -974,7 +974,7 @@ const jumpPlanner = {
 		return strip(grid);
 	},
 
-	/** Settings > General Preferences row, next to the other panels' on/off rows (same key as "Enable jump planner") */
+	/** Settings > Routes & Navigation row, next to the other panels' on/off rows (same key as "Enable jump planner") */
 	generalRowHtml: function() {
 		return "<tr><th>Jump planner:</th><td><label><input type='checkbox' id='jumpPlanner-enabled-general' /> Show the Jump planner and its ring on low/null-sec exits</label></td></tr>";
 	},

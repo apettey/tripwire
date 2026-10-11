@@ -28,7 +28,9 @@ No toggle: this reorganises Settings itself.
   Jumps & Mass, Signatures, Routes & Navigation, Jump Planner, Kills & Intel, Kill Reporting, General (was
   "General Preferences"), Personal Statistics. Upstream's signature and route rows are moved into Signatures
   and Routes & Navigation as DOM nodes (upstream still reads them by id).
-- All 20 fork settings migrated (option keys, defaults and Save behaviour unchanged). Hole size tags now
+- Every fork setting migrated, including those merged from main meanwhile (Fight here, Smart notes, the Jump
+  planner's System search and its on/off row, now in Routes & Navigation); option keys, defaults and Save behaviour
+  unchanged. Hole size tags now
   also go back to on with Settings > Reset (before, Reset left them as they were).
 - "Find a setting…" box: shows only matching rows, with their sections opened.
 - AGENTS.md section 2 and the tripwire-feature skill now say where a setting goes and how to add one.

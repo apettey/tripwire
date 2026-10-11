@@ -73,12 +73,12 @@ own Save/open/Reset hooks. Give the row an `order` so its place doesn't depend o
 | Section (`section` key) | What belongs there | Examples |
 | --- | --- | --- |
 | Chain Map (`chain`) | How the map itself is laid out and drawn (upstream rows) | renderer, gridlines, node spacing, sig name on map |
-| Map Markers (`markers`) | Things drawn on the map's nodes and connections | hole size tags, high-sec region, preserve mass, threat badges, rally point |
+| Map Markers (`markers`) | Things drawn on the map's nodes and connections | hole size tags, high-sec region, preserve mass, threat badges, Fight here |
 | Wormhole Jumps & Mass (`jumps`) | Jumping through holes: mass logging, rolling, after-jump prompts | jump mass, rolling guidance, return bookmark pop-up |
 | Signatures (`signatures`) | The signature list: adding, pasting, copying sigs | Add dialog type, paste life, copy separator, colour by age |
-| Routes & Navigation (`routes`) | Routes, destinations, getting somewhere | route blobs, K-space route, Thera/Turnur routes, Destinations, Favourites panel |
+| Routes & Navigation (`routes`) | Routes, destinations, getting somewhere | route blobs, K-space route, Thera/Turnur routes, Destinations, Favourites panel, Jump planner on/off |
 | Jump Planner (`jumpPlanner`) | One feature's own cluster: jump ship, range, mini-map | jump planner |
-| Kills & Intel (`intel`) | Kill feeds, threat info, intel panels | system/chain kill feed, threat & residents, d-scan & local, Watchlist |
+| Kills & Intel (`intel`) | Kill feeds, threat info, intel panels | system/chain kill feed, threat & residents, d-scan & local, Watchlist, smart notes |
 | Kill Reporting (`killReporting`) | One feature's own cluster: kill sounds and pop-ups | kill reporting |
 | General (`general`) | The whole app rather than one area | background, UI scale, What's new |
 

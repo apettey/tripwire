@@ -771,36 +771,21 @@ const smartNotes = {
 	// ---- Settings ----
 
 	setupSettings: function() {
-		const $general = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
-		if ($general.length && !$("#smartNotes-enabled").length) {
-			$general.append("<tr><th>Smart notes:</th><td>"
-				+ "<label><input type='checkbox' id='smartNotes-enabled' /> Kill cards and link chips in notes</label><br/>"
-				+ "<label><input type='checkbox' id='smartNotes-systemNames' /> System names in notes as chips (J163701)</label></td></tr>");
-		}
-		$(document).on("dialogopen", "#dialog-options", function() {
-			const opts = smartNotes.opts();
-			$("#smartNotes-enabled").prop("checked", smartNotes.enabled(opts));
-			$("#smartNotes-systemNames").prop("checked", smartNotes.systemNames(opts));
+		// Settings > Kills & Intel; takes effect on Save (options.apply() below re-renders), Reset = on
+		forkSettings.register({
+			section: "intel", order: 60, id: "smartNotes", type: "custom", key: "smartNotes", label: "Smart notes:",
+			keywords: "comments zkillboard links",
+			html: "<label><input type='checkbox' id='smartNotes-enabled' /> Kill cards and link chips in notes</label><br/>"
+				+ "<label><input type='checkbox' id='smartNotes-systemNames' /> System names in notes as chips (J163701)</label>",
+			load: function() {
+				const opts = smartNotes.opts();
+				$("#smartNotes-enabled").prop("checked", smartNotes.enabled(opts));
+				$("#smartNotes-systemNames").prop("checked", smartNotes.systemNames(opts));
+			},
+			save: function(o) {
+				o.smartNotes = { enabled: $("#smartNotes-enabled").prop("checked"), systemNames: $("#smartNotes-systemNames").prop("checked") };
+			}
 		});
-		// Capture phase so the values are in place before upstream's Save handler runs options.apply() and saves
-		document.addEventListener("click", function(e) {
-			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
-			if (!button || $.trim($(button).text()) !== "Save") { return; }
-			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#smartNotes-enabled").length) { return; }
-			options.smartNotes = { enabled: $("#smartNotes-enabled").prop("checked"), systemNames: $("#smartNotes-systemNames").prop("checked") };
-		}, true);
-		// Settings > Reset: a missing key means on
-		if (typeof options !== "undefined" && typeof options.reset === "function" && !options.reset.smartNotesWrapped) {
-			const reset = options.reset;
-			const wrapped = function() {
-				const result = reset.apply(this, arguments);
-				delete this.smartNotes;
-				return result;
-			};
-			Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
-			wrapped.smartNotesWrapped = true;
-			options.reset = wrapped;
-		}
 		// options.apply() runs on Save and Reset
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.smartNotesWrapped) {
 			const apply = options.apply;

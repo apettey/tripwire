@@ -216,7 +216,7 @@ const rally = {
 		return state.age + Math.max(0, ((now || Date.now()) - state.receivedAt) / 1000);
 	},
 
-	// ---- Settings (Settings > Chain Map Settings > Fight here) ----
+	// ---- Settings (Settings > Map Markers > Fight here) ----
 	// Discord (server side: public/rally.php; the channel is the "Fight here" type corp admins set up in Mask Admin >
 	// Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK)
 	DISCORD_COMMAND: "rallyDiscord",
