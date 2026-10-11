@@ -35,6 +35,8 @@ const jumpRange = {
 	//   jumped after the ship's reduction, and F the fatigue before the jump (minutes):
 	//     new fatigue          = min(300, max(10 x (1 + D), F x (1 + D)))       cap 5 hours
 	//     jump activation wait = min(30, max(1 + D, F / 10))                    cap 30 minutes, uses F BEFORE this jump
+	//   Fatigue also "decays in real time, whether logged in or not" (1 minute per minute), so a route that waits out each
+	//   cooldown has F - wait left before its next jump.
 	//   (the wiki: the cooldown is "one tenth of the pilot's Jump Fatigue value (before the jump fatigue is recalculated
 	//   for this jump)"). Reductions of the distance: 90% for Jump Freighters and Capital Industrial Ships (Rorqual) and
 	//   75% for Black Ops battleships; none for carriers, dreadnoughts, FAX, supers, titans and Lancers. CCP's
@@ -567,7 +569,9 @@ const jumpRange = {
 	 * Jump fatigue along a route (formulas in "Game rules relied on").
 	 * @param legs LY per jump; reduction 0-1 (fatigueReduction); startFatigue minutes already on the pilot (default 0)
 	 * @return {cooldowns: [minutes to wait after each jump but the last, before the next], waitTotal (their sum),
-	 *   fatigueEnd (minutes of fatigue after the last jump), cooldownEnd (the wait after the last jump)}
+	 *   fatigueEnd (minutes of fatigue right after the last jump, i.e. on arrival), cooldownEnd (the wait after the last jump)}
+	 *   The pilot waits out each cooldown before the next jump and fatigue decays 1 minute per minute meanwhile (the wiki's
+	 *   example, 5 LY carrier jumps: 60 -> 54 after a 6 min wait -> 300 (cap) -> 294 after 6 min; third wait 29.4 min).
 	 */
 	fatigue: function(legs, reduction, startFatigue) {
 		const red = Math.max(0, Math.min(1, Number(reduction) || 0));
@@ -577,8 +581,11 @@ const jumpRange = {
 		(Array.isArray(legs) ? legs : []).forEach(function(ly, i, all) {
 			const d = Math.max(0, Number(ly) || 0) * (1 - red);
 			const wait = Math.min(jumpRange.COOLDOWN_CAP_MIN, Math.max(1 + d, f / 10));		// uses the fatigue before this jump
-			if (i < all.length - 1) { cooldowns.push(wait); } else { cooldownEnd = wait; }
 			f = Math.min(jumpRange.FATIGUE_CAP_MIN, Math.max(10 * (1 + d), f * (1 + d)));
+			if (i < all.length - 1) {
+				cooldowns.push(wait);
+				f = Math.max(0, f - wait);		// fatigue decays in real time (1 minute per minute), also while waiting out the cooldown
+			} else { cooldownEnd = wait; }
 		});
 		return { cooldowns: cooldowns, waitTotal: cooldowns.reduce(function(a, b) { return a + b; }, 0), fatigueEnd: f, cooldownEnd: cooldownEnd };
 	},
@@ -767,7 +774,8 @@ const jumpRange = {
 
 	/**
 	 * A route that starts with chosen jumps (a pinned midpoint): prefix = [start, m1, ..., mk], then the best way on to
-	 * the destination within maxJumps minus the jumps already made.
+	 * the destination within maxJumps minus the jumps already made. A pin whose systems are not valid cyno targets any more
+	 * (a new incursion, a jam, a switched-off security) is dropped: the planned route comes back with pinDropped: true.
 	 * @return a routePlan row for the destination; jumps null (reason "range" etc.) when the rest cannot get there
 	 */
 	routeVia: function(prefix, destID, rangeLy, index, systems, opts, maxJumps) {
@@ -775,6 +783,10 @@ const jumpRange = {
 		const chain = prefix.map(Number);
 		const made = chain.length - 1;
 		const last = chain[chain.length - 1];
+		const sys = systems || {};
+		if (chain.slice(1).some(function(id) { return !jumpRange.isValidCynoTarget(id, sys[id], opts); })) {
+			return Object.assign(jumpRange.routePlan(chain[0], [destID], rangeLy, index, systems, opts, max)[0], { pinDropped: true });
+		}
 		if (made > max) { return jumpRange.routePlan(chain[0], [destID], rangeLy, index, systems, opts, 0)[0]; }
 		if (last === Number(destID)) { return jumpRange.describeRoute(chain, index, opts); }
 		const rest = jumpRange.routePlan(last, [destID], rangeLy, index, systems, opts, max - made)[0];

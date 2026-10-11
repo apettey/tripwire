@@ -173,11 +173,60 @@ describe('jumpPlanner midpoints', () => {
 			// pins of another exit are ignored
 			assert.strictEqual(model(ids, { pins: { 1: [alt.id] } }).rows[0].pinned, undefined);
 		});
+		it('a pin through a system that is no valid target any more is dropped (incursion, jam, setting)', () => {
+			const ids = [pick(3).id];
+			const row = model(ids).rows[0];
+			const alt = jumpRange.alternatives(JITA, row.path[1], 7, INDEX, S, model(ids).plan).filter(a => a.id !== row.path[0])[0];
+			const pins = { [ids[0]]: [alt.id] };
+			assert.strictEqual(model(ids, { pins: pins }).rows[0].pinned, true);
+			const plain = model(ids).rows[0];
+			const inc = model(ids, { pins: pins, live: { incursion: { [alt.id]: true }, rev: 'i' } }).rows[0];
+			assert.strictEqual(inc.pinned, false);
+			assert.ok(inc.path.indexOf(alt.id) < 0 && inc.jumps === plain.jumps);
+			const jammed = model(ids, { pins: pins, jammed: { [alt.id]: { setBy: 'x', age: 1 } } }).rows[0];
+			assert.ok(jammed.pinned === false && jammed.path.indexOf(alt.id) < 0);
+			// a Black Ops ship (covert) and the "ignore" setting keep the pin
+			assert.strictEqual(model(ids, { pins: pins, jammed: { [alt.id]: { setBy: 'x', age: 1 } } }, { jammed: 'ignore' }).rows[0].pinned, true);
+			assert.strictEqual(model(ids, { pins: pins, live: { incursion: { [alt.id]: true }, rev: 'i' } }, { avoidIncursions: false }).rows[0].pinned, true);
+			// the engine: the prefix is checked against the options it is given
+			const opts = Object.assign({}, model(ids).plan, { incursion: { [alt.id]: true }, avoidIncursions: true });
+			const via = jumpRange.routeVia([JITA, alt.id], ids[0], 7, INDEX, S, opts, 5);
+			assert.deepStrictEqual([via.pinDropped, via.path.indexOf(alt.id)], [true, -1]);
+		});
 		it('homeModel keeps the planner options for the other-systems list', () => {
 			const m = model([pick(3).id], { live: { stations: stations, rev: 'a' } });
 			assert.strictEqual(m.plan.prefer, 'jumps');
 			assert.strictEqual(m.plan.stations, stations);
 			assert.strictEqual(m.plan.reduction, 0);
+		});
+	});
+
+	describe('From exit with incursions', () => {
+		const exitID = sid('Amamake');
+		const model = (live, settings) => jumpPlanner.model({ exitID: exitID, index: INDEX, systems: S, regions: appData.regions, map: null,
+			settings: jumpPlanner.settings({ jumpRange: settings || {} }), presets: PRESETS, jammed: {}, gates: {}, live: live });
+		const base = model(null);
+		const target = base.rows.filter(r => !r.blocked)[3];
+		const live = { incursion: { [target.id]: true }, rev: 'i' };
+		it('an incursion system is shown like a jammed one: blocked and marked, counted as jammed', () => {
+			const m = model(live);
+			const r = m.rows.find(x => x.id === target.id);
+			assert.deepStrictEqual([r.blocked, r.jammed, r.incursion], [true, true, true]);
+			assert.strictEqual(m.counts.inRange, base.counts.inRange - 1);
+			assert.strictEqual(m.counts.jammed, base.counts.jammed + 1);
+			assert.ok(/>incursion</.test(jumpPlanner.listHtml([r], { key: 'ly', dir: 1 }, jumpPlanner.settings({}), false, null)));
+			assert.ok(!base.rows.find(x => x.id === target.id).incursion);
+		});
+		it('"Hide" hides it like the jammed ones', () => {
+			assert.ok(!model(live, { jammed: 'hide' }).rows.some(x => x.id === target.id));
+		});
+		it('"Avoid incursions" off and covert ships (Black Ops) leave it a normal target', () => {
+			assert.strictEqual(model(live, { avoidIncursions: false }).rows.find(x => x.id === target.id).blocked, false);
+			const covert = model(live, { ship: 'group-898' }).rows.find(x => x.id === target.id);
+			assert.strictEqual(covert.blocked, false);
+		});
+		it('without live data nothing changes', () => {
+			assert.deepStrictEqual(model({ rev: 'x' }).rows.map(r => r.id), base.rows.map(r => r.id));
 		});
 	});
 

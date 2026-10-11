@@ -327,7 +327,8 @@ const jumpPlanner = {
 
 	/**
 	 * Everything the panel shows for one exit.
-	 * @param ctx {exitID, index, systems, regions, map (gate map), settings, presets, jammed: {id: {setBy, age}}, gates: {id: jumps}}
+	 * @param ctx {exitID, index, systems, regions, map (gate map), settings, presets, jammed: {id: {setBy, age}}, gates: {id: jumps},
+	 *   live: {incursion: {id: true}} (optional)}
 	 * @return {range, preset, fuel ({hull, levels} or null), rows: [{id, name, sec, secText, region, ly, band, gates, jammed, blocked, jam, fuel}], counts}
 	 */
 	model: function(ctx) {
@@ -336,9 +337,11 @@ const jumpPlanner = {
 		const covert = !!(r.preset && r.preset.covert);
 		const jammedIDs = {};
 		Object.keys(ctx.jammed || {}).forEach(function(id) { jammedIDs[id] = true; });
+		// Systems in a Sansha incursion are jammed too ("Avoid incursions"): shown like cyno-jammed ones (marked, or hidden with "Hide")
+		const incursion = s.avoidIncursions !== false && ctx.live && ctx.live.incursion ? ctx.live.incursion : {};
 		const opts = {
 			lowsec: s.lowsec, nullsec: s.nullsec, covert: covert,
-			jammed: s.jammed === "ignore" ? {} : jammedIDs, showJammed: s.jammed === "mark"
+			jammed: Object.assign({}, s.jammed === "ignore" ? {} : jammedIDs, incursion), showJammed: s.jammed !== "hide"
 		};
 		const list = jumpRange.inRange(ctx.exitID, ctx.index, r.range, ctx.systems, opts);
 		const fuel = jumpPlanner.fuelSetup(r.preset, s);
@@ -349,7 +352,7 @@ const jumpPlanner = {
 			return {
 				id: hit.id, name: sys.name || String(hit.id), sec: Number(sys.security), secText: jumpPlanner.secText(sys.security),
 				region: region, ly: hit.ly, band: Math.min(hit.band, jumpPlanner.BAND_COLORS.length - 1), gates: gates === undefined ? null : gates,
-				jammed: !!jammedIDs[hit.id], blocked: !!hit.blocked, jam: (ctx.jammed || {})[hit.id] || null,
+				jammed: !!jammedIDs[hit.id] || !!incursion[hit.id], incursion: !!incursion[hit.id], blocked: !!hit.blocked, jam: (ctx.jammed || {})[hit.id] || null,
 				fuel: fuel ? jumpRange.fuelPerJump(hit.ly, fuel.hull, fuel.levels) : null
 			};
 		});
@@ -581,7 +584,7 @@ const jumpPlanner = {
 				+ "systems in range.</td></tr>";
 		}
 		rows.forEach(function(r) {
-			const action = r.blocked ? "<span class='jp-jammed-text' title='Cyno-jammed: a normal cyno can't be lit here'>jammed</span>"
+			const action = r.blocked ? "<span class='jp-jammed-text' title='" + (r.incursion ? "In a Sansha incursion: its cyno jammer stops a normal cyno" : "Cyno-jammed: a normal cyno can't be lit here") + "'>" + (r.incursion ? "incursion" : "jammed") + "</span>"
 				: "<a href='#' class='jp-dest' title='Set destination in game'>Dest</a>";
 			html += "<tr data-jp-id='" + r.id + "' class='" + (r.blocked ? "jp-row-blocked" : "") + "'>"
 				+ "<td class='jp-col-name'>" + esc(r.name) + (r.jammed && !r.blocked ? " <span class='jp-jammed-tag' title='" + esc(covert ? "Cyno-jammed: only a covert cyno works here" : "Marked cyno-jammed (shown as in range in Settings)") + "'>jammed</span>" : "") + "</td>"
@@ -950,7 +953,7 @@ const jumpPlanner = {
 			if (pin && pin.length && route.jumps) {
 				// A midpoint the user chose: keep the jumps up to it, plan the rest from there
 				const via = jumpRange.routeVia([ctx.startID].concat(pin), route.id, r.range, ctx.index, ctx.systems, opts, jumpPlanner.HOME_MAX_JUMPS);
-				if (via.jumps) { route = Object.assign(route, via, { pinned: true }); }
+				if (via.jumps) { route = Object.assign(route, via, { pinned: !via.pinDropped }); }
 			}
 			const sys = ctx.systems[route.id] || {};
 			const path = ctx.paths[route.id];
@@ -1668,12 +1671,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				state.gates[exitID] = jumpRange.gateJumps(gateMap(), exitID);
 			}
 			return { exitID: exitID, index: d.index, coords: d.coords, systems: systems(), regions: regions(), map: gateMap(),
-				settings: s, presets: d.presets, jammed: jammedNow(), gates: state.gates[exitID] };
+				settings: s, presets: d.presets, jammed: jammedNow(), gates: state.gates[exitID], live: liveData() };
 		}
 
 		function countFor(exitID) {
 			const s = current();
-			const key = exitID + "|" + JSON.stringify([s.ship, s.jdc, s.cap, s.lowsec, s.nullsec, s.jammed]);
+			const key = exitID + "|" + JSON.stringify([s.ship, s.jdc, s.cap, s.lowsec, s.nullsec, s.jammed, s.avoidIncursions, state.inc.rev]);
 			if (state.counts[key] === undefined) {
 				const ctx = context(exitID);
 				state.counts[key] = jp.model(ctx).counts.inRange;

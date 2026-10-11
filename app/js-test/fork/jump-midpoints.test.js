@@ -287,7 +287,20 @@ describe('jumpRange midpoint scoring', () => {
 			assert.deepStrictEqual(f.cooldowns, [6, 6]);		// max(1 + 5, 0 / 10), then max(6, 60 / 10)
 			assert.strictEqual(f.waitTotal, 12);
 			assert.strictEqual(f.fatigueEnd, 300);			// 60 -> min(300, 60 x 6)
-			assert.strictEqual(f.cooldownEnd, 30);			// max(6, 300 / 10)
+			close(f.cooldownEnd, 29.4);			// max(6, 294 / 10): 300 less the 6 minutes waited
+		});
+		it('the wiki example: 5 LY carrier jumps, waiting out each cooldown: waits 6, 6, 29.4 min; fatigue decays while waiting', () => {
+			// https://wiki.eveuniversity.org/Jump_fatigue: after jump 1 JF 60 min, after waiting 6 min 54; after jump 2 5 h (cap),
+			// after waiting 6 min 4 h 54 min; jump 3 needs 4 h 54 min / 10 = 29.4 min (the page rounds it to the 30 min cap)
+			const f = jumpRange.fatigue([5, 5, 5], 0);
+			assert.deepStrictEqual(f.cooldowns, [6, 6]);
+			close(f.cooldownEnd, 29.4);
+			assert.strictEqual(f.fatigueEnd, 300);
+			close(jumpRange.fatigue([5, 5], 0).fatigueEnd, 300);
+			close(jumpRange.fatigue([5], 0).fatigueEnd, 60);
+			const two = jumpRange.fatigue([5, 4], 0);		// 60 -> 54; jump 2 (4 LY): max(50, 54 x 5) = 270
+			close(two.fatigueEnd, 270);
+			close(two.cooldownEnd, 5.4);
 		});
 		it('the first jump: fatigue 10 x (1 + LY) minutes, wait 1 + LY', () => {
 			const f = jumpRange.fatigue([3.5], 0);
@@ -295,14 +308,15 @@ describe('jumpRange midpoint scoring', () => {
 		});
 		it('the wait comes from fatigue / 10 once that is larger', () => {
 			const f = jumpRange.fatigue([1, 1, 1, 1], 0);
-			// F: 0 -> 20 -> 40 -> 80 -> 160; waits max(2, F_before / 10): 2, 2, 4
-			assert.deepStrictEqual(f.cooldowns, [2, 2, 4]);
-			assert.strictEqual(f.fatigueEnd, 160);
+			// F after each jump (then less the wait): 20 -> 18; 36 -> 34; 68 -> 64.6; 129.2; waits max(2, F_before / 10): 2, 2, 3.4
+			assert.strictEqual(f.cooldowns.length, 3);
+			[2, 2, 3.4].forEach((w, i) => close(f.cooldowns[i], w));
+			close(f.fatigueEnd, 129.2);
 		});
 		it('Jump Freighter 90% and Black Ops 75% reduce the distance', () => {
 			const jf = jumpRange.fatigue([7, 7], jumpRange.fatigueReduction(902));
 			close(jf.cooldowns[0], 1.7);
-			close(jf.fatigueEnd, 28.9);			// max(17, 17 x 1.7)
+			close(jf.fatigueEnd, 26.01);			// 17 less the 1.7 min wait = 15.3; max(17, 15.3 x 1.7)
 			const bo = jumpRange.fatigue([4], jumpRange.fatigueReduction(898));
 			assert.deepStrictEqual([bo.fatigueEnd, bo.cooldownEnd], [20, 2]);
 			assert.deepStrictEqual([883, 902, 898, 547, 485, 30, 659, 1538, 4594].map(jumpRange.fatigueReduction), [0.9, 0.9, 0.75, 0, 0, 0, 0, 0, 0]);
