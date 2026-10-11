@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 77,
+      "date": "2026-10-11",
+      "title": "Hide cosmic anomalies",
+      "description": "Pasting your scanner window used to fill the signature list with cosmic anomalies. Choose Show, Hide or Don't import under Settings > Signatures > \"Anomalies in the signature list\". Hidden anomalies stay in the list data and are folded away behind an \"N anomalies hidden - show\" line; Show is the default.\n\nThe wormhole dialog also now offers the Drifter holes (S877, B735, V928, C414, R259) when the destination is a Drifter system, and its Stable and EOL buttons explain the game's new \"Reliable lifetime\" and \"Expired\" wording.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-77-sig-anomalies-gamedata.png",
+          "caption": "Anomalies folded away in the signature list"
+        }
+      ]
+    },
+    {
       "pr": 76,
       "date": "2026-10-11",
       "title": "Threat: 90-day activity and busiest hours",

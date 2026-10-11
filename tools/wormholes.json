@@ -99,11 +99,11 @@
 "V898": {"life": "16 Hours", "from": "Thera", "leadsTo": "Low-Sec", "mass": 2000000000, "jump": 1000000000},
 "E587": {"life": "16 Hours", "from": "Thera", "leadsTo": "Null-Sec", "mass": 3000000000, "jump": 1000000000},
 
-"S877": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J055520", "mass": 750000000, "jump": 375000000},
-"B735": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J110145", "mass": 750000000, "jump": 375000000},
-"V928": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J164710", "mass": 750000000, "jump": 375000000},
-"C414": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J200727", "mass": 750000000, "jump": 375000000},
-"R259": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "J174618", "mass": 750000000, "jump": 375000000},
+"S877": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-14", "mass": 750000000, "jump": 375000000},
+"B735": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-15", "mass": 750000000, "jump": 375000000},
+"V928": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-16", "mass": 750000000, "jump": 375000000},
+"C414": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-17", "mass": 750000000, "jump": 375000000},
+"R259": {"life": "16 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec" ], "leadsTo": "Class-18", "mass": 750000000, "jump": 375000000},
 
 "C729": {"life": "12 Hours", "from": [ "High-Sec", "Low-Sec", "Null-Sec", "Triglavian" ], "leadsTo": "Triglavian", "mass": 1000000000, "jump": 410000000},
 "F216": {"life": "12 Hours", "from": [ "Class-2", "Class-3", "Class-4", "Class-5", "Class-6" ], "leadsTo": "Triglavian", "mass": 1000000000, "jump": 375000000},

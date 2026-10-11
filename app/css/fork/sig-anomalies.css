@@ -1,0 +1,9 @@
+/* Cosmic anomalies in the signature list (fork feature: sig-anomalies). */
+#sigTable tr.sig-anomaly-hidden { display: none; }
+
+#sigAnomalyBar {
+	padding: 2px 6px;
+	font-size: 11px;
+	text-align: right;
+	opacity: 0.8;
+}
