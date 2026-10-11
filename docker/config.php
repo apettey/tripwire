@@ -38,6 +38,9 @@ define('EVE_SSO_REDIRECT', tw_env('EVE_SSO_REDIRECT',
     (tw_env_bool('TRIPWIRE_HTTPS', true) ? 'https' : 'http') . '://' . tw_env('TRIPWIRE_DOMAIN', 'localhost') . '/index.php?mode=sso'));
 
 define('ENABLE_SEARCH_SCOPE', tw_env_bool('ENABLE_SEARCH_SCOPE', true));
+// Fork (auto-mass-logging): ask tracking characters for their assets to read the active ship's fit. Off by default:
+// EVE SSO refuses scopes not enabled on the CCP developer application.
+define('ENABLE_ASSETS_SCOPE', tw_env_bool('ENABLE_ASSETS_SCOPE', false));
 
 // Discord integration: DISCORD_WEB_HOOK='{"maskID":"https://discord.com/api/webhooks/..."}'
 if (tw_env('DISCORD_WEB_HOOK')) {

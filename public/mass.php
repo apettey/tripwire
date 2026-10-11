@@ -24,6 +24,7 @@ $stmt->bindValue(':maskID', $maskID);
 $stmt->execute();
 
 $output['jumps'] = $stmt->fetchAll(PDO::FETCH_CLASS);
+require_once('../jump_fit.inc.php'); $output['jumps'] = jump_fit_jumps($mysql, $maskID, $wormholeID, $output['jumps']);	// fork: fitted jump mass
 
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
