@@ -75,7 +75,9 @@ Fork features that need their own tables create them on first use with `CREATE T
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
 and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
 `fork_watchlist_baseline` / `fork_watchlist_seen` (what the Discord type "Watchlist match" has seen, created by
-`discord_notify.worker.php`; DDL in `docker/sql/watchlist.sql`). The app user therefore
+`discord_notify.worker.php`; DDL in `docker/sql/watchlist.sql`) and `fork_jump_jammed` (cyno-jammed systems marked per
+mask for the [Jump planner](#jump-planner), created by `public/jump_jammed.php`, DDL in `jumprange/jammed.inc.php`, reference
+copy `docker/sql/jump-jammed.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -472,6 +474,24 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
   (`appData` is plain JSON after `var appData =`), once per worker process and per admin save (about 35 ms); there is
   no copy to regenerate after a game-data update. `watchlist/tests/` is not in the image.
 
+### Jump planner
+
+A range-ring icon on the chain's low-sec / null-sec exits opens the Jump planner panel (`app/js/fork/jump-planner.js`):
+which systems a jump ship reaches from that exit, by distance band, on a top-down mini-map and a list, plus trade-hub
+reach. The range maths is a separate pure engine, `app/js/fork/jump-range.js` (tests: `app/js-test/fork/jump-range.test.js`).
+No runtime calls to third parties and no configuration.
+
+- Static data in `public/jumprange/`: `systems.json` (positions of every gate-reachable k-space system plus Pochven and
+  Zarzakh, 0.001 LY, delta-encoded, about 86 kB) and `ships.json` (every published hull with a jump drive and its base
+  range, dogma attribute 867). Both are generated from CCP's Static Data Export (JSON Lines zip from
+  https://developers.eveonline.com/static-data) with `node jumprange/tools/generate-coords.js <unzipped-sde-dir>`; re-run
+  it after a game update, commit both files and set `jumpPlanner.DATA_VERSION` to the new `meta.version` (a test checks).
+- Cyno-jammed systems are marked by hand per mask (ESI has no public cyno jammer feed): `public/jump_jammed.php`
+  (`GET` lists, `POST mode=set|clear&systemID=`), same session/mask checks and `X-Requested-With` rule as `rally.php`,
+  only systems in `systems.json`, at most 500 per mask. Tests, against the dev database:
+  `docker compose -f docker-compose.dev.yml exec -T app php jumprange/tests/jammed_endpoint_test.php`
+  (`jumprange/tests/` and `jumprange/tools/` are not in the image).
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
@@ -503,7 +523,7 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`, `jumprange/tests/`, `jumprange/tools/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
