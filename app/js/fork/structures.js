@@ -275,11 +275,13 @@ const structures = {
 
 	/**
 	 * One chip per structure owner (ours first, then hostile, then unresolved; most structures first), then up to
-	 * `extraMax` corporations seen in kills here that own none of them.
+	 * `extraMax` corporations seen in kills here that own none of them. Residents set by hand for the mask (Intel panel >
+	 * Set residents) come first: one chip each; one that also owns structures here is that owner's chip (marked `set`).
 	 * @param extra [{id, name, ticker}] corporations from System Threat
-	 * @return [{key, side: ours|hostile|unknown|seen, id, type, ticker, name, count}]
+	 * @param set {entities: [{kind, id, name, ticker}], setBy} residents set by hand, or null
+	 * @return [{key, side: ours|hostile|unknown|seen|set, id, type, ticker, name, count, set, setBy}]
 	 */
-	residents: function(rows, extra, extraMax) {
+	residents: function(rows, extra, extraMax, set) {
 		const by = {};
 		const out = [];
 		rows.forEach(function(r) {
@@ -294,12 +296,29 @@ const structures = {
 		});
 		const rank = { ours: 0, hostile: 1, unknown: 2 };
 		out.sort(function(a, z) { return rank[a.side] - rank[z.side] || z.count - a.count || (a.ticker < z.ticker ? -1 : a.ticker > z.ticker ? 1 : 0); });
+		const first = [];
+		const setKeys = {};
+		((set && set.entities) || []).forEach(function(e) {
+			const id = parseInt(e.id, 10);
+			if (!(id > 0)) { return; }
+			const type = e.kind === "alliance" ? "alliance" : "corporation";
+			const key = type + ":" + id;
+			if (setKeys[key]) { return; }
+			setKeys[key] = true;
+			if (by[key]) {
+				by[key].set = true; by[key].setBy = set.setBy || "";
+				out.splice(out.indexOf(by[key]), 1);
+				first.push(by[key]);
+			} else {
+				first.push({ key: key, side: "set", set: true, setBy: set.setBy || "", id: id, type: type, ticker: e.ticker || "", name: e.name || "", count: 0 });
+			}
+		});
 		(extra || []).slice(0, 20).forEach(function(c) {
 			const key = "corporation:" + c.id;
-			if (by[key] || out.filter(function(o) { return o.side === "seen"; }).length >= (extraMax === undefined ? 3 : extraMax)) { return; }
+			if (by[key] || setKeys[key] || out.filter(function(o) { return o.side === "seen"; }).length >= (extraMax === undefined ? 3 : extraMax)) { return; }
 			out.push({ key: key, side: "seen", id: c.id, type: "corporation", ticker: c.ticker || "", name: c.name || "", count: 0 });
 		});
-		return out;
+		return first.concat(out);
 	},
 
 	// ---- Rendering ----
@@ -378,9 +397,9 @@ const structures = {
 	chipHtml: function(c, highlight) {
 		const esc = structures.escape;
 		const label = c.ticker || c.name || "?";
-		const tip = (c.name ? c.name : label) + (c.side === "seen" ? " – seen in kills here" : " – " + c.count + " structure" + (c.count === 1 ? "" : "s"))
-			+ (c.id ? ". Arrow: zKillboard / EveWho" : "");
-		let html = "<span class='str-chip str-chip-" + esc(c.side) + (highlight === c.key ? " str-chip-on" : "") + "' data-key='" + esc(c.key) + "' title='" + esc(tip) + "'>"
+		const tip = (c.name ? c.name : label) + (c.side === "seen" ? " – seen in kills here" : c.count ? " – " + c.count + " structure" + (c.count === 1 ? "" : "s") : "")
+			+ (c.set ? " – set as a resident" + (c.setBy ? " by " + c.setBy : "") : "") + (c.id ? ". Arrow: zKillboard / EveWho" : "");
+		let html = "<span class='str-chip str-chip-" + esc(c.side) + (c.set ? " str-chip-isset" : "") + (highlight === c.key ? " str-chip-on" : "") + "' data-key='" + esc(c.key) + "' title='" + esc(tip) + "'>"
 			+ esc(label) + (c.count ? " <b>" + c.count + "</b>" : "");
 		if (c.id && c.type) {
 			html += " <a class='str-chip-link' href='https://zkillboard.com/" + esc(c.type) + "/" + c.id + "/' target='_blank' rel='noopener noreferrer' title='zKillboard (EveWho: right-click, or evewho.com/"
@@ -436,7 +455,7 @@ const structures = {
 		const esc = structures.escape;
 		let html = "";
 		if (s.error) { html += "<div class='str-error'>" + esc(s.error) + "</div>"; }
-		const chips = structures.residents(s.rows, s.extraCorps);
+		const chips = structures.residents(s.rows, s.extraCorps, undefined, s.setResidents);
 		if (chips.length) {
 			html += "<div class='str-residents' title='Who lives here: owners of the structures (ours green, hostile orange), outlined = corporations seen in kills here'>"
 				+ chips.map(function(c) { return structures.chipHtml(c, s.highlight); }).join("") + "</div>";
@@ -534,6 +553,9 @@ const structures = {
 	showGone: false,
 	xhr: null,
 	notice: "",
+	view: "system",		// "system" (this system's structures) or "timers" (the board of every active timer of the mask)
+	setRes: null,		// residents set by hand for this system (system_residents.php), see setResidents()
+	setResAt: 0,
 
 	opts: function() { return typeof options !== "undefined" ? options : null; },
 	isSystem: function(id) { id = parseInt(id, 10); return id >= 30000000 && id < 33000000; },
@@ -556,6 +578,29 @@ const structures = {
 		} catch (e) { return []; }
 	},
 
+	/** Residents set by hand for the viewed system: our own poll, or System Threat's copy when it is newer (just edited) */
+	setResidents: function() {
+		let set = structures.setRes;
+		if (typeof systemThreat !== "undefined" && systemThreat.detailID === structures.systemID && (systemThreat.residentsAt || 0) > structures.setResAt) {
+			set = systemThreat.residentsSet || null;
+		}
+		return set && set.systemID === structures.systemID && set.entities && set.entities.length ? set : null;
+	},
+
+	fetchSetResidents: function() {
+		const id = structures.systemID;
+		if (!id) { return; }
+		if (structures.resXhr) { structures.resXhr.abort(); }
+		const xhr = $.ajax({ url: "system_residents.php", type: "GET", dataType: "JSON", cache: false, timeout: 15000, data: { systemID: id } });
+		structures.resXhr = xhr;
+		xhr.done(function(response) {
+			if (id !== structures.systemID) { return; }
+			structures.setRes = response && response.residents ? response.residents : null;
+			structures.setResAt = Date.now();
+			structures.renderPanel();
+		}).always(function() { if (structures.resXhr === xhr) { structures.resXhr = null; } });
+	},
+
 	absorb: function(response) {
 		if (!response || response.systemID !== structures.systemID) { return; }
 		if (typeof response.serverTime === "number") { structures.offset = response.serverTime - Math.floor(Date.now() / 1000); }
@@ -569,9 +614,12 @@ const structures = {
 	},
 
 	fetch: function() {
-		if (!structures.enabled(structures.opts()) || !structures.isSystem(structures.systemID)) { return; }
+		if (!structures.enabled(structures.opts())) { return; }
+		if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.fetchBoard(); }
+		if (!structures.isSystem(structures.systemID)) { return; }
 		if (document.hidden) { structures.missed = true; return; }
 		if (structures.xhr) { structures.xhr.abort(); }
+		structures.fetchSetResidents();
 		const id = structures.systemID;
 		const xhr = $.ajax({ url: structures.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000,
 			data: { action: "list", systemID: id, have: structures.hash } });
@@ -632,6 +680,22 @@ const structures = {
 		if (!$w.length) { return; }
 		const nowSec = structures.nowSec();
 		const id = structures.systemID;
+		if (typeof structureTimers !== "undefined") { structureTimers.renderInfo(); }
+		const timersView = structures.view === "timers" && typeof structureTimers !== "undefined";
+		$w.toggleClass("str-view-timers", timersView).find(".str-board").toggleClass("str-on", timersView);
+		$w.find(".str-title").text(timersView ? "Timers" : "Structures");
+		if (timersView) {
+			const inChain = {};
+			structureTimers.chainIDs.forEach(function(sid) { inChain[sid] = true; });
+			const board = { rows: structureTimers.boardData || [], filters: structureTimers.filters, nowSec: nowSec, inChain: inChain,
+				systemName: structures.systemName, loaded: structureTimers.boardData !== null, error: structureTimers.boardError || "" };
+			$w.find(".str-system").text("");
+			$w.find(".str-count").text(String(structureTimers.boardRows(board.rows, board.filters, nowSec).length || ""));
+			const top = $w.find(".content").scrollTop();
+			$w.find(".str-body").html(structureTimers.boardHtml(board));
+			$w.find(".content").scrollTop(top);
+			return;
+		}
 		$w.find(".str-system").text(id ? structures.systemName(id) : "");
 		$w.find(".str-count").text(structures.headerText(structures.rows, nowSec));
 		// The edited row was removed (by someone else): close the form and say so
@@ -655,7 +719,7 @@ const structures = {
 		const scroll = $content.scrollTop();
 		$w.find(".str-body").html(structures.panelHtml({
 			rows: structures.rows, gone: structures.gone, nowSec: nowSec, highlight: structures.highlight, editing: structures.editing, moreID: structures.moreID,
-			showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
+			showGone: structures.showGone, extraCorps: structures.threatCorps(), setResidents: structures.setResidents(), types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
 		}));
 		structures.notice = "";	// shown once
 		$content.scrollTop(scroll);
@@ -706,11 +770,25 @@ const structures = {
 			if (structures.types() === null && typeof intelScans !== "undefined") { intelScans.loadTypes(); }
 			structures.editing = structures.editing === "new" ? null : "new";
 			structures.redraw();
+		}).on("click", sel + " .str-board", function(e) {
+			e.preventDefault();
+			structures.setView(structures.view === "timers" ? "system" : "timers");
+		}).on("click", sel + " .str-filter", function(e) {
+			e.preventDefault();
+			const f = $(this).attr("data-f");
+			if (f === "hostileOnly" || f === "hideEnded") {
+				structureTimers.filters[f] = !structureTimers.filters[f];
+				structureTimers.saveFilters();
+				structures.renderPanel();
+			}
+		}).on("click", sel + " .str-trow", function() {
+			const id = parseInt($(this).attr("data-sys"), 10);
+			if (structures.isSystem(id) && typeof tripwire !== "undefined") { tripwire.systemChange(id); }
 		}).on("click", sel + " .str-paste", function(e) {
 			e.preventDefault();
 			if (typeof intelScans !== "undefined") { intelScans.openDialog(structures.systemID); }
 		}).on("click", sel + " .str-chip", function(e) {
-			if ($(e.target).closest(".str-chip-link").length) { return; }
+			if ($(e.target).closest(".str-chip-link").length || $(this).hasClass("str-chip-set")) { return; }
 			const key = $(this).attr("data-key");
 			structures.highlight = structures.highlight === key ? null : key;
 			structures.redraw();
@@ -796,7 +874,8 @@ const structures = {
 	widgetHtml: function() {
 		return "<li id='" + structures.WIDGET_ID + "' class='gridWidget'>"
 			+ "<div class='controls'><span class='str-head'><span class='str-title'>Structures</span> <span class='str-system'></span> <span class='str-count'></span></span>"
-			+ "<span class='str-tools'><a href='#' class='str-add' title='Add a structure'>+</a>"
+			+ "<span class='str-tools'><a href='#' class='str-board' title='Timers of all systems (click again to go back)'>" + structures.icon("clock") + "</a>"
+			+ "<a href='#' class='str-add' title='Add a structure'>+</a>"
 			+ "<a href='#' class='str-paste' title='Paste a d-scan'>" + structures.icon("paste") + "</a></span></div>"
 			+ "<div class='content'><div class='str-body'></div></div></li>";
 	},
@@ -836,6 +915,13 @@ const structures = {
 		structures.renderPanel();
 	},
 
+	setView: function(view) {
+		structures.view = view === "timers" ? "timers" : "system";
+		structures.editing = null; structures.moreID = null;
+		if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.fetchBoard(); }
+		structures.redraw();
+	},
+
 	removeWidget: function() {
 		const $w = structures.$widget();
 		if (!$w.length) { return; }
@@ -853,6 +939,7 @@ const structures = {
 		if (!structures.enabled(structures.opts())) {
 			structures.removeWidget();
 			if (structures.xhr) { structures.xhr.abort(); structures.xhr = null; }
+			if (typeof structureTimers !== "undefined") { structureTimers.renderInfo(); }
 			return;
 		}
 		structures.addWidget();
@@ -863,7 +950,7 @@ const structures = {
 		const id = parseInt(systemID, 10);
 		if (id !== structures.systemID) {
 			structures.systemID = structures.isSystem(id) ? id : null;
-			structures.rows = []; structures.gone = []; structures.hash = ""; structures.loaded = false;
+			structures.rows = []; structures.gone = []; structures.hash = ""; structures.loaded = false; structures.setRes = null; structures.setResAt = 0;
 			structures.editing = null; structures.moreID = null; structures.highlight = null; structures.showGone = false;
 			structures.renderPanel();
 		}
@@ -1002,7 +1089,7 @@ const structures = {
 			section: "intel", order: 45, id: "structures-enabled", type: "checkbox", key: "structures",
 			label: "Structures panel:", text: "Show the Structures panel (structures, owners and timers of the viewed system) and the d-scan save option",
 			get: function(o) { return structures.enabled(o); },
-			set: function(o, on) { o.structures = Object.assign({}, o.structures && o.structures.position ? { position: o.structures.position } : {}, { enabled: on }); }
+			set: function(o, on) { o.structures = Object.assign({}, o.structures, { enabled: on }); }
 		});
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.structuresWrapped) {
 			const apply = options.apply;
@@ -1036,6 +1123,7 @@ const structures = {
 		});
 		setInterval(structures.fetch, structures.POLL_MS);
 		setInterval(structures.renderPanel, 20000);	// countdowns and ages move on between polls
+		setInterval(function() { if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.tick(); } }, 1000);
 		structures.bindPanel();
 		structures.sync();
 	}

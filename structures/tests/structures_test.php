@@ -140,6 +140,36 @@ check('another resolved owner is hostile', structures_get($mysql, MASK_A, $id, $
 structures_update($mysql, MASK_A, $id, structures_changes($mysql, ['owner' => ''], $now)[0], 'Scout');
 check('no owner is neutral', structures_get($mysql, MASK_A, $id, $friendly)['side'], 'unknown');
 
+// Markers and the timers board (phase 2)
+$t = time();
+$ms = SYSTEM + 5;
+$mscan = structures_parse_scan("35832\tJ163702 - Fort One\tAstrahus\t10 km\n35832\tJ163702 - Fort Two\tAstrahus\t11 km\n16213\t\tCaldari Control Tower\t5,000 km\n33474\t\tMobile Depot\t12 km", 'J163702');
+structures_apply_scan($mysql, MASK_A, $ms, $mscan['structures'], 0, 'Scout');
+structures_apply_scan($mysql, MASK_A, $ms + 1, [[33474, 'Mobile Depot', 'deployable', 'Depot', null, '', 'Depot', false]], 0, 'Scout');
+$byType = [];
+foreach (structures_list($mysql, MASK_A, $ms, $friendly)['structures'] as $r) $byType[$r['typeName']][] = $r['id'];
+structures_update($mysql, MASK_A, $byType['Astrahus'][0], structures_changes($mysql, ['owner' => 'zzs hostile corp', 'timerKind' => 'armor', 'timerAt' => gmdate('Y-m-d H:i', $t + 7200)], $t)[0], 'Scout');
+structures_update($mysql, MASK_A, $byType['Astrahus'][1], structures_changes($mysql, ['owner' => 'ZZH', 'timerKind' => 'hull', 'timerAt' => gmdate('Y-m-d H:i', $t - 1800)], $t)[0], 'Scout');
+$depot = structures_list($mysql, MASK_A, $ms + 1, $friendly)['structures'][0]['id'];
+structures_update($mysql, MASK_A, $depot, structures_changes($mysql, ['timerKind' => 'other', 'timerAt' => gmdate('Y-m-d H:i', $t + 600)], $t)[0], 'Scout');
+$mk = structures_markers($mysql, MASK_A, [$ms, $ms + 1, $ms + 2, 'junk'], $friendly, $t);
+check('markers: systems with something, others left out', array_keys($mk), [$ms, $ms + 1]);
+check('markers: counts Upwell and POS only, hostile when an owner is hostile', [$mk[$ms]['count'], $mk[$ms]['hostile']], [3, true]);
+check('markers: types by count then name', $mk[$ms]['types'], [['Astrahus', 2], ['Caldari Control Tower', 1]]);
+check('markers: owner tickers, no duplicates', $mk[$ms]['owners'], ['ZZX', 'ZZH']);
+check('markers: the upcoming timer wins over the elapsed one', [$mk[$ms]['nextTimer']['kind'], $mk[$ms]['nextTimer']['typeName']], ['armor', 'Astrahus']);
+check('markers: a deployable alone only has its timer', [$mk[$ms + 1]['count'], $mk[$ms + 1]['nextTimer']['kind']], [0, 'other']);
+check('markers: other masks see nothing', structures_markers($mysql, MASK_B, [$ms, $ms + 1], $friendly, $t), []);
+check('markers: no systems', structures_markers($mysql, MASK_A, [], $friendly, $t), []);
+$mine = function ($rows) use ($ms) { return array_values(array_filter($rows, function ($r) use ($ms) { return $r['systemID'] >= $ms; })); };	// the earlier tests left a timer in SYSTEM
+$timers = structures_timers($mysql, MASK_A, $friendly, $t);
+check('timers: soonest first, elapsed under 2 h included', array_map(function ($r) { return $r['timerKind']; }, $mine($timers)), ['hull', 'other', 'armor']);
+check('timers: limit', count(structures_timers($mysql, MASK_A, $friendly, $t, 2)), 2);
+check('timers: ended more than 2 h ago drop off', count($mine(structures_timers($mysql, MASK_A, $friendly, $t + 4 * 3600))), 0);
+structures_set_gone($mysql, MASK_A, $byType['Astrahus'][0], 'destroyed', 'Scout');
+check('timers: a gone structure has no timer on the board', count($mine(structures_timers($mysql, MASK_A, $friendly, $t))), 2);
+check('timers: other masks see nothing', structures_timers($mysql, MASK_B, $friendly, $t), []);
+
 // Prune: deployables not seen for 7 days go, Upwell and POS never, gone rows after 30 days
 $twin = (int) $mysql->query("SELECT id FROM fork_structures WHERE maskID = " . MASK_A . " AND systemID = " . SYSTEM . " AND kind = 'upwell' AND id <> $id")->fetchColumn();
 structures_set_gone($mysql, MASK_A, $twin, 'destroyed', 'Scout');

@@ -12,6 +12,10 @@
 //				POST action=add&systemID=<id>&typeName=<name>[&typeID=][&name=][&owner=][&state=][&timerKind=&timerAt=][&note=]
 //				POST action=update&id=<id>[&owner= | &ownerID=&ownerType=][&state=][&timerKind=&timerAt=][&note=][&seenNow=1]
 //				POST action=gone&id=<id>&state=destroyed|removed|restore
+//				GET  action=markers&systemIDs=<id,id,...>[&have=<hash>]
+//				                                              -> per system on the map {count, hostile, types, owners, lastSeen, nextTimer}
+//				                                                 and the mask's next 20 timers (chain map markers, in-app alerts)
+//				GET  action=timers                            -> every active timer of the mask (the Structures panel's Timers view)
 //				Every write needs X-Requested-With: XMLHttpRequest (like intel_scans.php) and returns the system's list. Anyone with access to the mask may write. Every query filters on the session's mask.
 //				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups).
 //***********************************************************
@@ -142,7 +146,34 @@ try {
 			if (!structures_set_gone($mysql, $mask, $existing['id'], $state, $by)) structures_fail(404, 'Not found');
 		}
 	} else if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-		if ((isset($_GET['action']) ? $_GET['action'] : '') !== 'list') structures_fail(400, 'Unknown action');
+		$action = isset($_GET['action']) ? $_GET['action'] : '';
+		if ($action === 'markers' || $action === 'timers') {
+			$output['serverTime'] = $now;
+			if ($action === 'timers') {
+				$output['timers'] = structures_timers($mysql, $mask, $friendly, $now);
+			} else {
+				$raw = isset($_GET['systemIDs']) ? $_GET['systemIDs'] : '';
+				$ids = is_array($raw) ? $raw : explode(',', is_string($raw) ? $raw : '');
+				if (count($ids) > STRUCTURES_MARKERS_MAX) structures_fail(400, 'Too many systems');
+				$systemIDs = array();
+				foreach ($ids as $id) {
+					if (trim((string) $id) !== '') $systemIDs[] = structures_system_param(trim((string) $id));
+				}
+				$output['systems'] = (object) structures_markers($mysql, $mask, $systemIDs, $friendly, $now);
+				$output['next'] = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_NEXT);
+			}
+			$hash = md5(json_encode(array($output['systems'] ?? null, $output['next'] ?? null, $output['timers'] ?? null)));
+			$have = isset($_GET['have']) ? $_GET['have'] : '';
+			if ($have !== '' && is_string($have) && hash_equals($hash, $have)) {
+				$output = array('unchanged' => true, 'serverTime' => $now);
+			} else {
+				$output['hash'] = $hash;
+			}
+			$output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
+			echo json_encode($output);
+			exit();
+		}
+		if ($action !== 'list') structures_fail(400, 'Unknown action');
 		$systemID = structures_system_param(isset($_GET['systemID']) ? $_GET['systemID'] : '');
 	} else {
 		structures_fail(405, 'Method not allowed');

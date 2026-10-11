@@ -149,6 +149,22 @@ check('restore', [count($body['gone']), count($body['structures'])], [0, 4]);
 
 check('add: a Control Tower is fine', call('POST', ['action' => 'add', 'systemID' => SYSTEM, 'typeName' => 'Caldari Control Tower'])[0], 200);
 
+// --- Markers and timers (GET, no X-Requested-With needed) ---
+call('POST', ['action' => 'update', 'id' => $athanor['id'], 'owner' => 'Hostile Text Corp']);
+[$status, $body] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1)]);
+check('markers: systems with structures, next timers, hash', [$status, array_keys((array) $body['systems']), count($body['next']) >= 1, strlen($body['hash'])], [200, [SYSTEM], true, 32]);
+check('markers: summary of the system', [$body['systems'][SYSTEM]['count'], $body['systems'][SYSTEM]['nextTimer']['kind']], [5, 'hull']);
+[$status, $unchanged] = call('GET', ['action' => 'markers', 'systemIDs' => SYSTEM . ',' . (SYSTEM + 1), 'have' => $body['hash']]);
+check('markers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['systems'])], [true, false]);
+check('markers: a systemID that is not a system: 400', call('GET', ['action' => 'markers', 'systemIDs' => '12'])[0], 400);
+check('markers: more than 500 systems: 400', call('GET', ['action' => 'markers', 'systemIDs' => implode(',', range(31000001, 31000501))])[0], 400);
+check('markers: no systems is an empty answer', [call('GET', ['action' => 'markers'])[0], (array) call('GET', ['action' => 'markers'])[1]['systems']], [200, []]);
+check('markers: another mask sees nothing', [(array) call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['systems'], call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['next']], [[], []]);
+[$status, $body] = call('GET', ['action' => 'timers']);
+check('timers: the active timers of the mask', [$status, array_map(function ($r) { return $r['typeName']; }, $body['timers'])], [200, ['Athanor']]);
+check('timers: no session: 403', call('GET', ['action' => 'timers'], [])[0], 403);
+check('timers: another mask sees nothing', call('GET', ['action' => 'timers'], $other)[1]['timers'], []);
+
 // --- Rate limit: 20 writes a minute ---
 $mysql->exec('DELETE FROM fork_structure_writes WHERE userID = 900021');
 $keepRate = true;

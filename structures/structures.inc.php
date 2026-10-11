@@ -263,14 +263,17 @@ function structures_select() {
         . structures_ts('goneAt') . ' AS goneAt, goneBy FROM fork_structures';
 }
 
+/** 'ours' / 'hostile' for a resolved owner, 'unknown' without one. @param array $friendly intel_friendly_ids() */
+function structures_side(array $r, array $friendly) {
+    if ($r['ownerID'] === null) return 'unknown';
+    $ours = in_array((int) $r['ownerID'], $r['ownerType'] === 'alliance' ? $friendly['alliances'] : $friendly['corporations'], true);
+    return $ours ? 'ours' : 'hostile';
+}
+
 /** A database row as the browser gets it. @param array $friendly intel_friendly_ids() */
 function structures_format(array $r, array $friendly) {
     $int = function ($v) { return $v === null ? null : (int) $v; };
-    $side = 'unknown';
-    if ($r['ownerID'] !== null) {
-        $ours = in_array((int) $r['ownerID'], $r['ownerType'] === 'alliance' ? $friendly['alliances'] : $friendly['corporations'], true);
-        $side = $ours ? 'ours' : 'hostile';
-    }
+    $side = structures_side($r, $friendly);
     return [
         'id' => (int) $r['id'], 'systemID' => (int) $r['systemID'], 'typeID' => $int($r['typeID']), 'typeName' => $r['typeName'],
         'kind' => $r['kind'], 'name' => $r['name'],
@@ -312,6 +315,82 @@ function structures_list(PDO $db, $mask, $systemID, array $friendly) {
         if ($row['goneAt'] === null) $live[] = $row; else $gone[] = $row;
     }
     return ['structures' => $live, 'gone' => $gone, 'hash' => md5(json_encode([$live, $gone]))];
+}
+
+// ---- Timers board and chain map markers (phase 2) ----
+
+const STRUCTURES_MARKERS_MAX = 500;   // systems per markers request
+const STRUCTURES_BOARD_MAX   = 200;   // rows of the timers board
+const STRUCTURES_NEXT        = 20;    // next timers sent with the markers
+
+/** WHERE part for live rows (not gone, deployables not seen for a week hidden as in structures_list) */
+function structures_live_where() {
+    return "goneAt IS NULL AND NOT (kind = 'deployable' AND lastSeenAt < UTC_TIMESTAMP() - INTERVAL " . (int) STRUCTURES_DEPLOYABLE_DAYS . ' DAY)';
+}
+
+/**
+ * Active timers of the mask, soonest first: not ended more than 2 hours ago, whatever the system (in the chain or not).
+ * @return array rows as structures_format()
+ */
+function structures_timers(PDO $db, $mask, array $friendly, $now, $limit = STRUCTURES_BOARD_MAX) {
+    $stmt = $db->prepare(structures_select() . ' WHERE maskID = :mask AND ' . structures_live_where() . ' AND timerAt IS NOT NULL
+        AND timerAt >= DATE_ADD(\'1970-01-01\', INTERVAL :from SECOND) ORDER BY timerAt, id LIMIT ' . max(1, (int) $limit));
+    $stmt->bindValue(':mask', $mask);
+    $stmt->bindValue(':from', (int) $now - STRUCTURES_TIMER_PAST, PDO::PARAM_INT);
+    if (!$stmt->execute()) throw new PDOException('Could not read fork_structures');
+    return array_map(function ($r) use ($friendly) { return structures_format($r, $friendly); }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
+/**
+ * Per system summary for the chain map: the Upwell / POS rows (count, hostile, types, owners, newest sighting) and the
+ * soonest active timer of any live row (an upcoming one before an elapsed one). Systems with neither are left out.
+ * @param int[] $systemIDs
+ * @return array systemID => ['count', 'hostile', 'types' => [[name, n]], 'owners' => [ticker], 'lastSeen', 'nextTimer' => null | [...]]
+ */
+function structures_markers(PDO $db, $mask, array $systemIDs, array $friendly, $now) {
+    $ids = array_values(array_unique(array_map('intval', $systemIDs)));
+    if (!$ids) return [];
+    $stmt = $db->prepare('SELECT id, systemID, typeName, kind, name, ownerID, ownerType, ownerTicker, ownerText, timerKind, '
+        . structures_ts('timerAt') . ' AS timerAt, ' . structures_ts('lastSeenAt') . ' AS lastSeenAt FROM fork_structures
+        WHERE maskID = :mask AND ' . structures_live_where() . ' AND systemID IN (' . implode(',', $ids) . ') ORDER BY id');
+    $stmt->bindValue(':mask', $mask);
+    if (!$stmt->execute()) throw new PDOException('Could not read fork_structures');
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $sid = (int) $r['systemID'];
+        if (!isset($out[$sid])) $out[$sid] = ['count' => 0, 'hostile' => false, 'types' => [], 'owners' => [], 'lastSeen' => null, 'nextTimer' => null];
+        $e = &$out[$sid];
+        if ($r['kind'] !== 'deployable') {
+            $e['count']++;
+            if (structures_side($r, $friendly) === 'hostile') $e['hostile'] = true;
+            $e['types'][$r['typeName']] = ($e['types'][$r['typeName']] ?? 0) + 1;
+            $owner = $r['ownerID'] !== null ? ($r['ownerTicker'] !== null && $r['ownerTicker'] !== '' ? $r['ownerTicker'] : null) : ($r['ownerText'] !== '' ? $r['ownerText'] : null);
+            if ($owner !== null && !in_array($owner, $e['owners'], true)) $e['owners'][] = $owner;
+            $seen = (int) $r['lastSeenAt'];
+            if ($e['lastSeen'] === null || $seen > $e['lastSeen']) $e['lastSeen'] = $seen;
+        }
+        if ($r['timerAt'] !== null && (int) $r['timerAt'] >= $now - STRUCTURES_TIMER_PAST) {
+            $at = (int) $r['timerAt'];
+            $cur = $e['nextTimer'];
+            $upcoming = $at > $now;
+            $better = $cur === null
+                || ($upcoming && ($cur['at'] <= $now || $at < $cur['at']))
+                || (!$upcoming && $cur['at'] <= $now && $at > $cur['at']);
+            if ($better) $e['nextTimer'] = ['id' => (int) $r['id'], 'kind' => $r['timerKind'], 'at' => $at, 'typeName' => $r['typeName'], 'name' => $r['name']];
+        }
+        unset($e);
+    }
+    foreach ($out as $sid => &$e) {
+        if ($e['count'] === 0 && $e['nextTimer'] === null) { unset($out[$sid]); continue; }
+        $types = [];
+        foreach ($e['types'] as $name => $n) $types[] = [(string) $name, $n];
+        usort($types, function ($a, $z) { return $z[1] <=> $a[1] ?: strcmp($a[0], $z[0]); });
+        $e['types'] = array_slice($types, 0, 4);
+        $e['owners'] = array_slice($e['owners'], 0, 3);
+    }
+    unset($e);
+    ksort($out);
+    return $out;
 }
 
 function structures_live_count(PDO $db, $mask, $systemID) {
