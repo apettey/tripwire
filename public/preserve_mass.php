@@ -12,6 +12,7 @@
 //
 //	Storage in preserve_mass.inc.php (fork_preserve_mass, created on first use, so no migration is needed). Flags of
 //	deleted wormholes are never returned; they are deleted from the table when the mask's flags change.
+//	A change is also queued for Discord when a corp admin turned on the "Preserve mass" type (discord/preserve_mass.php).
 //***********************************************************
 $startTime = microtime(true);
 
@@ -54,6 +55,7 @@ try {
 		$mode = isset($_POST['mode']) ? $_POST['mode'] : '';
 		$wormholeID = isset($_POST['wormholeID']) ? preserve_mass_wormhole_id($_POST['wormholeID']) : false;
 		if ($wormholeID === false) preserve_mass_fail(400, 'Invalid wormholeID');
+		$before = preserve_mass_get($mysql, $mask, $wormholeID);	// Discord: what changed is decided here, not by the browser
 
 		if ($mode === 'set') {
 			if (!preserve_mass_wormhole_in_mask($mysql, $mask, $wormholeID)) {
@@ -66,6 +68,7 @@ try {
 			preserve_mass_fail(400, 'Unknown mode');
 		}
 		$output['result'] = true;
+		$discordChange = array('wormholeID' => $wormholeID, 'before' => $before, 'after' => preserve_mass_get($mysql, $mask, $wormholeID));
 		preserve_mass_clean($mysql, $mask);	// on changes only: GET polls never write
 	} else if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 		preserve_mass_fail(405, 'Method not allowed');
@@ -80,3 +83,16 @@ try {
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
 echo json_encode($output);
+
+// Discord (Mask Admin > Discord > Preserve mass): after the response is sent, queued for discord_notify.worker.php.
+// Only when the flag really changed (marked, cleared, or another pilot / reason); the module is loaded only then.
+if (isset($discordChange)) {
+	if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+	try {
+		require_once('../discord/discord.inc.php');
+		$action = discord_preserve_change($discordChange['before'], $discordChange['after']);
+		if ($action) discord_preserve_enqueue($mysql, $mask, $discordChange['wormholeID'], $action, $setBy === null ? '' : $setBy);
+	} catch (Throwable $e) {
+		error_log('preserve_mass.php discord: ' . $e->getMessage());
+	}
+}

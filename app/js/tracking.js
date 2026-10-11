@@ -75,7 +75,7 @@ $("#login").on("click", "#removeESI", function() {
 
 	$("#removeESI").attr("disabled", "disabled");
 
-	if ($.isArray(tripwire.data.esi.delete)) {
+	if ($.isArray(tripwire.data.esiDelete)) {	// fork: was tripwire.data.esi.delete, so every removal replaced the list
 		tripwire.data.esiDelete.push(characterID);
 	} else {
 		tripwire.data.esiDelete = [characterID];

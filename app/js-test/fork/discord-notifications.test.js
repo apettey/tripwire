@@ -99,6 +99,27 @@ describe('Discord notifications', function() {
 			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { chainKill: { enabled: false } } }), '');
 			assert.ok(/Set a home system so Tripwire knows which chain is yours/.test(dn.NO_HOME));
 		});
+		it('warns when watchlist matches are on without a home, naming what is not posted', function() {
+			const s = (home, chain, watchlist) => ({ homeSystemID: home, types: { chainKill: { enabled: chain }, watchlist: { enabled: watchlist } } });
+			assert.strictEqual(dn.homeWarning(s(0, false, true)), dn.NO_HOME_WATCHLIST);
+			assert.strictEqual(dn.homeWarning(s(0, true, true)), dn.NO_HOME_BOTH);
+			assert.strictEqual(dn.homeWarning(s(0, true, false)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(0, false, false)), '');
+			assert.strictEqual(dn.homeWarning(s(31000880, true, true)), '');
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { watchlist: { enabled: true } } }), dn.NO_HOME_WATCHLIST);
+			assert.strictEqual(dn.homeWarning(null), '');
+			assert.ok(/no watchlist matches are posted/.test(dn.NO_HOME_WATCHLIST));
+			assert.ok(/no chain kills or watchlist matches are posted/.test(dn.NO_HOME_BOTH));
+			assert.ok(/connected to your home system/.test(dn.HELP.watchlist) && /Watchlist match/.test(dn.HOME_HELP));
+		});
+		it('says what happened to the paused notice in the channel', function() {
+			assert.strictEqual(dn.homeNoticeText(null), '');
+			assert.strictEqual(dn.homeNoticeText(undefined), '');
+			assert.strictEqual(dn.homeNoticeText({ status: 'sent', at: '2026-10-11T12:34:56Z' }), 'A notice was posted to the chain kills channel on 2026-10-11 12:34 EVE time.');
+			assert.strictEqual(dn.homeNoticeText({ status: 'old', at: '2026-09-01T08:00:00Z' }), 'Chain kills paused since 2026-09-01 08:00 EVE time.');
+			assert.strictEqual(dn.homeNoticeText({ status: 'queued', at: '2026-10-11T12:34:56Z' }), 'A notice to the chain kills channel is waiting to be sent.');
+			assert.ok(/could not be sent/.test(dn.homeNoticeText({ status: 'failed', at: '2026-10-11T12:34:56Z' })));
+		});
 		it('is sent with the settings (0 = not set)', function() {
 			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: 31000880 })).settings.homeSystemID, 31000880);
 			assert.strictEqual(dn.collectSettings(formValues({ homeSystemID: '31000880' })).settings.homeSystemID, 31000880);
@@ -196,7 +217,7 @@ describe('Discord notifications', function() {
 		});
 	});
 
-	describe('collectSettings: rally point', function() {
+	describe('collectSettings: fight here (rally point)', function() {
 		it('keeps both texts and nothing of the other types', function() {
 			const v = formValues();
 			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '2', ping: ' @here ', templateClear: '  Cleared by {who} ' });
@@ -208,8 +229,8 @@ describe('Discord notifications', function() {
 			const v = formValues();
 			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '0', ping: 'everyone' });
 			assert.deepStrictEqual(dn.collectSettings(v).errors, [
-				'Rally point: the ping field takes only <@&roleID>, <@userID>, @here or @everyone',
-				'Rally point: choose a webhook to turn it on'
+				'Fight here: the ping field takes only <@&roleID>, <@userID>, @here or @everyone',
+				'Fight here: choose a webhook to turn it on'
 			]);
 		});
 	});
@@ -288,8 +309,19 @@ describe('Discord notifications', function() {
 				html = dn.pageHtml(state, s);
 				assert.ok(html.indexOf("data-system='0'>Not set</span>") > 0);
 				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME + '</p>') > 0);
+				// The notice posted to the channel for this episode, in the warning
+				const withNotice = Object.assign({}, state, { homeNotice: { status: 'sent', at: '2026-10-11T12:34:56Z' } });
+				assert.ok(dn.pageHtml(withNotice, s).indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME
+					+ " <span class='dn-home-notice'>A notice was posted to the chain kills channel on 2026-10-11 12:34 EVE time.</span></p>") > 0);
 				s.types.chainKill.enabled = false;
 				assert.ok(dn.pageHtml(state, s).indexOf(dn.NO_HOME) < 0);
+				assert.ok(dn.pageHtml(withNotice, s).indexOf('dn-home-notice') < 0);
+				s.types.watchlist.enabled = true;
+				html = dn.pageHtml(state, s);
+				assert.ok(html.indexOf("<p class='dn-bad dn-home-warning'>" + dn.NO_HOME_WATCHLIST + '</p>') > 0);
+				assert.ok(html.indexOf("<div class='dn-small dn-bad'>" + dn.NO_HOME_WATCHLIST + '</div>') > 0);
+				s.types.watchlist.enabled = false;
+				assert.ok(dn.pageHtml(state, s).indexOf('dn-home-warning') < 0);
 			} finally {
 				global.appData = saved;
 			}
@@ -302,16 +334,16 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf('Our Corp (98000001)') > 0);
 			assert.ok(html.indexOf(dn.SAFE_RULE) > 0);
 		});
-		it('shows the rally point type with its second text, escaped', function() {
+		it('shows the Fight here (rally point) type with its second text, escaped', function() {
 			const s = JSON.parse(JSON.stringify(settings));
 			s.types.rally.templateClear = "Cleared by {who} <script>";
 			const html = dn.pageHtml(state, s);
 			assert.ok(html.indexOf("data-kind='rally'") > 0);
 			assert.ok(html.indexOf('Set or moved:') > 0);
 			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>Cleared by {who} &lt;script&gt;</textarea>") > 0);
-			assert.ok(html.indexOf('Replaces the rally message (an edit: no new message, nobody pinged') > 0);
+			assert.ok(html.indexOf('Replaces the fight message (an edit: no new message, nobody pinged') > 0);
 			assert.ok(html.indexOf('<code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text') > 0);
-			assert.ok(html.indexOf('Nothing is sent when there is no rally message to edit') > 0);
+			assert.ok(html.indexOf('Nothing is sent when there is no fight message to edit') > 0);
 			assert.ok(html.indexOf('<code>{labelSystem}</code>, <code>{was}</code>') > 0);
 			assert.ok(html.indexOf('DISCORD_WEB_HOOK') < 0);
 		});
@@ -332,7 +364,69 @@ describe('Discord notifications', function() {
 		});
 		it('names a failed edit of an old rally message', function() {
 			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'rallyEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] }) });
-			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Rally point (old message) to #ops') > 0);
+			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Fight here (old message) to #ops') > 0);
+		});
+		it('names a failed chain kills notice', function() {
+			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'chainPaused', webhook: '#kills', error: 'HTTP 500', createdAt: null }] }) });
+			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Chain kills paused notice to #kills') > 0);
+		});
+	});
+
+	describe('Preserve mass type', function() {
+		it('is a type of its own, after the others', function() {
+			assert.strictEqual(dn.KINDS[dn.KINDS.length - 1], 'preserveMass');
+			assert.strictEqual(dn.LABELS.preserveMass, 'Preserve mass');
+			assert.ok(/strikes through the message/.test(dn.HELP.preserveMass) && /Every member's change is posted/.test(dn.HELP.preserveMass));
+		});
+		it('collects both texts and the chain option (missing = on)', function() {
+			const v = formValues();
+			v.types.preserveMass = Object.assign(v.types.preserveMass, { enabled: true, webhookID: '3', ping: ' <@&123456789012345678> ', templateClear: '  {mark} gone ' });
+			let r = dn.collectSettings(v);
+			assert.deepStrictEqual(r.errors, []);
+			assert.deepStrictEqual(r.settings.types.preserveMass, { enabled: true, webhookID: 3, template: 'T preserveMass', ping: '<@&123456789012345678>', templateClear: '{mark} gone', chainOnly: true });
+			v.types.preserveMass.chainOnly = false;
+			assert.strictEqual(dn.collectSettings(v).settings.types.preserveMass.chainOnly, false);
+			v.types.preserveMass.webhookID = '0';
+			assert.deepStrictEqual(dn.collectSettings(v).errors, ['Preserve mass: choose a webhook to turn it on']);
+		});
+		it('warns without a home only while it is limited to the chain', function() {
+			const s = (chainOnly, home) => ({ homeSystemID: home, types: { chainKill: { enabled: false }, preserveMass: { enabled: true, chainOnly: chainOnly } } });
+			assert.strictEqual(dn.homeWarning(s(true, 0)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(undefined, 0)), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning(s(false, 0)), '');
+			assert.strictEqual(dn.homeWarning(s(true, 31000880)), '');
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { preserveMass: { enabled: false, chainOnly: true } } }), '');
+		});
+		const state = { mask: { name: 'Corp' }, encrypted: true, webhooks: [{ id: 1, name: '#ops', hint: '…/1111', status: 'ok' }],
+			placeholders: { preserveMass: { connection: 'both ends', mark: 'struck <b>' } }, names: {}, outbox: {} };
+		const settings = () => {
+			const s = { types: {}, corporations: [], alliances: [], homeSystemID: 31000880 };
+			dn.KINDS.forEach(k => { s.types[k] = { enabled: false, webhookID: 0, template: '{system}', ping: '', pingSystems: [], maxJumps: 10, cooldownHours: 6, minIsk: 0 }; });
+			s.types.preserveMass = { enabled: true, webhookID: 1, template: 'Mark {connection}', templateClear: '{mark} <script>', ping: '', chainOnly: true };
+			return s;
+		};
+		it('shows its texts (escaped), the chain option and its placeholders', function() {
+			let html = dn.pageHtml(state, settings());
+			assert.ok(html.indexOf("data-kind='preserveMass'") > 0);
+			assert.ok(html.indexOf('Marked or changed:') > 0);
+			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>{mark} &lt;script&gt;</textarea>") > 0);
+			assert.ok(html.indexOf('<code>{mark}</code> is that message struck through') > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-chainOnly' checked />") > 0);
+			assert.ok(html.indexOf("<code title='struck &lt;b&gt;'>{mark}</code>") > 0);
+			const s = settings();
+			s.types.preserveMass.chainOnly = false;
+			html = dn.pageHtml(state, s);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-chainOnly' />") > 0);
+		});
+		it('previews the edit of a mark changed after 30 seconds', function() {
+			const p = function(c) { return { content: c, allowed_mentions: { parse: [] } }; };
+			const html = dn.previewsHtml({ preview: p('live'), previewClear: p('~~live~~ cleared'), previewChanged: p('~~live~~ changed') });
+			assert.ok(html.indexOf('When it is changed after 30 seconds, a new message is posted and the old one becomes:') < html.indexOf('<s>live</s> changed'));
+			assert.ok(html.indexOf('When it moves') < 0);
+		});
+		it('names a failed edit of an old mark message', function() {
+			const st = Object.assign({}, state, { outbox: { failures: [{ kind: 'preserveMassEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] } });
+			assert.ok(dn.pageHtml(st, settings()).indexOf('<li>Preserve mass (old message) to #ops') > 0);
 		});
 	});
 });

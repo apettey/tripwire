@@ -105,11 +105,24 @@ function discord_sample_label_moved($systemID) {
 	return 'AB';
 }
 
-/** Sample message contexts for the preview */
-function discord_sample_context($kind, $template, $ping, $maskName) {
+/** Sample fleet comp for the Fight here preview: the mask's first comp (Mask Admin > Fight here), else an example */
+function discord_sample_comp(PDO $db, $mask) {
+	$comps = fight_comps_load($db, $mask);
+	return $comps ? $comps[0] : array('id' => '', 'name' => 'Armor HACs', 'colour' => 'red', 'note' => 'Zealots and Sacrileges', 'mention' => '');
+}
+
+/** Sample message contexts for the preview ($comp: the fleet comp of the Fight here sample) */
+function discord_sample_context($kind, $template, $ping, $maskName, $comp = null) {
 	$base = array('kind' => $kind, 'template' => $template, 'ping' => $ping, 'mask' => $maskName, 'time' => time());
 	if ($kind === 'rally') {
-		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'), 'discord_sample_label');
+		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot', 'comp' => $comp), 'discord_sample_label');
+	}
+	if ($kind === 'preserveMass') {
+		// A hole from AB · J163701 to J152820 (C5), scanned on the far side (K162 from here)
+		$ends = discord_preserve_ends(array('wormholeID' => 1, 'type' => 'H296', 'parent' => 'secondary', 'life' => 'stable', 'mass' => 'destab',
+			'a' => 31002012, 'b' => 31001880, 'aSig' => 'ABC123', 'bSig' => 'XYZ789'), function ($systemID) { return $systemID === 31002012 ? 'AB' : ''; });
+		return discord_preserve_context(array('action' => 'set', 'who' => 'Example Pilot', 'wormholeID' => 1) + $base,
+			array('setBy' => 'Example Pilot', 'reason' => 'home static, fleet still out'), $ends);
 	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
@@ -193,6 +206,9 @@ try {
 					$stmt->execute(array($name, discord_seal($parsed['url']), discord_webhook_hint($parsed['url']), $webhook['id']));
 					// A new URL may be another channel: the next rally change posts instead of editing the old message
 					discord_rally_forget_webhook($mysql, $webhook['id']);
+					discord_preserve_forget_webhook($mysql, $webhook['id']);
+					// ... and chain kills still paused get a new notice there (discord/chain_notice.php)
+					discord_chain_notice_forget_webhook($mysql, $mask, $webhook['id']);
 				} else {
 					$stmt = $mysql->prepare('UPDATE discord_webhooks SET name = ?, updatedAt = UTC_TIMESTAMP() WHERE id = ?');
 					$stmt->execute(array($name, $webhook['id']));
@@ -240,7 +256,8 @@ try {
 			if ($template === '') $template = $defaults['types'][$kind]['template'];
 			$ping = discord_ping_normalise(isset($input['ping']) ? $input['ping'] : '');
 			if ($ping === null) discord_fail(400, 'Ping may only contain <@&roleID>, <@userID>, @here or @everyone');
-			$context = discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName);
+			$comp = $kind === 'rally' ? discord_sample_comp($mysql, $mask) : null;
+			$context = discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName, $comp);
 			$preview = array('preview' => discord_payload($context));
 			if ($kind === 'rally') {
 				// The rally type has a second message, for when the rally is cleared
@@ -253,7 +270,14 @@ try {
 					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null, 'discord_sample_label'));
 				// And moved after 30 s: the old message is edited like this (fixed text), a new one is posted
 				$preview['previewMoved'] = discord_payload(array('moved' => true, 'previous' => $preview['preview']['content'])
-					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot'), 'discord_sample_label_moved'));
+					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot', 'comp' => $comp), 'discord_sample_label_moved'));
+			} else if ($kind === 'preserveMass') {
+				// Cleared: the edit of the mark message; changed after 30 s: the old message becomes this (fixed text)
+				$templateClear = trim(str_replace("\r", '', (string) (isset($input['templateClear']) ? $input['templateClear'] : '')));
+				if ($templateClear === '') $templateClear = $defaults['types']['preserveMass']['templateClear'];
+				$preview['previewClear'] = discord_payload(array('previous' => $preview['preview']['content'], 'cleared' => true, 'who' => 'Other Pilot',
+					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context);
+				$preview['previewChanged'] = discord_payload(array('previous' => $preview['preview']['content'], 'changed' => true, 'who' => 'Other Pilot') + $context);
 			}
 			echo json_encode($preview);
 			exit();
@@ -282,6 +306,8 @@ try {
 		'placeholders' => discord_placeholders(),
 		'names' => (object) $names,
 		'outbox' => discord_outbox_status($mysql, $mask),
+		// Chain kills paused (no home system): the notice posted to their channel, or null (discord/chain_notice.php)
+		'homeNotice' => discord_chain_notice_status($mysql, $mask),
 		// Upstream's server-wide DISCORD_WEB_HOOK has a webhook for this mask: rally changes go there while the rally
 		// type is off (only whether there is one, never the URL)
 		'legacyRally' => discord_rally_legacy_hook($mask) !== null,

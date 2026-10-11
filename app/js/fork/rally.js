@@ -1,16 +1,23 @@
 const rally = {
-	// Rally point: one system per mask that everyone on the chain map sees highlighted, plus the
-	// wormhole route to it from the viewer's location (fork-owned file; server side is public/rally.php).
+	// "Fight here" (first called the rally point): one system per mask that everyone on the chain map sees highlighted,
+	// in the colour of the fleet comp it is for, plus the wormhole route to it from the viewer's location (fork-owned
+	// file; server side is public/rally.php, comps in app/js/fork/fight-comps.js and public/fight.php). Internal names
+	// stay "rally"; everything users read says "Fight here".
 	// Keep `const rally` on the first line: the test helper strips it to define a global.
 	URL: "rally.php",
 	POLL_MS: 10000,
 	LOCATION_CHECK_MS: 2000,
+	BANNER_TICK_MS: 30000,
 	ROUTE_CLASS: "rally-route",
 	NODE_CLASS: "rally-node",
-	MENU_COMMAND: "rallyToggle",
+	COLOUR_PREFIX: "fight-c-",
+	MENU_COMMAND: "fightMenu",	// "Fight here ▸" with the comps (masks with at least one comp)
+	TOGGLE_COMMAND: "fightToggle",	// one-click "Fight here" / "Clear fight" (masks without comps)
 
-	// Current rally for this mask: { systemID, setBy, setAt } or systemID null
-	state: { systemID: null, setBy: null, setAt: null },
+	// Current fight point of this mask: { systemID, setBy, setAt, comp: {id, name, colour, note} | null, label, age, receivedAt }
+	state: { systemID: null, setBy: null, setAt: null, comp: null, label: "", age: null, receivedAt: null },
+	// The mask's fleet comps (normalised, fightComps.normaliseComps)
+	comps: [],
 	// Result of the last decorate() call (see there)
 	lastRoute: null,
 
@@ -76,7 +83,7 @@ const rally = {
 	/** Turn the chain map's lines ([childNodeId, parentNodeId, modifiers, wormholeId]) into system-level
 	connections [childSystemID, parentSystemID, modifiers, lineIndex]. Working on systems rather than
 	nodes means a system shown twice (a loop) is one place. Lines without a wormhole id (calculated gate
-	routes) are left out: the rally route only follows wormholes. */
+	routes) are left out: the route only follows wormholes. */
 	systemConnections: function(rows, lines) {
 		const systems = rally.nodeSystems(rows);
 		const result = [];
@@ -115,19 +122,27 @@ const rally = {
 		return rootID === undefined ? null : rootID;
 	},
 
-	/** Add the rally class to a node's markup (makeSystemNode output) */
-	markNode: function(markup) {
-		if (typeof markup !== "string" || markup.indexOf(" " + rally.NODE_CLASS + " ") >= 0) { return markup; }
-		return markup.replace("class='node ", "class='node " + rally.NODE_CLASS + " ");
+	/** The colour class of a fight point's comp ("fight-c-red"), "" without a comp (today's green rally style) */
+	colourClass: function(comp) {
+		if (!comp || !comp.colour) { return ""; }
+		const key = typeof fightComps !== "undefined" ? fightComps.colourKey(comp.colour) : String(comp.colour).replace(/[^a-z]/g, "");
+		return key ? rally.COLOUR_PREFIX + key : "";
 	},
 
-	/** Decorate the output of chain.nodes() in place for the current rally: mark rally nodes and add the
-	route class to the lines on the route. Returns
+	/** Add the fight point class (and the comp's colour class) to a node's markup (makeSystemNode output) */
+	markNode: function(markup, colourClass) {
+		if (typeof markup !== "string" || markup.indexOf(" " + rally.NODE_CLASS + " ") >= 0) { return markup; }
+		return markup.replace("class='node ", "class='node " + rally.NODE_CLASS + " " + (colourClass ? colourClass + " " : ""));
+	},
+
+	/** Decorate the output of chain.nodes() in place for the current fight point: mark its nodes and add the
+	route class (and the comp's colour class) to the lines on the route. Returns
 	{ rallySystemID, onMap, startSystemID, jumps, lineIndexes } (jumps null if unreachable / not on map)
 	@param result chain.nodes() output: { map: { rows }, lines }
-	@param rallySystemID current rally system or null
-	@param locations { tracked, viewing } system IDs */
-	decorate: function(result, rallySystemID, locations) {
+	@param rallySystemID current fight system or null
+	@param locations { tracked, viewing } system IDs
+	@param colourClass the comp's colour class (rally.colourClass), "" / undefined without a comp */
+	decorate: function(result, rallySystemID, locations, colourClass) {
 		const rows = (result && result.map && result.map.rows) || [];
 		const lines = (result && result.lines) || [];
 		locations = locations || {};
@@ -135,8 +150,9 @@ const rally = {
 		// Lines are rebuilt on each draw, but strip any stale class anyway
 		lines.forEach(function(line) {
 			if (line && Array.isArray(line[2])) {
-				const i = line[2].indexOf(rally.ROUTE_CLASS);
-				if (i >= 0) { line[2].splice(i, 1); }
+				for (let i = line[2].length - 1; i >= 0; i--) {
+					if (line[2][i] === rally.ROUTE_CLASS || String(line[2][i]).indexOf(rally.COLOUR_PREFIX) === 0) { line[2].splice(i, 1); }
+				}
 			}
 		});
 
@@ -147,7 +163,7 @@ const rally = {
 		rows.forEach(function(row) {
 			const node = row && row.c && row.c[0];
 			if (node && String(node.systemID) === target) {
-				node.f = rally.markNode(node.f);
+				node.f = rally.markNode(node.f, colourClass);
 				info.onMap = true;
 			}
 		});
@@ -161,13 +177,16 @@ const rally = {
 			info.lineIndexes = route;
 			route.forEach(function(index) {
 				const line = lines[index];
-				if (line && Array.isArray(line[2]) && line[2].indexOf(rally.ROUTE_CLASS) < 0) { line[2].push(rally.ROUTE_CLASS); }
+				if (line && Array.isArray(line[2]) && line[2].indexOf(rally.ROUTE_CLASS) < 0) {
+					line[2].push(rally.ROUTE_CLASS);
+					if (colourClass) { line[2].push(colourClass); }
+				}
 			});
 		}
 		return info;
 	},
 
-	/** Text after the system name in the banner */
+	/** Route text in the banner */
 	routeText: function(info) {
 		if (!info || !info.onMap) { return "not on this map"; }
 		if (info.jumps === null || info.jumps === undefined) { return "no route"; }
@@ -175,11 +194,34 @@ const rally = {
 		return info.jumps + (info.jumps == 1 ? " jump" : " jumps");
 	},
 
-	// ---- Discord (server side: public/rally.php; the channel is the "Rally point" type corp admins set up in
-	// Mask Admin > Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK) ----
+	/** Fight point data from the server -> state ({systemID: null} when there is none) */
+	normaliseState: function(data, now) {
+		const systemID = data && rally.isRealSystemID(data.systemID) ? Number(data.systemID) : null;
+		if (!systemID) { return { systemID: null, setBy: null, setAt: null, comp: null, label: "", age: null, receivedAt: null }; }
+		const comp = data.comp && typeof fightComps !== "undefined" ? fightComps.normaliseComp(data.comp) : null;
+		const age = data.age === undefined || data.age === null || isNaN(Number(data.age)) ? null : Math.max(0, Number(data.age));
+		return { systemID: systemID, setBy: data.setBy || null, setAt: data.setAt || null, comp: comp,
+			label: typeof data.label === "string" ? data.label : "", age: age, receivedAt: age === null ? null : (now || Date.now()) };
+	},
+
+	/** Whether two states show a different fight (system or comp) */
+	differs: function(a, b) {
+		const compKey = function(s) { return s && s.comp ? [s.comp.id, s.comp.name, s.comp.colour, s.comp.note].join("|") : ""; };
+		return String(a && a.systemID) !== String(b && b.systemID) || compKey(a) !== compKey(b);
+	},
+
+	/** Seconds since the fight point was set, now */
+	ageNow: function(state, now) {
+		if (!state || state.age === null || state.age === undefined || !state.receivedAt) { return null; }
+		return state.age + Math.max(0, ((now || Date.now()) - state.receivedAt) / 1000);
+	},
+
+	// ---- Settings (Settings > Chain Map Settings > Fight here) ----
+	// Discord (server side: public/rally.php; the channel is the "Fight here" type corp admins set up in Mask Admin >
+	// Discord, discord/rally.php, or else upstream's server-wide DISCORD_WEB_HOOK)
 	DISCORD_COMMAND: "rallyDiscord",
-	DISCORD_HELP: "Rally changes go to the Discord channel your corporation's admins chose in Mask Admin > Discord.",
-	// Whether rally changes of this mask go to Discord at all (from rally.php's "discord")
+	DISCORD_HELP: "Fight here changes go to the Discord channel your corporation's admins chose in Mask Admin > Discord.",
+	// Whether fight changes of this mask go to Discord at all (from rally.php's "discord")
 	discordAvailable: false,
 
 	/** "Also post to Discord" choice: options.rallyDiscord.enabled, a missing key means on */
@@ -187,7 +229,12 @@ const rally = {
 		return !(opts && opts.rallyDiscord && opts.rallyDiscord.enabled === false);
 	},
 
-	/** POST body for a rally change: adds discord=1 when the mask has a webhook and the user wants it */
+	/** The fight banner in the chain map header: options.fightBanner.enabled, a missing key means on */
+	bannerEnabled: function(opts) {
+		return !(opts && opts.fightBanner && opts.fightBanner.enabled === false);
+	},
+
+	/** POST body for a change: adds discord=1 when the mask has a webhook and the user wants it */
 	changePayload: function(payload, available, opts) {
 		const result = Object.assign({}, payload);
 		result.discord = available && rally.discordEnabled(opts) ? 1 : 0;
@@ -198,6 +245,12 @@ const rally = {
 		return String(text === undefined || text === null ? "" : text)
 			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+	},
+
+	/** Notification text when someone else sets or moves the fight (HTML-escaped) */
+	notifyText: function(name, state) {
+		return "Fight here: " + rally.escape(name) + (state.comp ? " &middot; " + rally.escape(state.comp.name) : "")
+			+ (state.setBy ? " (set by " + rally.escape(state.setBy) + ")" : "");
 	},
 
 	// ---- Browser-only code below (not run under mocha) ----
@@ -222,26 +275,34 @@ const rally = {
 	renderBanner: function() {
 		const banner = $("#rally-banner");
 		if (!banner.length) { return; }
-		if (!rally.isRealSystemID(rally.state.systemID)) {
+		if (!rally.isRealSystemID(rally.state.systemID) || !rally.bannerEnabled(typeof options !== "undefined" ? options : null)) {
 			banner.addClass("hidden");
 			return;
 		}
-		const name = rally.systemName(rally.state.systemID);
+		const system = typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[rally.state.systemID] : null;
 		const info = rally.lastRoute && String(rally.lastRoute.rallySystemID) === String(rally.state.systemID) ? rally.lastRoute : null;
-		banner.find(".rally-name").attr("href", ".?system=" + name).text(name);
-		banner.find(".rally-jumps").text("(" + rally.routeText(info) + ")");
-		banner.attr("title", "Rally point" + (rally.state.setBy ? " set by " + rally.state.setBy : "") + (rally.state.setAt ? " at " + rally.state.setAt : ""));
-		banner.removeClass("hidden");
+		const parts = fightComps.bannerParts(rally.state, system, rally.routeText(info), rally.ageNow(rally.state));
+		banner.find(".rally-name").attr("href", ".?system=" + encodeURIComponent(rally.systemName(rally.state.systemID))).text(parts.where);
+		banner.find(".rally-jumps").text(parts.details ? "(" + parts.details + ")" : "");
+		const $comp = banner.find(".fight-comp").toggleClass("hidden", !parts.comp);
+		if (parts.comp) {
+			$comp.find(".fight-dot").css("background-color", fightComps.colourOf(parts.comp.colour));
+			$comp.find(".fight-comp-name").text(parts.comp.name);
+		}
+		banner.find(".fight-who").text(parts.who ? " · " + parts.who : "");
+		banner.find(".fight-age").text(parts.age ? " · " + parts.age : "");
+		banner.attr("title", fightComps.bannerTitle(parts));
+		banner.attr("class", rally.colourClass(rally.state.comp));
 	},
 
-	/** Apply rally data from the server; redraw if it changed */
+	/** Apply fight point data from the server; redraw if it changed */
 	apply: function(data, fromOthers) {
-		const systemID = data && rally.isRealSystemID(data.systemID) ? Number(data.systemID) : null;
-		const changed = systemID !== rally.state.systemID;
-		rally.state = { systemID: systemID, setBy: data ? data.setBy : null, setAt: data ? data.setAt : null };
+		const next = rally.normaliseState(data);
+		const changed = rally.differs(rally.state, next);
+		rally.state = next;
 		if (changed) {
-			if (fromOthers && systemID && typeof Notify !== "undefined") {
-				Notify.trigger("Rally point: " + rally.escape(rally.systemName(systemID)) + (rally.state.setBy ? " (set by " + rally.escape(rally.state.setBy) + ")" : ""), "green");
+			if (fromOthers && next.systemID && typeof Notify !== "undefined") {
+				Notify.trigger(rally.notifyText(fightComps.labelSystem(next.label, rally.systemName(next.systemID)), next), "green");
 			}
 			rally.redraw();
 		} else {
@@ -249,9 +310,21 @@ const rally = {
 		}
 	},
 
+	/** The mask's comps changed (rally.php's answer, or an admin's change in Mask Admin > Fight here) */
+	setComps: function(list) {
+		rally.comps = fightComps.normaliseComps(list);
+	},
+
+	answer: function(data, fromOthers) {
+		if (!data) { return; }
+		rally.discordAvailable = !!data.discord;
+		if (data.comps) { rally.setComps(data.comps); }
+		rally.apply(data.rally, fromOthers);
+	},
+
 	fetch: function() {
 		return $.ajax({ url: rally.URL, type: "GET", dataType: "JSON", cache: false })
-			.done(function(data) { if (data) { rally.discordAvailable = !!data.discord; rally.apply(data.rally, true); } });
+			.done(function(data) { rally.answer(data, true); });
 	},
 
 	post: function(payload) {
@@ -260,26 +333,31 @@ const rally = {
 			data: rally.changePayload(payload, rally.discordAvailable, typeof options !== "undefined" ? options : null),
 			headers: { "X-Requested-With": "XMLHttpRequest" }
 		}).done(function(data) {
-			if (data) { rally.discordAvailable = !!data.discord; rally.apply(data.rally, false); }
-		}).fail(function() {
-			if (typeof Notify !== "undefined") { Notify.trigger("Couldn't update the rally point", "red"); }
+			rally.answer(data, false);
+		}).fail(function(xhr) {
+			if (typeof Notify !== "undefined") {
+				Notify.trigger(rally.escape((xhr && xhr.responseJSON && xhr.responseJSON.error) || "Couldn't update the fight point"), "red");
+			}
 			rally.fetch();
 		});
 	},
 
-	set: function(systemID) {
+	/** Set (or move) the fight point, with a comp of the mask ("" / undefined = no comp) */
+	set: function(systemID, compID) {
 		if (!rally.isRealSystemID(systemID)) { return; }
-		rally.apply({ systemID: Number(systemID), setBy: tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.characterName : null, setAt: null }, false);	// optimistic
-		return rally.post({ mode: "set", systemID: Number(systemID) });
+		const comp = compID ? rally.comps.filter(function(c) { return c.id === compID; })[0] || null : null;
+		const same = String(rally.state.systemID) === String(systemID);
+		// optimistic; keep the label while it stays on the same system
+		rally.apply({ systemID: Number(systemID), setBy: tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.characterName : null,
+			comp: comp, label: same ? rally.state.label : "", age: 0 }, false);
+		const payload = { mode: "set", systemID: Number(systemID) };
+		if (comp) { payload.compID = comp.id; }
+		return rally.post(payload);
 	},
 
 	clear: function() {
 		rally.apply(null, false);
 		return rally.post({ mode: "clear" });
-	},
-
-	toggle: function(systemID) {
-		return String(rally.state.systemID) === String(systemID) ? rally.clear() : rally.set(systemID);
 	},
 
 	renderDiscordEntry: function() {
@@ -295,16 +373,36 @@ const rally = {
 		if (typeof options.save === "function") { options.save(); }
 	},
 
+	/** Fill the "Fight here" submenu for the right-clicked system */
+	renderSubmenu: function(systemID) {
+		const entries = fightComps.menuEntries(rally.comps, rally.state, systemID, rally.systemName);
+		$("#fightSubmenu").html(fightComps.menuHtml(entries));
+		$("#chainMenu").menu("refresh");
+	},
+
 	setupSettings: function() {
 		if (typeof options === "undefined") { return; }
-		// Settings > Map Markers row; takes effect on Save like its neighbours (Reset = on)
+		// Settings > Map Markers row; takes effect on Save like its neighbours (Reset = on for both)
 		forkSettings.register({
-			section: "markers", order: 50, id: "rallyDiscord-enabled", type: "custom", key: "rallyDiscord", label: "Rally point:",
-			keywords: "discord fight",
-			html: "<label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my rally changes to Discord</label>"
-				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord.</div>",
-			load: function(o) { $("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(o)); },
-			save: function(o) { o.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") }; }
+			section: "markers", order: 50, id: "fightHere", type: "custom", label: "Fight here:",
+			keywords: "rally discord banner comp",
+			html: "<label title='The fight point, its fleet comp, who set it and when, above the chain map. The system is marked on the map either way.'><input type='checkbox' id='fightBanner-enabled' /> Show the fight banner in the chain map header</label><br/>"
+				+ "<label title='" + rally.escape(rally.DISCORD_HELP) + "'><input type='checkbox' id='rallyDiscord-enabled' /> Post my fight changes to Discord</label>"
+				+ "<div class='rally-discord-note'>Corp admins choose the channel in Mask Admin &gt; Discord and the fleet comps in Mask Admin &gt; Fight here.</div>",
+			load: function(o) {
+				$("#rallyDiscord-enabled").prop("checked", rally.discordEnabled(o));
+				$("#fightBanner-enabled").prop("checked", rally.bannerEnabled(o));
+			},
+			save: function(o) {
+				o.rallyDiscord = { enabled: $("#rallyDiscord-enabled").prop("checked") };
+				o.fightBanner = { enabled: $("#fightBanner-enabled").prop("checked") };
+				setTimeout(rally.renderBanner, 0);
+			},
+			reset: function(o) {
+				delete o.rallyDiscord;
+				delete o.fightBanner;
+				setTimeout(rally.renderBanner, 0);
+			}
 		});
 	},
 
@@ -319,31 +417,47 @@ const rally = {
 			const result = originalNodes.apply(this, arguments);
 			try {
 				rally.lastLocations = rally.currentLocations();
-				rally.lastRoute = rally.decorate(result, rally.state.systemID, rally.lastLocations);
-			} catch (e) { console.error("rally: decorate failed", e); }
+				rally.lastRoute = rally.decorate(result, rally.state.systemID, rally.lastLocations, rally.colourClass(rally.state.comp));
+			} catch (e) { console.error("fight here: decorate failed", e); }
 			setTimeout(rally.renderBanner, 0);
 			return result;
 		};
 
 		// Banner in the chain map header
-		const banner = $("<span id='rally-banner' class='hidden'><span>|</span> <i class='rally-icon'>&#9873;</i> Rally: <a class='rally-name' href='#'></a> <span class='rally-jumps'></span> <i class='rally-clear' title='Clear rally point'>&#10005;</i></span>");
+		// The text parts are cut with an ellipsis when the header is narrow; the clear button stays visible after them
+		const banner = $("<span id='rally-banner' class='hidden'><span class='fight-sep'>|</span><span class='fight-text'><i class='rally-icon'>&#9873;</i> Fight here: <a class='rally-name' href='#'></a> <span class='rally-jumps'></span>"
+			+ "<span class='fight-comp hidden'> · <span class='fight-dot'></span><span class='fight-comp-name'></span></span><span class='fight-who'></span><span class='fight-age'></span></span>"
+			+ "<i class='rally-clear' title='Clear fight'>&#10005;</i></span>");
 		const anchor = $("#chainWidget .controls #higgs-jump");
 		if (anchor.length) { banner.insertAfter(anchor); } else { $("#chainWidget .controls").append(banner); }
 		banner.on("click", ".rally-clear", function(e) { e.preventDefault(); rally.clear(); });
 
-		// Context menu entry
+		// Context menu: "Fight here" with a submenu (no comp, one entry per comp, clear), filled when the menu opens
 		try {
 			const chainParent = $("#chainParent");
-			$("#chainMenu").append("<li data-command='" + rally.MENU_COMMAND + "'><a id='rallyMenuItem'>Rally here</a></li>");
-			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='" + rally.escape("Post your rally changes too. " + rally.DISCORD_HELP) + "'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
+			$("#chainMenu").append("<li data-command='" + rally.MENU_COMMAND + "'><a id='rallyMenuItem'>Fight here</a><ul id='fightSubmenu' class='fight-submenu'></ul></li>");
+			$("#chainMenu").append("<li data-command='" + rally.TOGGLE_COMMAND + "'><a id='fightToggleMenuItem'>Fight here</a></li>");
+			$("#chainMenu").append("<li data-command='" + rally.DISCORD_COMMAND + "' class='rally-discord-entry'><a id='rallyDiscordMenuItem' title='" + rally.escape("Post your fight changes too. " + rally.DISCORD_HELP) + "'><span class='rally-discord-check'></span> Also post to Discord</a></li>");
+			$("#fightSubmenu").html(fightComps.menuHtml(fightComps.menuEntries([], null, null)));
 			$("#chainMenu").menu("refresh");
 
 			const originalSelect = chainParent.contextmenu("option", "select");
 			chainParent.contextmenu("option", "select", function(e, ui) {
-				if (ui.cmd === rally.MENU_COMMAND) {
-					rally.toggle($(ui.target[0]).closest("[data-nodeid]").data("nodeid"));
+				const compID = fightComps.compOfCommand(ui.cmd);
+				if (compID !== null) {
+					rally.set($(ui.target[0]).closest("[data-nodeid]").data("nodeid"), compID);
 					return;
 				}
+				if (ui.cmd === rally.TOGGLE_COMMAND) {
+					const systemID = $(ui.target[0]).closest("[data-nodeid]").data("nodeid");
+					if (fightComps.flatEntry(rally.state, systemID).clear) { rally.clear(); } else { rally.set(systemID, ""); }
+					return;
+				}
+				if (ui.cmd === fightComps.CLEAR_COMMAND) {
+					rally.clear();
+					return;
+				}
+				if (ui.cmd === rally.MENU_COMMAND) { return false; }	// the submenu's parent
 				if (ui.cmd === rally.DISCORD_COMMAND) {
 					rally.setDiscordEnabled(!rally.discordEnabled(options));
 					return false;	// keep the menu open
@@ -355,18 +469,24 @@ const rally = {
 			chainParent.contextmenu("option", "beforeOpen", function(e, ui) {
 				const systemID = $(ui.target[0]).closest("[data-nodeid]").data("nodeid");
 				try {
-					$(this).contextmenu("showEntry", rally.MENU_COMMAND, rally.isRealSystemID(systemID));
-					$("#rallyMenuItem").text(String(rally.state.systemID) === String(systemID) ? "Clear rally" : "Rally here");
+					// With comps a submenu, without them the old one-click entry
+					const real = rally.isRealSystemID(systemID);
+					const withComps = rally.comps.length > 0;
+					$(this).contextmenu("showEntry", rally.MENU_COMMAND, real && withComps);
+					$(this).contextmenu("showEntry", rally.TOGGLE_COMMAND, real && !withComps);
+					if (real && withComps) { rally.renderSubmenu(systemID); }
+					if (real && !withComps) { $("#fightToggleMenuItem").text(fightComps.flatEntry(rally.state, systemID).text); }
 					$(this).contextmenu("showEntry", rally.DISCORD_COMMAND, rally.isRealSystemID(systemID) && rally.discordAvailable);
 					rally.renderDiscordEntry();
-				} catch (err) { console.error("rally: menu update failed", err); }
+				} catch (err) { console.error("fight here: menu update failed", err); }
 				return originalBeforeOpen ? originalBeforeOpen.apply(this, arguments) : undefined;
 			});
-		} catch (e) { console.error("rally: context menu setup failed", e); }
+		} catch (e) { console.error("fight here: context menu setup failed", e); }
 
 		// Shared state, and redraw when the tracked character moves (the route start changes)
 		rally.fetch();
 		setInterval(rally.fetch, rally.POLL_MS);
+		setInterval(rally.renderBanner, rally.BANNER_TICK_MS);	// "x min ago"
 		setInterval(function() {
 			if (!rally.state.systemID || !rally.lastLocations) { return; }
 			const now = rally.currentLocations();

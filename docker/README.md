@@ -68,9 +68,9 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` / `fork_rally_discord_message` (chain map rally point per mask and its live legacy Discord message, created by `public/rally.php`; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `zkill_kills` /
+`fork_rally` / `fork_rally_discord_message` (chain map rally point, "Fight here", per mask with a copy of its fleet comp, and its live legacy Discord message, created by `public/rally.php`; the `comp*` columns are added to an older `fork_rally` the first time a fight point is set; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_fight_comps` (the [fleet comps](#fight-here) per mask, created by `public/fight.php`), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
-`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` (the [zKillboard integration](#zkillboard-integration), DDL in
+`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
 and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
@@ -121,7 +121,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `ENABLE_ASSETS_SCOPE` | `false` | `config.php` (`ENABLE_ASSETS_SCOPE`), `public/login.php` | Asks tracking characters (Tracking > Add) for `esi-assets.read_assets.v1`, so [fitted jump mass](#fitted-jump-mass) can read the active ship's fit. EVE SSO refuses a scope your CCP developer application doesn't have (`invalid_scope`, adding characters fails), so: 1. enable `esi-assets.read_assets.v1` on the application at developers.eveonline.com, 2. set `ENABLE_ASSETS_SCOPE=true` and restart, 3. users remove and re-add their tracking characters. Without it jumps are logged with the hull mass only |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
-| `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`), `public/ping.php`, `rally_discord.inc.php` | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}`. Used by upstream's pings and, for masks that don't have the "Rally point" type turned on in Mask Admin > Discord ([Discord notifications](#discord-notifications); that setting wins), by rally point posts (posted directly by `public/rally.php`; same rules as the Mask Admin type with fixed texts and no pings: changes within 30 s of the post edit it, a later move posts a new message and strikes through the old one, a clear strikes through the message and posts nothing; links use the origin of `EVE_SSO_REDIRECT`). Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php` and, against the dev database, `php tests/rally_discord_lock_test.php` (`tests/` is not in the image) |
+| `DISCORD_WEB_HOOK` | unset | `config.php` (`DISCORD_WEB_HOOK`), `public/ping.php`, `rally_discord.inc.php` | JSON object, e.g. `{"maskID":"https://discord.com/api/webhooks/..."}`. Used by upstream's pings and, for masks that don't have the "Fight here" (rally point) type turned on in Mask Admin > Discord ([Discord notifications](#discord-notifications); that setting wins), by [Fight here](#fight-here) posts (posted directly by `public/rally.php`; same rules as the Mask Admin type with fixed texts that name the fleet comp, and no pings, not even the comp's mention: changes within 30 s of the post edit it, a later move posts a new message and strikes through the old one, a clear strikes through the message and posts nothing; links use the origin of `EVE_SSO_REDIRECT`). Tests: `docker compose -f docker-compose.dev.yml exec -T app php tests/rally_discord_test.php` and, against the dev database, `php tests/rally_discord_lock_test.php` (`tests/` is not in the image) |
 | `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php`, `zkill/` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting) and the [System Kill Feed](#zkillboard-integration). `false` = the worker idles and nothing is requested from zKillboard or ESI (no back-fills, no names) |
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
@@ -205,7 +205,7 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
 uses it for outgoing requests: `zkill_feed.worker.php`. Web endpoints never call zKillboard or ESI; they read the
-tables and at most add rows to bounded queues the worker drains (back-fills, names, system stats). New features that need kills must read these
+tables and at most add rows to bounded queues the worker drains (single-kill lookups, back-fills, names, system stats). New features that need kills must read these
 tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add their own zKillboard callers.
 
 | File | Owns |
@@ -215,11 +215,12 @@ tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add 
 | `zkill/schema.php` | DDL of the tables below (`docker/sql/zkill.sql` is the reference copy) |
 | `zkill/killmails.php` | Normalising a killmail (R2Z2 or API shape) into a row, storing, stream coverage and high-water mark, pruning |
 | `zkill/backfill.php` | Per-system back-fill queue: request (web), run (worker) |
+| `zkill/lookup.php` | Single-kill lookup queue for [Smart notes](#smart-notes) kill cards: request (web), fetch one kill (worker) |
 | `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
 | `zkill/stats.php`, `zkill/threat.php` | Per-system zKillboard stats cache + queue, and the read side of System Threat behind `public/system_threat.php` (see [System stats](#system-stats-system-threat)) |
 | `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
-| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image) |
+| `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image); also `lookup_test.php` (lookup queue and worker step on SQLite with a fake zKillboard / ESI) and `zkill_kill_endpoint_test.php` (`public/zkill_kill.php` against the dev database) |
 
 Data flow:
 
@@ -253,9 +254,11 @@ Data flow:
    stored as unresolvable. At most one rejection per pass, then name passes pause for 10 seconds: an invalid ID
    costs about three ESI errors and never blocks the queue. Names are re-resolved after 30 days (unresolvable ones
    after a day).
-4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention, finished back-fill rows
-   older than the retention, stale names.
+4. **Pruning.** Every 10 minutes with Kill Reporting's prune: kills older than the retention (kills fetched for a note,
+   `source = 'lookup'`, are kept 7 days after they arrived), finished back-fill rows older than the retention, finished
+   lookups older than 7 days, stale names.
 5. **System stats.** Lowest priority, after back-fills: see [System stats](#system-stats-system-threat).
+6. **Single-kill lookups.** Interleaved with back-fills and stats (at most every other API slot while they wait): see [Smart notes](#smart-notes).
 
 `public/system_kills.php` (logged-in users, GET only):
 
@@ -307,6 +310,24 @@ entry or `null`), `fetchedAt`, `statsStatus`, `pending`, `queueFull`, `local` (`
 (badges every 5 minutes and when the chain changes, the viewed system after 1 s; 6 s while pending, paused while the
 tab is hidden). Tests: `php zkill/tests/stats_test.php`.
 
+#### Smart notes
+
+System notes render zKillboard kill links as kill cards (`app/js/fork/smart-notes.js`, render time only: the stored
+note HTML is never changed). The card data comes from `public/zkill_kill.php` (logged-in users with a mask, GET only):
+`ids=<killID,...>` (at most 20) and/or `names=<id,...>` (at most 20 character / corporation / alliance IDs for chips).
+A kill in `zkill_killmails` is answered from there (names from `zkill_names`, unknown names queued, the card's
+red / green edge from the session's corporation and alliance, `KILL_REPORT_FRIENDLY_CORPORATIONS` and the active
+corporation / alliance mask). Any other kill is queued in `zkill_kill_lookup` (`zkill/lookup.php`) and answered
+`queued`; the browser asks again after 3, 10 and 30 seconds, then shows the plain link. Caps: 200 queued / running
+lookups per user, 2000 overall (above them: `full`, plain link). With `ZKILL_FEED_ENABLED=false` nothing is queued
+(`unavailable`). Name IDs above 32 bits are skipped; asked-for names are queued only while fewer than 200 names are
+pending. The worker's `zk_queues_run_one()` interleaves `zk_lookup_run_one()` with back-fills and stats (lookups first,
+but never twice in a row while other work waits), within the same `ZKILL_API_INTERVAL` budget and only while both
+zKillboard and ESI may be called: `https://zkillboard.com/api/killID/<id>/` for the hash, then ESI `/killmails/<id>/<hash>/`, stored with
+`source = 'lookup'` regardless of the retention and kept 7 days after it arrived. A failed lookup is retried after 10
+minutes, at most 3 attempts; a `running` lookup older than 5 minutes is queued again. The browser never calls
+zKillboard, Dotlan or EveWho; it only links to them and loads images from `images.evetech.net`.
+
 ### Discord notifications
 
 Corporation admins can have Tripwire post to their Discord (Mask Admin > Discord). All of it is fork-owned: `discord/`,
@@ -336,8 +357,9 @@ server-wide permissions, can only post to their own channel, and are revoked in 
 | Any kill in our chain | A kill in a wormhole, low-sec or null-sec system connected to the mask's **home system** through live wormholes right now (see "Home system" below; no home set = no chain kills); high-sec systems only with "include high-sec systems" (off by default, so a hole into Jita or Uedama doesn't post every gank) |
 | Kills by our corporation | One of "our" corporations/alliances is on the attackers' side (and not the victim) |
 | Losses of our corporation | The victim is in one of "our" corporations/alliances |
-| Watchlist match | A system on the mask's chain (every wormhole of the mask) matches one of the mask's [watchlist](#watchlist) filters, evaluated by the worker every 15 s (`discord/watchlist.php`), so it is posted even when nobody has Tripwire open. What is new comes from what the worker has seen, not from edit times: on the first poll after the type is turned on, or after a filter is saved or turned on, the chain's current matches are recorded without posting anything (`fork_watchlist_baseline`); afterwards a (filter, system) match is posted once, when none of its holes (any of the system's connections for filters on the system only, those fitting the hole conditions otherwise) was seen before; the message names the oldest of them. Every hole seen matching is kept in `fork_watchlist_seen` for as long as it exists (no expiry, so an old hole or a gate link is never posted again however long it stays on the chain), and forgotten when it is gone from the chain: a second way into a system already posted isn't posted, the system reached through a new wormhole after all its holes collapsed is. Editing a hole (name, EOL, mass) never posts it; a hole that only starts matching through an edit (e.g. its type is filled in) is new. A paused or deleted filter's records are dropped. Filters with "jumps from you / from home" are skipped (they depend on who is looking). Placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}` (class and effect), `{region}`, `{sig}` (the hole's signature in the system it is off), `{hole}` (its type there, K162 for the exit side), `{from}`, `{map}`; default ``{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}`` + `{map}` on a new line, e.g. "@here Watchlist **C5 with a Wolf-Rayet**: **J170540** (C5, Wolf-Rayet, E-R00024), through WRC-555 H296 in J115405". Filter names (admin text) and game data are escaped; at most 20 messages per mask per poll |
-| Rally point | Someone sets, moves or clears the chain map's rally point (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`, `{time}`...) and cleared (`{rally}`, `{who}`, `{time}`, `{was}`, and the system placeholders for the system the rally was on). Defaults: ``{pings} Tripwire rally point from *{who}*: **{labelSystem}** ({class}, {region})`` + `{map}` on a new line, e.g. "@here Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)", and ``{rally}`` + ``Cleared by *{who}* at {time}`` on a new line. One live message per mask (`discord_rally_message`: id and text as last posted): a set or move within 30 s of its post edits it (`PATCH .../messages/<id>`); a move after that posts a new message (with the pings) and edits the old one into its text struck through + "Moved to **AB · J170122** by *who* at <time>" (fixed text); a clear, at any time, edits it into the cleared text: `{rally}` is the message struck through line by line, without its pings and its link line (a cleared text without `{rally}` gets it put above). E.g. "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701** (C5, E-R00025)~~" / "Cleared by *Aashai Modor* at 19:08". A clear never posts a new message or pings: when there is no live message (never posted, deleted in Discord, another webhook, the type turned off and on since) nothing is sent. Every edit has empty `allowed_mentions` (Discord doesn't notify on edits anyway); the edits that end a message (cleared, moved) also have no pings in their text (the ping field and mentions the admin wrote are left out; a struck rally text that doesn't fit Discord's 2000 characters is cut, never the cleared line). `{time}` is a Discord timestamp (`<t:unix:t>`), shown in each reader's own time zone. Texts saved with an earlier default (1.15's, or 1.17's ``{pings} Tripwire rally point cleared by *{who}*{was}``) are read as today's; edited texts are kept. The message shows the rally as stored when it is sent, and a queued rally message is dropped when a newer one of the mask is queued (a set and a clear queued together send nothing). A live message deleted in Discord (404 Unknown Message) is posted again for a set/move, never for a clear, without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
+| Watchlist match | A system on the mask's chain, connected to the mask's **home system** through live wormholes right now (the chain kill rule, see "Home system" below, walked on every poll; no home set = no watchlist messages), matches one of the mask's [watchlist](#watchlist) filters, evaluated by the worker every 15 s (`discord/watchlist.php`), so it is posted even when nobody has Tripwire open. Matches outside that chain (old fragments) are neither posted nor recorded, so a system that gets connected to home later, while it still matches and its hole is still there, is posted then. What is new comes from what the worker has seen, not from edit times: on the first poll after the type is turned on, after a filter is saved or turned on, or after the home system changes, the chain's current matches are recorded without posting anything (`fork_watchlist_baseline`; records made before are kept, so a match posted earlier that is cut off at that moment isn't posted again when it is reconnected); afterwards a (filter, system) match is posted once, when none of its holes (any of the system's connections for filters on the system only, those fitting the hole conditions otherwise) was seen before. A match needs at least one hole of the chain among them (live by the chain's rule, far side in the chain or not known yet; an expired hole or one from a fragment alone doesn't make a match), and the message names the oldest of those. Every hole seen matching is kept in `fork_watchlist_seen` for as long as it exists (no expiry, so an old hole or a gate link is never posted again however long it stays on the chain), and forgotten when it is gone from the chain: a second way into a system already posted isn't posted, the system reached through a new wormhole after all its holes collapsed is. Editing a hole (name, EOL, mass) never posts it; a hole that only starts matching through an edit (e.g. its type is filled in) is new. A paused or deleted filter's records are dropped. Filters with "jumps from you / from home" are skipped (they depend on who is looking). Placeholders `{filter}`, `{system}`, `{class}`, `{effect}`, `{details}` (class and effect), `{region}`, `{sig}` (the hole's signature in the system it is off), `{hole}` (its type there, K162 for the exit side), `{from}`, `{map}`; default ``{pings} Watchlist **{filter}**: **{system}** ({details}, {region}), through {sig} {hole} in {from}`` + `{map}` on a new line, e.g. "@here Watchlist **C5 with a Wolf-Rayet**: **J170540** (C5, Wolf-Rayet, E-R00024), through WRC-555 H296 in J115405". Filter names (admin text) and game data are escaped; at most 20 messages per mask per poll |
+| Fight here (rally point; key `rally`) | Someone sets, moves or clears the chain map's fight point ([Fight here](#fight-here), first called the rally point), with or without a fleet comp, or changes its comp (and hasn't unticked "Also post to Discord", `options.rallyDiscord.enabled`). Two texts: set/moved (`{who}`, `{system}`, `{label}`, `{labelSystem}`, `{class}`, `{region}`, `{map}`, `{time}`, `{comp}`, `{compNote}`, `{withComp}`...) and cleared (`{rally}`, `{who}`, `{time}`, `{was}`, and the system placeholders for the system the fight was on). `{comp}` / `{compNote}` are the comp's name and note (admin text, escaped like game data; empty without a comp), `{withComp}` is " — comp: Armor HACs" or empty. `{pings}` is the comp's Discord mention (Mask Admin > Fight here) followed by the type's ping field, each mention once; `allowed_mentions` comes from those two and the admin's text only. Defaults: ``{pings} Fight here: **{labelSystem}** ({class}){withComp} — set by *{who}*`` + `{map}` on a new line, e.g. "<@&role> @here Fight here: **AB · J163701** (C5) — comp: Armor HACs — set by *Chribba*", and ``{rally}`` + ``Cleared by *{who}* at {time}`` on a new line. One live message per mask (`discord_rally_message`: id and text as last posted): a set or move within 30 s of its post edits it (`PATCH .../messages/<id>`), unless the change pings someone the message didn't (e.g. a comp with a role picked seconds after "no comp": edits never notify, so that is handled like a later move); a move after that posts a new message (with the pings) and edits the old one into its text struck through + "Moved to **AB · J170122** (Shield BS) by *who* at <time>", or "Changed to **AB · J170122** (Shield BS)" / "(no comp)" when only the comp changed on the same system (fixed text; `discord_rally_message.systemID` keeps the system the message shows, added to older tables on their first write); a clear, at any time, edits it into the cleared text: `{rally}` is the message struck through line by line, without its pings and its link line (a cleared text without `{rally}` gets it put above). E.g. "~~Fight here: **AABCA · J163701** (C5) — comp: Armor HACs — set by *Kytus Bos*~~" / "Cleared by *Aashai Modor* at 19:08". A clear never posts a new message or pings: when there is no live message (never posted, deleted in Discord, another webhook, the type turned off and on since) nothing is sent. Every edit has empty `allowed_mentions` (Discord doesn't notify on edits anyway); the edits that end a message (cleared, moved) also have no pings in their text (the ping field and mentions the admin wrote are left out; a struck rally text that doesn't fit Discord's 2000 characters is cut, never the cleared line). `{time}` is a Discord timestamp (`<t:unix:t>`), shown in each reader's own time zone. Texts saved with an earlier default (1.15's, 1.17's ``{pings} Tripwire rally point cleared by *{who}*{was}``, or the "Tripwire rally point from ..." set text from before Fight here) are read as today's; edited texts are kept (they still get the comp's mention in `{pings}`). The message shows the rally as stored when it is sent, and a queued rally message is dropped when a newer one of the mask is queued (a set and a clear queued together send nothing). A live message deleted in Discord (404 Unknown Message) is posted again for a set/move, never for a clear, without marking the webhook broken. Masks without the type turned on keep posting to upstream's server-wide `DISCORD_WEB_HOOK` when it has a webhook for them (the page says so) |
+| Preserve mass (key `preserveMass`, `discord/preserve_mass.php`) | Someone marks a chain connection "preserve mass" (`public/preserve_mass.php`, `fork_preserve_mass`), changes the mark (another pilot or another reason) or clears it. The change is decided on the server from the flag as stored before and after the request (re-marking with the same pilot and reason is no change), never from the browser, and queued after the response. Every member's change is posted: it is a corporation safety signal, so there is no per-user opt-out like Fight here's; admins turn the type on or off. **Only the chain** (`chainOnly`, on by default): a *new* message is only posted for a connection with an end in the chain connected to the home system (`discord_chain_systems_cached`, as chain kills; no home = nothing new, the page warns); edits of a message already posted always go through. Untick it to post every marked connection of the mask. Two texts: marked/changed (`{connection}` "AB · J163701 ↔ J152820": both ends with their chain labels, the end closer to home first, i.e. home, else the shorter label, an unlabelled end last; `{from}`, `{to}`, `{hole}` the type seen from `{from}` (K162 when scanned on the far side), `{class}` of `{to}`, `{details}` "K162, C5", `{sig}`, `{mass}`, `{life}`, `{who}`, `{reason}`, `{withReason}` ": home static" or empty, `{map}` link to `{from}`) and cleared (`{mark}` the message struck through, `{who}`, `{time}`). Defaults ``{pings} Preserve mass on **{connection}** ({details}) by *{who}*{withReason}`` + `{map}` on a new line, e.g. "@here Preserve mass on **AB · J163701 ↔ J152820** (K162, C5) by *Chribba*: home static", and ``{mark}`` + ``Cleared by *{who}* at {time}``. One live message per (mask, wormhole) (`discord_preserve_message`), handled like Fight here's: a change within 30 s of the post edits it (unless it pings someone new); a later change posts a new message (with the pings) and edits the old one into its text struck through + "Changed by *who* at <time>"; a clear edits it into the cleared text (no new message, no ping; nothing when there is no message); marked again within 30 s of that clear, the struck message is edited back instead of posting a new one. **Hole gone:** when a marked hole leaves the map (collapsed, expired or deleted, i.e. its `wormholes` row is gone) while its message is live, the worker's 10-minute prune pass queues one clear for it (`discord_preserve_clear_gone`; claimed once per hole in `discord_sent`, kind `pmGone`), so the message is struck through with "Cleared by *Tripwire (the hole is gone from the map)* at <time>" (the cleared text with that `{who}`), nobody pinged. **Debounce:** each change is queued due 10 s later and is dropped when a newer change of the same hole is queued, and the message shows the flag and hole as stored when it is sent, so marking and clearing a hole quickly posts nothing. Every edit has empty `allowed_mentions`; pilot names, reasons and labels are escaped like game data. A message deleted in Discord is posted again for a mark, never for a clear. A flag that can't be read when a mark is sent (a database error) makes the row wait and retry, as Fight here rows now do too, instead of failing it. Messages are forgotten a day after they were struck or 7 days after they were posted (holes don't live longer) |
 
 "Our" corporations/alliances (any IDs the admin enters) default to the mask's corporation. Kill types can skip NPC kills (default), pods and kills under an ISK value.
 When one kill matches several types that post to the same webhook, only the most specific is sent (loss > kill > chain).
@@ -355,6 +377,30 @@ nothing and the page warns; corp kills/losses don't use it. Before 2026-10-10 an
 wormhole signatures counted, so fragments of an old chain (holes collapsed or rolled but not deleted; upstream's
 `wormholeClean` only deletes them at `lifeLeft` + 10 % of their life) kept posting
 (`changes/2026-10-10-chain-kills-connected/`).
+"Watchlist match" uses the same chain since 2026-10-11 (`changes/2026-10-11-watchlist-home-chain/`): the worker walks
+it on each 15 s poll (`discord_chain_systems`, one query for all masks with the type on and filters), no home set
+means no watchlist messages (the page's warning names both types), and the home system is part of each filter's
+baseline stamp (`fork_watchlist_baseline.stamp` = `enabledAt:updatedAt:homeSystemID`), so setting or moving home
+records the new chain's current matches without posting them. The in-app watchlist (pop-up, sound, marks) is not
+limited: it matches what each member's chain map draws.
+
+**Chain kills paused notice** (`discord/chain_notice.php`, no setting). While chain kills are on and the mask has no
+home system, `discord_notify.worker.php` posts one message to the chain kill channel (checked every 15 s with the
+k-space poll): "Chain kills are paused: no home system is set for the **Corp** mask. An admin can set it in Tripwire >
+Mask Admin > Discord." Once per episode and channel: the episode is a `discord_sent` row (kind `nohome`, ref
+`wh:<webhookID>`) that is also the notice's dedupe, so later passes post nothing; it is kept by the 7-day prune for as
+long as the episode lasts. The episode ends (row deleted) when the mask gets a home, chain kills are turned off or
+moved to another channel, the webhook's URL is replaced (it may be another channel: the next pass posts a new notice
+there), or the mask or its webhook can no longer send; if chain kills still go to that channel, now with a home, and
+the notice did not fail (sent, still queued, or its outbox row already pruned: sent rows go after 7 days; a failed
+notice gets no "resumed", unless the episode outlasts the 14 days failed rows are kept), one "Chain kills resumed for the **Corp** mask (home: J160650)." follows. Removing the home again starts a
+new episode. Same rule as the chain: only "no home" pauses chain kills (a home without live holes is a chain of one
+system, and an unknown home ID is dropped when the settings load). Both messages are fixed text with empty
+`allowed_mentions` (no pings, whatever the type's ping field says) and the mask name escaped. Mask Admin > Discord adds
+to its "Set a home system" warning when the notice was posted ("A notice was posted to the chain kills channel on
+2026-10-11 00:59 EVE time.", or "Chain kills paused since ..." once the notice's outbox row is pruned; `homeNotice` in
+`discord.php`'s answer). Test: `discord/tests/chain_notice_flow_test.php`
+(against the dev stack's MySQL, worker and `discord-mock`).
 
 **Detection.** K-space: `discord_notify.worker.php` polls `wormholes`/`signatures` of masks with the type on every 15 s
 for signatures changed since its last look (high-water mark on `signatures.modifiedTime`, compared in MySQL, paged by
@@ -434,7 +480,7 @@ BLAKE2b of the setting); without it they are stored in plain text (the UI says s
 as a key is configured. Changing or removing the key makes stored URLs unreadable: those webhooks are marked broken and
 admins have to paste the URL again. Keep the key in your secrets store, like `EVE_SSO_SECRET`.
 
-**Outbound hosts:** `discord.com` (from the worker: POST, and PATCH to edit or strike through rally point messages; the legacy
+**Outbound hosts:** `discord.com` (from the worker: POST, and PATCH to edit or strike through rally point and preserve mass messages; the legacy
 `DISCORD_WEB_HOOK` rally posts come from `public/rally.php` as before). Embeds reference `images.evetech.net`,
 `zkillboard.com` and `evemaps.dotlan.net`; Discord fetches those, not Tripwire.
 
@@ -446,11 +492,48 @@ twice; `PATCH .../messages/<id>` edits (rally point), `GET /delete/<id>` makes l
 Unknown Message; `http://127.0.0.1:9095/messages` lists what was received and `/channel` shows the channel as a reader sees it (each message as last edited). Any 18-digit ID and 68-character token works, e.g.
 `https://discord.com/api/webhooks/111111111111111111/<68 characters>`. Fake a kill through the same path as the worker:
 `docker compose -f docker-compose.dev.yml exec -T app php docker/dev/discord-fake-kill.php <systemID> <loss|kill|neutral>`.
-Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` (`discord/tests/` and
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php discord/tests/discord_test.php` and, against the
+running dev stack (worker + mock), `php discord/tests/chain_notice_flow_test.php` (`discord/tests/` and
 `discord/tools/` are not in the image).
 
 Upstream's own manual "ping" button (`DISCORD_WEB_HOOK`, `public/ping.php`) is unchanged and separate. Rally point
 tests: also `php tests/rally_discord_test.php` (routing between the Mask Admin setting and `DISCORD_WEB_HOOK`, legacy texts) and, against the running dev stack (worker + mock), `php tests/rally_discord_flow_test.php` (every set / move / clear sequence on both paths, printing the channel).
+Preserve mass: `php discord/tests/preserve_mass_test.php` (settings, change detection, texts, escaping, mentions, the
+sender's plan, debounce, chain scope; SQLite) and, against the running dev stack (dev login, worker, mock),
+`php tests/preserve_mass_discord_flow_test.php` (marks and clears through `public/preserve_mass.php` over HTTP, printing the
+channel; takes a few minutes because of the 10 s debounce).
+
+### Fight here
+
+The chain map's rally point, renamed "Fight here" and given fleet comps. Right-click a system > **Fight here ▸**:
+"Fight here (no comp)" (the old rally), one entry per fleet comp of the mask (coloured dot + name), and "Clear fight"
+while a fight point is set. A mask without comps keeps the old one-click entry ("Fight here", or "Clear fight" on the
+fight's system). Everyone on the mask sees the system in the comp's colour (no comp: the old green), the
+route to it, and a banner in the chain map header: "Fight here: AB · J163701 (C5, 2 jumps) · Armor HACs · set by
+Chribba · 4 min ago ✕" (the chain label as the Discord message shows it, `discord_chain_label`; the comp's note in
+its tooltip; ✕ clears it). Members can hide the banner (Settings > Chain Map Settings > Fight here,
+`options.fightBanner.enabled`, on by default); the system stays marked.
+
+- **Comps** (Mask Admin > Fight here, `public/fight.php`, `fight/fight.inc.php`): the corporation's Tripwire admins
+  (same masks and checks as Mask Admin > Discord: the corp mask and corporation-owned custom masks, `checkAdmin`) add,
+  edit, reorder and remove up to 20 comps per mask: a name (required, up to 40 characters, unique per mask), a colour
+  from a fixed palette (green, red, orange, yellow, blue, purple, pink, cyan, white), an optional note (up to 140) and an
+  optional Discord mention (`<@&roleID>`, `<@userID>`, `@here`, `@everyone`, validated like the type's ping field).
+  Stored as JSON in `fork_fight_comps` (one row per mask). Every member reads the list (in `public/rally.php`'s answer,
+  without the mentions); changes need the admin, a per-session `X-CSRF-Token`, `X-Requested-With`, JSON and a
+  same-origin `Origin` (as `public/discord.php`).
+- **The fight point** is still `fork_rally` (`public/rally.php`, internal names unchanged: no data migration). Setting it
+  takes an optional `compID`; the server looks the comp up and stores a copy (`compID`, `compName`, `compColour`,
+  `compNote`, `compMention`), so a comp removed or renamed later keeps showing as it was until the fight is cleared or
+  moved. Choosing another comp on the same system counts as a change (Discord: an edit within 30 s, else a new message).
+- **Discord**: the "Fight here" type of Mask Admin > Discord (see the table above): the comp's name in the text, its
+  mention pinged with the type's ping. The legacy `DISCORD_WEB_HOOK` path names the comp, never pings.
+
+Tests: `docker compose -f docker-compose.dev.yml exec -T app php fight/tests/fight_test.php` (validation, storage,
+removed comps, payloads, template upgrade, legacy texts; SQLite) and, against the running dev stack (login from
+`docker/dev-seed.sh`, worker, mock), `php tests/fight_endpoint_test.php` (admin / non-admin / CSRF / Origin checks,
+comps and the fight point over HTTP, and set with a comp → move within 30 s → clear through the worker to the mock,
+printing the payloads). `fight/tests/` is not in the image. Mocha: `app/js-test/fork/fight-comps.test.js`.
 
 ### D-scan and local scans
 
@@ -485,7 +568,10 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
 - The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
   makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
   signature table). Each member turns these on or off in Settings > Kills & Intel > Watchlist.
-- The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`. Both matchers pass the
+- The Discord type "Watchlist match" matches the same filters in `discord_notify.worker.php`, only in the chain
+  connected to the mask's home system (Mask Admin > Discord; see "Home system" under
+  [Discord notifications](#discord-notifications)); the in-app pop-up, sound and marks cover everything on the
+  member's chain map. Both matchers pass the
   same cases, `watchlist/tests/cases.json` (mocha: `app/js-test/fork/watchlist.test.js`; PHP:
   `docker compose -f docker-compose.dev.yml exec -T app php watchlist/tests/watchlist_test.php`).
 - Game data (systems, wormhole types, regions) is read from `public/js/combine.js`, the file the browser matches with
@@ -542,7 +628,7 @@ stack has no `version.json` (the repo is mounted over it), so its tooltip shows 
 Only what the running app needs: the PHP sources, `api/`, `public/` (with the bundles built in the
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
-files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`, `jumprange/tests/`, `jumprange/tools/`) from the build context
+files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`, `watchlist/tests/`, `jumprange/tests/`, `jumprange/tools/`, `fight/tests/`) from the build context
 before copying it in; if upstream adds new non-runtime files, add them to that list.
 
 If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose

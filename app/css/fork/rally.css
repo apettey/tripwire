@@ -1,45 +1,81 @@
-/* Rally point on the chain map (fork-owned, see app/js/fork/rally.js) */
+/* Fight here (the rally point) on the chain map (fork-owned, see app/js/fork/rally.js and fight-comps.js) */
 
-/* The rally system's node: green, pulsing. !important because top-level/flare/current-node rules are more specific */
+/* Fleet comp colours (fightComps.PALETTE / fight_palette): --fight-rgb is the colour, --fight-bg the node background.
+   No comp: today's green rally style. */
+:root { --fight-rgb: 57, 255, 20; --fight-bg: #0b3d0b; --fight-bg-hi: #1a6b1a; }
+.fight-c-green  { --fight-rgb: 57, 255, 20;   --fight-bg: #0b3d0b; --fight-bg-hi: #1a6b1a; }
+.fight-c-red    { --fight-rgb: 255, 71, 71;   --fight-bg: #4a1010; --fight-bg-hi: #7a1c1c; }
+.fight-c-orange { --fight-rgb: 255, 159, 26;  --fight-bg: #4a2c05; --fight-bg-hi: #7a4a0a; }
+.fight-c-yellow { --fight-rgb: 255, 225, 77;  --fight-bg: #4a400c; --fight-bg-hi: #786814; }
+.fight-c-blue   { --fight-rgb: 77, 166, 255;  --fight-bg: #0d2c4d; --fight-bg-hi: #17487d; }
+.fight-c-purple { --fight-rgb: 181, 124, 255; --fight-bg: #2f1650; --fight-bg-hi: #4c2480; }
+.fight-c-pink   { --fight-rgb: 255, 110, 199; --fight-bg: #4d1238; --fight-bg-hi: #7d1e5c; }
+.fight-c-cyan   { --fight-rgb: 46, 230, 214;  --fight-bg: #0a403b; --fight-bg-hi: #116a62; }
+.fight-c-white  { --fight-rgb: 230, 230, 230; --fight-bg: #3a3a3a; --fight-bg-hi: #5c5c5c; }
+
+/* The fight system's node: the comp's colour, pulsing. !important because top-level/flare/current-node rules are more specific */
 #chainMap div.node.rally-node {
-	border-color: #39ff14 !important;
-	background: #0b3d0b !important;
-	box-shadow: 0 0 6px 2px rgba(57, 255, 20, 0.6) !important;
+	border-color: rgb(var(--fight-rgb)) !important;
+	background: var(--fight-bg) !important;
+	box-shadow: 0 0 6px 2px rgba(var(--fight-rgb), 0.6) !important;
 	animation: rally-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes rally-pulse {
-	0%, 100% { box-shadow: 0 0 4px 1px rgba(57, 255, 20, 0.45); background-color: #0b3d0b; }
-	50% { box-shadow: 0 0 16px 6px rgba(57, 255, 20, 0.95); background-color: #1a6b1a; }
+	0%, 100% { box-shadow: 0 0 4px 1px rgba(var(--fight-rgb), 0.45); background-color: var(--fight-bg); }
+	50% { box-shadow: 0 0 16px 6px rgba(var(--fight-rgb), 0.95); background-color: var(--fight-bg-hi); }
 }
 
 /* Radial / orgchart-top / orgchart-side renderers draw lines on a canvas, reading style from a temporary
    element with the connection's classes (propertyFromCssClass): colour, width and aura colour */
 .temp.rally-route {
-	border-color: #39ff14;
+	border-color: rgb(var(--fight-rgb));
 	border-width: 5px;
-	color: #39ff14;
+	color: rgb(var(--fight-rgb));
 }
 
 /* Google orgchart renderer: route lines are table cell borders */
 #chainMap td.rally-route {
 	border-color: #39ff14;
 }
+#chainMap td.rally-route.fight-c-green  { border-color: #39ff14; }
+#chainMap td.rally-route.fight-c-red    { border-color: #ff4747; }
+#chainMap td.rally-route.fight-c-orange { border-color: #ff9f1a; }
+#chainMap td.rally-route.fight-c-yellow { border-color: #ffe14d; }
+#chainMap td.rally-route.fight-c-blue   { border-color: #4da6ff; }
+#chainMap td.rally-route.fight-c-purple { border-color: #b57cff; }
+#chainMap td.rally-route.fight-c-pink   { border-color: #ff6ec7; }
+#chainMap td.rally-route.fight-c-cyan   { border-color: #2ee6d6; }
+#chainMap td.rally-route.fight-c-white  { border-color: #e6e6e6; }
 
-/* Banner in the chain map header */
+/* Banner in the chain map header: one line, never wider than the header (the full text is its tooltip) */
 #rally-banner {
 	margin-left: 6px;
-	color: #39ff14;
+	color: rgb(var(--fight-rgb));
 	white-space: nowrap;
+	display: inline-flex;
+	align-items: baseline;
+	max-width: calc(100% - 190px);	/* stays on the line of the header's icons (about 165 px) */
+	vertical-align: bottom;
+	cursor: default;
 }
 
 #rally-banner.hidden {
 	display: none;
 }
 
-#rally-banner > span:first-child {
+#rally-banner .fight-sep {
+	flex: none;
 	color: inherit;
 	margin-right: 4px;
+}
+
+/* The text takes the ellipsis; the clear button after it never shrinks */
+#rally-banner .fight-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 #rally-banner .rally-icon {
@@ -48,24 +84,46 @@
 }
 
 #rally-banner .rally-name {
-	color: #39ff14;
+	color: rgb(var(--fight-rgb));
 	font-weight: bold;
 }
 
-#rally-banner .rally-jumps {
+#rally-banner .rally-jumps,
+#rally-banner .fight-who,
+#rally-banner .fight-age {
 	color: #9c9;
 }
 
+#rally-banner .fight-comp.hidden { display: none; }
+#rally-banner .fight-comp-name { font-weight: bold; }
+
 #rally-banner .rally-clear {
+	flex: none;
 	font-style: normal;
 	cursor: pointer;
-	margin-left: 4px;
+	margin-left: 6px;
 	color: #bbb;
 }
 
 #rally-banner .rally-clear:hover {
 	color: #FF4747;
 }
+
+/* Comp colour dot (banner, submenu, Mask Admin > Fight here) */
+.fight-dot {
+	display: inline-block;
+	width: 0.7em;
+	height: 0.7em;
+	border-radius: 50%;
+	margin-right: 4px;
+	vertical-align: baseline;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* "Fight here" submenu */
+#chainMenu .fight-submenu { min-width: 12em; }
+#chainMenu .fight-entry.fight-current { font-weight: bold; }
+#chainMenu .fight-check { color: #39ff14; }
 
 /* "Also post to Discord" entry in the chain map context menu (Discord blurple when on) */
 #rallyDiscordMenuItem .rally-discord-check {
@@ -90,5 +148,41 @@
 	}
 }
 
-/* Settings > Map Markers > Rally point */
+/* Settings > Map Markers > Fight here: where the fight channel and comps are set */
 #dialog-options .rally-discord-note { font-size: 11px; color: #999; }
+
+/* Mask Admin > Fight here */
+.ui-dialog.fight-admin-active .ui-dialog-traypane { display: none; }
+
+#dialog-admin .fight-admin {
+	padding: 0 8px 12px 10px;
+	font-size: 12px;
+	line-height: 1.4;
+	text-align: left;
+}
+#dialog-admin .fight-admin h2 { font-size: 16px; margin: 4px 0 2px; }
+#dialog-admin .fight-admin h3 { font-size: 13px; margin: 12px 0 4px; color: #ccc; border-bottom: 1px solid #444; }
+#dialog-admin .fight-admin p { margin: 2px 0; }
+#dialog-admin .fight-small { font-size: 11px; color: #999; }
+#dialog-admin .fight-good { color: #6c6 !important; }
+#dialog-admin .fight-bad { color: #e66 !important; }
+#dialog-admin .fight-comps { width: 100%; border-collapse: collapse; margin: 6px 0 4px; }
+#dialog-admin .fight-comps th { text-align: left; color: #aaa; font-weight: normal; border-bottom: 1px solid #333; }
+#dialog-admin .fight-comps td { padding: 3px 6px 3px 0; vertical-align: top; }
+#dialog-admin .fight-comps .fight-order { width: 44px; white-space: nowrap; }
+#dialog-admin .fight-comps .fight-order button { font-size: 9px; padding: 0 3px; }
+#dialog-admin .fight-comps .fight-mention { font-family: monospace; color: #aaa; }
+#dialog-admin .fight-comps .fight-actions { white-space: nowrap; text-align: right; }
+#dialog-admin .fight-comps .fight-actions button { margin-left: 3px; font-size: 11px; }
+#dialog-admin .fight-form-table { border-collapse: collapse; }
+#dialog-admin .fight-form-table th { width: 110px; text-align: right; vertical-align: top; padding: 4px 6px 3px 0; color: #aaa; font-weight: normal; white-space: nowrap; }
+#dialog-admin .fight-form-table td { padding: 2px 0; }
+/* Upstream draws a line under every other row of Mask Admin tables: not in these */
+div.ui-dialog[aria-describedby='dialog-admin'] .window .fight-admin table tbody tr:nth-child(even) td { border-bottom: none; }
+#dialog-admin .fight-comps tbody td { border-bottom: 1px solid #333; }
+/* Colour swatches: the radio button is the dot (kept focusable for the keyboard) */
+#dialog-admin .fight-swatch { display: inline-block; position: relative; margin-right: 8px; cursor: pointer; }
+#dialog-admin .fight-swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+#dialog-admin .fight-swatch .fight-dot { width: 1.2em; height: 1.2em; margin: 0; vertical-align: middle; }
+#dialog-admin .fight-swatch input:checked + .fight-dot { box-shadow: 0 0 0 2px #111, 0 0 0 4px #eee; }
+#dialog-admin .fight-swatch input:focus-visible + .fight-dot { outline: 2px dashed #9cf; outline-offset: 3px; }
