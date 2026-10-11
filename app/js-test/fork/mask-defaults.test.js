@@ -3,7 +3,7 @@ const { include } = require('../helpers/helpers');
 include('app/js/fork/mask-defaults');
 // the tests below also use made-up keys (the real list is checked in mask-defaults-allow.test.js)
 before(() => { maskDefaults.ALLOWED.push('a', 'b', 'x', 'ok', 'alpha', 'zeta'); });
-after(() => { maskDefaults.ALLOWED.length = 27; });
+after(() => { maskDefaults.ALLOWED.length = 26; });
 
 describe('maskDefaults', () => {
 	const defaults = { sizeTags: { enabled: false, big: 1 }, soundMute: { enabled: true } };

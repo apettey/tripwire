@@ -71,7 +71,7 @@ const MASKADMIN_DEFAULTS_MAX_BYTES = 16384;
 const MASKADMIN_DEFAULTS_MAX_KEYS = 40;
 // The only options a mask default may carry: the top-level options keys the fork's Settings rows store (forkSettings.register
 // with a `key`). The browser has the same list (maskDefaults.ALLOWED); a mocha test keeps both equal to the keys the rows use.
-const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'favoritesPanel', 'favouritesRouteStrip', 'highsecRegion', 'holeNaming', 'intelScans', 'jumpReturn',
+const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'favouritesRouteStrip', 'highsecRegion', 'holeNaming', 'intelScans', 'jumpReturn',
     'killReporting', 'lootBuyers', 'preserveMass', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sigAnomalies', 'sizeTags', 'skyhooksPanel', 'smartNotes',
     'soundMute', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
 
