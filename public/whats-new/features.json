@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 78,
+      "date": "2026-10-11",
+      "title": "System status, occupier and alias",
+      "description": "Right-click a system on the chain map to mark it Friendly, Hostile, Active, Empty or Unscanned, give it a short alias like Staging, or note who occupies it; Clear all status removes all three at once. The node gets a coloured outline with a letter, the alias shows under it, and the system info panel summarises it. Everyone on your mask sees it, and it stays when the system leaves the chain and comes back. Turn the colours and info line off in Settings > Map Markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-78-system-status.png",
+          "caption": "Status outlines, letters and aliases on the chain map"
+        }
+      ]
+    },
+    {
       "pr": 77,
       "date": "2026-10-11",
       "title": "Hide cosmic anomalies",
