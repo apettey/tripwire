@@ -273,16 +273,31 @@ function esi_etag_dir(?string $set = null) {
     return $dir;
 }
 
+/** Routes that are fetched again and again; immutable per-ID routes (killmails/*, types, ...) are never stored */
+function esi_etag_routes() {
+    return ['fw/systems', 'universe/system_jumps', 'universe/system_kills', 'skyhooks/raidable', 'characters/affiliation',
+        'corporations/{id}', 'alliances/{id}', 'characters/{id}'];
+}
+
+function esi_etag_allowed($url) {
+    $route = esi_route_key($url);
+    return in_array($route, esi_etag_routes(), true) || strpos($route, 'sovereignty/') === 0;
+}
+
+/** Cache key: URL plus what changes the answer (token, compatibility date, language) */
 function esi_etag_file($url, array $headers = []) {
-    $auth = '';
+    $vary = ['authorization' => '', 'x-compatibility-date' => '', 'accept-language' => ''];
     foreach ($headers as $header) {
-        if (stripos(ltrim((string) $header), 'authorization:') === 0) $auth = trim((string) $header);
+        $parts = explode(':', (string) $header, 2);
+        $name = strtolower(trim($parts[0]));
+        if (isset($vary[$name]) && count($parts) === 2) $vary[$name] = $name === 'authorization' ? trim($parts[1]) : strtolower(trim($parts[1]));
     }
-    return esi_etag_dir() . '/' . sha1(strtolower($url) . "\n" . $auth) . '.json';
+    return esi_etag_dir() . '/' . sha1(strtolower($url) . "\n" . implode("\n", $vary)) . '.json';
 }
 
 /** @return array|null ['etag' => string, 'body' => string, 'headers' => array] stored for this request */
 function esi_etag_load($url, array $headers = []) {
+    if (!esi_etag_allowed($url)) return null;
     $raw = @file_get_contents(esi_etag_file($url, $headers));
     $entry = $raw ? json_decode($raw, true) : null;
     return is_array($entry) && is_string($entry['etag'] ?? null) && is_string($entry['body'] ?? null) ? $entry : null;
@@ -291,7 +306,7 @@ function esi_etag_load($url, array $headers = []) {
 /** Remember a 200 response that carries an ETag (weak or strong); anything else is ignored */
 function esi_etag_store($url, array $requestHeaders, $body, array $responseHeaders) {
     $etag = $responseHeaders['etag'] ?? '';
-    if ($etag === '' || !is_string($body) || strlen($body) > ESI_ETAG_MAX_BODY) return;
+    if ($etag === '' || !esi_etag_allowed($url) || !is_string($body) || strlen($body) > ESI_ETAG_MAX_BODY) return;
     $dir = esi_etag_dir();
     if (!is_dir($dir) && !@mkdir($dir, 0777, true) && !is_dir($dir)) return;
     $keep = array_intersect_key($responseHeaders, array_flip(['content-type', 'x-pages', 'expires', 'last-modified']));
@@ -299,14 +314,22 @@ function esi_etag_store($url, array $requestHeaders, $body, array $responseHeade
     $tmp = $file . '.' . getmypid() . '.tmp';
     if (@file_put_contents($tmp, json_encode(['etag' => $etag, 'body' => $body, 'headers' => $keep])) === false) return;
     @chmod($tmp, 0666);
-    @rename($tmp, $file);
-    if (mt_rand(1, 200) === 1) esi_etag_prune();
+    if (!@rename($tmp, $file)) @unlink($tmp);
+    esi_etag_prune();
 }
 
-function esi_etag_prune($now = null) {
+/** Delete unused entries and stray temp files; runs at most once an hour (marker file) unless $force */
+function esi_etag_prune($now = null, $force = false) {
     $now = $now ?? time();
+    $marker = esi_etag_dir() . '/.pruned';
+    clearstatcache();
+    if (!$force && @filemtime($marker) > $now - 3600) return;
+    @touch($marker, $now);
     foreach (glob(esi_etag_dir() . '/*.json') ?: [] as $file) {
         if (@filemtime($file) < $now - ESI_ETAG_MAX_AGE) @unlink($file);
+    }
+    foreach (glob(esi_etag_dir() . '/*.tmp') ?: [] as $file) {
+        if (@filemtime($file) < $now - 3600) @unlink($file);
     }
 }
 

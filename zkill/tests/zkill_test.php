@@ -194,7 +194,7 @@ esi_etag_dir($etagDir);
 $seen = [];
 $reply = [200, '{"k":1}', ['etag' => '"e1"']];
 zk_http_transport(function ($method, $url, $body, $extra = []) use (&$seen, &$reply) { $seen[] = $extra; return $reply; });
-$esiUrl = ZK_ESI_BASE . 'killmails/1/abc/';
+$esiUrl = ZK_ESI_BASE . 'corporations/7/';
 zk_http_pause('esi.evetech.net', 0);
 [$status, $text] = zk_http_get($esiUrl);
 check('worker etag: first ESI GET sends nothing extra', [$status, $text, $seen[0]], [200, '{"k":1}', []]);
@@ -207,7 +207,8 @@ zk_http_get('https://zkillboard.com/api/stats/');
 zk_http_get('https://zkillboard.com/api/stats/');
 check('worker etag: zKillboard is untouched', end($seen), []);
 zk_http_transport(null, true);
-foreach (glob($etagDir . '/*') ?: [] as $f) @unlink($f);
+foreach (array_merge(glob($etagDir . '/*') ?: [], glob($etagDir . '/.pruned') ?: []) as $f) @unlink($f);
+@unlink($etagDir . '/.pruned');
 @rmdir($etagDir);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";

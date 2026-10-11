@@ -209,20 +209,44 @@ esi_request('POST', 'https://esi.evetech.net/universe/names/', [], '[1]');
 check('etag: POST is never stored', count(glob($etagDir . '/*.json')), 1);
 // Authenticated responses are per access token
 $replies = [[200, '{"roles":["x"]}', ['etag' => '"r1"']]];
-esi_request('GET', 'https://esi.evetech.net/characters/9/roles/', ['Authorization: Bearer one']);
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer one']);
 $replies = [[200, '{}', []]];
-esi_request('GET', 'https://esi.evetech.net/characters/9/roles/', ['Authorization: Bearer two']);
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer two']);
 check('etag: another token does not get the stored ETag', in_array('If-None-Match: "r1"', end($sent)[2], true), false);
-esi_request('GET', 'https://esi.evetech.net/characters/9/roles/', ['Authorization: Bearer one']);
+esi_request('GET', 'https://esi.evetech.net/characters/9/', ['Authorization: Bearer one']);
 check('etag: the same token does', in_array('If-None-Match: "r1"', end($sent)[2], true), true);
 // Non-ESI URLs and pruning
 check('etag: only ESI urls', esi_etag_load('https://example.com/x'), null);
+// Immutable per-ID routes are never stored
+$before = count(glob($etagDir . '/*.json'));
+$replies = [[200, '{"k":1}', ['etag' => '"k"']], [200, '{"k":1}', ['etag' => '"k"']]];
+esi_request('GET', 'https://esi.evetech.net/killmails/1/abc/');
+esi_request('GET', 'https://esi.evetech.net/universe/types/587/');
+check('etag: killmails and types are not stored', [count(glob($etagDir . '/*.json')), esi_etag_load('https://esi.evetech.net/killmails/1/abc/')], [$before, null]);
+// Language / compatibility date are part of the key
+$replies = [[200, '{}', ['etag' => '"l"']]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: de']);
+$replies = [[200, '{}', []]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: en']);
+check('etag: language is part of the key', in_array('If-None-Match: "l"', end($sent)[2], true), false);
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['accept-language: DE']);
+check('etag: header names and values are case-insensitive', in_array('If-None-Match: "l"', end($sent)[2], true), true);
+$replies = [[200, '{}', []]];
+esi_request('GET', 'https://esi.evetech.net/fw/systems/', ['Accept-Language: de', 'X-Compatibility-Date: 2020-01-01']);
+check('etag: compatibility date is part of the key', in_array('If-None-Match: "l"', end($sent)[2], true), false);
+// Pruning: hourly via a marker file, old entries and stray temp files
+file_put_contents($etagDir . '/stray.tmp', 'x');
 foreach (glob($etagDir . '/*.json') as $f) touch($f, time() - ESI_ETAG_MAX_AGE - 10);
+touch($etagDir . '/stray.tmp', time() - 7200);
 esi_etag_prune();
-check('etag: old entries are pruned', glob($etagDir . '/*.json'), []);
+check('prune: skipped while the marker is fresh', count(glob($etagDir . '/*.json')) > 0, true);
+touch($etagDir . '/.pruned', time() - 7200);
+esi_etag_prune();
+check('prune: old entries and stray temp files go', [glob($etagDir . '/*.json'), glob($etagDir . '/*.tmp')], [[], []]);
 
 esi_transport(null, true);
-foreach (glob($etagDir . '/*') ?: [] as $f) @unlink($f);
+foreach (array_merge(glob($etagDir . '/*') ?: [], glob($etagDir . '/.pruned') ?: []) as $f) @unlink($f);
+@unlink($etagDir . '/.pruned');
 @rmdir($etagDir);
 @unlink($stale);
 @unlink($stateFile);

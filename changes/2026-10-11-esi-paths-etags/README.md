@@ -22,8 +22,10 @@ No visual change.
   Also `intel/tools/generate-types.js` (dev tool base URL). The zkill worker, skyhooks and system residents were
   already unversioned. No route was left behind.
 - ETags: `esi_request()` (and so `esi_open_url()`, skyhooks, system residents) and the zkill worker's
-  `zk_http_request()` store a 200's ETag with its body in `cache/esi-etag/` (one file per URL and access token,
-  max 1 MB, pruned after a week) and send `If-None-Match`; a 304 is returned to the caller as the stored 200.
+  `zk_http_request()` store a 200's ETag with its body in `cache/esi-etag/` (one file per URL, access token,
+  compatibility date and language; max 1 MB; only for re-fetched routes: fw/systems, system_jumps, system_kills,
+  skyhooks/raidable, sovereignty/*, characters/affiliation, characters/{id}, corporations/{id}, alliances/{id},
+  never killmails or other immutable per-ID routes; pruned after a week, checked at most hourly) and send `If-None-Match`; a 304 is returned to the caller as the stored 200.
   Not covered: `esi.class.php` `getAPI()` (upstream file, only path strings edited) and the worker's
   `zk_http_get_many()` (zKillboard only). The browser relies on its own HTTP cache.
 - Upstream files touched (path strings only): `app/js/tripwire/esi.js`, `esi.class.php`, `public/cached_third_party.php`.
