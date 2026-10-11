@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 60,
+      "date": "2026-10-11",
+      "title": "Discord: preserve mass marks",
+      "description": "Your corporation's Tripwire admins can now post preserve mass marks to Discord. When someone marks a connection \"preserve mass\", changes the reason or clears it, a message names the hole with its chain label, type and class, who marked it and why. Changes within 30 seconds edit the message, clearing the mark strikes it through without pinging anyone again, and holes that close are struck through automatically.\n\nSet it up in Mask Admin > Discord > Preserve mass: pick a channel and who to ping, and choose whether only connections in your home chain are posted. It's off until an admin turns it on; there is no personal setting, because a preserve mass mark is a warning for the whole corporation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-60-discord-preserve-mass.png",
+          "caption": "Mask Admin > Discord: the Preserve mass type and its preview"
+        }
+      ]
+    },
+    {
       "pr": 51,
       "date": "2026-10-11",
       "title": "Fight here: pick the fleet comp",
