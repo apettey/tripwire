@@ -36,6 +36,8 @@ function checkAdmin($mask) {
 function verifyMask($mask) {
 	global $mysql;
 	
+	require_once(__DIR__ . '/mask-guard.inc.php'); // fork: only canonical mask ids ("12.0"), anything else is the corp mask
+	if (($mask = tripwire_mask_canonical($mask)) === null) return $_SESSION['corporationID'] . '.2';
 	$checkMask = explode('.', $mask);
 	if ($checkMask[1] == 0 && $checkMask[0] != 0) {
 		// Check custom mask
