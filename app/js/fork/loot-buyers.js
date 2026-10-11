@@ -34,6 +34,14 @@ const lootBuyers = {
 		return data.blue.map(make("blue")).concat(red ? data.red.map(make("red")) : []);
 	},
 
+	/** The blue-loot buyer systems as guidance wants them (systemID - 30000000), sorted, once each */
+	blueSystems: function(data) {
+		if (!lootBuyers.valid(data)) { return []; }
+		const seen = {};
+		return data.blue.map(function(s) { return Number(s[1]) - 30000000; }).filter(function(id) { return id > 0 && !seen[id] && (seen[id] = true); })
+			.sort(function(a, b) { return a - b; });
+	},
+
 	/** The chain exits to search from: when routeHoleFilters is judging the holes (holeFilters = the table
 	routeDestinations.holeFilters), exits whose way home avoids the filtered holes, or else all of them (the same rule
 	as Destinations). exits: [{systemID, holes?, ...}] -> [systemID] */
@@ -107,12 +115,28 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (data || loading) { return; }
 			loading = true;
 			$.ajax({ url: lb.DATA_URL, dataType: "json", cache: true }).done(function(d) {
-				if (lb.valid(d)) { data = d; failed = false; } else { failed = true; }
+				if (lb.valid(d)) { data = d; failed = false; applyToSystemPanel(); } else { failed = true; }
 			}).fail(function() { failed = true; }).always(function() { loading = false; render(); });
+		}
+
+		/** Upstream's system panel line "Blue loot buyer: Nj from X" reads guidance_profiles.blueLootSystems, a hard-coded list
+		that is a bit stale; use our list (no upstream edit) once it is loaded */
+		function applyToSystemPanel() {
+			if (typeof guidance_profiles === "undefined" || !opts().enabled) { return; }
+			const systems = lb.blueSystems(data);
+			if (!systems.length) { return; }
+			guidance_profiles.blueLootSystems = systems;
+			try {
+				if (typeof guidance !== "undefined" && typeof guidance.clearCache === "function") { guidance.clearCache(); }
+				if (typeof systemPanel !== "undefined" && typeof viewingSystemID !== "undefined" && viewingSystemID) { systemPanel.update(); }
+			} catch (e) { /* the line refreshes with the next system view */ }
 		}
 
 		/** Distances from the usable exits, kept while the exits, route preferences and gate map stay the same */
 		function distances(exitIDs) {
+			// Intentional dependency: the skyhook panel's multi-source search (same costs and cut-off as guidance) is reused, not copied.
+			// Its file (skyhooks-panel.js) loads after ours, which is fine: it is only used when the window renders.
+			if (typeof skyhooksPanel === "undefined" || typeof skyhooksPanel.distances !== "function") { throw new Error("skyhooksPanel is not loaded"); }
 			const map = routeDestinations.routeMap();
 			const c = (typeof options !== "undefined" && options && options.chain) || {}, r = c.routeIgnore || {};
 			const key = exitIDs.join(",") + "|" + (c.routeSecurity || "") + "|" + (r.enabled ? (r.systems || []).join(",") : "");
@@ -146,7 +170,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!data) { load(); note(failed ? "The loot buyer list could not be loaded." : "Loading..."); return; }
 			const exitIDs = lb.usableExits(routeDestinations.lastExits, routeDestinations.holeFilters);
 			if (!exitIDs.length) { note("No k-space exit on the chain map to route from."); return; }
-			const rows = lb.nearest(data, s.red, distances(exitIDs), systemFor, lb.COUNT);
+			let rows;
+			try {
+				rows = lb.nearest(data, s.red, distances(exitIDs), systemFor, lb.COUNT);
+			} catch (err) {
+				console.error("Loot buyers: search failed", err);
+				note("Loot buyer search unavailable.");
+				return;
+			}
 			if (!rows.length) { note("No loot buyer reachable by gates from the chain's exits."); return; }
 			const name = function(id) { return (appData.systems[id] || {}).name || id; };
 			const canRoute = typeof autopilotRoute !== "undefined" && typeof autopilotRoute.push === "function";
@@ -171,6 +202,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() { setTimeout(init, 0); });
 		function init() {
 			install();
+			if (opts().enabled) { load(); }   // also corrects the system panel's blue loot line
 			const $d = $("#dialog-routeDestinations");
 			if ($d.length && !$d.find(".loot-buyers").length) {
 				$d.find(".route-dest-note").before(
@@ -212,7 +244,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const apply = options.apply;
 				options.apply = function() {
 					const result = apply.apply(this, arguments);
-					try { render(); } catch (err) { console.error("Loot buyers: apply failed", err); }
+					try { if (data) { applyToSystemPanel(); } else if (opts().enabled) { load(); } render(); } catch (err) { console.error("Loot buyers: apply failed", err); }
 					return result;
 				};
 				options.apply.lootBuyersWrapped = true;

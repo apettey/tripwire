@@ -84,6 +84,21 @@ describe('Loot buyers', () => {
 		it('nothing to search from, no exits', () => assert.deepStrictEqual(lootBuyers.usableExits([], null), []));
 	});
 
+	describe('blueSystems (the system panel line)', () => {
+		it('offset ids, sorted, once each', () => {
+			const ids = lootBuyers.blueSystems({ blue: [[1, O + 9, 1, 'a'], [2, O + 3, 1, 'b'], [3, O + 9, 1, 'c']], red: [[4, O + 1, 1, 'd']] });
+			assert.deepStrictEqual(ids, [3, 9]);
+		});
+		it('bad data gives nothing', () => assert.deepStrictEqual(lootBuyers.blueSystems(null), []));
+		it('covers every system of upstream\'s hard-coded blueLootSystems (and has a few more)', () => {
+			include('app/js/guidance_profiles');
+			const mine = new Set(lootBuyers.blueSystems(DATA));
+			const missing = guidance_profiles.blueLootSystems.filter(id => !mine.has(id));
+			assert.deepStrictEqual(missing, []);
+			assert.ok(mine.size > guidance_profiles.blueLootSystems.length);
+		});
+	});
+
 	describe('rowHtml', () => {
 		const row = { systemID: 30000017, stationID: 60014071, exitID: 30000001, jumps: 1, security: 0.04, name: 'Futzchag IX - Moon 9 - <Thukker> Mix Factory', corpID: 1, kinds: ['blue', 'red'], more: 2 };
 		it('escapes, marks the kinds and offers the route', () => {
@@ -183,6 +198,25 @@ describe('Loot buyers', () => {
 			assert.strictEqual(gen.seeded([o({ is_buy_order: false })], ids).length, 0);
 			assert.strictEqual(gen.seeded([o({ type_id: 34 })], ids).length, 0);
 			assert.strictEqual(gen.seeded([o(), o()], ids).length, 1);
+		});
+		it('checkFloor: fails below 80% of the previous counts, per class', () => {
+			const prev = { blue: new Array(100).fill(0), red: new Array(50).fill(0) };
+			assert.deepStrictEqual(gen.checkFloor({ blue: 80, red: 40 }, prev), []);
+			assert.strictEqual(gen.checkFloor({ blue: 79, red: 50 }, prev).length, 1);
+			assert.strictEqual(gen.checkFloor({ blue: 0, red: 0 }, prev).length, 2);
+			assert.deepStrictEqual(gen.checkFloor({ blue: 0, red: 0 }, null), []);
+		});
+		it('esi: retries 5xx / 420 / 429 with backoff, gives the last answer, never retries a 404', async () => {
+			const real = global.fetch;
+			const run = async (statuses) => {
+				let calls = 0;
+				global.fetch = async () => ({ status: statuses[Math.min(calls++, statuses.length - 1)] });
+				try { return { res: await gen.esi('http://x', 3, 1), calls }; } finally { global.fetch = real; }
+			};
+			assert.deepStrictEqual(await run([200]).then(r => [r.res.status, r.calls]), [200, 1]);
+			assert.deepStrictEqual(await run([404]).then(r => [r.res.status, r.calls]), [404, 1]);
+			assert.deepStrictEqual(await run([503, 429, 200]).then(r => [r.res.status, r.calls]), [200, 3]);
+			assert.deepStrictEqual(await run([420, 420, 420, 200]).then(r => [r.res.status, r.calls]), [420, 3]);
 		});
 		it('roman numerals', () => assert.deepStrictEqual([1, 4, 9, 10, 14].map(gen.roman), ['I', 'IV', 'IX', 'X', 'XIV']));
 	});
