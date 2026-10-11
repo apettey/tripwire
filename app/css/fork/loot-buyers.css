@@ -1,0 +1,21 @@
+/* Nearest loot buyers in the Destinations window (fork-owned, see app/js/fork/loot-buyers.js) */
+#dialog-routeDestinations .loot-buyers { margin: 12px 0 6px 0; padding-top: 8px; border-top: 1px solid #333; }
+#dialog-routeDestinations .loot-buyers.hidden { display: none; }
+#dialog-routeDestinations .loot-head { margin-bottom: 4px; }
+#dialog-routeDestinations .loot-red-label { float: right; cursor: pointer; }
+#dialog-routeDestinations .loot-list { list-style: none; margin: 0; padding: 0; }
+#dialog-routeDestinations .loot-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid #222; }
+#dialog-routeDestinations .loot-sys { flex: 0 0 120px; white-space: nowrap; }
+#dialog-routeDestinations .loot-sec { color: #999; font-size: 0.9em; }
+#dialog-routeDestinations .loot-station { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dialog-routeDestinations .loot-more { color: #999; font-size: 0.9em; }
+#dialog-routeDestinations .loot-kinds { flex: 0 0 auto; }
+#dialog-routeDestinations .loot-kind { padding: 0 5px; border-radius: 3px; font-size: 0.85em; border: 1px solid; }
+#dialog-routeDestinations .loot-kind-blue { color: #6db3ff; border-color: #2d5f99; background: #10243b; }
+#dialog-routeDestinations .loot-kind-red { color: #ff7b7b; border-color: #993333; background: #3b1010; }
+#dialog-routeDestinations .loot-jumps { flex: 0 0 70px; text-align: right; white-space: nowrap; }
+#dialog-routeDestinations .loot-route, #dialog-routeDestinations .loot-route-none { flex: 0 0 18px; text-align: center; }
+#dialog-routeDestinations .loot-route { cursor: pointer; color: #8ac; }
+#dialog-routeDestinations .loot-route:hover { color: #fff; }
+#dialog-routeDestinations .loot-note { color: #999; padding: 4px 0; }
+#dialog-routeDestinations .loot-foot { color: #888; font-size: 0.85em; margin: 6px 0 0 0; }
