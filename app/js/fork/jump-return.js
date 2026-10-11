@@ -192,6 +192,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			clearTimeout(hideTimer);
 			clearTimeout(fadeTimer);
 			$("#jump-return-panel").remove();
+			$("body").removeClass("jump-return-open");
 		}
 
 		function fadeOutPanel(delay) {
@@ -200,7 +201,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const $panel = $("#jump-return-panel");
 			fadeTimer = setTimeout(function() {
 				$panel.addClass("jump-return-fading");
-				fadeTimer = setTimeout(function() { $panel.remove(); }, 400);
+				fadeTimer = setTimeout(function() { $panel.remove(); $("body").removeClass("jump-return-open"); }, 400);
 			}, delay);
 		}
 
@@ -242,6 +243,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			});
 
 			$("body").append($panel);
+			// Notices (jump mass prompt etc.) stack in the same top-right spot: push them below the panel
+			document.documentElement.style.setProperty("--jump-return-height", ($panel.outerHeight() || 26) + "px");
+			$("body").addClass("jump-return-open");
 			hideTimer = setTimeout(function() { fadeOutPanel(0); }, jumpReturn.AUTO_HIDE_MS);
 		}
 
