@@ -482,6 +482,32 @@ describe('jumpPlanner', () => {
 			assert.strictEqual(hs.problem, null);
 			assert.strictEqual(jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({}) }, base, { startID: null })).problem, 'none');
 		});
+		it('homeModel: Supercarrier / Titan: nothing listed or counted, one clear message', () => {
+			const hp = jumpPlanner.homePaths(chainResult());
+			['group-659', 'group-30'].forEach(ship => {
+				const m = jumpPlanner.homeModel({ startID: AMAMAKE, exits: [KBP, EY, EGG], paths: hp.paths, index: INDEX, systems: S,
+					settings: jumpPlanner.settings({ jumpRange: { ship: ship } }), presets: PRESETS, jammed: {} });
+				assert.deepStrictEqual([m.problem, m.rows.length, m.counts.reachable], ['supercap', 0, 0], ship);
+			});
+			assert.ok(/can't go through wormholes/.test(jumpPlanner.startProblemText('supercap', '')));
+		});
+		it('homeExits: every LS/NS exit, whatever "Exits that get a range" is set to', () => {
+			const r = chainResult();
+			const all = jumpPlanner.homeExits(r, S);
+			assert.deepStrictEqual(all, [EY, KBP, EGG]);
+			assert.deepStrictEqual(jumpPlanner.chainExits(r, S, 'viewing', J152820), []);	// what the From exit tabs would get
+			const m = jumpPlanner.homeModel({ startID: AMAMAKE, exits: all, paths: jumpPlanner.homePaths(r).paths, index: INDEX, systems: S,
+				settings: jumpPlanner.settings({ jumpRange: { exits: 'viewing' } }), presets: PRESETS, jammed: {} });
+			assert.strictEqual(m.rows.length, 3);
+		});
+		it('homeKey changes with the preserve-mass flags of holes on a way home only', () => {
+			const r = chainResult();
+			const none = jumpPlanner.homeKey(r, S, {});
+			assert.strictEqual(jumpPlanner.homeKey(r, S, { 999: { wormholeID: 999 } }), none);	// not on a way home
+			assert.notStrictEqual(jumpPlanner.homeKey(r, S, { 12: { wormholeID: 12 } }), none);
+			const more = chainResult(); more.lines[0][2] = [];	// the EOL on hole 11 gone
+			assert.notStrictEqual(jumpPlanner.homeKey(more, S, {}), none);
+		});
 		it('route text', () => {
 			const n = id => S[id].name;
 			assert.strictEqual(jumpPlanner.routeText({ jumps: 1, legs: [6.24] }, n), '1 jump 6.2 LY');

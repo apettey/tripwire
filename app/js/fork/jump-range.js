@@ -320,7 +320,9 @@ const jumpRange = {
 
 	/**
 	 * Routes from one start to each of several destinations (e.g. the chain's exits), at most 2 jumps each, ranked:
-	 * reachable first (fewer jumps first, then shorter total LY, then id), then the rest by id.
+	 * reachable first (fewer jumps first, then shorter total LY, then id), then the rest by id. For 2 jumps the total is
+	 * that of the midpoint shown (reach()'s first: the shortest longer leg, then the shortest total), not the shortest
+	 * total over every midpoint.
 	 * @param opts see isValidCynoTarget (jammed, covert, lowsec, nullsec)
 	 * @return [{id, reach (reach() output), jumps (0-2 or null), legs ([LY] per jump), total (LY), via (midpoint id or null),
 	 *   reason (null, or when not reachable: "range" | "jammed" | "target" | "origin" | "nopos")}]

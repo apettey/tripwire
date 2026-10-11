@@ -24,22 +24,23 @@ the last valid start in `options.jumpRange.origin`; Settings > Reset removes bot
 ## Change
 
 - **Mode switch** under the panel header: **From exit** (as before, default) | **Get home**. The exit's ring icon on the
-  chain map always opens From exit.
+  chain map, and clicking an exit's name (when that opens the planner), always open From exit.
 - **Jump from:** a box that matches system names like the search box (same `searchSystems` / suggestions), plus quick
   picks: last used start, Jita, Amarr. High-sec and Pochven are valid starts; W-space, Thera and Zarzakh are refused
   with the reason ("J152820 is in wormhole space: jump drives can't be used there").
 - **Home:** the root of the chain map (the system `pathHome` counts from: the chain tab's system, or the viewed system
   without a tab), shown as "Home: J152820"; several roots each count as their exits' home. No chain: an empty state.
 - **List** (replaces the exit tabs, trade-hub strip and system search in this mode): every LS/NS exit on the chain
-  (same exit set as the tabs), ranked 1 jump before 2 jumps, then by total LY: "1 jump 3.7 LY" / "2 jumps via Sosala
+  (always all of them, even with "Exits that get a range: Only the system I'm viewing"), ranked 1 jump before 2 jumps, then by total LY: "1 jump 3.7 LY" / "2 jumps via Sosala
   (6.0 + 6.2 LY)", "N holes to home", warnings, **Dest** (sets the destination to the first cyno system, midpoint or
   exit, through the same "Set route in game" picker). Unreachable exits after, greyed, with the reason (out of range
   within 2 jumps, cyno-jammed for a normal cyno, low/null-sec targets off). Covert-cyno ships (Black Ops) still reach
   jammed exits. Hover or click a row: tooltip with the route, route drawn on the mini-map.
 - **Warnings** (text only, never block): "hole too small for Carrier: N2 K346 (L)" (from the size-tags lookup:
   `sizeTags.tagFor` with the hole's type, or "likely" when the size is guessed from the system classes), "size unknown:
-  ..." when there is no size, EOL, mass critical, destab, preserve-mass flag. Supercarrier / Titan: "can't go through
-  wormholes".
+  ..." when there is no size, EOL, mass critical, destab, preserve-mass flag (redrawn when a flag is set or
+  cleared, without waiting for a chain redraw). Supercarrier / Titan: no list, only "Supercarriers and titans can't go
+  through wormholes".
 - **Mini-map** centred on the start, range rings as before, widened to fit the farthest reachable exit; exits as
   labelled diamonds (dim when unreachable), the selected route as a dashed line start → midpoint → exit.
 - **Engine** (`jump-range.js`, pure, tested): `startProblem`, `routesTo` (ranked 1-2 jump routes to many targets, for

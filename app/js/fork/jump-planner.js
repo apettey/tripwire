@@ -664,6 +664,27 @@ const jumpPlanner = {
 		return { homes: homes, paths: paths };
 	},
 
+	/** The exits Get home routes to: every LS/NS exit on the chain, whatever "Exits that get a range" says */
+	homeExits: function(result, systems) {
+		return jumpPlanner.chainExits(result, systems, "all");
+	},
+
+	/**
+	 * What Get home shows from the chain, as a string to compare: the exits, each system's way home, and which holes on
+	 * those ways are flagged preserve mass (flags: preserveMass.flags, by wormhole id)
+	 */
+	homeKey: function(result, systems, flags) {
+		const hp = jumpPlanner.homePaths(result);
+		const preserved = [];
+		Object.keys(hp.paths).forEach(function(id) {
+			hp.paths[id].holes.forEach(function(h) {
+				const key = String(h.wormholeID);
+				if (flags && flags[key] && preserved.indexOf(key) < 0) { preserved.push(key); }
+			});
+		});
+		return JSON.stringify({ exits: jumpPlanner.homeExits(result, systems), homes: hp.homes, paths: hp.paths, preserve: preserved.sort() });
+	},
+
 	/** A hole's short name: its signature name, else the first 3 letters of the signature, plus the type when known ("N1 Z142") */
 	holeLabel: function(hole) {
 		const base = hole.name ? String(hole.name).substring(0, 24) : hole.signatureID ? String(hole.signatureID).substring(0, 3).toUpperCase() : "?";
@@ -712,7 +733,8 @@ const jumpPlanner = {
 		Object.keys(ctx.jammed || {}).forEach(function(id) { jammedIDs[id] = true; });
 		const opts = { lowsec: s.lowsec, nullsec: s.nullsec, covert: covert, jammed: s.jammed === "ignore" ? {} : jammedIDs };
 		const need = r.preset ? jumpRange.shipNeeds(r.preset.key.replace(/^group-(\d+).*$/, "$1")) : null;
-		const problem = ctx.startID ? jumpRange.startProblem(ctx.startID, ctx.systems[ctx.startID], ctx.index) : "none";
+		// Supercarriers and titans can't take the wormholes home: nothing to list
+		const problem = need === "none" ? "supercap" : ctx.startID ? jumpRange.startProblem(ctx.startID, ctx.systems[ctx.startID], ctx.index) : "none";
 		const exits = (ctx.exits || []).filter(function(id) { return ctx.paths && ctx.paths[id]; });
 		const routes = problem ? [] : jumpRange.routesTo(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts);
 		const rows = routes.map(function(route) {
@@ -749,6 +771,7 @@ const jumpPlanner = {
 	startProblemText: function(problem, startName) {
 		switch (problem) {
 			case "none": return "Pick the system to jump from: type a name, or click Jita or Amarr.";
+			case "supercap": return "Supercarriers and titans can't go through wormholes. Pick another jump ship to plan the way home.";
 			case "wh": return startName + " is in wormhole space: jump drives can't be used there. Pick a k-space system.";
 			case "zarzakh": return startName + " is Zarzakh: jump drives can't be used there. Pick another system.";
 			case "nopos": return "No position known for " + startName + ".";
@@ -1011,6 +1034,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// Get home mode
 			chainResult: null,		// the last chain.nodes() output (rows and lines)
 			homeKey: "",			// exits and holes on the way home, to redraw when they change
+			allExits: [],			// every LS/NS exit on the chain (Get home ignores "Exits that get a range")
 			start: null,			// the system to jump from (options.jumpRange.origin once a valid one is picked)
 			from: { matches: [], active: -1, refocusing: false },
 			$from: null				// the "Jump from" row, kept across renders like the search row
@@ -1128,10 +1152,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					const exits = s.enabled ? jp.chainExits(result, systems(), s.exits, viewing()) : [];
 					jp.decorate(result, exits, systems());
 					state.chainResult = result;
-					// Get home also follows the holes on the way home (new, EOL, mass, a new root)
-					const homeKey = s.enabled && s.mode === "home" ? JSON.stringify(jp.homePaths(result)) : "";
-					if (exits.join(",") !== state.exits.join(",") || homeKey !== state.homeKey) {
+					// Get home: every LS/NS exit (not the "Exits that get a range" setting), and the holes on the way
+					// home (new, EOL, mass, preserve mass, a new root)
+					const allExits = s.enabled ? jp.homeExits(result, systems()) : [];
+					const homeKey = s.enabled && s.mode === "home" ? jp.homeKey(result, systems(), preserveFlags()) : "";
+					if (exits.join(",") !== state.exits.join(",") || allExits.join(",") !== state.allExits.join(",") || homeKey !== state.homeKey) {
 						state.exits = exits;
+						state.allExits = allExits;
 						state.homeKey = homeKey;
 						clearTimeout(state.renderTimer);
 						state.renderTimer = setTimeout(render, 150);	// debounced: the chain redraws often
@@ -1341,6 +1368,34 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		// ---- Get home mode ----
 
+		/** The mask's preserve-mass flags by wormhole id (preserve-mass.js), or none */
+		function preserveFlags() {
+			return typeof preserveMass !== "undefined" && preserveMass.flags ? preserveMass.flags : {};
+		}
+
+		/** Preserve-mass flags arrive and change without a chain redraw: hook the marker refresh both apply() and
+		 * a local change go through, and show Get home again when a hole on a way home changed */
+		function hookPreserveMass() {
+			if (typeof preserveMass === "undefined" || typeof preserveMass.refreshMap !== "function" || preserveMass.refreshMap.jumpPlannerWrapped) { return; }
+			const refreshMap = preserveMass.refreshMap;
+			preserveMass.refreshMap = function() {
+				const result = refreshMap.apply(this, arguments);
+				try {
+					const s = current();
+					if (s.enabled && s.mode === "home" && state.chainResult) {
+						const key = jp.homeKey(state.chainResult, systems(), preserveFlags());
+						if (key !== state.homeKey) {
+							state.homeKey = key;
+							clearTimeout(state.renderTimer);
+							state.renderTimer = setTimeout(render, 150);
+						}
+					}
+				} catch (e) { console.warn("Jump planner: preserve mass refresh", e); }
+				return result;
+			};
+			preserveMass.refreshMap.jumpPlannerWrapped = true;
+		}
+
 		/** Holes on the way home with what the other features know: size class (size-tags), real type, preserve-mass flag */
 		function annotateHoles(paths) {
 			Object.keys(paths).forEach(function(id) {
@@ -1354,7 +1409,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					} catch (e) { tag = null; }
 					h.size = tag ? tag.size : null;
 					h.certain = !!(tag && tag.certain);
-					h.preserve = typeof preserveMass !== "undefined" && !!preserveMass.flags && !!preserveMass.flags[String(h.wormholeID)];
+					h.preserve = !!preserveFlags()[String(h.wormholeID)];
 				});
 			});
 			return paths;
@@ -1383,7 +1438,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!$from.find(".jp-from-input").is(":focus")) { $from.find(".jp-from-input").val(start ? name(start) : ""); }
 			const scroll = $body.find(".jp-list-wrap").scrollTop();
 			const ctx = context(start && state.data.index.pos[start] ? start : null);
-			const home = jp.homeModel({ startID: start, exits: state.exits, paths: hp.paths, index: state.data.index, systems: systems(),
+			const home = jp.homeModel({ startID: start, exits: state.allExits, paths: hp.paths, index: state.data.index, systems: systems(),
 				settings: s, presets: state.data.presets, jammed: ctx.jammed });
 			let html;
 			if (!hp.homes.length) {
@@ -1776,6 +1831,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		$(function() {
 			installHook();
+			hookPreserveMass();	// preserve-mass.js loads after this file: wrap it once everything is there
 			setupSettings();
 			sync();
 			const $doc = $(document);
@@ -1792,7 +1848,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const s = current();
 				if (!s.enabled || !s.clickOpen) { return; }
 				const id = parseInt($(this).closest("[data-nodeid]").attr("data-nodeid"), 10);
-				if (state.exits.indexOf(id) >= 0) { open(id); }
+				if (state.exits.indexOf(id) >= 0) { open(id, true); }	// like the ring: From exit, so the click shows something
 			});
 			$doc.on("click", sel + " .jp-close", function(e) { e.preventDefault(); close(); });
 			$doc.on("click", sel + " .jp-settings", function(e) { e.preventDefault(); openSettings(); });
