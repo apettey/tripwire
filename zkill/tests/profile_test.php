@@ -29,7 +29,9 @@ function profile_db() {
     $db->exec('CREATE TABLE zkill_profile_cache (systemID INTEGER PRIMARY KEY, analysedAt TEXT NOT NULL, profile TEXT NOT NULL)');
     $db->exec("CREATE TABLE zkill_killmails (id INTEGER PRIMARY KEY AUTOINCREMENT, killID INTEGER, systemID INTEGER, killTime TEXT, npc INTEGER DEFAULT 0,
         victimCorporationID INTEGER, victimAllianceID INTEGER, finalBlowCharacterID INTEGER, finalBlowCorporationID INTEGER, finalBlowAllianceID INTEGER)");
-    $db->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, systemID INTEGER, type TEXT)");
+    $db->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, systemID INTEGER, type TEXT, lifeLength INTEGER NOT NULL DEFAULT 0,
+        lifeLeft TEXT NULL, modifiedTime TEXT NOT NULL DEFAULT '2026-01-01 00:00:00')");
+    $db->sqliteCreateFunction('NOW', function () { return gmdate('Y-m-d H:i:s'); }, 0);
     return $db;
 }
 function add_kills(PDO $db, $systemID, array $rows) {
@@ -141,13 +143,18 @@ ini_set('error_log', (string) $previous);
 
 // --- watch set: decided on the server from the mask chain ---
 $db = profile_db();
-$db->exec("INSERT INTO signatures (maskID, systemID, type) VALUES ('1.0', 31000010, 'wormhole'), ('1.0', 31000011, 'wormhole'), ('1.0', 31000010, 'wormhole'),
-    ('1.0', 31000012, 'combat'), ('2.0', 31000013, 'wormhole'), ('1.0', 0, 'wormhole'), ('1.0', 5, 'wormhole')");
-check('watch: viewed system plus the mask chain, once each', zk_watch_systems($db, 31000005, '1.0'), [31000005, 31000010, 31000011]);
+$future = gmdate('Y-m-d H:i:s', time() + 86400);
+$past = gmdate('Y-m-d H:i:s', time() - 86400);
+$db->exec("INSERT INTO signatures (maskID, systemID, type, lifeLength, lifeLeft, modifiedTime) VALUES
+    ('1.0', 31000010, 'wormhole', 86400, '$future', '2026-10-01 00:00:00'), ('1.0', 31000011, 'wormhole', 86400, '$future', '2026-10-05 00:00:00'),
+    ('1.0', 31000010, 'wormhole', 86400, '$future', '2026-10-02 00:00:00'), ('1.0', 31000012, 'combat', 0, NULL, '2026-10-09 00:00:00'),
+    ('2.0', 31000013, 'wormhole', 0, NULL, '2026-10-09 00:00:00'), ('1.0', 0, 'wormhole', 0, NULL, '2026-10-09 00:00:00'), ('1.0', 5, 'wormhole', 0, NULL, '2026-10-09 00:00:00'),
+    ('1.0', 31000014, 'wormhole', 86400, '$past', '2026-10-10 00:00:00'), ('1.0', 31000015, 'wormhole', 0, NULL, '2026-09-01 00:00:00')");
+check('watch: viewed system plus the live mask chain, most recently modified first, once each', zk_watch_systems($db, 31000005, '1.0'), [31000005, 31000011, 31000010, 31000015]);
 check('watch: another mask is not mixed in', zk_watch_systems($db, null, '2.0'), [31000013]);
-check('watch: the viewed system is not repeated', zk_watch_systems($db, 31000010, '1.0'), [31000010, 31000011]);
+check('watch: the viewed system is not repeated', zk_watch_systems($db, 31000010, '1.0'), [31000010, 31000011, 31000015]);
 check('watch: no mask, only the viewed system', zk_watch_systems($db, 31000005, null), [31000005]);
-check('watch: limit', count(zk_watch_systems($db, 31000005, '1.0', 2)), 2);
+check('watch: limit keeps the most recently modified', zk_watch_systems($db, 31000005, '1.0', 3), [31000005, 31000011, 31000010]);
 
 // --- per-system storage cap ---
 $db = profile_db();
@@ -161,17 +168,26 @@ for ($i = 0; $i < ZK_KEEP_MAX_PER_SYSTEM + 300; $i++) $insert->execute([$i + 1, 
 $insert->execute([900001, $sys, gmdate('Y-m-d H:i:s', $now - 3600)]);   // inside the retention window: not counted by the cap
 $insert->execute([900002, 31000099, gmdate('Y-m-d H:i:s', $oldStart - 5)]);   // unwatched system: left to the normal prune
 $db->commit();
-check('cap: the oldest are dropped', zk_keep_housekeeping($db, $now), 300);
+$oldestBefore = zk_unix($db->query("SELECT MIN(killTime) FROM zkill_killmails WHERE systemID = $sys")->fetchColumn());
+check('capped: flagged while over the cap, from the oldest kill', zk_profile_capped_from($db, $sys, $now), $oldestBefore);
+check('cap: the oldest are dropped', zk_keep_housekeeping($db, $now, true), 300);
 check('cap: exactly the cap is left beyond the retention', (int) $db->query("SELECT COUNT(*) FROM zkill_killmails WHERE systemID = $sys AND killTime < '" . gmdate('Y-m-d H:i:s', $now - $retention) . "'")->fetchColumn(), ZK_KEEP_MAX_PER_SYSTEM);
 check('cap: the newest are kept', (int) $db->query("SELECT MIN(id) FROM zkill_killmails WHERE systemID = $sys AND killID <= " . ZK_KEEP_MAX_PER_SYSTEM)->fetchColumn(), 1);
 check('cap: recent and unwatched kills untouched', (int) $db->query('SELECT COUNT(*) FROM zkill_killmails WHERE killID >= 900001')->fetchColumn(), 2);
-check('cap: nothing more to drop', zk_keep_housekeeping($db, $now), 0);
-// History honestly starts at the oldest kept kill when the cap bit
-$oldest = zk_unix($db->query("SELECT MIN(killTime) FROM zkill_killmails WHERE systemID = $sys")->fetchColumn());
-check('capped: coverage starts at the oldest kept kill', zk_profile_capped_from($db, $sys, $now), $oldest);
+check('cap: nothing more to drop', zk_keep_housekeeping($db, $now, true), 0);
+check('capped: exactly the cap (after the housekeeping) is not capped', zk_profile_capped_from($db, $sys, $now), null);
 check('capped: a system under the cap is not capped', zk_profile_capped_from($db, 31000099, $now), null);
+// The profile reports where history really starts while the cap is exceeded
+$insert->execute([900003, $sys, gmdate('Y-m-d H:i:s', $oldStart - 86400)]);
+$oldest = zk_unix($db->query("SELECT MIN(killTime) FROM zkill_killmails WHERE systemID = $sys")->fetchColumn());
 $p = zk_profile_get($db, $sys, $now, $now - 2 * 86400);
 check('capped: the profile says so', $p['coveredDays'], round(($now - $oldest) / 86400, 1));
+// The cap query is throttled in the worker (not forced): the first call runs it, the next within ten minutes does not
+$insert->execute([900004, $sys, gmdate('Y-m-d H:i:s', $oldStart - 90000)]);
+check('cap: the worker runs it once', zk_keep_housekeeping($db, $now), 2);
+$insert->execute([900005, $sys, gmdate('Y-m-d H:i:s', $oldStart - 95000)]);
+check('cap: and not again within ten minutes', zk_keep_housekeeping($db, $now + 300), 0);
+check('cap: but after ten minutes', zk_keep_housekeeping($db, $now + ZK_KEEP_CAP_INTERVAL + 1), 1);
 
 // --- profile cache: computed from the stored kills, reused, per-system TTL ---
 $db = profile_db();

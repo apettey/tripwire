@@ -19,6 +19,7 @@ const ZK_PROFILE_LEVELS       = [['critical', 50], ['high', 15], ['moderate', 5]
 const ZK_KEEP_MAX_SYSTEMS     = 500;     // systems whose kills are kept for longer
 const ZK_KEEP_MAX_PER_USER    = 200;     // watched systems one user may have added
 const ZK_KEEP_MAX_PER_SYSTEM  = 5000;    // kills kept beyond the retention window per watched system (oldest dropped)
+const ZK_KEEP_CAP_INTERVAL     = 600;     // seconds between runs of the per-system cap query
 const ZK_KEEP_PRUNE_DAYS      = 14;      // systems nobody looked at in this many days are let go
 
 /** Days stored kills of watched systems are kept (ZKILL_THREAT_KEEP_DAYS, 0-90, default 90; 0 = only ZKILL_RETENTION_HOURS) */
@@ -152,13 +153,13 @@ function zk_profile_compute(PDO $db, $systemID, $now, $coveredFrom) {
 
 /**
  * When the per-system storage cap has cut history short: the time of the oldest kept kill beyond the retention window,
- * if there are ZK_KEEP_MAX_PER_SYSTEM of them (the cap drops the oldest), else null.
+ * if there are more than ZK_KEEP_MAX_PER_SYSTEM of them (the housekeeping drops the oldest), else null.
  */
 function zk_profile_capped_from(PDO $db, $systemID, $now) {
     $stmt = $db->prepare('SELECT COUNT(*), MIN(killTime) FROM zkill_killmails WHERE systemID = ? AND killTime < ? AND killTime >= ?');
     $stmt->execute([$systemID, gmdate('Y-m-d H:i:s', $now - zk_retention_seconds()), gmdate('Y-m-d H:i:s', $now - 90 * 86400)]);
     [$count, $oldest] = $stmt->fetch(PDO::FETCH_NUM);
-    return (int) $count >= ZK_KEEP_MAX_PER_SYSTEM ? zk_unix($oldest) : null;
+    return (int) $count > ZK_KEEP_MAX_PER_SYSTEM ? zk_unix($oldest) : null;
 }
 
 /**
@@ -213,7 +214,10 @@ function zk_watch_systems(PDO $db, $detailID, $maskID, $limit = 200) {
     $ids = $detailID === null ? [] : [(int) $detailID];
     if ($maskID !== null && $maskID !== '') {
         try {
-            $stmt = $db->prepare("SELECT DISTINCT systemID FROM signatures WHERE maskID = ? AND type = 'wormhole' AND systemID > 0 LIMIT " . (int) $limit);
+            // Live wormholes only (lifeLength 0 = no expiry known), most recently modified first, before the limit
+            $stmt = $db->prepare("SELECT systemID, MAX(modifiedTime) AS changed FROM signatures
+                WHERE maskID = ? AND type = 'wormhole' AND systemID > 0 AND (lifeLength = 0 OR lifeLeft >= NOW())
+                GROUP BY systemID ORDER BY changed DESC LIMIT " . (int) $limit);
             $stmt->execute([$maskID]);
             foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) if (zk_is_system_id((int) $id)) $ids[] = (int) $id;
         } catch (PDOException $error) {
@@ -260,10 +264,27 @@ function zk_keep_prune_exception(PDO $db) {
  * Worker, after the retention prune: drop the oldest kills of a watched system beyond ZK_KEEP_MAX_PER_SYSTEM kills older
  * than the retention window, and cached profiles older than a day. @return int kills deleted
  */
-function zk_keep_housekeeping(PDO $db, $now = null) {
+function zk_keep_housekeeping(PDO $db, $now = null, $force = false) {
+    static $capChecked = 0;
     $now = $now ?? time();
     $deleted = 0;
     try {
+        // The cap query scans the watched systems' old kills: at most every ZK_KEEP_CAP_INTERVAL seconds
+        if ($force || $now - $capChecked >= ZK_KEEP_CAP_INTERVAL) {
+            if (!$force) $capChecked = $now;
+            $deleted = zk_keep_enforce_cap($db, $now);
+        }
+        $db->prepare('DELETE FROM zkill_profile_cache WHERE analysedAt < ?')->execute([gmdate('Y-m-d H:i:s', $now - 86400)]);
+    } catch (PDOException $error) {
+        // tables not created yet
+    }
+    return $deleted;
+}
+
+/** Drop the oldest kills of watched systems beyond ZK_KEEP_MAX_PER_SYSTEM kills older than the retention window. @return int kills deleted */
+function zk_keep_enforce_cap(PDO $db, $now) {
+    $deleted = 0;
+    {
         $cutoff = gmdate('Y-m-d H:i:s', $now - zk_retention_seconds());
         $stmt = $db->prepare('SELECT systemID FROM zkill_killmails WHERE killTime < ? AND systemID IN (SELECT systemID FROM zkill_system_keep)
             GROUP BY systemID HAVING COUNT(*) > ' . ZK_KEEP_MAX_PER_SYSTEM);
@@ -277,9 +298,6 @@ function zk_keep_housekeeping(PDO $db, $now = null) {
             $del->execute([$systemID, $time]);
             $deleted += $del->rowCount();
         }
-        $db->prepare('DELETE FROM zkill_profile_cache WHERE analysedAt < ?')->execute([gmdate('Y-m-d H:i:s', $now - 86400)]);
-    } catch (PDOException $error) {
-        // tables not created yet
     }
     return $deleted;
 }
@@ -314,14 +332,13 @@ function zk_profile_get(PDO $db, $systemID, $now, $retentionCoveredFrom) {
         $got = $db->prepare('SELECT GET_LOCK(?, ?)');
         $got->execute([$lock, ZK_PROFILE_LOCK_WAIT]);
         $locked = (int) $got->fetchColumn() === 1;
-        // Another request may have finished while this one waited (or, without the lock, use whatever there is)
-        $cached = zk_profile_cached($db, $systemID, time(), $ttl) ?: ($locked ? null : zk_profile_cached($db, $systemID, $now, null));
-        if ($cached) {
-            if ($locked) $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$lock]);
-            return $cached;
-        }
     }
     try {
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+            // Another request may have finished while this one waited (or, without the lock, use whatever there is)
+            $cached = zk_profile_cached($db, $systemID, time(), $ttl) ?: ($locked ? null : zk_profile_cached($db, $systemID, $now, null));
+            if ($cached) return $cached;
+        }
         // Before the system was watched only the retention window is known; once watched, everything since then is
         $since = $keepSince === false ? null : zk_unix($keepSince);
         $coveredFrom = $watched ? min($since, $retentionCoveredFrom ?? $since) : $retentionCoveredFrom;
