@@ -99,6 +99,7 @@ function zk_prune(PDO $db) {
     // Kills fetched for a note (source 'lookup', often older than the retention) stay ZK_LOOKUP_KEEP_DAYS after they arrived
     $deleted = $db->exec('DELETE FROM zkill_killmails WHERE killTime < UTC_TIMESTAMP() - INTERVAL ' . $retention . " SECOND
         AND (source <> 'lookup' OR receivedAt < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY)' . zk_keep_prune_exception($db));
+    $deleted += zk_keep_housekeeping($db);   // per-system cap of the longer retention, old cached profiles
     $db->exec("DELETE FROM zkill_kill_lookup WHERE status IN ('done', 'failed')
         AND COALESCE(attemptedAt, requestedAt) < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY');
     $db->exec("DELETE FROM zkill_backfill WHERE status IN ('done', 'failed') AND requestedAt < UTC_TIMESTAMP() - INTERVAL " . $retention . ' SECOND');

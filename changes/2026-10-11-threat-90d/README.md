@@ -42,6 +42,11 @@ collapsed. The 7 d / 90 d choice is remembered per browser (localStorage). Serve
   corporations left out; listed only with final-blow kills on at least 3 different UTC days; also their ships lost
   here), level over 90 days (Critical 50 or more, High 15 or more, Moderate 5 or more, Low 1 or more; WormholeSystems'
   thresholds). Cached per system for an hour in `zkill_system_keep` ("analysed X ago").
+- **Review round 1**: the profile is aggregated in SQL (no kills loaded into PHP); at most 5000 kills per watched system
+  beyond the retention window (oldest dropped, coverage reported from the oldest kept kill); the watch set is the viewed
+  system plus the user's mask chain from `signatures`, with a per-user cap of 200, written by one batched upsert that
+  never throws; profiles of unwatched systems are cached (10 minutes) in the new `zkill_profile_cache` table and
+  computed under a MySQL `GET_LOCK`.
 - **Response**: `detail.profile` in `zk_system_threat()` (`zkill/threat.php`); group IDs go through the existing name
   lookup (names already resolved are returned, others are queued for the worker).
 - **UI** (`app/js/fork/system-threat-90d.js`, `app/css/fork/system-threat-90d.css`, new): pure SVG sparkline, blue bars

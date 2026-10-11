@@ -347,12 +347,17 @@ checks against the dev database).
 The Threat & residents section also shows a 7 d / 90 d profile of the viewed system: kills, the busiest 4 hours of the
 EVE day (a 24-bar kills-by-hour chart), the top 5 groups (alliance, else corporation; only groups with kills on 3 or
 more different days) and when it was analysed. It is computed by `zkill/profile.php` from `zkill_killmails`
-(`zk_profile_compute()`, cached per system for an hour in `zkill_system_keep`), so it costs **no zKillboard request**:
+(`zk_profile_compute()`: SQL aggregates by hour, (group, day) and victim group, never the raw kills in PHP; cached per
+system in `zkill_profile_cache` for an hour, ten minutes when nobody watches the system, one request computing per
+system at a time via MySQL `GET_LOCK`), so it costs **no zKillboard request**:
 the zKillboard call budget is unchanged (same stats and back-fill requests as before, same `ZKILL_API_INTERVAL`).
-The retention window is too short for 90 days, so the systems people look at (the viewed system and the chain systems
-of a request that may queue; at most 500, rows nobody asked for in 14 days are dropped) are listed in
+The retention window is too short for 90 days, so the systems people look at (the viewed system and the systems of the
+user's mask chain, looked up on the server from the mask's wormhole signatures, never from the request; at most 500
+overall and 200 per user, rows nobody asked for in 14 days are dropped; one batched upsert that cannot fail the request) are listed in
 `zkill_system_keep` and the stream keeps their kills for `ZKILL_THREAT_KEEP_DAYS` (default 90) instead of
-`ZKILL_RETENTION_HOURS`: `zk_store_killmail()` stores older kills of those systems and `zk_prune()` spares them. History
+`ZKILL_RETENTION_HOURS`: `zk_store_killmail()` stores older kills of those systems and `zk_prune()` spares them, keeping
+at most 5000 kills beyond the retention window per system (oldest dropped by `zk_keep_housekeeping()`; the panel's
+coverage then starts at the oldest kept kill). History
 therefore builds up from the day a system is first looked at (the response's `detail.profile.coveredDays` and the
 panel's "kills seen for about N days so far" say how much), plus what the retention window and its back-fill already
 held. zKillboard's own history API is limited to 7 days, so nothing older can be fetched. Storage: roughly 0.3 KB per
