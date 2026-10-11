@@ -9,7 +9,14 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 [docs/eve-wormhole-primer.md](../../../docs/eve-wormhole-primer.md). Work through this list in order.
 
 ## 1. Branch and plan
-- [ ] `git checkout main && git pull && git checkout -b feature/<name>` (one feature per branch/PR).
+- [ ] **Stack on the newest open PR.** Look at open PRs (`gh pr list --state open`). If there are none, branch
+      from `main`. Otherwise branch from the **top of the stack** (the newest open feature/fix branch) and open
+      your PR against that branch, so PRs form one chain and never conflict with each other (`changes/README.md`,
+      `features.json` and Settings rows conflict whenever two PRs branch from `main` in parallel):
+      `git fetch origin && git checkout -b feature/<name> origin/<top-of-stack branch or main>` (one feature per branch/PR).
+- [ ] Parallel work (several agents at once) still starts from the same base; the coordinator rebases each finished
+      branch onto the then-top of the stack before opening its PR, and only the coordinator edits the shared index
+      files (`changes/README.md` row, `features.json` entry) at that point.
 - [ ] Start the dev stack: `docker compose -f docker-compose.dev.yml up --build` (http://127.0.0.1:8080).
 - [ ] Take the **before** screenshot now, before editing (see step 5).
 - [ ] Answer **"does it need a Settings toggle?"** (AGENTS.md section 2). Default yes for user-facing
@@ -97,7 +104,8 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
 - [ ] Note the number of review rounds in the PR body.
 
 ## 8. PR and What's New
-- [ ] Commit, push, open the PR against `main` **first** to learn its number `<N>`.
+- [ ] Commit, push, open the PR against the branch you stacked on (`main` only when nothing else is open)
+      **first** to learn its number `<N>`. Start the body with "**Stacked on #<M>** (merge that first)" when stacked.
 - [ ] Add the entry at the top of `public/whats-new/features.json`: `pr: <N>`, `date`, `title`,
       plain-text `description`, `images` saved as `public/whats-new/img/pr-<N>-<name>.png`.
 - [ ] PR body: what changed, link to the change-log entry, before/after screenshots as
@@ -107,3 +115,5 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
 
 ## 9. Merge
 - [ ] Merge with a **merge commit** (not squash/rebase).
+- [ ] Merge stacked PRs **bottom-up**. The repo deletes head branches on merge, so GitHub retargets the next PR
+      to `main` by itself; if a PR still points at a merged branch, `gh pr edit <N> --base main`.
