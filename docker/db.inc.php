@@ -16,3 +16,7 @@ try {
 } catch (PDOException $error) {
     error_log($error->getMessage());
 }
+
+// Fork: keep the session mask canonical and re-check access to it on every request (mask-guard.inc.php).
+require_once(__DIR__ . '/mask-guard.inc.php');
+if (isset($mysql)) tripwire_mask_guard($mysql);
