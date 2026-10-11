@@ -59,7 +59,9 @@ const jumpPlanner = {
 			showHs: raw.showHs === true,
 			hubs: raw.hubs !== false,
 			search: raw.search !== false,
-			open: raw.open === true
+			open: raw.open === true,
+			mode: pick(raw.mode, ["exit", "home"], "exit"),
+			origin: Number(raw.origin) > 0 && Number.isInteger(Number(raw.origin)) ? Number(raw.origin) : null
 		};
 		if (raw.position && typeof raw.position === "object") { s.position = raw.position; }
 		return s;
@@ -226,8 +228,10 @@ const jumpPlanner = {
 		const W = jumpPlanner.MAP_W, H = jumpPlanner.MAP_H;
 		const s = ctx.settings;
 		const origin = ctx.index.pos[ctx.exitID];
-		// The whole range must fit (it can be larger than the "Mini-map shows" radius), with a little margin
-		const scale = (H / 2 - 6) / (Math.max(s.mapRadius, model.range) * 1.04);
+		// The whole range must fit (it can be larger than the "Mini-map shows" radius), with a little margin; ctx.fitLy
+		// (Get home: the farthest reachable exit) widens it
+		const radius = Math.max(s.mapRadius, model.range, Number(ctx.fitLy) || 0);
+		const scale = (H / 2 - 6) / (radius * 1.04);
 		const cx = W / 2, cy = H / 2;
 		const project = function(p) { return { x: cx + (p.x - origin.x) * scale, y: cy - (p.z - origin.z) * scale }; };
 		const rings = jumpRange.rings(model.range).map(function(ly, i, all) {
@@ -238,7 +242,7 @@ const jumpPlanner = {
 		const points = [];
 		const shown = {};
 		// Systems out to the "Mini-map shows" radius (3-D distance, like the range), not the whole rectangle
-		jumpRange.within(ctx.index, origin, Math.max(s.mapRadius, model.range)).forEach(function(hit) {
+		jumpRange.within(ctx.index, origin, radius).forEach(function(hit) {
 			const p = project(ctx.index.pos[hit.id]);
 			if (p.x < -4 || p.x > W + 4 || p.y < -4 || p.y > H + 4) { return; }
 			const sys = ctx.systems[hit.id] || {};
@@ -271,7 +275,7 @@ const jumpPlanner = {
 			}
 		});
 		const out = points.filter(function(p) { return p.kind === "out"; }).length;
-		return { scale: scale, cx: cx, cy: cy, rings: rings, points: points, lines: lines, outShown: out };
+		return { scale: scale, cx: cx, cy: cy, origin: origin, rings: rings, points: points, lines: lines, outShown: out };
 	},
 
 	/**
@@ -317,7 +321,7 @@ const jumpPlanner = {
 	},
 
 	/** SVG markup of the mini-map; foundID (the system search's pick) gets a pulsing ring when it is on the map */
-	mapSvg: function(mapModel, labels, focusIDs, foundID) {
+	mapSvg: function(mapModel, labels, focusIDs, foundID, overlay) {
 		const esc = jumpPlanner.escape;
 		const focus = {};
 		(focusIDs || []).forEach(function(id) { if (id) { focus[id] = true; } });
@@ -351,7 +355,7 @@ const jumpPlanner = {
 			svg += "<circle class='jp-found-ring' cx='" + found.x + "' cy='" + found.y + "' r='9'></circle>"
 				+ "<circle class='jp-found-pulse' cx='" + found.x + "' cy='" + found.y + "' r='9'></circle>";
 		}
-		svg += "</g><g class='jp-labels'>" + (labels || []).map(function(l) {
+		svg += "</g>" + (overlay || "") + "<g class='jp-labels'>" + (labels || []).map(function(l) {
 			return "<text class='" + l.cls + "' x='" + l.x + "' y='" + l.y + "' text-anchor='" + l.anchor + "'>" + esc(l.text) + "</text>";
 		}).join("") + "</g></svg>";
 		return svg;
@@ -420,12 +424,15 @@ const jumpPlanner = {
 		parts.push(info.gates === null || info.gates === undefined ? "no gate route" : info.gates === 0 ? "here" : info.gates + (info.gates === 1 ? " gate" : " gates"));
 		lines.push("<div class='jp-tip-sub'>" + parts.join(" · ") + "</div>");
 		const note = { hs: "High-sec: no cyno", out: "Out of range", jammed: "Cyno-jammed: no normal cyno" }[info.kind];
-		if (note) { lines.push("<div class='jp-tip-note'>" + esc(note) + "</div>"); }
+		// Get home: an exit's route from the start (instead of "out of range" for one jump)
+		if (info.route) { lines.push("<div class='jp-tip-route'>" + esc(info.route) + "</div>"); }
+		else if (note) { lines.push("<div class='jp-tip-note'>" + esc(note) + "</div>"); }
 		if (info.jam) {
 			lines.push("<div class='jp-tip-jam'>Marked jammed" + (info.jam.setBy ? " by " + esc(info.jam.setBy) : "") + ", " + esc(jumpPlanner.ageText(info.jam.age)) + (info.jam.age >= 60 ? " ago" : "") + "</div>");
 		}
 		const links = [];
-		if (info.kind === "in") { links.push("<a href='#' class='jp-tip-dest'>Set destination</a>"); }
+		if (info.cyno) { links.push("<a href='#' class='jp-home-dest' data-jp-cyno='" + (parseInt(info.cyno, 10) || 0) + "'>Set destination</a>"); }
+		else if (info.kind === "in") { links.push("<a href='#' class='jp-tip-dest'>Set destination</a>"); }
 		links.push("<a href='#' class='jp-tip-copy'>Copy</a>");
 		if (info.canMark) { links.push("<a href='#' class='jp-tip-jamtoggle'>" + (info.jam ? "Unmark jammed" : "Mark jammed") + "</a>"); }
 		lines.push("<div class='jp-tip-links'>" + links.join("") + "</div>");
@@ -606,6 +613,274 @@ const jumpPlanner = {
 		}).join("");
 	},
 
+	// ---- Get home mode (pure) ----
+
+	/** Root of a chain row (c[1].v null, undefined or "") */
+	isRootRow: function(row) {
+		const p = row && row.c && row.c[1] ? row.c[1].v : null;
+		return p === null || p === undefined || p === "";
+	},
+
+	/**
+	 * Each chain system's way home: the root of its chain tree (the same "home" pathHome counts from) and the holes
+	 * from the system back to it, fewest holes when a system is on the chain twice. Calculated / synthetic rows are left out.
+	 * @param result chain.nodes() output: {map: {rows}, lines: [[childV, parentV, modifiers, wormholeID]]}
+	 * @return {homes: [root systemID, chain order], paths: {systemID: {home, holes: [{wormholeID, from, to, name,
+	 *   signatureID, type (the far side's type), eol, mass ("critical" | "destab" | null)}]}}} (holes: exit first)
+	 */
+	homePaths: function(result) {
+		const rows = result && result.map && Array.isArray(result.map.rows) ? result.map.rows : [];
+		const byV = {}, line = {};
+		rows.forEach(function(row) { if (!jumpPlanner.isExtraRow(row)) { byV[row.c[0].v] = row; } });
+		((result && result.lines) || []).forEach(function(l) { if (l) { line[l[0]] = l; } });
+		const homes = [], paths = {};
+		rows.forEach(function(row) {
+			if (jumpPlanner.isExtraRow(row)) { return; }
+			const id = parseInt(row.c[0].systemID, 10);
+			const holes = [];
+			let cur = row, steps = 0;
+			while (cur && !jumpPlanner.isRootRow(cur) && steps++ < 200) {
+				const parent = byV[cur.c[1].v];
+				if (!parent) { return; }		// not a whole path (parent left out): skip
+				const pathHome = Array.isArray(cur.pathHome) ? cur.pathHome : [];
+				const child = pathHome[pathHome.length - 1] || {};
+				const l = line[cur.c[0].v] || [];
+				const mods = Array.isArray(l[2]) ? l[2] : [];
+				holes.push({
+					wormholeID: l[3] === undefined ? null : l[3], from: parseInt(parent.c[0].systemID, 10) || null, to: parseInt(cur.c[0].systemID, 10) || null,
+					name: child.name || "", signatureID: child.signatureID || "", type: child.type || "",
+					eol: mods.indexOf("eol") >= 0, mass: mods.indexOf("critical") >= 0 ? "critical" : mods.indexOf("destab") >= 0 ? "destab" : null
+				});
+				cur = parent;
+			}
+			if (!cur || !jumpPlanner.isRootRow(cur)) { return; }
+			const home = parseInt(cur.c[0].systemID, 10);
+			if (!home) { return; }
+			if (cur === row && homes.indexOf(home) < 0) { homes.push(home); }
+			if (!id) { return; }
+			if (!paths[id] || holes.length < paths[id].holes.length) { paths[id] = { home: home, holes: holes }; }
+		});
+		return { homes: homes, paths: paths };
+	},
+
+	/** A hole's short name: its signature name, else the first 3 letters of the signature, plus the type when known ("N1 Z142") */
+	holeLabel: function(hole) {
+		const base = hole.name ? String(hole.name).substring(0, 24) : hole.signatureID ? String(hole.signatureID).substring(0, 3).toUpperCase() : "?";
+		const type = hole.realType && hole.realType !== "K162" && hole.realType !== "????" ? hole.realType : "";
+		return type && base.indexOf(type) < 0 ? base + " " + type : base;
+	},
+
+	/**
+	 * Warnings for taking a ship home along these holes. Hole sizes come from size-tags (hole.size, hole.certain),
+	 * the ship's need from jumpRange.shipNeeds. Never blocks anything: text only.
+	 * @param holes homePaths() holes, annotated with size / certain / realType / preserve
+	 * @return [{level: "warn" | "note", text}]
+	 */
+	holeWarnings: function(holes, need, shipName) {
+		const out = [];
+		const ship = shipName || "this ship";
+		if (need === "none") { out.push({ level: "warn", text: ship + " can't go through wormholes" }); }
+		const unknown = [];
+		(holes || []).forEach(function(h) {
+			const label = jumpPlanner.holeLabel(h);
+			if (need !== "none") {
+				const fits = jumpRange.holeFits(need, h.size);
+				if (fits === false) { out.push({ level: "warn", text: (h.certain ? "hole too small for " : "hole likely too small for ") + ship + ": " + label + " (" + h.size + (h.certain ? "" : "?") + ")" }); }
+				else if (fits === null && need && !h.size) { unknown.push(label); }
+			}
+			if (h.eol) { out.push({ level: "warn", text: "EOL: " + label }); }
+			if (h.mass === "critical") { out.push({ level: "warn", text: "mass critical: " + label }); }
+			else if (h.mass === "destab") { out.push({ level: "note", text: "destab: " + label }); }
+			if (h.preserve) { out.push({ level: "note", text: "preserve mass: " + label }); }
+		});
+		if (unknown.length) { out.push({ level: "note", text: "size unknown: " + unknown.join(", ") }); }
+		return out;
+	},
+
+	/**
+	 * Get home: from a start system, the routes to each exit on the chain (1-2 jumps), and the holes from there home.
+	 * @param ctx {startID, exits: [systemID], paths (homePaths().paths, holes annotated), index, systems, settings, presets, jammed}
+	 * @return {range, preset, covert, need, problem (jumpRange.startProblem), rows: [routesTo row + {name, sec, secText, cyno,
+	 *   home, holes, warnings}], counts: {reachable, total}}
+	 */
+	homeModel: function(ctx) {
+		const s = ctx.settings;
+		const r = jumpPlanner.range(s, ctx.presets);
+		const covert = !!(r.preset && r.preset.covert);
+		const jammedIDs = {};
+		Object.keys(ctx.jammed || {}).forEach(function(id) { jammedIDs[id] = true; });
+		const opts = { lowsec: s.lowsec, nullsec: s.nullsec, covert: covert, jammed: s.jammed === "ignore" ? {} : jammedIDs };
+		const need = r.preset ? jumpRange.shipNeeds(r.preset.key.replace(/^group-(\d+).*$/, "$1")) : null;
+		const problem = ctx.startID ? jumpRange.startProblem(ctx.startID, ctx.systems[ctx.startID], ctx.index) : "none";
+		const exits = (ctx.exits || []).filter(function(id) { return ctx.paths && ctx.paths[id]; });
+		const routes = problem ? [] : jumpRange.routesTo(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts);
+		const rows = routes.map(function(route) {
+			const sys = ctx.systems[route.id] || {};
+			const path = ctx.paths[route.id];
+			return Object.assign(route, {
+				name: sys.name || String(route.id), sec: Number(sys.security), secText: jumpPlanner.secText(sys.security),
+				cyno: route.jumps === 2 ? route.via : route.jumps === 1 ? route.id : null,
+				home: path.home, holes: path.holes, warnings: jumpPlanner.holeWarnings(path.holes, need, r.preset ? r.preset.group : "")
+			});
+		});
+		return {
+			range: r.range, max: r.max, preset: r.preset, covert: covert, need: need, opts: opts, problem: problem, rows: rows,
+			counts: { reachable: rows.filter(function(x) { return x.jumps !== null; }).length, total: rows.length }
+		};
+	},
+
+	/** "1 jump 6.2 LY", "2 jumps via M (5.8 + 5.6 LY)", or why not */
+	routeText: function(row, name, settings) {
+		if (row.jumps === 0) { return "you are here"; }
+		if (row.jumps === 1) { return "1 jump " + row.legs[0].toFixed(1) + " LY"; }
+		if (row.jumps === 2) { return "2 jumps via " + name(row.via) + " (" + row.legs[0].toFixed(1) + " + " + row.legs[1].toFixed(1) + " LY)"; }
+		const direct = row.reach && isFinite(row.reach.direct) ? " (" + row.reach.direct.toFixed(1) + " LY)" : "";
+		switch (row.reason) {
+			case "range": return "out of range within 2 jumps" + direct;
+			case "jammed": return "cyno-jammed (normal cyno)";
+			case "target": return (jumpRange.kind(row.id, { security: row.sec }) === "ls" ? "low-sec" : "null-sec") + " targets are off in Settings";
+			case "nopos": return "no position known";
+			default: return "not reachable";
+		}
+	},
+
+	/** Why a start can't be used, for the panel */
+	startProblemText: function(problem, startName) {
+		switch (problem) {
+			case "none": return "Pick the system to jump from: type a name, or click Jita or Amarr.";
+			case "wh": return startName + " is in wormhole space: jump drives can't be used there. Pick a k-space system.";
+			case "zarzakh": return startName + " is Zarzakh: jump drives can't be used there. Pick another system.";
+			case "nopos": return "No position known for " + startName + ".";
+			case "unknown": return "Unknown system.";
+			default: return "";
+		}
+	},
+
+	/** Mode switch for the panel: From exit | Get home */
+	modeHtml: function(mode) {
+		const b = function(value, text, title) {
+			return "<button type='button' data-jp-mode='" + value + "' class='" + (mode === value ? "active" : "") + "' title='" + title + "'>" + text + "</button>";
+		};
+		return "<span class='jp-mode' role='group' aria-label='Planner mode'>"
+			+ b("exit", "From exit", "Where a jump ship can go from each low/null-sec exit on the chain")
+			+ b("home", "Get home", "From a system of your choice, jump to an exit on the chain and take the wormholes home") + "</span>";
+	},
+
+	/** "Home: J152820" (or several homes, or none) */
+	homeText: function(homes, name) {
+		if (!homes || !homes.length) { return "no home on this chain"; }
+		return "Home: " + homes.map(name).join(", ");
+	},
+
+	/** Quick picks for the start: the last one used (when not a hub), Jita, Amarr */
+	quickPicks: function(lastID) {
+		const list = Number(lastID) > 0 && jumpPlanner.HUBS.indexOf(Number(lastID)) < 0 ? [Number(lastID)] : [];
+		return list.concat(jumpPlanner.HUBS);
+	},
+
+	/** Start row (HTML, escaped): quick-pick buttons and, when there is one, why the start can't be used */
+	quickPicksHtml: function(picks, startID, lastID, name) {
+		const esc = jumpPlanner.escape;
+		return (picks || []).map(function(id) {
+			const title = Number(id) === Number(lastID) && jumpPlanner.HUBS.indexOf(Number(id)) < 0 ? "Last used start" : "Jump from " + name(id);
+			return "<button type='button' class='jp-quick" + (Number(id) === Number(startID) ? " active" : "") + "' data-jp-start='" + (parseInt(id, 10) || 0) + "' title='" + esc(title) + "'>" + esc(name(id)) + "</button>";
+		}).join("");
+	},
+
+	/** The Get home list: reachable exits first (ranked), then the rest greyed with the reason; warnings under each row */
+	homeListHtml: function(model, name, settings, homes) {
+		const esc = jumpPlanner.escape;
+		let html = "<table class='jp-list jp-home-list'><thead><tr><th>Exit</th><th>Jump route</th><th>Wormholes</th><th></th></tr></thead><tbody>";
+		if (!model.rows.length) { html += "<tr><td colspan='4' class='jp-empty'>No low-sec or null-sec exits on this chain.</td></tr>"; }
+		const several = (homes || []).length > 1;
+		model.rows.forEach(function(r) {
+			const ok = r.jumps !== null;
+			const holes = r.holes.length + (r.holes.length === 1 ? " hole" : " holes") + " to " + (several ? name(r.home) : "home");
+			const dest = ok && r.cyno ? "<a href='#' class='jp-home-dest' data-jp-cyno='" + r.cyno + "' title='" + esc("Set destination in game: " + name(r.cyno)) + "'>Dest</a>" : "";
+			html += "<tr data-jp-id='" + r.id + "' class='jp-home-row" + (ok ? "" : " jp-row-out") + "'>"
+				+ "<td class='jp-col-name'>" + esc(r.name) + " <span class='" + jumpPlanner.secClass(r.sec) + "'>" + esc(r.secText) + "</span></td>"
+				+ "<td class='jp-col-route" + (ok ? "" : " jp-dim") + "'>" + esc(jumpPlanner.routeText(r, name, settings)) + "</td>"
+				+ "<td class='jp-col-holes' title='" + esc(r.holes.map(jumpPlanner.holeLabel).join(" → ") + " → " + name(r.home)) + "'>" + esc(holes) + "</td>"
+				+ "<td class='jp-col-act'>" + dest + "</td></tr>";
+			if (r.warnings.length) {
+				html += "<tr data-jp-id='" + r.id + "' class='jp-home-warn" + (ok ? "" : " jp-row-out") + "'><td colspan='4'>" + r.warnings.map(function(w) {
+					return "<span class='jp-w-" + w.level + "'>" + (w.level === "warn" ? "⚠ " : "") + esc(w.text) + "</span>";
+				}).join("") + "</td></tr>";
+			}
+		});
+		return html + "</tbody></table>";
+	},
+
+	/** Footer for Get home: "2 of 4 exits reachable" */
+	homeFooterText: function(model) {
+		return model.counts.reachable + " of " + model.counts.total + (model.counts.total === 1 ? " exit" : " exits") + " reachable within 2 jumps";
+	},
+
+	/** Plain-text routes for the clipboard */
+	homeCopyText: function(model, startName, name, jdc) {
+		const lines = ["Get home from " + startName + " (" + (model.preset ? model.preset.label : "") + ", JDC " + jumpPlanner.ROMAN[jdc] + ", " + jumpRange.formatLy(model.range) + ")"];
+		model.rows.forEach(function(r) {
+			lines.push([r.name, r.secText, jumpPlanner.routeText(r, name), r.holes.length + " holes to " + name(r.home)].join("\t")
+				+ (r.warnings.length ? "\t" + r.warnings.map(function(w) { return w.text; }).join("; ") : ""));
+		});
+		return lines.join("\n");
+	},
+
+	/** A position on the mini-map (mapModel() output) */
+	projectPoint: function(mapModel, pos) {
+		if (!pos || !mapModel.origin) { return null; }
+		return { x: Math.round((mapModel.cx + (pos.x - mapModel.origin.x) * mapModel.scale) * 10) / 10, y: Math.round((mapModel.cy - (pos.z - mapModel.origin.z) * mapModel.scale) * 10) / 10 };
+	},
+
+	/**
+	 * Get home overlay on the mini-map (SVG, escaped): the chain's exits as diamonds with their names, and the selected
+	 * route as lines start → (midpoint) → exit.
+	 * @param rows homeModel() rows; pos {systemID: {x, y, z}}; selectedID the route to draw
+	 */
+	homeOverlaySvg: function(mapModel, rows, pos, selectedID, name) {
+		const esc = jumpPlanner.escape;
+		const W = jumpPlanner.MAP_W, H = jumpPlanner.MAP_H;
+		const inside = function(p) { return p && p.x >= -2 && p.x <= W + 2 && p.y >= -2 && p.y <= H + 2; };
+		let svg = "<g class='jp-home-overlay'>";
+		const sel = (rows || []).filter(function(r) { return r.id === Number(selectedID) && r.jumps; })[0];
+		if (sel) {
+			const ids = [null].concat(sel.via ? [sel.via] : []).concat([sel.id]);
+			const pts = ids.map(function(id) { return id === null ? { x: mapModel.cx, y: mapModel.cy } : jumpPlanner.projectPoint(mapModel, pos[id]); });
+			if (pts.every(function(p) { return p; })) {
+				svg += "<polyline class='jp-route' points='" + pts.map(function(p) { return p.x + "," + p.y; }).join(" ") + "'></polyline>";
+				if (sel.via && inside(pts[1])) {
+					svg += "<circle class='jp-route-mid' cx='" + pts[1].x + "' cy='" + pts[1].y + "' r='4'></circle>"
+						+ "<text class='jp-l-mid' x='" + pts[1].x + "' y='" + (pts[1].y + 15) + "' text-anchor='middle'>" + esc(name(sel.via)) + "</text>";
+				}
+			}
+		}
+		// Names beside the diamonds: right or left, above or below, whichever is free and inside the map
+		const boxes = [{ x0: mapModel.cx - 8, x1: mapModel.cx + 8, y0: mapModel.cy - 8, y1: mapModel.cy + 8 }];
+		let labels = "";
+		(rows || []).forEach(function(r) {
+			const p = jumpPlanner.projectPoint(mapModel, pos[r.id]);
+			if (!inside(p)) { return; }
+			const d = 6;
+			svg += "<g class='jp-pt jp-hx" + (r.jumps !== null ? " jp-hx-ok" : " jp-hx-no") + (r.id === Number(selectedID) ? " jp-hx-sel" : "") + "' data-jp-id='" + r.id + "'>"
+				+ "<polygon points='" + [[p.x, p.y - d], [p.x + d, p.y], [p.x, p.y + d], [p.x - d, p.y]].map(function(q) { return q[0] + "," + q[1]; }).join(" ") + "'></polygon></g>";
+			boxes.push({ x0: p.x - d, x1: p.x + d, y0: p.y - d, y1: p.y + d });
+			const w = String(r.name).length * 6.2 + 2;
+			const spots = [[8, -5, "start"], [-8, -5, "end"], [8, 13, "start"], [-8, 13, "end"]].map(function(o) {
+				const x0 = o[2] === "start" ? p.x + o[0] : p.x + o[0] - w;
+				return { x: p.x + o[0], y: p.y + o[1], anchor: o[2], box: { x0: x0, x1: x0 + w, y0: p.y + o[1] - 9, y1: p.y + o[1] + 2 } };
+			});
+			const free = spots.filter(function(o) {
+				return o.box.x0 >= 0 && o.box.x1 <= W && o.box.y0 >= 0 && o.box.y1 <= H && !boxes.some(function(b) {
+					return o.box.x0 < b.x1 && o.box.x1 > b.x0 && o.box.y0 < b.y1 && o.box.y1 > b.y0;
+				});
+			})[0];
+			if (!free) { return; }
+			boxes.push(free.box);
+			labels += "<text class='jp-l-hx' x='" + Math.round(free.x * 10) / 10 + "' y='" + Math.round(free.y * 10) / 10 + "' text-anchor='" + free.anchor + "'>" + esc(r.name) + "</text>";
+		});
+		return svg + labels + "</g>";
+	},
+
 	/**
 	 * Where the panel goes without a saved position (first open, after Settings > Reset).
 	 * "right": the highest free spot against the right edge of the window (the free space beside the chain map in the
@@ -731,7 +1006,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			last: null,			// {ctx, model, mapModel} of the last render
 			// System search (this page only): the picked system, the suggestions, and whether to scroll to it on the next render
 			search: { id: null, matches: [], active: -1, scroll: false, refocusing: false },
-			$search: null			// the search row, kept across renders so typing isn't lost
+			$search: null,			// the search row, kept across renders so typing isn't lost
+			// Get home mode
+			chainResult: null,		// the last chain.nodes() output (rows and lines)
+			homeKey: "",			// exits and holes on the way home, to redraw when they change
+			start: null,			// the system to jump from (options.jumpRange.origin once a valid one is picked)
+			from: { matches: [], active: -1, refocusing: false },
+			$from: null				// the "Jump from" row, kept across renders like the search row
 		};
 
 		function current() { return jp.settings(options); }
@@ -845,8 +1126,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					const s = current();
 					const exits = s.enabled ? jp.chainExits(result, systems(), s.exits, viewing()) : [];
 					jp.decorate(result, exits, systems());
-					if (exits.join(",") !== state.exits.join(",")) {
+					state.chainResult = result;
+					// Get home also follows the holes on the way home (new, EOL, mass, a new root)
+					const homeKey = s.enabled && s.mode === "home" ? JSON.stringify(jp.homePaths(result)) : "";
+					if (exits.join(",") !== state.exits.join(",") || homeKey !== state.homeKey) {
 						state.exits = exits;
+						state.homeKey = homeKey;
 						clearTimeout(state.renderTimer);
 						state.renderTimer = setTimeout(render, 150);	// debounced: the chain redraws often
 					}
@@ -867,7 +1152,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='controls'><span class='jp-title'>Jump planner</span>"
 				+ "<i class='jp-close' data-icon='times' title='Close the Jump planner'></i>"
 				+ "<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i></div>"
-				+ "<div class='content'><div class='jp-head'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
+				+ "<div class='content'><div class='jp-head'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
 				+ "</li>";
 		}
 
@@ -912,11 +1197,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$w.stop(true, true);
 		}
 
-		/** Open the panel on an exit's tab */
-		function open(systemID) {
+		/** Open the panel on an exit's tab (fromRing: the exit's ring icon, which always shows From exit) */
+		function open(systemID, fromRing) {
 			if (!isOn()) { return; }
 			const id = parseInt(systemID, 10);
 			if (id) { state.selected = id; }
+			if (fromRing && current().mode === "home") { store({ mode: "exit" }, true); }
 			state.pinnedID = null;
 			state.error = "";
 			const wasOpen = !!$widget().length;
@@ -986,7 +1272,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!state.selected) { state.selected = exits[0] || null; }
 			const r = jp.range(s, state.data.presets);
 			$w.find(".jp-head").html(jp.headerHtml(state.data.presets, s, r.range));
-			$w.find(".jp-tabs").html(jp.tabsHtml(exits, state.selected, name, exits.reduce(function(acc, id) { acc[id] = countFor(id); return acc; }, {})));
+			$w.find(".jp-modebar").html(jp.modeHtml(s.mode) + "<span class='jp-home-name'></span>");
+			const fromFocus = !!state.$from && state.$from.find(".jp-from-input").is(":focus");
+			if (state.$from) { state.$from.detach(); }
+			if (s.mode === "home") { renderHome($w, s, fromFocus); return; }
+			$w.find(".jp-tabs").removeClass("hidden").html(jp.tabsHtml(exits, state.selected, name, exits.reduce(function(acc, id) { acc[id] = countFor(id); return acc; }, {})));
 			const $body = $w.find(".jp-body");
 			if (!state.selected) {
 				$body.html("<div class='jp-state'>No low-sec or null-sec exits on this chain. Exits get a small ring icon on the chain map; click it to plan jumps from there.</div>");
@@ -1036,8 +1326,133 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function mapHtml() {
 			const l = state.last;
+			if (l.home) {
+				// Get home: only the start's label from the usual set; the exits carry their own names
+				const focusHome = [state.hoverID, state.pinnedID];
+				const first = l.home.rows.filter(function(r) { return r.jumps; })[0];
+				const selected = state.pinnedID || state.hoverID || (first ? first.id : null);
+				const labels = jp.placeLabels(l.mapModel, []).filter(function(x) { return x.cls === "jp-l-exit"; });
+				return jp.mapSvg(l.mapModel, labels, focusHome, null, jp.homeOverlaySvg(l.mapModel, l.home.rows, l.ctx.index.pos, selected, name));
+			}
 			const focus = [state.hoverID, state.pinnedID, state.search.id];
 			return jp.mapSvg(l.mapModel, jp.placeLabels(l.mapModel, focus), focus, state.search.id);
+		}
+
+		// ---- Get home mode ----
+
+		/** Holes on the way home with what the other features know: size class (size-tags), real type, preserve-mass flag */
+		function annotateHoles(paths) {
+			Object.keys(paths).forEach(function(id) {
+				paths[id].holes.forEach(function(h) {
+					const real = typeof sizeTags !== "undefined" ? sizeTags.wormholeTypeFor(h.wormholeID) : undefined;
+					h.realType = real || "";
+					let tag = null;
+					try {
+						// The same lookup as the size tags on the chain map: one side is the hole's type, the other K162
+						if (typeof sizeTags !== "undefined" && h.from && h.to) { tag = sizeTags.tagFor(real && real !== h.type ? real : "K162", h.type, h.from, h.to); }
+					} catch (e) { tag = null; }
+					h.size = tag ? tag.size : null;
+					h.certain = !!(tag && tag.certain);
+					h.preserve = typeof preserveMass !== "undefined" && !!preserveMass.flags && !!preserveMass.flags[String(h.wormholeID)];
+				});
+			});
+			return paths;
+		}
+
+		function homeData() {
+			const result = state.chainResult || (typeof chain !== "undefined" && chain && chain.data ? { map: chain.data.map, lines: chain.data.lines } : null);
+			const hp = jp.homePaths(result);
+			annotateHoles(hp.paths);
+			return hp;
+		}
+
+		function startID() {
+			if (!state.start) { state.start = current().origin; }
+			return state.start;
+		}
+
+		function renderHome($w, s, fromFocus) {
+			const hp = homeData();
+			const start = startID();
+			$w.find(".jp-modebar .jp-home-name").text(jp.homeText(hp.homes, name));
+			$w.find(".jp-tabs").addClass("hidden").empty();
+			const $body = $w.find(".jp-body");
+			const $from = fromRow();
+			$from.find(".jp-quicks").html(jp.quickPicksHtml(jp.quickPicks(s.origin), start, s.origin, name));
+			if (!$from.find(".jp-from-input").is(":focus")) { $from.find(".jp-from-input").val(start ? name(start) : ""); }
+			const scroll = $body.find(".jp-list-wrap").scrollTop();
+			const ctx = context(start && state.data.index.pos[start] ? start : null);
+			const home = jp.homeModel({ startID: start, exits: state.exits, paths: hp.paths, index: state.data.index, systems: systems(),
+				settings: s, presets: state.data.presets, jammed: ctx.jammed });
+			let html;
+			if (!hp.homes.length) {
+				html = "<div class='jp-state'>No chain on this tab. Get home needs a chain map with a home system (the system the chain starts from).</div>";
+				state.last = null;
+			} else if (home.problem) {
+				html = "<div class='jp-state" + (start ? " jp-error" : "") + "'>" + jp.escape(jp.startProblemText(home.problem, start ? name(start) : "")) + "</div>";
+				state.last = null;
+			} else {
+				// The farthest reachable exit fits on the map (a little beyond, so it isn't lost to rounding at the edge)
+				ctx.fitLy = home.rows.reduce(function(m, r) { return r.jumps ? Math.max(m, r.reach.direct + 0.05) : m; }, 0);
+				const model = jp.model(ctx);
+				const mapModel = jp.mapModel(ctx, model);
+				state.last = { ctx: ctx, model: model, mapModel: mapModel, home: home };
+				html = "<div class='jp-map'>" + mapHtml() + "<div class='jp-tip hidden'></div>"
+					+ "<span class='jp-map-note'>top-down, true scale · centred on " + jp.escape(name(start)) + "</span></div>"
+					+ "<div class='jp-list-wrap'>" + jp.homeListHtml(home, name, s, hp.homes) + "</div>"
+					+ "<div class='jp-foot'><span class='jp-foot-text'>" + jp.escape(jp.homeFooterText(home)) + "</span>"
+					+ "<a href='#' class='jp-copy-list'>Copy list</a></div>";
+			}
+			$body.html(html).prepend($from);
+			$body.find(".jp-list-wrap").scrollTop(scroll || 0);
+			if (fromFocus) {
+				state.from.refocusing = true;
+				try { $from.find(".jp-from-input")[0].focus({ preventScroll: true }); } finally { state.from.refocusing = false; }
+			}
+			if (state.last) {
+				refreshMap();
+				if (state.pinnedID) { showTip(state.pinnedID); }
+			}
+		}
+
+		/** The "Jump from" row (built once; renderHome moves it into the new body) */
+		function fromRow() {
+			if (!state.$from) {
+				state.$from = $("<div class='jp-from'><span class='jp-from-label'>Jump from</span><span class='jp-from-box'>"
+					+ "<input type='text' class='jp-from-input' placeholder='System…' aria-label='The system to jump from'"
+					+ " autocomplete='off' spellcheck='false' maxlength='40' role='combobox' aria-autocomplete='list' aria-expanded='false' />"
+					+ "<ul class='jp-from-menu jp-search-menu hidden' role='listbox'></ul></span><span class='jp-quicks'></span></div>");
+			}
+			return state.$from;
+		}
+
+		function closeFromMenu() {
+			state.from.matches = [];
+			state.from.active = -1;
+			fromRow().find(".jp-from-menu").addClass("hidden").empty();
+			fromRow().find(".jp-from-input").attr("aria-expanded", "false");
+		}
+
+		function fromInput(text) {
+			const $menu = fromRow().find(".jp-from-menu");
+			if (!$.trim(text)) { closeFromMenu(); return; }
+			state.from.matches = jp.searchSystems(text, systems());
+			state.from.active = state.from.matches.length ? 0 : -1;
+			if (!state.from.matches.length) { $menu.html("<li class='jp-search-none'>No system with that name</li>").removeClass("hidden"); return; }
+			$menu.html(jp.searchMenuHtml(state.from.matches, state.from.active, systems(), regions())).removeClass("hidden");
+			fromRow().find(".jp-from-input").attr("aria-expanded", "true");
+		}
+
+		/** A new start: remembered (options.jumpRange.origin) when a jump drive can be used there */
+		function pickStart(id) {
+			if (!id) { return; }
+			state.start = id;
+			state.pinnedID = null;
+			state.hoverID = null;
+			closeFromMenu();
+			fromRow().find(".jp-from-input").val(name(id)).blur();
+			if (state.data && !jumpRange.startProblem(id, systems()[id], state.data.index)) { store({ origin: id }, true); }
+			render();
 		}
 
 		// ---- System search ----
@@ -1140,7 +1555,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function tipInfo(id) {
 			const l = state.last;
 			if (!l) { return null; }
-			const point = l.mapModel.points.filter(function(p) { return p.id === id; })[0];
+			const route = l.home ? l.home.rows.filter(function(r) { return r.id === id; })[0] : null;
+			// Get home: an exit beyond the drawn systems still has its diamond
+			const point = l.mapModel.points.filter(function(p) { return p.id === id; })[0] || (route ? jp.projectPoint(l.mapModel, l.ctx.index.pos[id]) : undefined) || undefined;
 			const row = l.model.rows.filter(function(r) { return r.id === id; })[0];
 			const sys = l.ctx.systems[id] || {};
 			const region = l.ctx.regions && l.ctx.regions[sys.regionID] ? l.ctx.regions[sys.regionID].name : "";
@@ -1149,7 +1566,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				id: id, name: sys.name || String(id), sec: sys.security, region: region,
 				ly: jumpRange.distanceLy(l.ctx.index.pos[l.ctx.exitID], l.ctx.index.pos[id]),
 				band: row ? row.band : null, gates: l.ctx.gates[id] === undefined ? null : l.ctx.gates[id], kind: kind,
-				jam: l.ctx.jammed[id] || null, canMark: jp.isRangeExit(id, sys), point: point
+				jam: l.ctx.jammed[id] || null, canMark: jp.isRangeExit(id, sys), point: point,
+				route: route ? jp.routeText(route, name) + " · " + route.holes.length + (route.holes.length === 1 ? " hole" : " holes") + " to " + name(route.home) : null,
+				cyno: route && route.jumps ? route.cyno : null
 			};
 		}
 
@@ -1196,7 +1615,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				notify("Setting a destination in game isn't available.", "red", 5000);
 				return;
 			}
-			autopilotRoute.push([state.selected, id], "Destination " + name(id) + " (jump from " + name(state.selected) + ")");
+			// Get home: the jumps start at the chosen start, not at an exit
+			const from = state.last && state.last.home ? state.last.ctx.exitID : state.selected;
+			autopilotRoute.push([from, id], "Destination " + name(id) + " (jump from " + name(from) + ")");
 		}
 
 		function copy(text, what) {
@@ -1330,6 +1751,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					const result = reset.apply(this, arguments);
 					delete this.jumpRange;
 					resetPending = true;
+					state.start = null;		// Get home's start goes with options.jumpRange.origin
 					return result;
 				};
 				Object.keys(reset).forEach(function(k) { wrapped[k] = reset[k]; });
@@ -1361,7 +1783,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("click", "#chainMap .jp-ring", function(e) {
 				e.preventDefault();
 				e.stopPropagation();
-				open($(this).attr("data-jp-exit"));
+				open($(this).attr("data-jp-exit"), true);
 			});
 			$doc.on("mousedown", "#chainMap .jp-ring", function(e) { e.stopPropagation(); });
 			// Clicking an exit's name (which also views it, upstream) opens the planner on it when that is switched on
@@ -1429,6 +1851,50 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				refreshMap();
 				$widget().find(".jp-tip").addClass("hidden");
 			});
+			// Get home: mode switch, start picker, quick picks, Dest (the first cyno: midpoint or exit)
+			$doc.on("click", sel + " .jp-mode button", function() {
+				const mode = $(this).attr("data-jp-mode");
+				if (mode === current().mode) { return; }
+				store({ mode: mode }, true);
+				state.pinnedID = null;
+				state.hoverID = null;
+				state.homeKey = "";
+				render();
+			});
+			$doc.on("click", sel + " .jp-quick", function() { pickStart(parseInt($(this).attr("data-jp-start"), 10)); });
+			$doc.on("input", sel + " .jp-from-input", function() { fromInput($(this).val()); });
+			$doc.on("focus", sel + " .jp-from-input", function() {
+				if (state.from.refocusing) { return; }
+				$(this).select();
+			});
+			$doc.on("blur", sel + " .jp-from-input", function() {
+				setTimeout(function() {
+					const $input = fromRow().find(".jp-from-input");
+					if ($input.is(":focus")) { return; }
+					closeFromMenu();
+					if (!$.trim($input.val())) { $input.val(state.start ? name(state.start) : ""); }	// left empty: show the start again
+				}, 150);
+			});
+			$doc.on("keydown", sel + " .jp-from-input", function(e) {
+				const f = state.from;
+				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+					e.preventDefault();
+					if (!f.matches.length) { fromInput($(this).val()); return; }
+					f.active = (f.active + (e.key === "ArrowDown" ? 1 : -1) + f.matches.length) % f.matches.length;
+					fromRow().find(".jp-from-menu").html(jp.searchMenuHtml(f.matches, f.active, systems(), regions()));
+				} else if (e.key === "Enter") {
+					e.preventDefault();
+					const list = f.matches.length ? f.matches : jp.searchSystems($(this).val(), systems(), 1);
+					pickStart(list[Math.max(0, f.active)] || list[0]);
+				} else if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					closeFromMenu();
+					$(this).val(state.start ? name(state.start) : "").blur();
+				}
+			});
+			$doc.on("mousedown", sel + " .jp-from-menu li[data-jp-find]", function(e) { e.preventDefault(); pickStart(parseInt($(this).attr("data-jp-find"), 10)); });
+			$doc.on("click", sel + " .jp-home-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).attr("data-jp-cyno"), 10)); });
 			$doc.on("click", sel + " .jp-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).closest("tr").attr("data-jp-id"), 10)); });
 			$doc.on("click", sel + " .jp-tip-dest", function(e) { e.preventDefault(); setDestination(parseInt($(this).closest(".jp-tip").attr("data-jp-id"), 10)); });
 			$doc.on("click", sel + " .jp-tip-copy", function(e) { e.preventDefault(); const id = parseInt($(this).closest(".jp-tip").attr("data-jp-id"), 10); copy(name(id), name(id)); });
@@ -1438,6 +1904,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const l = state.last;
 				if (!l) { return; }
 				const s = current();
+				if (l.home) { copy(jp.homeCopyText(l.home, name(l.ctx.exitID), name, s.jdc), "The routes"); return; }
 				copy(jp.copyText(jp.sortRows(l.model.rows, state.sort.key, state.sort.dir), name(l.ctx.exitID), l.model.preset ? l.model.preset.label : "", s.jdc, l.model.range), "The list");
 			});
 			document.addEventListener("visibilitychange", function() { if (!document.hidden && $widget().length) { loadJammed(); } });

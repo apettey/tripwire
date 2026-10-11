@@ -266,4 +266,76 @@ describe('jumpRange', () => {
 			assert.ok(Object.values(g).every(n => n <= 1));
 		});
 	});
+	describe('Get home: startProblem, routesTo', () => {
+		const A = sid('Amamake');
+		it('start: high-sec and Pochven allowed; W-space, Thera, Zarzakh and unknown systems not', () => {
+			assert.strictEqual(jumpRange.startProblem(sid('Jita'), S[sid('Jita')], INDEX), null);
+			assert.strictEqual(jumpRange.startProblem(A, S[A], INDEX), null);
+			assert.strictEqual(jumpRange.startProblem(sid('Archee'), S[sid('Archee')], INDEX), null);
+			assert.strictEqual(jumpRange.startProblem(sid('J152820'), S[sid('J152820')], INDEX), 'wh');
+			assert.strictEqual(jumpRange.startProblem(sid('Thera'), S[sid('Thera')], INDEX), 'wh');
+			assert.strictEqual(jumpRange.startProblem(30100000, S[30100000], INDEX), 'zarzakh');
+			assert.strictEqual(jumpRange.startProblem(123, undefined, INDEX), 'unknown');
+			assert.strictEqual(jumpRange.startProblem(A, S[A], { pos: {} }), 'nopos');
+		});
+		it('ranks 1 jump before 2 jumps, then by total LY; unreachable last with the reason', () => {
+			const ids = ['EC-P8R', 'KBP7-G', 'E-YCML', 'Egghelende', 'Auga'].map(sid);
+			const r = jumpRange.routesTo(A, ids, 7, INDEX, S, {});
+			assert.deepStrictEqual(r.map(x => x.jumps), [1, 1, 2, 2, null]);
+			assert.deepStrictEqual([r[0].id, r[1].id], [sid('Auga'), sid('Egghelende')]);	// 0.4 LY before 3.7 LY
+			assert.ok(r[2].total <= r[3].total);
+			assert.ok(r[2].via && r[2].legs.length === 2 && r[2].legs.every(l => l <= 7));
+			assert.ok(Math.abs(r[2].total - (r[2].legs[0] + r[2].legs[1])) < 1e-9);
+			assert.deepStrictEqual([r[4].id, r[4].reason, r[4].via], [sid('EC-P8R'), 'range', null]);
+			assert.deepStrictEqual(r[0].legs.length, 1);
+		});
+		it('a cyno-jammed exit: unreachable for a normal cyno ("jammed"), fine with a covert one', () => {
+			const egg = sid('Egghelende');
+			const jammed = {}; jammed[egg] = true;
+			assert.deepStrictEqual([jumpRange.routesTo(A, [egg], 7, INDEX, S, { jammed: jammed })[0].jumps, jumpRange.routesTo(A, [egg], 7, INDEX, S, { jammed: jammed })[0].reason], [null, 'jammed']);
+			assert.strictEqual(jumpRange.routesTo(A, [egg], 7, INDEX, S, { jammed: jammed, covert: true })[0].jumps, 1);
+		});
+		it('targets switched off: "target"; the start itself: 0 jumps', () => {
+			const egg = sid('Egghelende');
+			assert.strictEqual(jumpRange.routesTo(A, [egg], 7, INDEX, S, { lowsec: false })[0].reason, 'target');
+			const self = jumpRange.routesTo(A, [A], 7, INDEX, S, {})[0];
+			assert.deepStrictEqual([self.jumps, self.total], [0, 0]);
+		});
+		it('a W-space start reaches nothing (it has no position)', () => {
+			assert.strictEqual(jumpRange.routesTo(sid('J152820'), [A], 7, INDEX, S, {})[0].reason, 'nopos');
+			assert.strictEqual(jumpRange.routesTo(sid('Thera'), [A], 7, INDEX, S, {})[0].jumps, null);
+		});
+	});
+
+	describe('holeFits / shipNeeds', () => {
+		it('ship groups: Black Ops L, Jump Freighter and Rorqual VL, capitals XL, supers and titans none', () => {
+			assert.deepStrictEqual([898, 902, 883, 547, 485, 1538, 4594, 5120, 659, 30, 1].map(jumpRange.shipNeeds),
+				['L', 'VL', 'VL', 'XL', 'XL', 'XL', 'XL', 'XL', 'none', 'none', null]);
+		});
+		it('hull masses agree (appData.mass): Black Ops <= 375 kt, JF / Rorqual <= 1,000 kt but > 410 kt, capitals <= 2,000 kt but > 1,000 kt', () => {
+			const ships = SHIPS.ships;
+			const mass = s => appData.mass[s.typeID].mass;
+			const max = { L: 375e6, VL: 1000e6, XL: 2000e6 }, below = { L: 62e6, VL: 410e6, XL: 1000e6 };
+			ships.forEach(s => {
+				const need = jumpRange.shipNeeds(s.groupID);
+				if (need === 'none' || !appData.mass[s.typeID]) { return; }
+				assert.ok(mass(s) <= max[need] && mass(s) > below[need], s.name + ' ' + mass(s) + ' ' + need);
+			});
+		});
+		it('matrix', () => {
+			const sizes = ['S', 'M', 'L', 'VL', 'XL'];
+			const table = ['L', 'VL', 'XL', 'none'].map(need => sizes.map(size => jumpRange.holeFits(need, size)));
+			assert.deepStrictEqual(table, [
+				[false, false, true, true, true],
+				[false, false, false, true, true],
+				[false, false, false, false, true],
+				[false, false, false, false, false]
+			]);
+		});
+		it('unknown size or ship: null (no warning); a super never fits, even an unknown hole', () => {
+			assert.strictEqual(jumpRange.holeFits('XL', null), null);
+			assert.strictEqual(jumpRange.holeFits(null, 'L'), null);
+			assert.strictEqual(jumpRange.holeFits('none', null), false);
+		});
+	});
 });

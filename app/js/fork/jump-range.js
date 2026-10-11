@@ -305,5 +305,72 @@ const jumpRange = {
 				|| (c.gates === best.gates && c.legs < best.legs)))) { best = c; }
 		});
 		return best;
+	},
+
+	/**
+	 * Why a jump drive can't be used to leave a system (null when it can): "wh" (W-space, Thera), "zarzakh",
+	 * "unknown" (no such system) or "nopos" (no position known). High-sec and Pochven are valid starts.
+	 */
+	startProblem: function(systemID, sys, index) {
+		const kind = jumpRange.kind(systemID, sys);
+		if (!kind) { return "unknown"; }
+		if (!jumpRange.canJumpFrom(systemID, sys)) { return kind === "zarzakh" ? "zarzakh" : "wh"; }
+		return index && index.pos[systemID] ? null : "nopos";
+	},
+
+	/**
+	 * Routes from one start to each of several destinations (e.g. the chain's exits), at most 2 jumps each, ranked:
+	 * reachable first (fewer jumps first, then shorter total LY, then id), then the rest by id.
+	 * @param opts see isValidCynoTarget (jammed, covert, lowsec, nullsec)
+	 * @return [{id, reach (reach() output), jumps (0-2 or null), legs ([LY] per jump), total (LY), via (midpoint id or null),
+	 *   reason (null, or when not reachable: "range" | "jammed" | "target" | "origin" | "nopos")}]
+	 */
+	routesTo: function(startID, destIDs, rangeLy, index, systems, opts) {
+		const o = opts || {};
+		const out = (destIDs || []).map(function(destID) {
+			const id = Number(destID);
+			const r = jumpRange.reach(startID, id, rangeLy, index, systems, o, 2);
+			const row = { id: id, reach: r, jumps: r.jumps, legs: [], total: Infinity, via: null, reason: null };
+			if (r.jumps === 0) { row.total = 0; }
+			else if (r.jumps === 1) { row.legs = [r.direct]; row.total = r.direct; }
+			else if (r.jumps === 2) { row.via = r.via[0].id; row.legs = [r.via[0].ly1, r.via[0].ly2]; row.total = r.via[0].ly1 + r.via[0].ly2; }
+			else if (r.reason === "target") {
+				// Only the jam in the way: a valid target without it
+				row.reason = jumpRange.isValidCynoTarget(id, systems[id], Object.assign({}, o, { jammed: null })) ? "jammed" : "target";
+			} else { row.reason = r.reason === "unknown" ? "nopos" : r.reason; }
+			return row;
+		});
+		out.sort(function(a, b) {
+			const ra = a.jumps === null ? 1 : 0, rb = b.jumps === null ? 1 : 0;
+			if (ra !== rb) { return ra - rb; }
+			if (ra) { return a.id - b.id; }
+			return a.jumps - b.jumps || a.total - b.total || a.id - b.id;
+		});
+		return out;
+	},
+
+	// Wormhole size a jump ship needs, by ship group (hull mass, appData.mass / SDE, against the hole size classes
+	// of size-tags.js: L up to 375-410 kt, VL up to 1,000 kt, XL 2,000 kt). Checked 2026-10-11:
+	// - Black Ops 106-113 kt: battleship holes (L) and up.
+	// - Jump Freighter 820-960 kt and Rorqual 800 kt: too heavy for L, need a freighter hole (VL) or bigger.
+	// - Carrier, Dreadnought, FAX, Lancer, Command Carrier 1,100-1,310 kt: capital holes (XL) only.
+	// - Supercarrier and Titan: "Supercapitals don't fit through wormholes" (https://wiki.eveuniversity.org/Wormhole_space).
+	// Mass categories: https://wiki.eveuniversity.org/Wormhole_attributes. Hull mass only (plates, rigs and
+	// propulsion modules add to it), so a warning, never a block.
+	SIZE_ORDER: ["S", "M", "L", "VL", "XL"],
+	SHIP_NEEDS: { 898: "L", 902: "VL", 883: "VL", 547: "XL", 485: "XL", 1538: "XL", 4594: "XL", 5120: "XL", 659: "none", 30: "none" },
+
+	/** The smallest hole size class a ship group needs ("L" | "VL" | "XL"), "none" (can't use wormholes), or null (unknown) */
+	shipNeeds: function(groupID) {
+		return jumpRange.SHIP_NEEDS[Number(groupID)] || null;
+	},
+
+	/** Whether a ship that needs `need` (shipNeeds) fits through a hole of size class `size` (sizeTags.sizeOf):
+	 * true, false, or null when either is unknown. A ship that can't use wormholes never fits. */
+	holeFits: function(need, size) {
+		if (need === "none") { return false; }
+		const n = jumpRange.SIZE_ORDER.indexOf(need), s = jumpRange.SIZE_ORDER.indexOf(size);
+		if (n < 0 || s < 0) { return null; }
+		return s >= n;
 	}
 };
