@@ -435,6 +435,10 @@ const systemThreat = {
 		if (error) { body += "<div class='threat-muted'>" + esc(error) + "</div>"; }
 		const s = model ? model.summary : null;
 		if (s && s.kills90d !== null) { body += "<div class='threat-muted'>~" + esc(systemThreat.formatCount(s.kills90d)) + " kills in 90 days</div>"; }
+		// 90-day profile: hour-of-day chart and top groups (app/js/fork/system-threat-90d.js)
+		if (model && model.profile && typeof threat90d !== "undefined") {
+			body += threat90d.html(model.profile, nowMs, { period: threat90d.period, names: model.names });
+		}
 		const set = systemThreat.setResidentsHtml(v.residents, nowMs);
 		if (set) {
 			body += set + "<a href='#' class='threat-show-activity' aria-expanded='" + (v.showActivity ? "true" : "false") + "'>"
@@ -536,6 +540,8 @@ const systemThreat = {
 			structures: (detail.structures || []).map(function(st) {
 				return { killID: parseInt(st.killID, 10), typeName: name(st.typeID), ownerName: name(st.corporationID), timeMs: Date.parse(st.time) };
 			}),
+			profile: detail.profile || null,
+			names: names,
 			namesPending: !!detail.namesPending,
 			windowText: systemThreat.formatHours(response.retentionSeconds)
 		};

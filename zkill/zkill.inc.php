@@ -28,6 +28,7 @@ require_once(__DIR__ . '/backfill.php');
 require_once(__DIR__ . '/names.php');
 require_once(__DIR__ . '/query.php');
 require_once(__DIR__ . '/stats.php');
+require_once(__DIR__ . '/profile.php');
 require_once(__DIR__ . '/threat.php');
 require_once(__DIR__ . '/lookup.php');
 

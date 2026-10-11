@@ -70,7 +70,7 @@ Fork features that need their own tables create them on first use with `CREATE T
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
 `fork_rally` / `fork_rally_discord_message` (chain map rally point, "Fight here", per mask with a copy of its fleet comp, and its live legacy Discord message, created by `public/rally.php`; the `comp*` columns are added to an older `fork_rally` the first time a fight point is set; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_fight_comps` (the [fleet comps](#fight-here) per mask, created by `public/fight.php`), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `fork_rolling` ("rolling" flags on chain connections: who (character ID and name), when, note; created by `public/rolling.php`, `rolling.inc.php`, built like `fork_preserve_mass`; tests: `php tests/rolling_test.php`), `fork_system_residents` (residents of a system set by hand per mask, created by `public/system_residents.php`, `system_residents.inc.php`; see [System stats](#system-stats-system-threat)), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
-`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
+`zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_system_keep` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
 ([Discord notifications](#discord-notifications), DDL in `docker/sql/discord.sql`; `discord_rally` of 1.15-1.17 is no longer read and can be dropped)
 and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask, created by `public/watchlist.php`) /
@@ -128,6 +128,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ZKILL_FEED_ENABLED` | `true` | `config.php` (`ZKILL_FEED_ENABLED`), `zkill_feed.worker.php`, `zkill/` | Follow zKillboard's R2Z2 feed for [Kill Reporting](#kill-reporting) and the [System Kill Feed](#zkillboard-integration). `false` = the worker idles and nothing is requested from zKillboard or ESI (no back-fills, no names) |
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
+| `ZKILL_THREAT_KEEP_DAYS` | `90` | `config.php` (`ZKILL_THREAT_KEEP_DAYS`), `zkill/profile.php` | Days (0-90) the stored kills of systems people look at are kept for the System Threat [90-day profile](#90-day-profile-system-threat) instead of `ZKILL_RETENTION_HOURS`; `0` = off |
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `INTEL_ZKILL_THREAT_ENABLED` | `true` | `config.php` (`INTEL_ZKILL_THREAT_ENABLED`), `intel/pilots.inc.php` | Whether the worker fetches zKillboard character stats for pilots in shared local scans ([who is in local](#who-is-in-local)). `false` = corporations / alliances only (ESI), nothing is asked from zKillboard for local scans. Without `ZKILL_FEED_ENABLED` neither lookup runs |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
@@ -233,6 +234,7 @@ tables (`zkill/query.php`, `public/system_kills.php`) and queue work, never add 
 | `zkill/lookup.php` | Single-kill lookup queue for [Smart notes](#smart-notes) kill cards: request (web), fetch one kill (worker) |
 | `zkill/names.php` | ESI name cache: look up / queue (web), resolve in batches via `POST /universe/names` (worker) |
 | `zkill/query.php` | Read helpers for endpoints, e.g. `zk_system_kills()` behind `public/system_kills.php` |
+| `zkill/profile.php` | 90-day threat profile and the longer retention of watched systems' kills (see [90-day profile](#90-day-profile-system-threat)) |
 | `zkill/stats.php`, `zkill/threat.php` | Per-system zKillboard stats cache + queue, and the read side of System Threat behind `public/system_threat.php` (see [System stats](#system-stats-system-threat)) |
 | `zkill/system_ids.php` | Generated list of valid solar system IDs (8289 systems as ranges) from `appData.systems` in `public/js/combine.js`. Regenerate after upstream changes that file: `docker compose -f docker-compose.dev.yml exec -T assets node zkill/tools/generate-system-ids.js` |
 | `zkill/tests/zkill_test.php` | Tests of the pure parts (no database or network): `docker compose -f docker-compose.dev.yml exec -T app php zkill/tests/zkill_test.php` (`zkill/tests/` and `zkill/tools/` are not in the image); also `lookup_test.php` (lookup queue and worker step on SQLite with a fake zKillboard / ESI) and `zkill_kill_endpoint_test.php` (`public/zkill_kill.php` against the dev database) |
@@ -339,6 +341,29 @@ stored row, `zkill_names` and the system's `zkill_system_stats` top lists, else 
 `/alliances/{id}` (through `esi/esi.inc.php`, so ESI pauses apply; only on Save). The browser re-reads the residents with
 the viewed system's detail polls (every 5 minutes; while its stats are pending, not more than once a minute). Tests: `php tests/system_residents_test.php` (fake ESI; storage
 checks against the dev database).
+
+#### 90-day profile (System Threat)
+
+The Threat & residents section also shows a 7 d / 90 d profile of the viewed system: kills, the busiest 4 hours of the
+EVE day (a 24-bar kills-by-hour chart), the top 5 groups (alliance, else corporation; only groups with kills on 3 or
+more different days) and when it was analysed. It is computed by `zkill/profile.php` from `zkill_killmails`
+(`zk_profile_compute()`: SQL aggregates by hour, (group, day) and victim group, never the raw kills in PHP; cached per
+system in `zkill_profile_cache` for an hour, ten minutes when nobody watches the system, one request computing per
+system at a time via MySQL `GET_LOCK`), so it costs **no zKillboard request**:
+the zKillboard call budget is unchanged (same stats and back-fill requests as before, same `ZKILL_API_INTERVAL`).
+The retention window is too short for 90 days, so the systems people look at (the viewed system and the systems of the
+user's mask chain, looked up on the server from the mask's wormhole signatures, never from the request; at most 500
+overall and 200 per user, rows nobody asked for in 14 days are dropped; one batched upsert that cannot fail the request) are listed in
+`zkill_system_keep` and the stream keeps their kills for `ZKILL_THREAT_KEEP_DAYS` (default 90) instead of
+`ZKILL_RETENTION_HOURS`: `zk_store_killmail()` stores older kills of those systems and `zk_prune()` spares them, keeping
+at most 5000 kills beyond the retention window per system (oldest dropped by `zk_keep_housekeeping()`; the panel's
+coverage then starts at the oldest kept kill). History
+therefore builds up from the day a system is first looked at (the response's `detail.profile.coveredDays` and the
+panel's "kills seen for about N days so far" say how much), plus what the retention window and its back-fill already
+held. zKillboard's own history API is limited to 7 days, so nothing older can be fetched. Storage: roughly 0.3 KB per
+stored kill (a wormhole has a few dozen kills in 90 days; a busy k-space system tens of thousands, so on a small
+instance set `ZKILL_THREAT_KEEP_DAYS=30` or `0`). Tests: `php zkill/tests/profile_test.php`,
+`app/js-test/fork/system-threat-90d.test.js`.
 
 #### Smart notes
 

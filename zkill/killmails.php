@@ -62,7 +62,10 @@ function zk_store_row(PDO $db, array $row, $source) {
 /** Store a killmail (R2Z2 or API shape) if it is inside the retention window. Returns true when inserted. */
 function zk_store_killmail(PDO $db, array $kill, $source) {
     $row = zk_killmail_row($kill);
-    if ($row === null || strtotime($row['killTime'] . ' UTC') < time() - zk_retention_seconds()) return false;
+    if ($row === null) return false;
+    $killUnix = strtotime($row['killTime'] . ' UTC');
+    // Older than the retention window: only kills of systems people watch are kept longer (zkill/profile.php)
+    if ($killUnix < time() - zk_retention_seconds() && !zk_keep_wants($db, (int) $row['systemID'], $killUnix)) return false;
     return zk_store_row($db, $row, $source);
 }
 
@@ -95,7 +98,8 @@ function zk_prune(PDO $db) {
     $retention = zk_retention_seconds();
     // Kills fetched for a note (source 'lookup', often older than the retention) stay ZK_LOOKUP_KEEP_DAYS after they arrived
     $deleted = $db->exec('DELETE FROM zkill_killmails WHERE killTime < UTC_TIMESTAMP() - INTERVAL ' . $retention . " SECOND
-        AND (source <> 'lookup' OR receivedAt < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY)');
+        AND (source <> 'lookup' OR receivedAt < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY)' . zk_keep_prune_exception($db));
+    $deleted += zk_keep_housekeeping($db);   // per-system cap of the longer retention, old cached profiles
     $db->exec("DELETE FROM zkill_kill_lookup WHERE status IN ('done', 'failed')
         AND COALESCE(attemptedAt, requestedAt) < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY');
     $db->exec("DELETE FROM zkill_backfill WHERE status IN ('done', 'failed') AND requestedAt < UTC_TIMESTAMP() - INTERVAL " . $retention . ' SECOND');

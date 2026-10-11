@@ -163,7 +163,13 @@ function zk_system_threat(PDO $db, array $systemIDs, array $options = []) {
         if ($detailID !== null) {
             $coverage = zk_backfill_request($db, [$detailID], zk_retention_seconds(), ['queue' => $queue, 'source' => 'panel', 'userID' => $userID]);
             $detail = zk_threat_detail($db, $detailID, $now);
+            $c = $coverage[$detailID];
+            // Watch the viewed system and the user's mask chain (looked up here, not taken from the request), so the
+            // stream keeps their kills for the 90-day profile
+            if ($queue && $feed['enabled'] && zk_keep_days() > 0) zk_keep_touch($db, zk_watch_systems($db, $detailID, $options['maskID'] ?? null), $now, $userID);
+            $profile = zk_profile_get($db, $detailID, $now, $c['coveredFrom']);
             $nameIDs = [];
+            foreach (['d7', 'd90'] as $period) foreach ($profile[$period]['groups'] as $g) $nameIDs[] = $g['id'];
             foreach (['corporations', 'alliances'] as $kind) foreach ($detail[$kind] as $e) $nameIDs[] = $e['id'];
             foreach ($detail['structures'] as $st) {
                 $nameIDs[] = $st['typeID'];
@@ -172,12 +178,12 @@ function zk_system_threat(PDO $db, array $systemIDs, array $options = []) {
             [$names, $namesPending] = zk_names_lookup($db, $nameIDs, $feed['enabled']);
             $nameMap = [];
             foreach ($names as $id => $name) $nameMap[(string) $id] = $name;
-            $c = $coverage[$detailID];
             $response['detail'] = [
                 'systemID' => $detailID,
                 'corporations' => $detail['corporations'],
                 'alliances' => $detail['alliances'],
                 'structures' => $detail['structures'],
+                'profile' => $profile,
                 'names' => (object) $nameMap,
                 'namesPending' => $feed['enabled'] && $namesPending > 0,
                 'complete' => $c['complete'],

@@ -18,6 +18,7 @@ if(!isset($_SESSION['userID'])) {
 	exit();
 }
 $sessionUserID = (int) $_SESSION['userID'];
+$sessionMaskID = isset($_SESSION['mask']) ? (string) $_SESSION['mask'] : null;
 session_write_close();
 
 require_once('../config.php');
@@ -71,6 +72,7 @@ try {
 		'queue' => $queue === '1',
 		'userID' => $sessionUserID,
 		'detail' => $detail,
+		'maskID' => $sessionMaskID,
 	)));
 } catch (PDOException $error) {
 	error_log('system_threat.php: ' . $error->getMessage());

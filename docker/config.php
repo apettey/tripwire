@@ -56,6 +56,8 @@ define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORA
 // spacing of zKillboard API requests made by the worker for back-fills (seconds, 1-60)
 define('ZKILL_RETENTION_HOURS', tw_env('ZKILL_RETENTION_HOURS', 48));
 define('ZKILL_API_INTERVAL', tw_env('ZKILL_API_INTERVAL', 2));
+// System Threat 90-day profile (zkill/profile.php): days (0-90, 0 = off) kills of systems people look at are kept
+define('ZKILL_THREAT_KEEP_DAYS', tw_env('ZKILL_THREAT_KEEP_DAYS', 90));
 // Local scans (fork, intel/pilots.inc.php): false = the worker never asks zKillboard for the stats of pilots in shared
 // local scans (corporations / alliances from ESI still work)
 define('INTEL_ZKILL_THREAT_ENABLED', tw_env_bool('INTEL_ZKILL_THREAT_ENABLED', true));
