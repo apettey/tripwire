@@ -725,6 +725,19 @@ No runtime calls to third parties and no configuration.
   https://developers.eveonline.com/static-data) with `node jumprange/tools/generate-coords.js <unzipped-sde-dir> --zip <the zip>`
   (records the zip name and SHA-256 in `meta`); re-run
   it after a game update, commit both files and set `jumpPlanner.DATA_VERSION` to the new `meta.version` (a test checks).
+- `ships.json` also carries each hull's jump fuel, read from the SDE (not hard-coded): `fuelTypeID` / `fuelName` (the
+  isotope, dogma attribute 866), `fuelPerLy` (attribute 868), `fuelBonuses` (`[{skillID, skill, perLevel}]`, today only
+  the Jump Freighters skill, 10% per level, found through the dogma effect that modifies attribute 868 and the hull's
+  trait line) and `fuelRole` (0), plus `meta.fuelSkill` (Jump Fuel Conservation, 21610, 10% per level). Per jump:
+  `ceil(fuelPerLy x LY x (1 - 0.1 x JFC) x (1 - perLevel x level) x (1 - fuelRole))`, summed over a route
+  ([EVE University: Jump drives](https://wiki.eveuniversity.org/Jump_drives); it gives no rounding rule, so each jump
+  is rounded up). Skill levels are entered by hand (panel fuel bar, Settings > Jump Planner), never read from ESI; a
+  missing level counts as V. `jumpPlanner.SHIPS_REV` busts the cache of `ships.json` when it changes without a new SDE
+  build (bump it with the file).
+- Get home routes take up to 5 jumps (`jumpPlanner.HOME_MAX_JUMPS`): `jumpRange.routesFrom` is one layered search per
+  start (fewest jumps, then least total LY, midpoints must be valid cyno targets), about 40 ms over all of k-space for a
+  Carrier and 100 ms for a Jump Freighter; the panel keeps the last search while start, range and rules stay the same.
+  The trade-hub strip stays at 2 jumps.
 - Cyno-jammed systems are marked by hand per mask (ESI has no public cyno jammer feed): `public/jump_jammed.php`
   (`GET` lists, `POST mode=set|clear&systemID=`), same session/mask checks and `X-Requested-With` rule as `rally.php`,
   only systems in `systems.json`, at most 500 per mask. Tests, against the dev database:

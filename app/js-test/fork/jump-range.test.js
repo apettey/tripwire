@@ -307,6 +307,257 @@ describe('jumpRange', () => {
 		});
 	});
 
+	describe('routesFrom (layered, up to N jumps)', () => {
+		// A made-up world: systems by position, ids 30009001+, null-sec unless a security is given
+		function world(points, secs, regions) {
+			const ids = points.map((p, i) => 30009001 + i);
+			const coords = { ids: ids, pos: {} };
+			const systems = {};
+			ids.forEach((id, i) => {
+				coords.pos[id] = { x: points[i][0], y: points[i][1] || 0, z: points[i][2] || 0 };
+				systems[id] = { security: secs && secs[i] !== undefined ? secs[i] : -0.5, regionID: regions && regions[i] ? regions[i] : 10000002 };
+			});
+			return { ids: ids, index: jumpRange.buildIndex(coords, 5), systems: systems, coords: coords };
+		}
+		const line = n => world(Array.from({ length: n }, (v, i) => [i * 4]));
+		const from = (w, start, dests, range, opts, max) => jumpRange.routesFrom(w.ids[start], dests.map(d => w.ids[d]), range, w.index, w.systems, opts || {}, max);
+
+		it('3, 4 and 5 jumps on a line: legs, midpoints, via, total', () => {
+			const w = line(8);		// 4 LY apart; range 5: one hop at a time
+			[[3, 3], [4, 4], [5, 5]].forEach(([dest, jumps]) => {
+				const r = from(w, 0, [dest], 5)[0];
+				assert.strictEqual(r.jumps, jumps, 'dest ' + dest);
+				assert.deepStrictEqual(r.legs, new Array(jumps).fill(4));
+				assert.deepStrictEqual(r.path, w.ids.slice(1, dest));
+				assert.strictEqual(r.via, w.ids[1]);
+				assert.strictEqual(r.total, 4 * jumps);
+				assert.strictEqual(r.direct, 4 * dest);
+				assert.strictEqual(r.reason, null);
+			});
+			const one = from(w, 0, [1], 5)[0];
+			assert.deepStrictEqual([one.jumps, one.legs, one.path, one.via, one.total], [1, [4], [], null, 4]);
+		});
+		it('maxJumps limits: beyond it "range"; default is 5; 0 reaches nothing but the start', () => {
+			const w = line(9);
+			assert.deepStrictEqual([from(w, 0, [5], 5)[0].jumps, from(w, 0, [6], 5)[0].jumps], [5, null]);
+			assert.deepStrictEqual([from(w, 0, [6], 5)[0].reason, from(w, 0, [6], 5)[0].total], ['range', Infinity]);
+			assert.strictEqual(jumpRange.routesFrom(w.ids[0], [w.ids[5], w.ids[6]], 5, w.index, w.systems, {})[1].reason, 'range');	// default 5
+			assert.strictEqual(from(w, 0, [6], 5, {}, 6)[0].jumps, 6);
+			assert.strictEqual(from(w, 0, [3], 5, {}, 2)[0].jumps, null);
+			const none = from(w, 0, [0, 1], 5, {}, 0);
+			assert.deepStrictEqual(none.map(r => [r.jumps, r.reason]), [[0, null], [null, 'range']]);
+		});
+		it('fewer jumps beat a shorter total', () => {
+			// 2 jumps via (5, 3) = 11.66 LY, or 3 jumps straight along the line = 10 LY
+			const w = world([[0, 0], [10, 0], [5, 3], [3.34, 0], [6.67, 0]]);
+			const r = from(w, 0, [1], 6)[0];
+			assert.deepStrictEqual([r.jumps, r.path], [2, [w.ids[2]]]);
+			assert.ok(Math.abs(r.total - 2 * Math.sqrt(34)) < 1e-9, r.total);
+		});
+		it('among equal jumps, the least total LY (reach() prefers the shortest longer leg instead)', () => {
+			// via (5, 3): legs 5.83 + 5.83 = 11.66; via (3, 0.1): legs 3.0 + 7.0 = 10.0
+			const w = world([[0, 0], [10, 0], [5, 3], [3, 0.1]]);
+			const r = from(w, 0, [1], 7.2)[0];
+			assert.deepStrictEqual([r.jumps, r.path], [2, [w.ids[3]]]);
+			assert.ok(Math.abs(r.total - (Math.hypot(3, 0.1) + Math.hypot(7, 0.1))) < 1e-9);
+			assert.strictEqual(jumpRange.reach(w.ids[0], w.ids[1], 7.2, w.index, w.systems, {}, 2).via[0].id, w.ids[2]);
+		});
+		it('agrees with a brute-force search on random systems (fewest jumps, then least total LY, valid midpoints only)', () => {
+			let seed = 12345;
+			const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+			for (let round = 0; round < 12; round++) {
+				const n = 14;
+				const pts = Array.from({ length: n }, () => [rnd() * 18, rnd() * 12, rnd() * 12]);
+				const secs = pts.map(() => (rnd() < 0.2 ? 0.9 : rnd() < 0.5 ? 0.2 : -0.4));		// some high-sec: never a midpoint
+				const w = world(pts, secs);
+				const range = 5 + rnd() * 3;
+				const opts = rnd() < 0.5 ? { lowsec: false } : {};
+				const valid = id => jumpRange.isValidCynoTarget(id, w.systems[id], opts);
+				const d = (a, b) => jumpRange.distanceLy(w.coords.pos[a], w.coords.pos[b]);
+				const startIdx = 0;
+				const brute = {};		// id -> {jumps, total}
+				const walk = (cur, jumps, total, seen) => {
+					if (jumps > 5) { return; }
+					if (jumps > 0 && (!brute[cur] || jumps < brute[cur].jumps || (jumps === brute[cur].jumps && total < brute[cur].total))) { brute[cur] = { jumps: jumps, total: total }; }
+					w.ids.forEach(next => {
+						if (seen.indexOf(next) >= 0 || !valid(next) || d(cur, next) > range) { return; }
+						walk(next, jumps + 1, total + d(cur, next), seen.concat([next]));
+					});
+				};
+				walk(w.ids[startIdx], 0, 0, [w.ids[startIdx]]);
+				const rows = jumpRange.routesFrom(w.ids[startIdx], w.ids.slice(1), range, w.index, w.systems, opts, 5);
+				rows.forEach(r => {
+					const b = brute[r.id];
+					if (!valid(r.id)) { assert.strictEqual(r.jumps, null); return; }
+					if (!b) { assert.strictEqual(r.jumps, null, 'round ' + round + ' ' + r.id); return; }
+					assert.strictEqual(r.jumps, b.jumps, 'round ' + round + ' ' + r.id);
+					assert.ok(Math.abs(r.total - b.total) < 1e-9, 'round ' + round + ' ' + r.id + ' ' + r.total + ' vs ' + b.total);
+					assert.strictEqual(r.legs.length, r.jumps);
+					assert.ok(r.legs.every(l => l <= range + 1e-9));
+					assert.ok(r.path.every(id => valid(id)), 'midpoints are valid targets (never high-sec)');
+				});
+			}
+		});
+		it('jammed systems block a normal cyno as midpoint or destination; covert ones pass; "jammed" when only the jam is in the way', () => {
+			const w = line(4);		// 0 - 1 - 2 - 3
+			const jam = {}; jam[w.ids[2]] = true;
+			assert.deepStrictEqual([from(w, 0, [3], 5, { jammed: jam })[0].jumps, from(w, 0, [3], 5, { jammed: jam })[0].reason], [null, 'range']);
+			assert.strictEqual(from(w, 0, [3], 5, { jammed: jam, covert: true })[0].jumps, 3);
+			const dest = from(w, 0, [2], 5, { jammed: jam })[0];
+			assert.deepStrictEqual([dest.jumps, dest.reason], [null, 'jammed']);
+			assert.strictEqual(from(w, 0, [2], 5, { jammed: jam, covert: true })[0].jumps, 2);
+		});
+		it('high-sec is never a midpoint or a target; a high-sec start works', () => {
+			const w = world([[0], [4], [8], [12]], [0.9, -0.5, 0.9, -0.5]);
+			assert.deepStrictEqual([from(w, 0, [1], 5)[0].jumps, from(w, 0, [3], 5)[0].reason], [1, 'range']);	// 0 (high-sec) starts; 2 is high-sec: no midpoint
+			assert.strictEqual(from(w, 1, [2], 5)[0].reason, 'target');
+			assert.strictEqual(from(w, 1, [3], 5)[0].reason, 'range');
+		});
+		it('low-sec / null-sec targets switched off apply to midpoints and destinations', () => {
+			const w = world([[0], [4], [8], [12]], [-0.5, 0.2, -0.5, -0.5]);
+			assert.strictEqual(from(w, 0, [3], 5)[0].jumps, 3);
+			const off = from(w, 0, [3, 1], 5, { lowsec: false });
+			assert.deepStrictEqual(off.map(r => [r.id === w.ids[1] ? 'ls' : 'ns', r.jumps, r.reason]), [['ls', null, 'target'], ['ns', null, 'range']]);
+			assert.strictEqual(from(w, 0, [3], 5, { nullsec: false })[0].reason, 'target');
+		});
+		it('Pochven is never a midpoint or target, but a valid start', () => {
+			const w = world([[0], [4], [8], [12]], [-1, -0.5, -0.5, -0.5], [10000070, 10000002, 10000002, 10000002]);
+			assert.strictEqual(from(w, 0, [3], 5)[0].jumps, 3);
+			assert.strictEqual(from(w, 1, [0], 5)[0].reason, 'target');
+			assert.strictEqual(from(w, 3, [1], 5, {}, 5)[0].jumps, 2);
+			const w2 = world([[0], [4], [8]], [-0.5, -1, -0.5], [10000002, 10000070, 10000002]);
+			assert.strictEqual(from(w2, 0, [2], 5)[0].reason, 'range');		// the Pochven system can't be a midpoint
+		});
+		it('W-space, Zarzakh and unknown starts: "origin"; unknown positions: "nopos"; the start itself: 0 jumps', () => {
+			const w = line(3);
+			const rows = jumpRange.routesFrom(31000001, [w.ids[1]], 5, w.index, w.systems, {}, 5);
+			assert.strictEqual(rows[0].reason, 'nopos');		// no position for the start
+			w.systems[w.ids[0]] = { security: -0.99, class: 3, regionID: 11000001 };
+			assert.strictEqual(from(w, 0, [1], 5)[0].reason, 'origin');
+			w.systems[w.ids[0]] = { security: -0.5, regionID: 10000002 };
+			const mixed = jumpRange.routesFrom(w.ids[0], [w.ids[0], 30000001, w.ids[2]], 5, w.index, w.systems, {}, 5);
+			assert.deepStrictEqual(mixed.map(r => [r.jumps, r.reason]), [[0, null], [2, null], [null, 'nopos']]);
+			assert.deepStrictEqual([mixed[0].legs, mixed[0].path, mixed[0].total, mixed[0].via], [[], [], 0, null]);
+			assert.deepStrictEqual(jumpRange.routesFrom(w.ids[0], [], 5, w.index, w.systems, {}, 5), []);
+		});
+		it('ranks like routesTo: reachable first (fewer jumps, then shorter total, then id), the rest by id', () => {
+			const w = line(8);
+			const rows = from(w, 0, [7, 2, 5, 1, 3], 5, {}, 3);
+			assert.deepStrictEqual(rows.map(r => [r.id - w.ids[0], r.jumps]), [[1, 1], [2, 2], [3, 3], [5, null], [7, null]]);
+		});
+		it('on the real map it never needs more jumps than routesTo and its total is never longer; Dest (first cyno) is a midpoint or the exit', () => {
+			const A = sid('Amamake');
+			const ids = ['Auga', 'Egghelende', 'KBP7-G', 'E-YCML', 'Sifilar', 'Ofstold'].map(sid);
+			const a = jumpRange.routesFrom(A, ids, 7, INDEX, S, {}, 5);
+			const b = jumpRange.routesTo(A, ids, 7, INDEX, S, {});
+			b.filter(x => x.jumps).forEach(old => {
+				const now = a.find(x => x.id === old.id);
+				assert.ok(now.jumps <= old.jumps);
+				if (now.jumps === old.jumps) { assert.ok(now.total <= old.total + 1e-9); }
+			});
+		});
+		it('is fast: one search over all of k-space, Carrier (7 LY) and Jump Freighter (10 LY), 5 jumps', () => {
+			const jita = sid('Jita');
+			const all = COORDS.ids.filter(id => jumpRange.isValidCynoTarget(id, S[id], {}));
+			[7, 10].forEach(range => {
+				const t = process.hrtime.bigint();
+				const rows = jumpRange.routesFrom(jita, all, range, INDEX, S, {}, 5);
+				const ms = Number(process.hrtime.bigint() - t) / 1e6;
+				assert.ok(rows.some(r => r.jumps === 5) && rows.every(r => r.jumps === null || r.legs.every(l => l <= range + 1e-9)));
+				assert.ok(ms < 1500, range + ' LY took ' + ms + ' ms');
+				console.log('      routesFrom Jita -> ' + all.length + ' systems, ' + range + ' LY, 5 jumps: ' + ms.toFixed(0) + ' ms');
+			});
+		});
+	});
+
+	describe('jump fuel', () => {
+		const ship = { typeID: 1, name: 'Test', fuelTypeID: 16274, fuelName: 'Helium Isotopes', fuelPerLy: 3000, fuelBonuses: [], fuelRole: 0 };
+		const jf = { typeID: 28848, name: 'Anshar', fuelTypeID: 17887, fuelName: 'Oxygen Isotopes', fuelPerLy: 9400, fuelBonuses: [{ skillID: 29029, skill: 'Jump Freighters', perLevel: 0.1 }], fuelRole: 0 };
+		it('formula: fuelPerLy x LY x (1 - 0.1 x Jump Fuel Conservation); missing skill = V', () => {
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: 5 }), 10500);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: 0 }), 21000);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: 4 }), 12600);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, {}), 10500);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship), 10500);
+			assert.strictEqual(jumpRange.fuelPerJump(0, ship, {}), 0);
+		});
+		it('Jump Freighters skill and the hull role bonus multiply with it', () => {
+			assert.strictEqual(jumpRange.fuelPerJump(5, jf, { 21610: 5, 29029: 5 }), 11750);		// 9400 x 5 x 0.5 x 0.5
+			assert.strictEqual(jumpRange.fuelPerJump(5, jf, { 21610: 5, 29029: 0 }), 23500);
+			assert.strictEqual(jumpRange.fuelPerJump(5, jf, { 21610: 5 }), 11750);			// JF skill missing = V
+			assert.strictEqual(jumpRange.fuelPerJump(5, jf, { 21610: 0, 29029: 0 }), 47000);
+			const role = Object.assign({}, ship, { fuelPerLy: 1000, fuelRole: 0.25 });
+			assert.strictEqual(jumpRange.fuelPerJump(10, role, { 21610: 5 }), 3750);		// 1000 x 10 x 0.5 x 0.75
+		});
+		it('rounds up to whole units per jump (and ignores float noise); levels are clamped', () => {
+			assert.strictEqual(jumpRange.fuelPerJump(1.2345, ship, { 21610: 5 }), 1852);	// 1851.75
+			assert.strictEqual(jumpRange.fuelPerJump(7.0000000001, ship, { 21610: 5 }), 10500);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: 9 }), 10500);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: -2 }), 21000);
+			assert.strictEqual(jumpRange.fuelPerJump(7, ship, { 21610: '3' }), 14700);
+			assert.deepStrictEqual([undefined, null, '', 'x', 7, -1, 2.6].map(jumpRange.skillLevel), [5, 5, 5, 5, 5, 0, 3]);
+		});
+		it('unknown or missing fuel data: null (the panel shows a dash)', () => {
+			assert.strictEqual(jumpRange.fuelPerJump(7, null, {}), null);
+			assert.strictEqual(jumpRange.fuelPerJump(7, { name: 'x' }, {}), null);
+			assert.strictEqual(jumpRange.fuelPerJump(7, { fuelPerLy: 0 }, {}), null);
+			assert.strictEqual(jumpRange.fuelPerJump(NaN, ship, {}), null);
+			assert.strictEqual(jumpRange.fuelPerJump(null, ship, {}), null);
+			assert.strictEqual(jumpRange.fuelPerJump(-1, ship, {}), null);
+			assert.strictEqual(jumpRange.routeFuel([3, 4], null, {}), null);
+			assert.strictEqual(jumpRange.routeFuel(null, ship, {}), null);
+			assert.strictEqual(jumpRange.routeFuel([3, NaN], ship, {}), null);
+		});
+		it('a route is the sum of its jumps (each rounded up)', () => {
+			assert.strictEqual(jumpRange.routeFuel([], ship, {}), 0);
+			assert.strictEqual(jumpRange.routeFuel([7], ship, {}), 10500);
+			assert.strictEqual(jumpRange.routeFuel([5.5, 6.5, 4], ship, {}), 8250 + 9750 + 6000);
+			assert.strictEqual(jumpRange.routeFuel([1.0001, 1.0001], ship, {}), 3002);		// 1500.15 -> 1501 twice, not 3001
+		});
+		it('formatting: thousands separators and the short isotope name', () => {
+			assert.strictEqual(jumpRange.formatFuel(12340, ship), '12,340 Helium');
+			assert.strictEqual(jumpRange.formatFuel(1234567, jf), '1,234,567 Oxygen');
+			assert.strictEqual(jumpRange.formatFuel(999), '999');
+			assert.strictEqual(jumpRange.formatFuel(0, ship), '0 Helium');
+			assert.strictEqual(jumpRange.formatFuel(null, ship), '–');
+			assert.strictEqual(jumpRange.formatFuel(NaN), '–');
+			assert.strictEqual(jumpRange.fuelShortName('Nitrogen Isotopes'), 'Nitrogen');
+		});
+		describe('the SDE data (ships.json)', () => {
+			const hull = name => SHIPS.ships.find(s => s.name === name);
+			it('every hull has its isotope and amount per LY; the Jump Fuel Conservation skill is the one in the engine', () => {
+				assert.ok(SHIPS.ships.every(s => s.fuelTypeID > 0 && /Isotopes$/.test(s.fuelName) && s.fuelPerLy > 0 && Array.isArray(s.fuelBonuses) && typeof s.fuelRole === 'number'));
+				assert.deepStrictEqual(SHIPS.meta.fuelSkill, { skillID: jumpRange.JFC_ID, skill: 'Jump Fuel Conservation', perLevel: jumpRange.JFC_STEP });
+				assert.ok(/ceil\(/.test(SHIPS.meta.fuel));
+			});
+			it('known amounts: capitals 3000 per LY, Black Ops 700, Rorqual 4000, Jump Freighters 8200-10000; racial isotopes', () => {
+				assert.deepStrictEqual([hull('Archon').fuelName, hull('Archon').fuelPerLy], ['Helium Isotopes', 3000]);
+				assert.deepStrictEqual([hull('Thanatos').fuelName, hull('Chimera').fuelName, hull('Nidhoggur').fuelName], ['Oxygen Isotopes', 'Nitrogen Isotopes', 'Hydrogen Isotopes']);
+				assert.strictEqual(hull('Redeemer').fuelPerLy, 700);
+				assert.strictEqual(hull('Rorqual').fuelPerLy, 4000);
+				assert.deepStrictEqual(['Anshar', 'Ark', 'Nomad', 'Rhea'].map(n => hull(n).fuelPerLy), [9400, 8800, 8200, 10000]);
+				assert.strictEqual(hull('Avatar').fuelPerLy, 3000);
+			});
+			it('only the Jump Freighters have a hull skill bonus: Jump Freighters, 10% per level; no role bonuses', () => {
+				const withBonus = SHIPS.ships.filter(s => s.fuelBonuses.length).map(s => s.name).sort();
+				assert.deepStrictEqual(withBonus, ['Anshar', 'Ark', 'Nomad', 'Rhea']);
+				assert.deepStrictEqual(hull('Ark').fuelBonuses, [{ skillID: 29029, skill: 'Jump Freighters', perLevel: 0.1 }]);
+				assert.ok(SHIPS.ships.every(s => s.fuelRole === 0));
+			});
+			it('presets list the hulls with fuel data, by name', () => {
+				const presets = jumpRange.presets(SHIPS);
+				const carrier = presets.find(p => p.group === 'Carrier');
+				assert.deepStrictEqual(carrier.hulls.map(h => h.name), ['Archon', 'Chimera', 'Nidhoggur', 'Thanatos']);
+				assert.deepStrictEqual(Object.keys(carrier.hulls[0]).sort(), ['fuelBonuses', 'fuelName', 'fuelPerLy', 'fuelRole', 'fuelTypeID', 'name', 'typeID']);
+				assert.strictEqual(presets.find(p => p.group === 'Capital Industrial Ship').hulls.length, 1);
+				assert.deepStrictEqual(jumpRange.presets({ ships: [{ typeID: 1, name: 'A', groupID: 9, group: 'G', baseLy: 3 }] })[0].hulls, []);
+				// A Carrier at JDC V and JFC V, Archon: 7 LY costs 10,500 Helium; at JFC 0 it is 21,000 (CCP's 3000 per LY)
+				assert.strictEqual(jumpRange.fuelPerJump(7, carrier.hulls[0], { 21610: 5 }), 10500);
+				assert.strictEqual(jumpRange.fuelPerJump(7, carrier.hulls[0], { 21610: 0 }), 21000);
+			});
+		});
+	});
+
 	describe('holeFits / shipNeeds', () => {
 		it('ship groups: Black Ops L, Jump Freighter and Rorqual VL, capitals XL, supers and titans none', () => {
 			assert.deepStrictEqual([898, 902, 883, 547, 485, 1538, 4594, 5120, 659, 30, 1].map(jumpRange.shipNeeds),
