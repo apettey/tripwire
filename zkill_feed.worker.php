@@ -8,7 +8,8 @@
 //   - stores kills in systems that are on someone's chain in `zkill_kills` (Kill Reporting's alert log, 24 h).
 // Between kills it drains the single-kill lookup queue (Smart notes kill cards, at most every other API slot while
 // other work waits), the back-fill queue (zKillboard API, ZKILL_API_INTERVAL), then the per-system stats queue
-// (System Threat, same API budget, lowest priority) and the ESI name queue.
+// (System Threat, same API budget), then pilot stats of shared local scans (lowest priority, intel/pilots.inc.php),
+// and the ESI queues: names, and the corporations / alliances of local scans.
 // Browsers never talk to zKillboard; they poll public/kills.php and public/system_kills.php, which read the tables.
 //
 //   php zkill_feed.worker.php
@@ -30,6 +31,7 @@ chdir(__DIR__);
 require('config.php');
 require_once(__DIR__ . '/zkill/zkill.inc.php');
 require_once(__DIR__ . '/discord/discord.inc.php');   // Discord notifications: kills are queued from the stream below
+require_once(__DIR__ . '/intel/pilots.inc.php');      // Local scans: corporations / alliances (ESI) and pilot threat (zKillboard)
 date_default_timezone_set('UTC');
 
 const ZKF_BASE_URL         = 'https://r2z2.zkillboard.com/ephemeral/';
@@ -45,6 +47,7 @@ const ZKF_HEARTBEAT_EVERY  = 300;
 const ZKF_STATE_SAVE_EVERY = 5;        // seconds; the sequence is also saved after every stored kill
 const ZKF_NAMES_EVERY      = 2;        // seconds between ESI name-queue passes (only while caught up)
 const ZKF_NAMES_REQUESTS   = 3;        // ESI requests per name pass
+const ZKF_PILOTS_REQUESTS  = 8;        // ESI requests per local-pilots pass (same interval as the name passes)
 
 // Same DDL as docker/sql/kill-reporting.sql (keep in sync)
 const ZKF_DDL = [
@@ -99,6 +102,7 @@ function zkf_connect() {
     $mysql->query('SELECT 1');
     foreach (ZKF_DDL as $ddl) $mysql->exec($ddl);
     zk_ensure_schema($mysql);
+    intel_pilots_schema($mysql);
     zk_backfill_recover($mysql);
     return $mysql;
 }
@@ -213,12 +217,17 @@ function zkf_prune(PDO $db) {
 function zkf_tick(PDO $db) {
     static $lastNames = 0;
     try {
-        $line = zk_queues_run_one($db);   // kill lookups (Smart notes), back-fills, System Threat stats: zkill/lookup.php
+        // One zKillboard API job: kill lookups / back-fills / System Threat stats (zkill/lookup.php), else local pilot
+        // stats (lowest priority): intel_zkill_api_step() in intel/pilots.inc.php
+        $line = intel_zkill_api_step($db);
         if ($line !== null) zkf_log($line);
         if (time() - $lastNames >= ZKF_NAMES_EVERY) {
             $lastNames = time();
             $resolved = zk_names_resolve($db, ZKF_NAMES_REQUESTS);
             if ($resolved) zkf_log("resolved $resolved names");
+            foreach ([intel_lookups_run($db), intel_affiliation_run($db, ZKF_PILOTS_REQUESTS)] as $line) {
+                if ($line !== null) zkf_log($line);
+            }
         }
     } catch (PDOException $error) {
         throw $error;

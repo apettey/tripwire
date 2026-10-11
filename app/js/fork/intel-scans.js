@@ -5,7 +5,8 @@ const intelScans = {
 	// Intel panel (its own layout widget, following the viewed system) lists the system's scans as chips that expand to
 	// the full summary; chain map nodes with a fresh scan get a small marker. Server: public/intel_scans.php (validates, normalises and stores the rows; the parse
 	// here is only the preview). Static type data: public/intel/types.json (from ESI, built by intel/tools/).
-	// Settings: options.intelScans = {enabled (missing = on), pasteDetect (missing = on), freshMinutes, gridKm}.
+	// Settings: options.intelScans = {enabled (missing = on), pasteDetect (missing = on), freshMinutes, gridKm,
+	// affiliation / threat (missing = on: local scans grouped by alliance and corporation, zKillboard threat; intel-pilots.js)}.
 	// Keep `const intelScans` on the first line: the test helper strips it to define a global.
 	URL: "intel_scans.php",
 	TYPES_URL: "intel/types.json",
@@ -374,8 +375,11 @@ const intelScans = {
 			+ "<b>" + esc(parts[0]) + "</b> " + esc(parts.slice(1).join(" · ")) + "</button>";
 	},
 
-	/** Full summary markup (escaped); preview: without the "shared by" line (paste dialog) */
-	detailHtml: function(scan, summary, gridKm, preview) {
+	/**
+	 * Full summary markup (escaped); preview: without the "shared by" line (paste dialog).
+	 * extra (panel only): {opts, pilots (`pilots` of the server for the open local scan), types, expanded, shipsOnScan}
+	 */
+	detailHtml: function(scan, summary, gridKm, preview, extra) {
 		const esc = intelScans.escape;
 		const f = intelScans.formatDistance;
 		let html = "<div class='intel-detail" + (preview ? " intel-detail-preview" : "") + "' data-scan='" + esc(scan.id) + "'>";
@@ -383,10 +387,21 @@ const intelScans = {
 			+ (scan.mine ? " <a href='#' class='intel-delete' data-scan='" + esc(scan.id) + "' title='Delete this scan for everyone'>delete</a>" : "") + "</div>";
 		if (!summary) { return html + "<div class='intel-muted'>loading…</div></div>"; }
 		if (scan.kind === "local") {
-			html += "<div>" + esc(intelScans.plural(summary.count, "pilot", "pilots")) + "</div>";
-			const shown = summary.names.slice(0, intelScans.NAMES_SHOWN);
-			html += "<div class='intel-names'>" + shown.map(esc).join(", ")
-				+ (summary.names.length > shown.length ? " <span class='intel-muted'>and " + (summary.names.length - shown.length) + " more</span>" : "") + "</div>";
+			// Corporations / alliances and threat (intel-pilots.js), in the panel only
+			const pilots = !preview && extra && typeof intelPilots !== "undefined";
+			const affiliation = pilots && intelPilots.affiliation(extra.opts);
+			const threat = pilots && intelPilots.threat(extra.opts);
+			html += "<div>" + esc(intelScans.plural(summary.count, "pilot", "pilots")
+				+ (extra && extra.shipsOnScan !== undefined ? " · " + intelScans.plural(extra.shipsOnScan, "ship", "ships") + " on scan" : "")) + "</div>";
+			if (!affiliation) {
+				const shown = summary.names.slice(0, intelScans.NAMES_SHOWN);
+				html += "<div class='intel-names'>" + shown.map(esc).join(", ")
+					+ (summary.names.length > shown.length ? " <span class='intel-muted'>and " + (summary.names.length - shown.length) + " more</span>" : "") + "</div>";
+			}
+			if (affiliation || threat) {
+				html += "<div class='intel-pilots'>" + intelPilots.html({ scanID: scan.id, names: summary.names, types: extra.types, expanded: extra.expanded || {},
+					view: extra.pilots && String(extra.pilots.scanID) === String(scan.id) ? extra.pilots : null, affiliation: affiliation, threat: threat }) + "</div>";
+			}
 			if (summary.invalid) { html += "<div class='intel-muted'>" + esc(intelScans.plural(summary.invalid, "line", "lines")) + " not understood</div>"; }
 			return html + "</div>";
 		}
@@ -517,9 +532,51 @@ const intelScans = {
 		return Object.keys(intelScans.dataCache).slice(0, 60).join(",");
 	},
 
+	// ---- Pilots of the open local scan (intel-pilots.js) ----
+
+	pilotsView: null,	// `pilots` answer of the server for the open local scan
+	expanded: {},		// "<scanID>:<group key>" => true for expanded pilot groups
+	PILOTS_POLL_MS: 5000,
+	PILOTS_FAST_FOR_MS: 300000,	// poll fast for at most this long after opening a scan
+
+	/** ID of the open scan when it is a local scan whose pilots are shown (a setting is on), else null */
+	pilotsScanID: function() {
+		const opts = intelScans.opts();
+		if (typeof intelPilots === "undefined" || !(intelPilots.affiliation(opts) || intelPilots.threat(opts))) { return null; }
+		const open = intelScans.scans.filter(function(s) { return s.id === intelScans.openScanID; })[0];
+		return open && open.kind === "local" ? open.id : null;
+	},
+
+	/** Whether the server is still working on the pilots (poll again soon) */
+	pilotsBusy: function(view, opts) {
+		if (!view || !view.lookups) { return false; }
+		if (view.pending > 0) { return true; }
+		const threat = typeof intelPilots !== "undefined" && intelPilots.threat(opts) && view.threat;
+		return !!threat && (!!view.threatPending || (Array.isArray(view.pilots) && view.pilots.some(function(p) { return Array.isArray(p) && p[3] === "q"; })));
+	},
+
+	/** Poll every PILOTS_POLL_MS while the open local scan's pilots are being looked up */
+	schedulePilots: function() {
+		clearTimeout(intelScans.pilotsTimer);
+		const id = intelScans.pilotsScanID();
+		if (!id) { return; }
+		if (intelScans.pilotsFor !== id) { intelScans.pilotsFor = id; intelScans.pilotsSince = Date.now(); }
+		const view = intelScans.pilotsView;
+		if (view && String(view.scanID) === String(id) && !intelScans.pilotsBusy(view, intelScans.opts())) { return; }
+		if (Date.now() - intelScans.pilotsSince > intelScans.PILOTS_FAST_FOR_MS) { return; }
+		intelScans.pilotsTimer = setTimeout(intelScans.fetch, intelScans.PILOTS_POLL_MS);
+	},
+
 	absorb: function(response) {
 		if (!response) { return; }
 		if (response.latest) { intelScans.latest = response.latest; intelScans.latestAt = Date.now(); }
+		if (String(response.systemID) === String(intelScans.scansSystemID)) {
+			if (response.pilots && String(response.pilots.scanID) === String(intelScans.openScanID)) {
+				intelScans.pilotsView = response.pilots;
+			} else if (intelScans.pilotsView && String(intelScans.pilotsView.scanID) !== String(intelScans.openScanID)) {
+				intelScans.pilotsView = null;
+			}
+		}
 		if (Array.isArray(response.scans) && String(response.systemID) === String(intelScans.scansSystemID)) {
 			const merged = intelScans.mergeScans(response.scans, intelScans.dataCache);
 			intelScans.scans = merged.scans;
@@ -541,6 +598,8 @@ const intelScans = {
 		if (intelScans.xhr) { intelScans.xhr.abort(); }
 		const data = intelScans.isSystem(intelScans.scansSystemID) ? { systemID: intelScans.scansSystemID } : {};
 		if (data.systemID && !intelScans.refetched) { data.have = intelScans.haveParam(); }
+		const pilots = data.systemID ? intelScans.pilotsScanID() : null;
+		if (pilots) { data.pilots = pilots; }
 		const xhr = $.ajax({ url: intelScans.URL, type: "GET", data: data, dataType: "JSON", cache: false, timeout: 15000 });
 		intelScans.xhr = xhr;
 		xhr.done(function(response) {
@@ -548,6 +607,7 @@ const intelScans = {
 			intelScans.absorb(response);
 			intelScans.patchChain();
 			intelScans.renderPanel();
+			intelScans.schedulePilots();
 		}).fail(function(x, status) {
 			if (status === "abort") { return; }
 			intelScans.error = "Could not load scans" + (x && x.status ? " (HTTP " + x.status + ")" : "");
@@ -651,9 +711,21 @@ const intelScans = {
 		return s && s.name ? s.name : String(systemID);
 	},
 
+	SHIPS_NEAR_SECONDS: 180,
+
+	/** Ships on the newest d-scan shared within SHIPS_NEAR_SECONDS of a local scan, or undefined when there is none */
+	shipsNear: function(scans, local, types, gridKm) {
+		if (!types) { return undefined; }
+		const near = scans.filter(function(s) {
+			return s.kind === "dscan" && s.data !== undefined && Math.abs(s.age - local.age) <= intelScans.SHIPS_NEAR_SECONDS;
+		}).sort(function(a, z) { return a.age - z.age; })[0];
+		return near ? intelScans.summarizeDscan(near.data, types, gridKm).ships : undefined;
+	},
+
 	/**
 	 * Inner HTML of the panel body (escaped).
-	 * @param state {systemID, scans (ages as of now), types, freshSeconds, gridKm, showOlder, openScanID, error}
+	 * @param state {systemID, scans (ages as of now), types, freshSeconds, gridKm, showOlder, openScanID, error,
+	 *               opts, pilots (`pilots` answer for the open local scan), expanded (open pilot groups)}
 	 */
 	panelHtml: function(state) {
 		const esc = intelScans.escape;
@@ -665,7 +737,9 @@ const intelScans = {
 			return "<div class='intel-chips'>" + list.map(function(s) {
 				const summary = s.data !== undefined && (s.kind === "local" || state.types) ? intelScans.summarize(s, state.types, state.gridKm) : null;
 				const open = s.id === state.openScanID;
-				return intelScans.chipHtml(s, summary, s.age < state.freshSeconds, open) + (open ? intelScans.detailHtml(s, summary, state.gridKm) : "");
+				const extra = { opts: state.opts, pilots: state.pilots, types: state.types, expanded: state.expanded,
+					shipsOnScan: open && s.kind === "local" ? intelScans.shipsNear(scans, s, state.types, state.gridKm) : undefined };
+				return intelScans.chipHtml(s, summary, s.age < state.freshSeconds, open) + (open ? intelScans.detailHtml(s, summary, state.gridKm, false, extra) : "");
 			}).join("") + "</div>";
 		};
 		let html = "<div class='intel-actions'><button type='button' class='intel-paste' title='Paste a directional scan or the local member list and share a summary with your mask'>"
@@ -761,6 +835,7 @@ const intelScans = {
 			intelScans.scansSystemID = intelScans.isSystem(id) ? id : null;
 			intelScans.scans = [];
 			intelScans.openScanID = null;
+			intelScans.pilotsView = null;
 			intelScans.showOlder = false;
 			intelScans.renderPanel();
 		}
@@ -774,14 +849,16 @@ const intelScans = {
 		const id = intelScans.scansSystemID;
 		const shift = Math.floor((Date.now() - intelScans.scansAt) / 1000);
 		const scans = intelScans.scans.map(function(s) { return Object.assign({}, s, { age: s.age + shift }); });
-		if (scans.some(function(s) { return s.kind === "dscan"; })) { intelScans.loadTypes(); }
+		// Type data: d-scan summaries, and cyno-capable hulls among the ships of looked-up pilots
+		if (scans.some(function(s) { return s.kind === "dscan"; }) || intelScans.pilotsView) { intelScans.loadTypes(); }
 		$w.find(".intel-system").text(id ? "— " + intelScans.systemName(id) : "");
 		$w.find(".intel-status").text(scans.length ? intelScans.plural(scans.length, "scan", "scans") : "");
 		const $content = $w.find(".content");
 		const scroll = $content.scrollTop();
 		$w.find(".intel-body").html(intelScans.panelHtml({
 			systemID: id, scans: scans, types: intelScans.types, freshSeconds: intelScans.freshMinutes(opts) * 60,
-			gridKm: intelScans.gridKm(opts), showOlder: intelScans.showOlder, openScanID: intelScans.openScanID, error: intelScans.error
+			gridKm: intelScans.gridKm(opts), showOlder: intelScans.showOlder, openScanID: intelScans.openScanID, error: intelScans.error,
+			opts: opts, pilots: intelScans.pilotsView, expanded: intelScans.expanded
 		}));
 		$content.scrollTop(scroll);
 	},
@@ -794,6 +871,12 @@ const intelScans = {
 		}).on("click", sel + " .intel-chip", function() {
 			const id = parseInt($(this).attr("data-scan"), 10);
 			intelScans.openScanID = intelScans.openScanID === id ? null : id;
+			intelScans.renderPanel();
+			if (intelScans.pilotsScanID()) { intelScans.fetch(); }	// its corporations and threat
+		}).on("click", sel + " .intel-group-toggle", function(e) {
+			e.preventDefault();
+			const key = String($(this).attr("data-group"));
+			if (intelScans.expanded[key]) { delete intelScans.expanded[key]; } else { intelScans.expanded[key] = true; }
 			intelScans.renderPanel();
 		}).on("click", sel + " .intel-older", function(e) {
 			e.preventDefault();
@@ -926,6 +1009,7 @@ const intelScans = {
 			$dialog.dialog("close");
 			intelScans.patchChain();
 			intelScans.renderPanel();
+			if (intelScans.pilotsScanID()) { intelScans.fetch(); }	// a shared local scan: its corporations and threat
 		}).fail(function(x) {
 			const message = x && x.responseJSON && x.responseJSON.error ? x.responseJSON.error : "Could not share the scan" + (x && x.status ? " (HTTP " + x.status + ")" : "");
 			$dialog.find(".intel-error").text(message);
@@ -941,6 +1025,8 @@ const intelScans = {
 			$general.append("<tr><th>D-scan &amp; local intel:</th><td>"
 				+ "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-pasteDetect' /> Open the d-scan dialog when you paste a d-scan anywhere (Ctrl+V)</label><br/>"
+				+ "<label><input type='checkbox' id='intelScans-affiliation' /> Group local scans by alliance and corporation</label><br/>"
+				+ "<label><input type='checkbox' id='intelScans-threat' /> Show zKillboard threat of pilots in local scans</label><br/>"
 				+ "<label>Fresh for <input type='number' id='intelScans-fresh' min='1' max='1440' style='width: 4em;' /> min</label>, "
 				+ "<label>on grid within <input type='number' id='intelScans-grid' min='1' max='1000000' style='width: 6em;' /> km</label></td></tr>");
 		}
@@ -948,6 +1034,8 @@ const intelScans = {
 			const opts = intelScans.opts();
 			$("#intelScans-enabled").prop("checked", intelScans.enabled(opts));
 			$("#intelScans-pasteDetect").prop("checked", intelScans.pasteDetect(opts));
+			$("#intelScans-affiliation").prop("checked", typeof intelPilots === "undefined" || intelPilots.affiliation(opts));
+			$("#intelScans-threat").prop("checked", typeof intelPilots === "undefined" || intelPilots.threat(opts));
 			$("#intelScans-fresh").val(intelScans.freshMinutes(opts));
 			$("#intelScans-grid").val(intelScans.gridKm(opts));
 		});
@@ -956,7 +1044,8 @@ const intelScans = {
 			const button = e.target && e.target.closest ? e.target.closest(".ui-dialog-buttonpane button") : null;
 			if (!button || $.trim($(button).text()) !== "Save") { return; }
 			if (!$(button).closest(".ui-dialog").find("#dialog-options").length || !$("#intelScans-enabled").length) { return; }
-			const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked") };
+			const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked"),
+				affiliation: $("#intelScans-affiliation").prop("checked"), threat: $("#intelScans-threat").prop("checked") };
 			if (options.intelScans && options.intelScans.position) { settings.position = options.intelScans.position; }
 			const fresh = parseInt($("#intelScans-fresh").val(), 10);
 			const grid = parseInt($("#intelScans-grid").val(), 10);

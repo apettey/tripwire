@@ -36,6 +36,7 @@ services:
       KILL_REPORT_FRIENDLY_CORPORATIONS: ${KILL_REPORT_FRIENDLY_CORPORATIONS:-}
       ZKILL_RETENTION_HOURS: ${ZKILL_RETENTION_HOURS:-}
       ZKILL_API_INTERVAL: ${ZKILL_API_INTERVAL:-}
+      INTEL_ZKILL_THREAT_ENABLED: ${INTEL_ZKILL_THREAT_ENABLED:-}
       # Discord notifications: dev key for encrypting webhook URLs, and the fake Discord below (dev only;
       # only local hosts are accepted, see docker/README.md#discord-notifications)
       DISCORD_SECRET_KEY: ${DISCORD_SECRET_KEY:-dev-only-discord-secret-key}

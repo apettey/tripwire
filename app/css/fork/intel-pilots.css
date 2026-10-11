@@ -1,0 +1,43 @@
+/* Who is in local (fork feature, app/js/fork/intel-pilots.js): pilot groups and threat badges in the Intel panel */
+.intel-pilots { margin-top: 2px; }
+.intel-pilots-status, .intel-pilots-loading { font-style: italic; }
+.intel-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.intel-group-nested { margin-left: 12px; }
+.intel-group-body { margin: 0 0 2px 12px; white-space: normal; }
+.intel-body a.intel-group-toggle { color: #d6e6ee; }
+.intel-body a.intel-group-toggle:hover { text-decoration: none; }
+.intel-body a.intel-group-toggle:hover .intel-group-name { text-decoration: underline; }
+.intel-caret { display: inline-block; width: 10px; color: #8f9ba3; }
+.intel-group-count { display: inline-block; min-width: 18px; text-align: right; font-weight: bold; }
+.intel-friendly .intel-group-name, .intel-friendly .intel-group-count { color: #8fd07a; }
+.intel-friendly-tag {
+	padding: 0 4px;
+	font-size: 10px;
+	color: #8fd07a;
+	border: 1px solid rgba(143, 208, 122, 0.5);
+	border-radius: 6px;
+}
+.intel-group-other .intel-group-name, .intel-group-pending .intel-group-name { color: #8f9ba3; }
+.intel-body a.intel-zkill { color: #6f8a96; font-size: 10px; }
+.intel-group-top { color: #c9a0a0; }
+.intel-pilot-list { list-style: none; margin: 0; padding: 0; }
+.intel-pilot-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.intel-body .intel-pilot-list a { color: #ccc; }
+
+/* Threat badges: danger ratio from zKillboard; skull for dangerous pilots */
+.intel-threat {
+	display: inline-block;
+	padding: 0 4px;
+	font-size: 10px;
+	line-height: 13px;
+	border-radius: 6px;
+	color: #d6e6ee;
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	cursor: default;
+}
+.intel-threat-low { color: #a8c8d4; }
+.intel-threat-mid { color: #ffc040; border-color: rgba(255, 192, 64, 0.5); }
+.intel-threat-high { color: #fff; background: rgba(210, 60, 60, 0.55); border-color: rgba(255, 110, 110, 0.8); }
+.intel-threat-none, .intel-threat-na, .intel-threat-loading { color: #8f9ba3; background: none; }
+.intel-threat-flag { margin-left: 3px; color: #ffc040; }
