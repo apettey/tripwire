@@ -597,6 +597,35 @@ removed comps, payloads, template upgrade, legacy texts; SQLite) and, against th
 comps and the fight point over HTTP, and set with a comp → move within 30 s → clear through the worker to the mock,
 printing the payloads). `fight/tests/` is not in the image. Mocha: `app/js-test/fork/fight-comps.test.js`.
 
+### Mask admins
+
+Mask Admin > Admins & members (`public/mask_admins.php`, `maskadmin/maskadmin.inc.php`,
+`app/js/fork/mask-admin-tab.js`, `app/js/fork/mask-defaults.js`). Tables are created on first use
+(`docker/sql/mask-admins.sql` is the reference): `fork_mask_admins`, `fork_mask_blocks`, `fork_mask_defaults`,
+`fork_mask_audit`.
+
+- **Several admins.** On a custom mask the owner and the owning corporation's Tripwire admins can make any member a
+  mask admin (and revoke it). `checkAdmin()` in `lib.inc.php` accepts granted admins, so Mask Admin and the Discord,
+  Watchlist and Fight here tabs honour them. Granted admins can block, unblock, remove members and set the defaults;
+  they can't grant/revoke, edit the access list or delete the mask, and Discord / Fight here / Watchlist stay for the
+  corporation's Tripwire admins. A grant counts only while the character still has access to the mask. The owner and
+  corporation admins can't be revoked, blocked or removed. Blocks are per character.
+- **Remove / block.** *Remove* deletes a character's own entry from the access list (not possible for access through
+  a corporation or alliance). *Block* (with a reason) makes the mask unusable for that character whatever grants
+  access: `docker/db.inc.php`, loaded by every endpoint, drops a blocked character's session to their corp mask
+  before anything reads `$_SESSION['mask']`, and the mask disappears from their mask list. Unblocking doesn't put
+  them back on the mask; they pick it again. Alliance members are listed once they have used the mask (Tripwire
+  stores no alliance per character).
+- **Mask default settings.** An admin ticks fork settings (rows registered with a `key`) and saves their own current
+  values as the mask's defaults. For a key the member has no value for, the default is used (own choice, then mask
+  default, then built-in); Settings shows a "mask default" badge on those rows. Saving other settings never turns a
+  default into a personal choice. A member who picks exactly the default value is not told apart from one who never
+  chose. Not allowed as defaults: layout, tracking, favourites, background, scale, masks and upstream's built-in
+  groups (`chain`, `signatures`, `buttons`).
+- **Security.** The mask is always the session's mask (no request value names one). Writes need the per-session
+  `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`, like `fight.php`. Every change is in the audit list.
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/mask_admins_test.php`.
+
 ### D-scan and local scans
 
 Pilots paste a d-scan or local member list into the Intel dialog (system info panel, or chain map right-click
