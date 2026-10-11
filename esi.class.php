@@ -76,8 +76,9 @@ class esi {
 	public function validateJWT($token) {
 		if ( $jwks = $this->getJWKS() ) {
 			JWT::$leeway = 60;
-			$algs = array_column( $jwks['keys'], 'alg' );
-			$jwt = JWT::decode($token, JWK::parseKeySet($jwks), $algs);
+			// php-jwt 6+ binds each key to the algorithm its JWK declares, so a
+			// token can only verify with the key and algorithm EVE published for it.
+			$jwt = JWT::decode($token, JWK::parseKeySet($jwks));
 			$url = parse_url(self::$loginUrl);
 			$issuer = array(
 				$url['host'],
