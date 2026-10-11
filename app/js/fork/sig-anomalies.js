@@ -45,15 +45,16 @@ const sigAnomalies = {
 		return sigAnomalies.isAnomalyRow(scanner) ? sigAnomalies.MARKER : undefined;
 	},
 
-	/** Paste: true if the row must not be imported at all (mode "skip" and the row is an anomaly) */
-	skipRow: function(scanner, opts) {
-		return sigAnomalies.mode(opts) === "skip" && sigAnomalies.isAnomalyRow(scanner);
+	/** Paste: true if the row must not be added (mode "skip", an anomaly, and not in the list yet). Rows that
+	 *  already exist are not skipped: they only get marked (needsMark), so they stay known as anomalies. */
+	skipRow: function(scanner, sig, opts) {
+		return sigAnomalies.mode(opts) === "skip" && sigAnomalies.isAnomalyRow(scanner) && !sig;
 	},
 
 	/** Paste: true if an existing non-wormhole sig should get the anomaly marker now (a row of the paste is an
-	 *  anomaly and the sig isn't marked yet). Never in "skip" mode, which leaves anomalies alone. */
-	needsMark: function(scanner, sig, opts) {
-		return sigAnomalies.mode(opts) !== "skip" && sigAnomalies.isAnomalyRow(scanner) && !!sig && sig.type !== "wormhole" && !sigAnomalies.isAnomaly(sig);
+	 *  anomaly and the sig isn't marked yet), in every mode. */
+	needsMark: function(scanner, sig) {
+		return sigAnomalies.isAnomalyRow(scanner) && !!sig && sig.type !== "wormhole" && !sigAnomalies.isAnomaly(sig);
 	},
 
 	/** "Delete missing sigs": true if the sig must be kept although the paste doesn't list it. In "skip" mode
@@ -93,6 +94,7 @@ const sigAnomalies = {
 		$("#sigTable tbody tr[data-id]").each(function() {
 			$(this).toggleClass("sig-anomaly-hidden", !sigAnomalies.revealed && !!set[$(this).attr("data-id")]);
 		});
+		sigAnomalies.unselectHidden();
 		let $bar = $("#sigAnomalyBar");
 		const text = sigAnomalies.barText(hidden.length, sigAnomalies.revealed);
 		if (!text) { $bar.remove(); sigAnomalies.revealed = false; return; }
@@ -101,6 +103,14 @@ const sigAnomalies = {
 			$("#sigTableWrapper").before($bar);
 		}
 		$bar.find("a").text(text);
+	},
+
+	/** A hidden row must not stay selected (Ctrl+A, shift-click ranges): Delete and Copy would act on it unseen */
+	unselectHidden: function() {
+		const $rows = $("#sigTable tbody tr.sig-anomaly-hidden.selected");
+		if (!$rows.length) { return; }
+		$rows.removeClass("selected");
+		$("#signaturesWidget").trigger("selected:change");
 	},
 
 	scheduled: null,
@@ -113,6 +123,7 @@ const sigAnomalies = {
 		forkSettings.register({
 			section: "signatures", order: 50, id: "sigAnomalies-mode", type: "select", key: "sigAnomalies",
 			label: "Anomalies in the signature list:",
+			hint: "Hide folds anomalies away behind a toggle line; Don't import skips new ones when you paste. Pasted anomalies are always marked, so you can switch later.",
 			choices: [["show", "Show"], ["hide", "Hide"], ["skip", "Don't import"]],
 			get: function(o) { return sigAnomalies.mode(o); },
 			set: function(o, value) { o.sigAnomalies = { mode: sigAnomalies.MODES.indexOf(value) >= 0 ? value : "show" }; }
@@ -135,6 +146,11 @@ const sigAnomalies = {
 			sigAnomalies.revealed = !sigAnomalies.revealed;
 			sigAnomalies.apply();
 		});
+		// Ctrl+A and shift-click select rows after this handler: look again once they are done
+		$(document).on("keydown", function(e) { if ((e.ctrlKey || e.metaKey) && e.keyCode === 65) { setTimeout(sigAnomalies.unselectHidden, 0); } });
+		$("#sigTable").on("click", "tbody tr", function() { setTimeout(sigAnomalies.unselectHidden, 0); });
+		// a paste (or any refresh) can mark rows after they were drawn: hide them once the answer is in
+		$(document).ajaxComplete(sigAnomalies.schedule);
 		const tbody = document.querySelector("#sigTable > tbody");
 		if (tbody && typeof MutationObserver !== "undefined") {
 			new MutationObserver(sigAnomalies.schedule).observe(tbody, { childList: true });

@@ -28,7 +28,7 @@ corrections / pure improvements and have no toggle.
 **Anomalies.** `paste.js` already recognised the "Cosmic Anomaly" group in every language but threw it away. Pasted anomalies
 are now marked with `signatures.bookmark = "anomaly"` (an upstream column nothing uses; the server keeps it when a sig is
 edited, so no schema change). Hide folds them away with an "N anomalies hidden - show" line above the list (rows stay in the
-data). Don't import: paste skips anomaly rows, never marks existing ones, and "Click to delete missing sigs" never deletes a
+data). Don't import: paste does not add anomaly rows (rows already in the list are only marked), and "Click to delete missing sigs" never deletes a
 marked anomaly. In Show and Hide mode anomalies in the paste count as present, so they are not deleted as missing; a sig
 that was imported before this change gets the marker the next time it appears in a paste. New files:
 `app/js/fork/sig-anomalies.js`, `app/css/fork/sig-anomalies.css`, tests `sig-anomalies.test.js`.

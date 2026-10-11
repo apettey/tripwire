@@ -122,10 +122,9 @@ tripwire.pasteSignatures = function() {
         for (var i in paste) {
             var scanner = rowParse(paste[i]);
 
-            if (scanner.id && sigAnomalies.skipRow(scanner, options)) continue; // fork: Settings > Signatures > Anomalies = Don't import
             if (scanner.id) {
                 var signature = $.map(tripwire.client.signatures, function(signature) { if (signature.signatureID && signature.signatureID.toUpperCase() == scanner.id[0] + scanner.id[1] && signature.systemID == viewingSystemID) return signature; })[0];
-                if (signature) {
+                if (sigAnomalies.skipRow(scanner, signature, options)) { continue; } else if (signature) { // fork: Anomalies = Don't import
                     // Update signature (only non-wormholes can be updated to a wormhole)
                     if (scanner.type == "Wormhole" && signature.type != "wormhole") {
                         var wormhole = $.map(tripwire.client.wormholes, function(wormhole) { if (wormhole.initialID == signature.id || wormhole.secondaryID == signature.id) return wormhole; })[0] || {};
@@ -162,7 +161,7 @@ tripwire.pasteSignatures = function() {
 							undo.push(tripwire.client.signatures[signature.id]);
 						}
                     // Make sure we are only updating when we have new info (we never turn wormholes into regular signatures)
-                    } else if (signature.type != "wormhole" && ((scanner.type && scanner.type.toLowerCase() != signature.type) || (scanner.name && scanner.name != signature.name) || sigAnomalies.needsMark(scanner, signature, options))) {
+                    } else if (signature.type != "wormhole" && ((scanner.type && scanner.type.toLowerCase() != signature.type) || (scanner.name && scanner.name != signature.name) || sigAnomalies.needsMark(scanner, signature))) {
                         payload.signatures.update.push({
                             "id": signature.id,
                             "systemID": viewingSystemID,

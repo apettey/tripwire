@@ -29,17 +29,17 @@ describe('Cosmic anomalies in the signature list', () => {
 			assert.equal(sigAnomalies.marker(sigRow), undefined);
 		});
 		it('skips anomaly rows only in skip mode', () => {
-			assert.ok(sigAnomalies.skipRow(anomalyRow, skip));
-			assert.ok(!sigAnomalies.skipRow(anomalyRow, hide));
-			assert.ok(!sigAnomalies.skipRow(anomalyRow, undefined));
-			assert.ok(!sigAnomalies.skipRow(sigRow, skip));
+			assert.ok(sigAnomalies.skipRow(anomalyRow, undefined, skip));
+			assert.ok(!sigAnomalies.skipRow(anomalyRow, undefined, hide));
+			assert.ok(!sigAnomalies.skipRow(anomalyRow, undefined, undefined));
+			assert.ok(!sigAnomalies.skipRow(sigRow, undefined, skip));
 		});
-		it('marks an existing unmarked sig, once, and never wormholes', () => {
-			assert.ok(sigAnomalies.needsMark(anomalyRow, { type: 'combat' }, hide));
-			assert.ok(!sigAnomalies.needsMark(anomalyRow, { type: 'combat', bookmark: 'anomaly' }, hide));
-			assert.ok(!sigAnomalies.needsMark(anomalyRow, { type: 'wormhole' }, hide));
-			assert.ok(!sigAnomalies.needsMark(sigRow, { type: 'data' }, hide));
-			assert.ok(!sigAnomalies.needsMark(anomalyRow, { type: 'combat' }, skip));
+		it('does not skip an anomaly already in the list: it only gets marked', () => assert.ok(!sigAnomalies.skipRow(anomalyRow, { type: 'combat' }, skip)));
+		it('marks an existing unmarked sig, once, in every mode, and never wormholes', () => {
+			assert.ok(sigAnomalies.needsMark(anomalyRow, { type: 'combat' }));
+			assert.ok(!sigAnomalies.needsMark(anomalyRow, { type: 'combat', bookmark: 'anomaly' }));
+			assert.ok(!sigAnomalies.needsMark(anomalyRow, { type: 'wormhole' }));
+			assert.ok(!sigAnomalies.needsMark(sigRow, { type: 'data' }));
 		});
 	});
 
@@ -50,6 +50,28 @@ describe('Cosmic anomalies in the signature list', () => {
 			assert.ok(!sigAnomalies.keepOnFullPaste({ bookmark: 'anomaly' }, undefined));
 		});
 		it('never keeps ordinary sigs', () => assert.ok(!sigAnomalies.keepOnFullPaste({ bookmark: null }, skip)));
+	});
+
+	describe('selection', () => {
+		let saved;
+		beforeEach(() => { saved = global.$; });
+		afterEach(() => { global.$ = saved; });
+		it('drops hidden rows from the selection and refreshes the buttons', () => {
+			const calls = [];
+			global.$ = sel => ({
+				length: sel.indexOf('sig-anomaly-hidden.selected') >= 0 ? 2 : 1,
+				removeClass: c => calls.push('removeClass ' + c),
+				trigger: e => calls.push('trigger ' + e)
+			});
+			sigAnomalies.unselectHidden();
+			assert.deepEqual(calls, ['removeClass selected', 'trigger selected:change']);
+		});
+		it('does nothing when no hidden row is selected', () => {
+			const calls = [];
+			global.$ = () => ({ length: 0, removeClass: () => calls.push('x'), trigger: () => calls.push('x') });
+			sigAnomalies.unselectHidden();
+			assert.deepEqual(calls, []);
+		});
 	});
 
 	describe('list', () => {
