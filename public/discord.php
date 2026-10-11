@@ -105,11 +105,17 @@ function discord_sample_label_moved($systemID) {
 	return 'AB';
 }
 
-/** Sample message contexts for the preview */
-function discord_sample_context($kind, $template, $ping, $maskName) {
+/** Sample fleet comp for the Fight here preview: the mask's first comp (Mask Admin > Fight here), else an example */
+function discord_sample_comp(PDO $db, $mask) {
+	$comps = fight_comps_load($db, $mask);
+	return $comps ? $comps[0] : array('id' => '', 'name' => 'Armor HACs', 'colour' => 'red', 'note' => 'Zealots and Sacrileges', 'mention' => '');
+}
+
+/** Sample message contexts for the preview ($comp: the fleet comp of the Fight here sample) */
+function discord_sample_context($kind, $template, $ping, $maskName, $comp = null) {
 	$base = array('kind' => $kind, 'template' => $template, 'ping' => $ping, 'mask' => $maskName, 'time' => time());
 	if ($kind === 'rally') {
-		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot'), 'discord_sample_label');
+		return discord_rally_context(array('action' => 'set', 'who' => 'Example Pilot') + $base, array('systemID' => 31001880, 'setBy' => 'Example Pilot', 'comp' => $comp), 'discord_sample_label');
 	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
@@ -240,7 +246,8 @@ try {
 			if ($template === '') $template = $defaults['types'][$kind]['template'];
 			$ping = discord_ping_normalise(isset($input['ping']) ? $input['ping'] : '');
 			if ($ping === null) discord_fail(400, 'Ping may only contain <@&roleID>, <@userID>, @here or @everyone');
-			$context = discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName);
+			$comp = $kind === 'rally' ? discord_sample_comp($mysql, $mask) : null;
+			$context = discord_sample_context($kind, mb_substr($template, 0, DISCORD_TEMPLATE_MAX), $ping, $maskName, $comp);
 			$preview = array('preview' => discord_payload($context));
 			if ($kind === 'rally') {
 				// The rally type has a second message, for when the rally is cleared
@@ -253,7 +260,7 @@ try {
 					'templateClear' => mb_substr($templateClear, 0, DISCORD_TEMPLATE_MAX)) + $context, null, 'discord_sample_label'));
 				// And moved after 30 s: the old message is edited like this (fixed text), a new one is posted
 				$preview['previewMoved'] = discord_payload(array('moved' => true, 'previous' => $preview['preview']['content'])
-					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot'), 'discord_sample_label_moved'));
+					+ discord_rally_context(array('action' => 'set') + $context, array('systemID' => 31002012, 'setBy' => 'Other Pilot', 'comp' => $comp), 'discord_sample_label_moved'));
 			}
 			echo json_encode($preview);
 			exit();

@@ -127,10 +127,10 @@ function flow_system($name) { foreach (range(31000001, 31002604) as $id) { $s = 
 $sysA = flow_system('J163701');
 $sysB = flow_system('J152820');
 $appUrl = discord_app_url();
-$liveA = "@here Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\\-R00025)\n<{$appUrl}?system=J163701>";
-$struckA = '~~Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\\-R00025)~~';
-$liveB = "@here Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\\-R00024)\n<{$appUrl}?system=J152820>";
-$struckB = '~~Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\\-R00024)~~';
+$liveA = "@here Fight here: **J163701** (C5) — set by *Kytus Bos*\n<{$appUrl}?system=J163701>";
+$struckA = '~~Fight here: **J163701** (C5) — set by *Kytus Bos*~~';
+$liveB = "@here Fight here: **J152820** (C5) — set by *Aashai Modor*\n<{$appUrl}?system=J152820>";
+$struckB = '~~Fight here: **J152820** (C5) — set by *Aashai Modor*~~';
 
 // ---------- Mask Admin > Discord (outbox, worker) ----------
 echo "## Mask Admin > Discord (outbox)\n";
@@ -193,9 +193,9 @@ check('outbox: the production sequence', flow_channel('production sequence: Tyra
 // ---------- DISCORD_WEB_HOOK (legacy, posted directly; no pings, fixed texts) ----------
 echo "\n## DISCORD_WEB_HOOK (legacy)\n";
 // Legacy texts: the system's class and region inside the bold, no pings (no link: the CLI has no EVE_SSO_REDIRECT)
-$legacyLive = function ($who, $where) { return "Tripwire rally point from *$who*: **$where**"; };
+$legacyLive = function ($who, $where) { return "Fight here: **$where** — set by *$who*"; };
 $plain = function ($text) {
-    return strtr($text, ["@here " => '', '**J163701** (C5, E\\-R00025)' => '**J163701 (C5, E-R00025)**', '**J152820** (C5, E\\-R00024)' => '**J152820 (C5, E-R00024)**']);
+    return strtr($text, ["@here " => '', '**J163701** (C5)' => '**J163701 (C5, E-R00025)**', '**J152820** (C5)' => '**J152820 (C5, E-R00024)**']);
 };
 $liveB = $legacyLive('Aashai Modor', 'J152820 (C5, E-R00024)');
 
