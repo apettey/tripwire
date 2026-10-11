@@ -1022,6 +1022,23 @@ $wpLink(31000706, 31000708);   // behind the joint
 check('watchlist poll: after the joint hole expired, what is behind it is not posted', $wpPoll(31002238, $chNow + 601), []);
 $wpLink(31000705, 31000709);   // the home chain still counts
 check('watchlist poll: ... the home chain still is', $wpPoll(31002238, $chNow + 601), ['J123555']);
+// The hole named in the message: the live one of the chain, not an older expired one into the same system
+$wpLink(31000709, 31000710, 300);   // expires at +300
+$wpLink(31000705, 31000710);
+$wpData = function () use ($wp) { return json_decode($wp->query('SELECT data FROM discord_outbox ORDER BY id DESC LIMIT 1')->fetchColumn(), true); };
+check('watchlist poll: a new system reached by an expired and a live hole names the live one', [$wpPoll(31002238, $chNow + 601), $wpData()['from']],
+    [['J151125'], 'J214929']);
+// Posted, cut off, filter saved (re-baseline), reconnected while its holes stay: not posted again
+$cut = $wpLink(31000709, 31000711);
+$wpLink(31000711, 31000712);
+check('watchlist poll: posted', $wpPoll(31002238, $chNow + 601), ['J123412', 'J112309']);
+$wp->exec("DELETE FROM signatures WHERE id IN (SELECT initialID FROM wormholes WHERE id = $cut) OR id IN (SELECT secondaryID FROM wormholes WHERE id = $cut)");
+$wp->exec("DELETE FROM wormholes WHERE id = $cut");
+$wp->prepare('UPDATE fork_watchlist SET filters = ?')->execute([json_encode([['id' => 'c2', 'name' => 'Any C2 (renamed)', 'enabled' => true,
+    'conditions' => ['classes' => ['C2']], 'updatedAt' => 200, 'updatedBy' => 'test']])]);
+check('watchlist poll: cut off, filter saved: nothing', $wpPoll(31002238, $chNow + 601), []);
+$wpLink(31000709, 31000711);
+check('watchlist poll: posted, cut off, filter saved, reconnected: not posted again', $wpPoll(31002238, $chNow + 601), []);
 
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

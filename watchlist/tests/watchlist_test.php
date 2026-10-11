@@ -117,10 +117,10 @@ $wlData['systems'][31000703] = ['name' => 'J100703', 'security' => -1, 'regionID
 $wlData['systems'][31000704] = ['name' => 'J100704', 'security' => -1, 'regionID' => 11000007, 'class' => 2];
 foreach ([31000705, 31000706, 31000707, 31000708] as $id) $wlData['systems'][$id] = ['name' => 'J' . ($id - 30900000), 'security' => -1, 'regionID' => 11000007, 'class' => 2];   // the home chain checks
 $wlData = watchlist_index($wlData);
-// The chain: what $links connect to $home (the worker walks the mask's live holes, discord_chain_systems; same walk)
+// The chain: what the live holes of $links connect to $home (the worker walks them with discord_chain_systems; same walk)
 $chainOf = function (array $links, $home) {
     $pairs = [];
-    foreach ($links as $l) if ($l['a'] && $l['b']) $pairs[] = [$l['a'], $l['b']];
+    foreach ($links as $l) if ($l['a'] && $l['b'] && ($l['live'] ?? true)) $pairs[] = [$l['a'], $l['b']];
     return discord_chain_walk($pairs, $home);
 };
 $poll = function (array $filters, array $links, $enabledAt = 1000, $home = 31002238, $mask = null) use ($wl, $wlMask, $wlData, $chainOf) {
@@ -201,16 +201,59 @@ check('home chain: cut off again and reconnected by a new hole while its holes s
     [$hcPoll(array_merge($hcBase, [$hc(23, $C2c, $C2d)])), $hcPoll(array_merge($hcBase, [$hc(23, $C2c, $C2d), $hc(25, $HOME, $C2b)]))], [[], []]);
 check('home chain: no home set: nothing announced, even a new hole from the old home', [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)]), 0),
     $wl->query("SELECT stamp FROM fork_watchlist_baseline WHERE maskID = '$hcMask'")->fetchColumn()], [[], '1000:100:0']);
-check('home chain: no home set: nothing recorded either', $hcSeen(), []);
-check('home chain: setting a home records its chain without announcing', [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)])), $hcSeen()], [[], [$C2a, 31000705]]);
+check('home chain: no home set: nothing new recorded (what was posted is kept)', $hcSeen(), [$C2a, $C2b, $C2c]);
+check('home chain: setting a home records its chain without announcing', [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)])), $hcSeen()], [[], [$C2a, $C2b, $C2c, 31000705]]);
 check('home chain: moving home (another chain) re-baselines without announcing, the old chain no longer counts',
     [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)]), $C2b), $hcSeen(), $hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705), $hc(27, $HOME, 31000706)]), $C2b)],
-    [[], [$C2b, $C2c], []]);
+    [[], [$C2a, $C2b, $C2c, 31000705], []]);
 check('home chain: ... a new hole on the new chain is announced', $hcPoll(array_merge($hcBase, [$hc(28, $C2c, 31000706)]), $C2b), ['fe:31000706:28']);
 // Records made before the home was part of the stamp ("enabledAt:updatedAt") re-baseline once, silently
 $wl->exec("UPDATE fork_watchlist_baseline SET stamp = '1000:100' WHERE maskID = '$hcMask'");
 check('home chain: stamps from before the upgrade re-baseline silently', [$hcPoll(array_merge($hcBase, [$hc(28, $C2c, 31000706), $hc(29, $C2b, 31000707)]), $C2b),
     $wl->query("SELECT stamp FROM fork_watchlist_baseline WHERE maskID = '$hcMask'")->fetchColumn()], [[], '1000:100:' . $C2b]);
+// Re-baselining keeps what was posted: posted, cut off, filter saved (or home moved), reconnected: not news
+$rbMask = '98000003.2';
+$rbPoll = function (array $links, $updatedAt = 100, $home = 31002238) use ($poll, $filters, $rbMask) {
+    $f = $filters[4];
+    $f['updatedAt'] = $updatedAt;
+    return $poll([$f], $links, 1000, $home, $rbMask);
+};
+$rbBase = [$hc(31, $HOME, $C2a)];
+$rbPoll($rbBase);
+check('re-baseline: posted first', $rbPoll(array_merge($rbBase, [$hc(32, $C2a, $C2b), $hc(33, $C2b, $C2c)])), ['fe:' . $C2b . ':32', 'fe:' . $C2c . ':33']);
+check('re-baseline: cut off (the joining hole deleted), the filter saved: nothing', [$rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c)])),
+    $rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c)]), 300)], [[], []]);
+check('re-baseline: posted, cut off, filter saved, reconnected by a new hole: not posted again',
+    $rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c), $hc(34, $C2a, $C2b)]), 300), []);
+check('re-baseline: the records were kept', $wl->query("SELECT COUNT(*) FROM fork_watchlist_seen WHERE maskID = '$rbMask' AND wormholeID = 33")->fetchColumn() > 0, true);
+check('re-baseline: home moved away and back: still not news', [$rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c), $hc(34, $C2a, $C2b)]), 300, $C2a),
+    $rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c), $hc(34, $C2a, $C2b)]), 300)], [[], []]);
+check('re-baseline: a new system after it is still news', $rbPoll(array_merge($rbBase, [$hc(33, $C2b, $C2c), $hc(34, $C2a, $C2b), $hc(35, $C2c, 31000705)]), 300),
+    ['fe:31000705:35']);
+
+// The hole a message names, and which holes make a match: only holes of the chain (live, far side in the chain or unknown)
+$dead = function ($link) { return ['live' => false] + $link; };
+$nmLinks = [
+    $dead(['wormholeID' => 41, 'a' => $HOME, 'b' => $WR, 'type' => null, 'size' => null, 'aSig' => 'old111', 'bSig' => '', 'typedSide' => 'a']),
+    ['wormholeID' => 42, 'a' => $HOME, 'b' => $WR, 'type' => null, 'size' => null, 'aSig' => 'new222', 'bSig' => '', 'typedSide' => 'a', 'live' => true],
+    ['wormholeID' => 43, 'a' => $HOME, 'b' => null, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'hhh296', 'bSig' => '', 'typedSide' => 'a', 'live' => true],
+    $dead(['wormholeID' => 44, 'a' => $C2a, 'b' => null, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'ddd296', 'bSig' => '', 'typedSide' => 'a']),
+    ['wormholeID' => 45, 'a' => $HOME, 'b' => $C2a, 'type' => null, 'size' => null, 'aSig' => 'ccc222', 'bSig' => '', 'typedSide' => 'a'],
+    ['wormholeID' => 46, 'a' => $C2a, 'b' => $C2b, 'type' => 'H296', 'size' => 'XL', 'aSig' => 'fff296', 'bSig' => '', 'typedSide' => 'a'],
+];
+$nmChain = [$HOME => true, $WR => true, $C2a => true];   // C2b: an old fragment's system (46 is not a hole of the chain)
+check('chain hole: live with both ends in the chain, or one end in it and the other unknown; not dead, not to a fragment',
+    array_map(function ($l) use ($nmChain) { return discord_watchlist_chain_hole($l, $nmChain); }, $nmLinks), [false, true, true, false, true, false]);
+check('discord matches: the named hole is the oldest hole of the chain; holes outside it alone make no match',
+    array_map(function ($m) { return [$m[0]['id'], $m[1], $m[2], $m[3]]; }, discord_watchlist_matches([$filters[0], $filters[1]], $nmLinks, $data, $nmChain)),
+    [['fa', $WR, [41, 42], 42], ['fb', $HOME, [43], 43]]);
+check('discord matches: without a chain, the oldest hole is named and every hole counts',
+    array_map(function ($m) { return [$m[0]['id'], $m[1], $m[3]]; }, discord_watchlist_matches([$filters[0], $filters[1]], $nmLinks, $data)),
+    [['fa', $WR, 41], ['fb', $HOME, 43], ['fb', $C2a, 44]]);
+$nmMask = '98000004.2';
+$poll([$filters[4]], [$hc(51, $HOME, $C2a)], 1000, $HOME, $nmMask);
+check('discord new: the message names the live hole, not an older expired one', $poll([$filters[4]],
+    [$hc(51, $HOME, $C2a), $dead($hc(52, $C2a, $C2b)), $hc(53, $C2a, $C2b)], 1000, $HOME, $nmMask), ['fe:' . $C2b . ':53']);
 
 // --- static data from public/js/combine.js (what the browser matches with) ---
 $app = watchlist_data_from_combine(__DIR__ . '/../../public/js/combine.js');
