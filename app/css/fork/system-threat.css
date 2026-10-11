@@ -1,4 +1,5 @@
-/* System Threat (fork feature): kill-activity badge on chain map nodes and the block in the system info panel.
+/* System Threat (fork feature): kill-activity badge on chain map nodes and the collapsible Threat & residents section
+   (Intel panel, or the system info panel when the Intel panel is off).
    The badge is not scoped to #chainMap: the renderers measure node markup outside the map. */
 .threat-badge {
 	position: absolute;	/* top-left corner of the node ([data-nodeid] is position: relative) */
@@ -28,7 +29,7 @@
 /* A kill in the last hour */
 .threat-badge.threat-hot { box-shadow: 0 0 4px 1px rgba(255, 70, 40, 0.85); }
 
-/* System info panel block */
+/* Threat & residents section */
 .threat-info {
 	clear: both;
 	margin-top: 6px;
@@ -76,3 +77,41 @@
 }
 .threat-info .threat-alliances, .threat-info .threat-structures { margin-top: 2px; color: #8f9ba3; }
 .threat-info .threat-alliances a, .threat-info .threat-structures a { color: #ccc; }
+/* Collapsible header: caret, title, level and count stay visible while collapsed */
+.threat-info .threat-head { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.threat-info .threat-head:focus { outline: none; }
+.threat-info .threat-head:focus-visible { outline: 1px dotted #8f9ba3; }
+.threat-info .threat-caret { display: inline-block; width: 10px; color: #8f9ba3; }
+.threat-info .threat-set-residents {
+	float: right;
+	margin-left: 6px;
+	padding: 0 6px;
+	font: inherit;
+	font-size: 10px;
+	line-height: 14px;
+	color: #d6e6ee;
+	background: rgba(79, 179, 217, 0.18);
+	border: 1px solid rgba(79, 179, 217, 0.55);
+	border-radius: 3px;
+	cursor: pointer;
+}
+.threat-info .threat-set-residents:hover { background: rgba(79, 179, 217, 0.32); }
+.threat-info .threat-body { margin-top: 1px; padding-left: 10px; }
+.threat-info .threat-note { margin-top: 2px; color: #ccc; white-space: pre-wrap; overflow-wrap: anywhere; }
+.threat-info .threat-residents-set .threat-name { color: #ffc040; }
+.threat-info .threat-show-activity { display: inline-block; margin-top: 2px; color: #4fb3d9; font-size: 10px; }
+.threat-info .threat-activity { margin-top: 2px; padding-left: 6px; border-left: 2px solid rgba(255, 255, 255, 0.08); }
+
+/* In the Intel panel: at the top, above the paste button */
+.threat-info.threat-in-intel { clear: none; margin: 0 0 6px; padding: 0 0 4px; border-top: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+
+/* Set residents dialog */
+.threat-dialog { font-size: 11px; line-height: 15px; }
+.threat-dialog .threat-dialog-help { margin: 0 0 6px; color: #aaa; }
+.threat-dialog .threat-dialog-picks { max-height: 200px; overflow-y: auto; margin-bottom: 6px; }
+.threat-dialog .threat-dialog-picks label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.threat-dialog .threat-dialog-picks img { width: 14px; height: 14px; margin: 0 3px 0 2px; vertical-align: -3px; border-radius: 2px; }
+.threat-dialog .threat-ticker, .threat-dialog .threat-muted { color: #8f9ba3; }
+.threat-dialog .threat-dialog-field { display: block; margin-top: 6px; color: #ccc; }
+.threat-dialog .threat-dialog-field input { display: block; box-sizing: border-box; width: 100%; margin-top: 2px; }
+.threat-dialog .threat-dialog-error { color: #ff8080; }

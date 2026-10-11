@@ -257,6 +257,69 @@ describe('System threat', () => {
 		});
 		it('loading state', () => assert.ok(systemThreat.infoHtml(null, NOW).indexOf('loading') >= 0));
 		it('no model without detail', () => assert.strictEqual(systemThreat.infoModel({ systems: {} }, NOW, systems), null));
+		describe('collapsible section', () => {
+			const model = () => systemThreat.infoModel(response, NOW, systems);
+			const set = { entities: [{ kind: 'corporation', id: 20, name: 'Home <Corp>', ticker: 'H<M' }, { kind: 'alliance', id: 99, name: "All'y", ticker: 'AL' }],
+				note: 'Lowsec static <script>x</script>', setBy: 'Pilot <b>', setAt: NOW / 1000 - 3 * 86400 };
+			it('collapsed: header with level and count only, no body', () => {
+				const html = systemThreat.sectionHtml(model(), NOW, { collapsed: true, canSet: true });
+				assert.ok(html.indexOf("aria-expanded='false'") >= 0, html);
+				assert.ok(html.indexOf('threat-level threat-2') >= 0 && html.indexOf('7 in 7 days') >= 0, html);
+				assert.ok(html.indexOf('threat-body') < 0 && html.indexOf('Active here') < 0, html);
+				assert.ok(html.indexOf('Set residents') >= 0, html);
+			});
+			it('expanded: header and the active list', () => {
+				const html = systemThreat.sectionHtml(model(), NOW, { collapsed: false, canSet: true });
+				assert.ok(html.indexOf("aria-expanded='true'") >= 0, html);
+				assert.ok(html.indexOf('Active here') >= 0 && html.indexOf('threat-body') >= 0, html);
+				assert.ok(html.indexOf('show activity') < 0, html);
+			});
+			it('no Set residents button unless allowed', () => assert.ok(systemThreat.sectionHtml(model(), NOW, {}).indexOf('threat-set-residents') < 0));
+			it('loading header without a model', () => assert.ok(systemThreat.sectionHtml(null, NOW, { canSet: true }).indexOf('loading') >= 0));
+			it('residents set by hand replace the active list, escaped', () => {
+				const html = systemThreat.sectionHtml(model(), NOW, { residents: set, canSet: true });
+				assert.ok(html.indexOf('>Residents<') >= 0, html);
+				assert.ok(html.indexOf('Active here') < 0, html);
+				assert.ok(html.indexOf('Home &lt;Corp&gt;') >= 0 && html.indexOf('[H&lt;M]') >= 0 && html.indexOf('All&#39;y') >= 0, html);
+				assert.ok(html.indexOf('<script>') < 0 && html.indexOf('Lowsec static &lt;script&gt;') >= 0, html);
+				assert.ok(html.indexOf('set by Pilot &lt;b&gt;, 3d ago') >= 0, html);
+				assert.ok(html.indexOf('https://zkillboard.com/alliance/99/') >= 0 && html.indexOf('alliances/99/logo') >= 0, html);
+				assert.ok(html.indexOf('show activity') >= 0 && html.indexOf('Edit residents') >= 0, html);
+				assert.ok(html.indexOf('threat-level threat-2') >= 0, html);	// the threat level stays
+			});
+			it('show activity reveals the detected list below the residents', () => {
+				const html = systemThreat.sectionHtml(model(), NOW, { residents: set, showActivity: true });
+				assert.ok(html.indexOf('hide activity') >= 0 && html.indexOf('Active here') > html.indexOf('>Residents<'), html);
+			});
+			it('an empty set counts as nothing set', () => {
+				const html = systemThreat.sectionHtml(model(), NOW, { residents: { entities: [] }, canSet: true });
+				assert.ok(html.indexOf('Active here') >= 0 && html.indexOf('Set residents') >= 0, html);
+			});
+		});
+
+		describe('Set residents dialog', () => {
+			const model = () => systemThreat.infoModel(response, NOW, systems);
+			it('quick picks: likely residents are ticked when nothing is set', () => {
+				const picks = systemThreat.quickPicks(model(), null);
+				assert.deepStrictEqual(picks.map(p => [p.kind, p.id, p.checked]), [['corporation', 20, true]]);
+			});
+			it('quick picks: what is set is ticked (and listed first), others not', () => {
+				const picks = systemThreat.quickPicks(model(), { entities: [{ kind: 'alliance', id: 7, name: 'Far', ticker: 'F' }] });
+				assert.deepStrictEqual(picks.map(p => [p.kind, p.id, p.checked]), [['alliance', 7, true], ['corporation', 20, false]]);
+			});
+			it('quick picks: each once', () => {
+				const picks = systemThreat.quickPicks(model(), { entities: [{ kind: 'corporation', id: 20, name: 'Home', ticker: 'HOME' }] });
+				assert.deepStrictEqual(picks.map(p => [p.kind, p.id, p.checked]), [['corporation', 20, true]]);
+			});
+			it('quick picks without data', () => assert.deepStrictEqual(systemThreat.quickPicks(null, null), []));
+			it('parses typed names', () => assert.deepStrictEqual(systemThreat.parseNames(' Foo  Corp , bar,,foo corp' + String.fromCharCode(10) + 'Baz '), ['Foo Corp', 'bar', 'Baz']));
+			it('dialog markup is escaped', () => {
+				const html = systemThreat.dialogHtml([{ kind: 'corporation', id: 5, name: '<i>x</i>', ticker: "'T", checked: true, resident: true }], { note: "<b>'n'" });
+				assert.ok(html.indexOf('<i>') < 0 && html.indexOf('&lt;i&gt;x') >= 0, html);
+				assert.ok(html.indexOf("value='&lt;b&gt;&#39;n&#39;'") >= 0, html);
+				assert.ok(html.indexOf("data-kind='corporation' data-id='5' checked") >= 0, html);
+			});
+		});
 	});
 
 	describe('settings', () => {

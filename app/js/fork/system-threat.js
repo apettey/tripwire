@@ -1,9 +1,10 @@
 const systemThreat = {
-	// System Threat (fork-owned): a kill-activity badge on chain map nodes and a "Threat & residents" block in the
-	// system info panel. Reads public/system_threat.php, which serves zKillboard's per-system stats cached by the
-	// pooled zKillboard integration (zkill/stats.php, fetched only by the feed worker) plus the kills the stream keeps;
-	// the browser itself only loads logos from images.evetech.net and links to zkillboard.com.
-	// Settings: options.systemThreat.enabled (badges), options.systemResidents.enabled (info panel block); missing = on.
+	// System Threat (fork-owned): a kill-activity badge on chain map nodes and a collapsible "Threat & residents" section at
+	// the top of the Intel panel (in the system info panel when the Intel panel is off), with residents set by hand and
+	// shared with the mask (public/system_residents.php, which looks names up on ESI). Reads public/system_threat.php, which
+	// serves zKillboard's per-system stats cached by the pooled zKillboard integration (zkill/stats.php, fetched only by
+	// the feed worker) plus the kills the stream keeps; the browser itself only loads logos from images.evetech.net and links to zkillboard.com.
+	// Settings: options.systemThreat.enabled (badges), options.systemResidents.enabled (the section); missing = on.
 	// Keep `const systemThreat` on the first line: the test helper strips it to define a global.
 	URL: "system_threat.php",
 	REFRESH_MS: 300000,	// chain badges and the viewed system, while visible
@@ -318,22 +319,36 @@ const systemThreat = {
 		return n > 0 ? "https://images.evetech.net/" + (kind === "alliance" ? "alliances" : "corporations") + "/" + n + "/logo?size=32" : "";
 	},
 
-	/** HTML of the info panel block. @param model {summary, residents, structures, detail, namesPending, error} */
-	infoHtml: function(model, nowMs) {
+	/** Header of the collapsible section: caret, title, level pill and short count (visible while collapsed), Set residents */
+	headHtml: function(model, nowMs, view) {
 		const esc = systemThreat.escape;
-		if (!model) { return "<div class='threat-head'><span class='threat-label'>Threat</span> <span class='threat-muted'>loading…</span></div>"; }
-		const s = model.summary;
-		const tip = esc(systemThreat.describe(s, nowMs).join("\n"));
-		let html = "<div class='threat-head' title='" + tip + "'><span class='threat-label'>Threat</span> ";
-		if (s.level === null) {
+		const v = view || {};
+		let html = "<div class='threat-head' role='button' tabindex='0' aria-expanded='" + (v.collapsed ? "false" : "true") + "'";
+		if (model) { html += " title='" + esc(systemThreat.describe(model.summary, nowMs).join("\n")) + "'"; }
+		html += "><span class='threat-caret' aria-hidden='true'>" + (v.collapsed ? "&#9656;" : "&#9662;") + "</span>"
+			+ "<span class='threat-label'>Threat &amp; residents</span> ";
+		const s = model ? model.summary : null;
+		if (!s) {
+			html += "<span class='threat-muted'>loading…</span>";
+		} else if (s.level === null) {
 			html += "<span class='threat-muted'>" + (s.pending ? "loading zKillboard stats…" : "unknown") + "</span>";
 		} else {
 			html += "<span class='threat-level threat-" + s.level + (s.hot ? " threat-hot" : "") + "'>" + esc(s.levelName) + "</span> "
-				+ "<span class='threat-counts'>" + esc(s.count) + " in " + esc(s.basis)
-				+ (s.kills90d !== null ? " · ~" + esc(systemThreat.formatCount(s.kills90d)) + " in 90 days" : "") + "</span>";
+				+ "<span class='threat-counts'>" + esc(s.count) + " in " + esc(s.basis) + "</span>";
 		}
-		html += "</div>";
-		if (model.error) { html += "<div class='threat-muted'>" + esc(model.error) + "</div>"; }
+		if (v.canSet) {
+			html += "<button type='button' class='threat-set-residents' title='Set who lives in this system (shared with your mask)'>"
+				+ (v.residents && v.residents.entities && v.residents.entities.length ? "Edit residents" : "Set residents") + "</button>";
+		}
+		return html + "</div>";
+	},
+
+	/** Auto-detected activity: corporations active here, alliances, structures lost (from kills) */
+	activityHtml: function(model, nowMs) {
+		const esc = systemThreat.escape;
+		if (!model) { return ""; }
+		const s = model.summary;
+		let html = "";
 		const r = model.residents;
 		if (r) {
 			const corps = r.corporations.slice(0, systemThreat.RESIDENTS_SHOWN);
@@ -376,6 +391,124 @@ const systemThreat = {
 					+ " " + esc(systemThreat.ago(st.timeMs, nowMs)) + " ago";
 			}).join(", ") + "</div>";
 		}
+		return html;
+	},
+
+	/**
+	 * Residents set by hand (shared with the mask), shown instead of the auto-detected list.
+	 * @param set {entities: [{kind, id, name, ticker}], note, setBy, setAt (unix s)}
+	 */
+	setResidentsHtml: function(set, nowMs) {
+		const esc = systemThreat.escape;
+		if (!set || !Array.isArray(set.entities) || !set.entities.length) { return ""; }
+		let html = "<div class='threat-sub'>Residents</div><ul class='threat-residents threat-residents-set'>";
+		set.entities.forEach(function(e) {
+			const id = parseInt(e.id, 10);
+			if (!(id > 0)) { return; }
+			const kind = e.kind === "alliance" ? "alliance" : "corporation";
+			html += "<li><a href='https://zkillboard.com/" + kind + "/" + id + "/' target='_blank' rel='noopener noreferrer'>"
+				+ "<img src='" + esc(systemThreat.logoURL(kind, id)) + "' alt='' loading='lazy' />"
+				+ "<span class='threat-name'>" + esc(e.name || "Unknown") + "</span>"
+				+ (e.ticker ? " <span class='threat-ticker'>[" + esc(e.ticker) + "]</span>" : "") + "</a>"
+				+ (kind === "alliance" ? " <span class='threat-stats'>alliance</span>" : "") + "</li>";
+		});
+		html += "</ul>";
+		if (set.note) { html += "<div class='threat-note'>" + esc(set.note) + "</div>"; }
+		const when = set.setAt ? systemThreat.ago(Number(set.setAt) * 1000, nowMs) : "";
+		if (set.setBy || when) {
+			html += "<div class='threat-muted threat-setby'>set" + (set.setBy ? " by " + esc(set.setBy) : "") + (when ? ", " + esc(when) + " ago" : "") + "</div>";
+		}
+		return html;
+	},
+
+	/**
+	 * The whole section (header + body unless collapsed).
+	 * @param view {collapsed, canSet, residents (set by hand, or null), showActivity, error}
+	 */
+	sectionHtml: function(model, nowMs, view) {
+		const esc = systemThreat.escape;
+		const v = view || {};
+		const html = systemThreat.headHtml(model, nowMs, v);
+		if (v.collapsed) { return html; }
+		let body = "";
+		const error = v.error || (model && model.error);
+		if (error) { body += "<div class='threat-muted'>" + esc(error) + "</div>"; }
+		const s = model ? model.summary : null;
+		if (s && s.kills90d !== null) { body += "<div class='threat-muted'>~" + esc(systemThreat.formatCount(s.kills90d)) + " kills in 90 days</div>"; }
+		const set = systemThreat.setResidentsHtml(v.residents, nowMs);
+		if (set) {
+			body += set + "<a href='#' class='threat-show-activity' aria-expanded='" + (v.showActivity ? "true" : "false") + "'>"
+				+ (v.showActivity ? "hide activity" : "show activity") + "</a>";
+			if (v.showActivity) { body += "<div class='threat-activity'>" + systemThreat.activityHtml(model, nowMs) + "</div>"; }
+		} else {
+			body += systemThreat.activityHtml(model, nowMs);
+		}
+		return html + (body ? "<div class='threat-body'>" + body + "</div>" : "");
+	},
+
+	/** HTML of the block, expanded, without the Set residents button */
+	infoHtml: function(model, nowMs) {
+		return systemThreat.sectionHtml(model, nowMs, {});
+	},
+
+	/**
+	 * Quick picks for the Set residents dialog: what is set plus the corporations and alliances listed as active here,
+	 * each once. Ticked: what is set; when nothing is set, the likely residents.
+	 * @return [{kind, id, name, ticker, checked, resident}]
+	 */
+	quickPicks: function(model, set) {
+		const out = [];
+		const seen = {};
+		const stored = set && Array.isArray(set.entities) && set.entities.length ? set.entities : null;
+		const isSet = {};
+		(stored || []).forEach(function(e) { isSet[(e.kind === "alliance" ? "alliance" : "corporation") + ":" + parseInt(e.id, 10)] = true; });
+		const add = function(e, kind) {
+			const id = parseInt(e.id, 10);
+			const key = kind + ":" + id;
+			if (!(id > 0) || seen[key]) { return; }
+			seen[key] = true;
+			out.push({ kind: kind, id: id, name: e.name || "", ticker: e.ticker || "", resident: !!e.resident,
+				checked: stored ? !!isSet[key] : !!e.resident });
+		};
+		(stored || []).forEach(function(e) { add(e, e.kind === "alliance" ? "alliance" : "corporation"); });
+		const r = model && model.residents ? model.residents : null;
+		if (r) {
+			r.corporations.slice(0, systemThreat.RESIDENTS_SHOWN).forEach(function(e) { add(e, "corporation"); });
+			r.alliances.slice(0, 4).forEach(function(e) { add(e, "alliance"); });
+		}
+		return out;
+	},
+
+	/** Free-entry names typed in the dialog (comma or new line separated), trimmed, each once */
+	parseNames: function(text) {
+		const seen = {};
+		return String(text || "").split(/[,\n]/).map(function(n) { return n.replace(/\s+/g, " ").trim(); }).filter(function(n) {
+			const k = n.toLowerCase();
+			if (!n || seen[k]) { return false; }
+			seen[k] = true;
+			return true;
+		});
+	},
+
+	/** Body of the Set residents dialog */
+	dialogHtml: function(picks, set) {
+		const esc = systemThreat.escape;
+		let html = "<p class='threat-dialog-help'>Who lives in this system? Shown to everyone on your mask instead of the corporations detected from kills.</p>";
+		if (picks.length) {
+			html += "<div class='threat-dialog-picks'>" + picks.map(function(p) {
+				return "<label><input type='checkbox' class='threat-pick' data-kind='" + esc(p.kind) + "' data-id='" + esc(p.id) + "'" + (p.checked ? " checked" : "") + " /> "
+					+ "<img src='" + esc(systemThreat.logoURL(p.kind, p.id)) + "' alt='' loading='lazy' />"
+					+ esc(p.name || (p.kind + " " + p.id)) + (p.ticker ? " <span class='threat-ticker'>[" + esc(p.ticker) + "]</span>" : "")
+					+ (p.kind === "alliance" ? " <span class='threat-muted'>alliance</span>" : "")
+					+ (p.resident ? " <span class='threat-muted'>· likely resident</span>" : "") + "</label>";
+			}).join("") + "</div>";
+		} else {
+			html += "<p class='threat-muted'>No corporations seen here recently.</p>";
+		}
+		html += "<label class='threat-dialog-field'>Add by exact name<input type='text' class='threat-names' maxlength='300' autocomplete='off' spellcheck='false' placeholder='Corporation or alliance (separate several with commas)' /></label>"
+			+ "<div class='threat-dialog-error'></div>"
+			+ "<label class='threat-dialog-field'>Note<input type='text' class='threat-note-input' maxlength='200' autocomplete='off' placeholder='e.g. Lowsec static, active EU TZ' value='"
+			+ esc(set && set.note ? set.note : "") + "' /></label>";
 		return html;
 	},
 
@@ -509,9 +642,47 @@ const systemThreat = {
 		chainObj.nodes = wrapped;
 	},
 
-	// ---- Info panel block ----
+	// ---- Threat & residents section: in the Intel panel, or in the system info panel when that is off ----
+
+	RESIDENTS_URL: "system_residents.php",
+	RESIDENTS_REFRESH_MS: 60000,	// other mask members' changes, with the detail polls
+	COLLAPSED_KEY: "tripwire.threatResidents.collapsed",
+	DIALOG_ID: "dialog-systemResidents",
 
 	$info: function() { return $("#systemThreatInfo"); },
+
+	/** Where the section goes: [element to insert before, 'intel' / 'info'], or null when neither panel is there */
+	host: function() {
+		const $intel = $("#intelScansWidget .content > .intel-body");
+		if ($intel.length) { return [$intel.first(), "intel"]; }
+		// Above the activity graph, so the threat line is visible without scrolling the panel
+		const $graph = $("#infoWidget #activityGraph");
+		return $graph.length ? [$graph.first(), "info"] : null;
+	},
+
+	/** Create the section or move it to its host (the Intel panel can be turned on and off at runtime). False when there is no host. */
+	place: function() {
+		const host = systemThreat.host();
+		let $info = systemThreat.$info();
+		if (!host) { $info.remove(); return false; }
+		if (!$info.length) {
+			$info = $("<div id='systemThreatInfo' class='threat-info'></div>");
+			systemThreat.detailID = null;
+		}
+		if ($info.next()[0] !== host[0][0]) { host[0].before($info.detach()); }
+		$info.toggleClass("threat-in-intel", host[1] === "intel").toggleClass("threat-in-info", host[1] === "info");
+		return true;
+	},
+
+	collapsed: function() {
+		try { return window.localStorage.getItem(systemThreat.COLLAPSED_KEY) === "1"; } catch (e) { return false; }
+	},
+
+	setCollapsed: function(on) {
+		try {
+			if (on) { window.localStorage.setItem(systemThreat.COLLAPSED_KEY, "1"); } else { window.localStorage.removeItem(systemThreat.COLLAPSED_KEY); }
+		} catch (e) { /* private mode: not remembered */ }
+	},
 
 	syncInfo: function() {
 		const on = systemThreat.residentsEnabled(typeof options !== "undefined" ? options : null);
@@ -521,13 +692,9 @@ const systemThreat = {
 			systemThreat.detailID = null;
 			return;
 		}
-		if (!systemThreat.$info().length) {
-			// Above the activity graph, so the threat line is visible without scrolling the panel
-			const $before = $("#infoWidget #activityGraph");
-			if (!$before.length) { return; }
-			$before.before("<div id='systemThreatInfo' class='threat-info'></div>");
-			systemThreat.detailID = null;
-		}
+		const had = systemThreat.$info().length;
+		if (!systemThreat.place()) { systemThreat.stopDetail(); systemThreat.detailID = null; return; }
+		if (had && systemThreat.detailID) { systemThreat.renderInfo(); return; }	// only moved: keep the data and the polling
 		systemThreat.loadDetail(typeof viewingSystemID !== "undefined" ? viewingSystemID : null);
 	},
 
@@ -535,11 +702,13 @@ const systemThreat = {
 		clearTimeout(systemThreat.detailTimer);
 		clearTimeout(systemThreat.detailQueueTimer);
 		if (systemThreat.detailXhr) { systemThreat.detailXhr.abort(); systemThreat.detailXhr = null; }
+		if (systemThreat.residentsXhr) { systemThreat.residentsXhr.abort(); systemThreat.residentsXhr = null; }
 	},
 
 	loadDetail: function(systemID) {
 		const id = parseInt(systemID, 10);
 		if (!systemThreat.$info().length || !systemThreat.isSystem(id, typeof tripwire !== "undefined" ? tripwire.systems : null)) {
+			systemThreat.detailID = null;
 			systemThreat.$info().empty();
 			return;
 		}
@@ -547,10 +716,14 @@ const systemThreat = {
 			systemThreat.detailID = id;
 			systemThreat.detailResponse = null;
 			systemThreat.detailError = "";
+			systemThreat.residentsSet = null;
+			systemThreat.residentsAt = 0;
+			systemThreat.showActivity = false;
 			systemThreat.renderInfo();
 		}
 		systemThreat.detailPolls = 0;
 		systemThreat.stopDetail();
+		systemThreat.fetchResidents();
 		// What the server has right away; queue work only once the system has been viewed a moment
 		systemThreat.fetchDetail(false);
 		systemThreat.detailQueueTimer = setTimeout(function() {
@@ -563,6 +736,8 @@ const systemThreat = {
 		if (!id || !systemThreat.$info().length) { return; }
 		if (document.hidden) { systemThreat.missed = true; return; }
 		if (systemThreat.detailXhr) { systemThreat.detailXhr.abort(); }
+		// Residents set by other mask members: with the detail polls, at most once a minute
+		if (queue && Date.now() - (systemThreat.residentsAt || 0) >= systemThreat.RESIDENTS_REFRESH_MS) { systemThreat.fetchResidents(); }
 		const xhr = $.ajax({ url: systemThreat.URL, type: "GET", data: { systemID: id, queue: queue ? 1 : 0 },
 			dataType: "JSON", cache: false, timeout: 15000 });
 		systemThreat.detailXhr = xhr;
@@ -588,20 +763,134 @@ const systemThreat = {
 		});
 	},
 
-	renderInfo: function() {
-		const $info = systemThreat.$info();
-		if (!$info.length) { return; }
-		const now = Date.now();
-		const model = systemThreat.infoModel(systemThreat.detailResponse, now, typeof tripwire !== "undefined" ? tripwire.systems : null);
+	fetchResidents: function() {
+		const id = systemThreat.detailID;
+		if (!id) { return; }
+		if (systemThreat.residentsXhr) { systemThreat.residentsXhr.abort(); }
+		systemThreat.residentsAt = Date.now();
+		const xhr = $.ajax({ url: systemThreat.RESIDENTS_URL, type: "GET", data: { systemID: id }, dataType: "JSON", cache: false, timeout: 15000 });
+		systemThreat.residentsXhr = xhr;
+		xhr.done(function(response) {
+			if (id !== systemThreat.detailID) { return; }
+			systemThreat.residentsSet = response && response.residents ? response.residents : null;
+			systemThreat.renderInfo();
+		}).always(function() {
+			if (systemThreat.residentsXhr === xhr) { systemThreat.residentsXhr = null; }
+		});
+	},
+
+	currentModel: function(nowMs) {
+		const model = systemThreat.infoModel(systemThreat.detailResponse, nowMs, typeof tripwire !== "undefined" ? tripwire.systems : null);
 		if (model) { model.error = systemThreat.detailError; }
-		$info.html(model || !systemThreat.detailError ? systemThreat.infoHtml(model, now)
-			: "<div class='threat-muted'>" + systemThreat.escape(systemThreat.detailError) + "</div>");
+		return model;
+	},
+
+	renderInfo: function() {
+		if (!systemThreat.$info().length || !systemThreat.place()) { return; }
+		const $info = systemThreat.$info();
+		if (!systemThreat.detailID) { $info.empty(); return; }
+		const now = Date.now();
+		$info.html(systemThreat.sectionHtml(systemThreat.currentModel(now), now, {
+			collapsed: systemThreat.collapsed(), canSet: true, residents: systemThreat.residentsSet,
+			showActivity: systemThreat.showActivity, error: systemThreat.detailError
+		}));
+	},
+
+	bindInfo: function() {
+		$(document).on("click", "#systemThreatInfo .threat-head", function(e) {
+			if ($(e.target).closest("button, a").length) { return; }
+			systemThreat.setCollapsed(!systemThreat.collapsed());
+			systemThreat.renderInfo();
+		}).on("keydown", "#systemThreatInfo .threat-head", function(e) {
+			if ((e.key === "Enter" || e.key === " ") && e.target === this) {
+				e.preventDefault();
+				systemThreat.setCollapsed(!systemThreat.collapsed());
+				systemThreat.renderInfo();
+				systemThreat.$info().find(".threat-head").trigger("focus");
+			}
+		}).on("click", "#systemThreatInfo .threat-set-residents", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			systemThreat.openResidentsDialog();
+		}).on("click", "#systemThreatInfo .threat-show-activity", function(e) {
+			e.preventDefault();
+			systemThreat.showActivity = !systemThreat.showActivity;
+			systemThreat.renderInfo();
+		});
+	},
+
+	// ---- Set residents dialog ----
+
+	openResidentsDialog: function() {
+		const id = systemThreat.detailID;
+		if (!id) { return; }
+		let $dialog = $("#" + systemThreat.DIALOG_ID);
+		if (!$dialog.length) {
+			$dialog = $("<div id='" + systemThreat.DIALOG_ID + "' class='threat-dialog'></div>").appendTo("body");
+			$dialog.dialog({
+				autoOpen: false,
+				resizable: false,
+				modal: true,
+				width: 420,
+				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-systemResidents",
+				buttons: [
+					{ text: "Save", "class": "threat-save", click: function() { systemThreat.saveResidents("set"); } },
+					{ text: "Clear residents", "class": "threat-clear", click: function() { systemThreat.saveResidents("clear"); } },
+					{ text: "Cancel", click: function() { $(this).dialog("close"); } }
+				]
+			});
+			$dialog.on("keydown", "input[type=text]", function(e) {
+				if (e.key === "Enter") { e.preventDefault(); systemThreat.saveResidents("set"); }
+			});
+		}
+		const set = systemThreat.residentsSet;
+		systemThreat.dialogSystemID = id;
+		$dialog.html(systemThreat.dialogHtml(systemThreat.quickPicks(systemThreat.currentModel(Date.now()), set), set));
+		const name = typeof tripwire !== "undefined" && tripwire.systems && tripwire.systems[id] ? tripwire.systems[id].name : String(id);
+		$dialog.dialog("option", "title", "Residents: " + name);
+		$dialog.parent().find(".threat-clear").toggle(!!(set && set.entities && set.entities.length));
+		$dialog.parent().find(".threat-save, .threat-clear").prop("disabled", false).removeClass("ui-state-disabled");
+		$dialog.dialog("open");
+	},
+
+	saveResidents: function(mode) {
+		const $dialog = $("#" + systemThreat.DIALOG_ID);
+		const id = systemThreat.dialogSystemID;
+		if (!$dialog.length || !id) { return; }
+		const $error = $dialog.find(".threat-dialog-error").text("");
+		const data = { mode: mode, systemID: id };
+		if (mode === "set") {
+			const picks = $dialog.find(".threat-pick:checked").map(function() {
+				return { kind: $(this).attr("data-kind"), id: parseInt($(this).attr("data-id"), 10) };
+			}).get();
+			const names = systemThreat.parseNames($dialog.find(".threat-names").val());
+			if (!picks.length && !names.length) { $error.text("Tick or enter at least one corporation or alliance (or use Clear residents)."); return; }
+			data.entities = JSON.stringify(picks);
+			data.names = JSON.stringify(names);
+			data.note = String($dialog.find(".threat-note-input").val() || "").slice(0, 200);
+		}
+		const $buttons = $dialog.parent().find(".threat-save, .threat-clear").prop("disabled", true).addClass("ui-state-disabled");
+		$.ajax({ url: systemThreat.RESIDENTS_URL, type: "POST", data: data, dataType: "JSON", timeout: 30000,
+			headers: { "X-Requested-With": "XMLHttpRequest" } }).done(function(response) {
+			if (id === systemThreat.detailID) {
+				systemThreat.residentsSet = response && response.residents ? response.residents : null;
+				systemThreat.residentsAt = Date.now();
+				systemThreat.showActivity = false;
+				systemThreat.renderInfo();
+			}
+			$dialog.dialog("close");
+		}).fail(function(x) {
+			$error.text(x && x.responseJSON && x.responseJSON.error ? x.responseJSON.error
+				: "Could not save the residents" + (x && x.status ? " (HTTP " + x.status + ")" : ""));
+		}).always(function() {
+			$buttons.prop("disabled", false).removeClass("ui-state-disabled");
+		});
 	},
 
 	// ---- Settings ----
 
 	setupSettings: function() {
-		// Settings > Map Markers (badges) and Kills & Intel (info block); take effect on Save like their neighbours (Reset = on)
+		// Settings > Map Markers (badges) and Kills & Intel (the section); take effect on Save like their neighbours (Reset = on)
 		forkSettings.register({
 			section: "markers", order: 40, id: "systemThreat-enabled", type: "checkbox", key: "systemThreat",
 			label: "Threat badges:", text: "Show recent kill activity on nodes",
@@ -610,7 +899,7 @@ const systemThreat = {
 		});
 		forkSettings.register({
 			section: "intel", order: 30, id: "systemResidents-enabled", type: "checkbox", key: "systemResidents",
-			label: "System threat & residents:", text: "Show threat and active corporations in the system info panel",
+			label: "System threat & residents:", text: "Show threat and residents in the Intel panel (or the system info panel)",
 			get: function(o) { return systemThreat.residentsEnabled(o); },
 			set: function(o, on) { o.systemResidents = { enabled: on }; }
 		});
@@ -630,6 +919,7 @@ const systemThreat = {
 
 	init: function() {
 		systemThreat.setupSettings();
+		systemThreat.bindInfo();
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.systemThreatWrapped) {
 			const systemChange = tripwire.systemChange;
 			tripwire.systemChange = function(systemID) {
