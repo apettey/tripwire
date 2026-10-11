@@ -163,3 +163,50 @@
 #skyhooksWidget .sky-route:hover {
 	color: #FFF;
 }
+
+/* Planet: lava / ice badge (colour AND text, so it doesn't rely on colour alone) and the estimated value */
+#skyhooksWidget .sky-options .sky-planets {
+	color: #999;
+}
+
+#skyhooksWidget .sky-planetcell {
+	flex: 0 0 auto;
+	min-width: 118px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#skyhooksWidget .sky-planet {
+	display: inline-block;
+	min-width: 2.8em;
+	padding: 0 5px;
+	border-radius: 3px;
+	font-size: 0.85em;
+	font-weight: bold;
+	text-align: center;
+	color: #111;
+}
+
+#skyhooksWidget .sky-planet-lava {
+	background: #e8743d;
+}
+
+#skyhooksWidget .sky-planet-ice {
+	background: #7fd0ee;
+}
+
+#skyhooksWidget .sky-planet-other {
+	background: #666;
+	color: #DDD;
+}
+
+#skyhooksWidget .sky-planetname {
+	color: #AAA;
+}
+
+#skyhooksWidget .sky-value {
+	flex: 0 0 auto;
+	min-width: 72px;
+	text-align: right;
+	color: #8fd18f;
+}
