@@ -60,6 +60,7 @@ foreach ($chars as $i => $c) {
 }
 $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?, ?, 1373)')->execute([MASK_A, 'Test mask A', OWNER]);
 $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?, ?, 2)')->execute([MASK_B, 'Test mask B', CORP_B]);
+$db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, ?, 2)')->execute([MASK_B, 99000040]);   // a mask needs one access entry (masks.php create; the mask guard's join)
 $db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, ?, 2)')->execute([MASK_A, CORP_A]);
 $db->prepare('INSERT INTO `groups` (maskID, joined, eveID, eveType) VALUES (?, 1, ?, 1373)')->execute([MASK_A, DIRECT]);
 $actor = function ($id, $name) { return ['id' => $id, 'name' => $name]; };
@@ -377,12 +378,12 @@ foreach (['990001.0abc', '990001.00', '0990001.0', ' 990001.0', '990001.0%'] as 
     list($st, $out) = http('GET', 'mask_admins.php?mode=get', $sOutsider);
     check('http: outsider with mask "' . $spelling . '" gets no admin data', [$st, $out['canAdmin'] ?? null], [200, false]);
 }
-check('upstream verifyMask lets 990001.0abc through (documents why the hook canonicalises)', (function () {
+check('verifyMask (hotfix) no longer lets 990001.0abc through', (function () {
     $_SESSION = ['characterID' => OUTSIDER, 'corporationID' => CORP_X, 'allianceID' => null];
     $r = verifyMask('990001.0abc');
     $_SESSION = [];
     return $r;
-})(), '990001.0abc');
+})(), CORP_X . '.2');
 check('MySQL reads 990001.0abc as mask 990001.0', (string) $db->query("SELECT maskID FROM masks WHERE maskID = '990001.0abc'")->fetchColumn(), '990001.0');
 // a blocked member that edits the stored session mask by hand (spelled differently) is still dropped
 maskadmin_block($db, MASK_A, $O, MEMBER2, 'spelling');

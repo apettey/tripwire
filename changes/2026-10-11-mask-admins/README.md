@@ -37,9 +37,9 @@ badge only appears on settings an admin chose.
   `masks.inc.php` (blocked masks are left out of the mask list), `public/masks.php` (deleting a mask stays with the
   owner / corp admins, via `maskadmin_corp_admin()`).
 - **Security review fixes (same entry):**
-  - Mask ids are canonicalised on every request (`maskadmin_enforce_session`, from `docker/db.inc.php`, and again in
-    `login.php`): only `digits.0-3` is accepted (leading zeros dropped), anything else becomes the corp mask, then the
-    block check runs. This also closes an **upstream** hole that exists on `origin/main`: `verifyMask()` lets
+  - Mask ids are canonicalised and access-checked on every request by the hotfix guard (`mask-guard.inc.php`, from
+    `docker/db.inc.php` and `login.php`); `maskadmin_enforce_session` runs right after it and only does the block check
+    (`maskadmin_canonical_mask` reuses `tripwire_mask_canonical` for direct callers). That guard also closes an **upstream** hole that exists on `origin/main`: `verifyMask()` lets
     `"12.0abc"` through on PHP 8, so any logged-in user could put it in their session through `options.php` and read or
     write mask 12.0 (MySQL casts it to 12.0). Reproduced on the dev stack (a character without access wrote a note into
     another mask) and verified closed.

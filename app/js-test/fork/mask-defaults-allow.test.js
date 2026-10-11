@@ -19,7 +19,7 @@ describe('maskDefaults allow-list', () => {
 				if (m) { keys.add(m[1]); }
 			});
 		});
-		assert.deepStrictEqual(maskDefaults.ALLOWED.slice(0, 24).sort(), server);
+		assert.deepStrictEqual(maskDefaults.ALLOWED.slice(0, 27).sort(), server);
 		assert.deepStrictEqual([...keys].sort(), server);
 	});
 

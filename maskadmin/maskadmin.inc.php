@@ -19,6 +19,8 @@
 // can run it without a web server. The mask of every call to the endpoint (public/mask_admins.php) is the session's mask,
 // never a request value.
 
+require_once(__DIR__ . '/../mask-guard.inc.php');   // tripwire_mask_canonical
+
 const MASKADMIN_DDL = [
     "CREATE TABLE IF NOT EXISTS `fork_mask_admins` (
       `maskID` decimal(12,1) NOT NULL,
@@ -69,8 +71,8 @@ const MASKADMIN_DEFAULTS_MAX_BYTES = 16384;
 const MASKADMIN_DEFAULTS_MAX_KEYS = 40;
 // The only options a mask default may carry: the top-level options keys the fork's Settings rows store (forkSettings.register
 // with a `key`). The browser has the same list (maskDefaults.ALLOWED); a mocha test keeps both equal to the keys the rows use.
-const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'favoritesPanel', 'favouritesRouteStrip', 'highsecRegion', 'intelScans', 'jumpReturn',
-    'killReporting', 'preserveMass', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sizeTags', 'skyhooksPanel', 'smartNotes',
+const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'favoritesPanel', 'favouritesRouteStrip', 'highsecRegion', 'holeNaming', 'intelScans', 'jumpReturn',
+    'killReporting', 'lootBuyers', 'preserveMass', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sigAnomalies', 'sizeTags', 'skyhooksPanel', 'smartNotes',
     'soundMute', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
 
 function maskadmin_ensure_schema(PDO $db) {
@@ -228,11 +230,8 @@ function maskadmin_corp_admin($mask) {
  * (leading zeros dropped); anything else, or anything that is not a string/number, becomes the character's corp mask.
  */
 function maskadmin_canonical_mask($mask, $corporationID) {
-    $fallback = ((int) $corporationID) . '.2';
-    if (!is_string($mask) && !is_int($mask)) return $fallback;
-    if (!preg_match('/^([0-9]{1,10})\.([0-3])$/D', (string) $mask, $m)) return $fallback;
-    $id = ltrim($m[1], '0');
-    return ($id === '' ? '0' : $id) . '.' . $m[2];
+    $canonical = tripwire_mask_canonical($mask);   // mask-guard.inc.php (the hotfix that canonicalises the session mask)
+    return $canonical !== null ? $canonical : ((int) $corporationID) . '.2';
 }
 
 /**
