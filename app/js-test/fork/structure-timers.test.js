@@ -81,6 +81,42 @@ describe('Structure timers', () => {
 		});
 	});
 
+	describe('in-app alerts', () => {
+		const t = (o) => row(Object.assign({ id: 7, timerKind: 'hull', typeName: 'Fortizar', name: 'J163701 - Fort Knox' }, o));
+		const keys = (list) => list.map((a) => a.key);
+		it('is on by default; the setting is options.structures.alerts', () => {
+			assert.equal(structureTimers.alertsEnabled(undefined), true);
+			assert.equal(structureTimers.alertsEnabled({ structures: { mapMarker: false } }), true);
+			assert.equal(structureTimers.alertsEnabled({ structures: { alerts: false } }), false);
+		});
+		it('fires at 15 minutes and at the end, not before', () => {
+			const at = NOW_S + 3600;
+			assert.deepEqual(structureTimers.dueAlerts([t({ timerAt: at })], at - 901, {}), []);
+			assert.deepEqual(keys(structureTimers.dueAlerts([t({ timerAt: at })], at - 900, {})), ['7:' + at + ':900']);
+			assert.deepEqual(keys(structureTimers.dueAlerts([t({ timerAt: at })], at - 1, {})), ['7:' + at + ':900']);
+			assert.deepEqual(keys(structureTimers.dueAlerts([t({ timerAt: at })], at, {})), ['7:' + at + ':0']);
+			assert.deepEqual(structureTimers.dueAlerts([t({ timerAt: at })], at + 120, {}), []);
+		});
+		it('once per timer and lead; a changed end is a new timer', () => {
+			const at = NOW_S + 600;
+			const seen = { ['7:' + at + ':900']: true };
+			assert.deepEqual(structureTimers.dueAlerts([t({ timerAt: at })], NOW_S, seen), []);
+			assert.equal(structureTimers.dueAlerts([t({ timerAt: at + 3600 })], at + 3600 - 60, seen).length, 1);
+		});
+		it('soonest first; timers without a kind or time are ignored', () => {
+			const list = [t({ id: 1, timerAt: NOW_S + 800 }), t({ id: 2, timerAt: NOW_S + 100 }), t({ id: 3, timerKind: null }), t({ id: 4, timerAt: null })];
+			assert.deepEqual(structureTimers.dueAlerts(list, NOW_S, {}).map((a) => a.row.id), [2, 1]);
+		});
+		it('text and toast: kind, lead, structure name without the system prefix, escaped', () => {
+			const a = { key: 'k<', lead: 900, row: t({ typeName: '<Fort>' }) };
+			assert.equal(structureTimers.alertText(a, 'J163701'), 'Hull timer in 15 m: <Fort> "Fort Knox" in J163701');
+			assert.equal(structureTimers.alertText({ lead: 0, row: t({ name: '' }) }, 'J1'), 'Hull timer ended: Fortizar in J1');
+			const html = structureTimers.alertHtml(a, 'J163701');
+			assert.ok(html.includes('&lt;Fort&gt;') && html.includes("data-key='k&lt;'") && !html.includes('<Fort>'));
+			assert.ok(structureTimers.alertHtml({ key: 'k', lead: 0, row: t() }, 'J').includes('kill-toast-timer-end'));
+		});
+	});
+
 	describe('board', () => {
 		const rows = [
 			row({ id: 1, timerAt: NOW_S + 7200, side: 'hostile', ownerID: 2, ownerTicker: 'BAD', ownerType: 'corporation' }),

@@ -100,6 +100,8 @@ function dn_run() {
                 else $highWater = discord_kspace_start($db);   // take over from about now (the poll re-reads an overlap)
                 // Watchlist matches: same leader, same cadence (dedupe rows make a second poller harmless anyway)
                 if ($leader) $totals['watchlist'] += discord_watchlist_poll($db, dn_type_masks($db, 'watchlist'));
+                // Structure timer reminders (24 h / 1 h / 15 m / at the end): same leader, same cadence; the dedupe rows make a second poller harmless
+                if ($leader) $totals['stimer'] = ($totals['stimer'] ?? 0) + discord_structure_timer_poll($db, dn_type_masks($db, 'structureTimer'));
                 // Chain kills on without a home system: one notice to their channel (same leader, same cadence)
                 if ($leader) discord_chain_notice_poll($db, dn_type_masks($db, 'chainKill'));
             }
@@ -130,7 +132,7 @@ function dn_run() {
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();
                 $queued = (int) $db->query("SELECT COUNT(*) FROM discord_outbox WHERE status = 'queued'")->fetchColumn();
-                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']}, watchlist queued {$totals['watchlist']} since start; $queued queued now");
+                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']}, watchlist queued {$totals['watchlist']}, structure timers queued ".($totals['stimer'] ?? 0)." since start; $queued queued now");
             }
             $backoff = 0;
             usleep(250000);

@@ -47,3 +47,9 @@
 .str-chip-set { background: rgba(79, 179, 217, 0.18); border-color: rgba(79, 179, 217, 0.6); color: #8fd0ea; cursor: default; }
 .str-chip-set::before, .str-chip-isset::before { content: "\25C6"; font-size: 7px; margin-right: 2px; vertical-align: 1px; color: #8fd0ea; }
 .str-chip-isset { box-shadow: 0 0 0 1px rgba(79, 179, 217, 0.7); }
+
+/* In-app timer alerts reuse the kill pop-ups (#kill-reporting-toasts, app/css/fork/kill-reporting.css) */
+.kill-toast-timer { border-left-color: #e8c060; background: rgba(54, 42, 8, 0.94); cursor: pointer; }
+.kill-toast-timer-end { border-left-color: #ff5a4a; background: rgba(60, 14, 14, 0.94); }
+.kill-toast-timer .str-alert-ico { color: #e8c060; }
+.kill-toast-timer-end .str-alert-ico { color: #ff5a4a; }
