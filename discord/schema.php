@@ -63,13 +63,15 @@ const DISCORD_DDL = [
     // Rally point messages (discord/rally.php): the live one per mask, with its text as last posted, so changes within
     // DISCORD_RALLY_WINDOW edit it and a clear or later move can strike it through. Written only by the sender
     // (discord_dispatch); deleted when the message is ended. Replaces `discord_rally` (1.15-1.17, no text; its rows
-    // may be "cleared" notices, so they are not read: drop it when convenient).
+    // may be "cleared" notices, so they are not read: drop it when convenient). systemID: the system the message shows
+    // ("Changed to" instead of "Moved to" when only the fleet comp changed); added to older tables on their first write.
     "CREATE TABLE IF NOT EXISTS `discord_rally_message` (
       `maskID` decimal(12,1) NOT NULL,
       `webhookID` int unsigned NOT NULL,
       `messageID` varchar(32) NOT NULL,
       `content` text NOT NULL,
       `postedAt` datetime NOT NULL,
+      `systemID` int NOT NULL DEFAULT 0,
       PRIMARY KEY (`maskID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];

@@ -1,6 +1,30 @@
 {
   "features": [
     {
+      "pr": 51,
+      "date": "2026-10-11",
+      "title": "Fight here: pick the fleet comp",
+      "description": "The rally point is now Fight here. Right-click a system and pick one of your corporation's fleet comps from the Fight here menu: the banner, the system's colour on the chain map and the Discord message show the comp, and its Discord role gets pinged. Corporation admins set up the comps (name, colour, role, note) in Mask Admin > Fight here.\n\nYou can hide the fight banner in Settings > Chain Map Settings > Fight here.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-51-fight-here.png",
+          "caption": "Fight here with a fleet comp: menu, banner and coloured route"
+        }
+      ]
+    },
+    {
+      "pr": 50,
+      "date": "2026-10-11",
+      "title": "Jump planner",
+      "description": "Low-sec and null-sec exits on the chain map now have a small blue range ring. Click it (or the exit's name) to open the Jump planner: pick your jump ship and Jump Drive Calibration and see every system you can reach in one jump, coloured by distance on a top-down map, with gate jumps and a Dest button to set your destination in game. It also shows whether you can jump to the exit from Jita or Amarr within two jumps, and lets anyone on the mask mark a system as cyno-jammed.\n\nTurn it off or change the ship, targets and map in Settings > Jump Planner.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-50-jump-planner.png",
+          "caption": "The ring on an exit opens the Jump planner"
+        }
+      ]
+    },
+    {
       "pr": 48,
       "date": "2026-10-11",
       "title": "Paste a d-scan anywhere",

@@ -407,7 +407,7 @@ check('rally: enabling needs a webhook', discord_settings_normalise(['types' => 
 check('rally: long clear text cut', mb_strlen(discord_settings_normalise(['types' => ['rally' => ['templateClear' => str_repeat('x', 2000)]]], discord_settings_defaults())[0]['types']['rally']['templateClear']), DISCORD_TEMPLATE_MAX);
 check('rally: type only when on with a webhook', [discord_rally_type($rs) !== null, discord_rally_type(discord_settings_defaults())], [true, null]);
 check('rally: stamped like the other types', discord_settings_stamp($rs, discord_settings_defaults(), 4000)['types']['rally']['enabledAt'], 4000);
-check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'label', 'labelSystem', 'who', 'time', 'rally', 'was']);
+check('rally: placeholders', array_keys(discord_placeholders()['rally']), ['pings', 'mask', 'system', 'security', 'class', 'region', 'map', 'dotlan', 'label', 'labelSystem', 'who', 'comp', 'compNote', 'withComp', 'time', 'rally', 'was']);
 check('k-space: label placeholders', [isset(discord_placeholders()['kspace']['label']), isset(discord_placeholders()['kspace']['labelSystem']), isset(discord_placeholders()['chainKill']['label'])], [true, true, true]);   // kills too since the kill chain label
 
 // Data queued by public/rally.php: the type's texts, who, and nothing from before the type was turned on
@@ -422,10 +422,10 @@ check('rally data: unknown action is a set', discord_rally_data($rtype, 'Corp', 
 $tpl = discord_default_templates();
 $rbase = ['template' => $tpl['rally'], 'templateClear' => $tpl['rallyClear'], 'ping' => '', 'mask' => 'Corp', 'time' => 2000];
 $wh = discord_payload(discord_rally_context(['action' => 'set', 'who' => 'Late'] + $rbase, ['systemID' => 31001880, 'setBy' => 'Chribba']));
-check('rally message: wormhole', $wh['content'], "Tripwire rally point from *Chribba*: **J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+check('rally message: wormhole', $wh['content'], "Fight here: **J152820** (C5) — set by *Chribba*\n<" . discord_app_url() . "?system=J152820>");
 check('rally message: no embed, nobody pinged', [isset($wh['embeds']), $wh['allowed_mentions'], $wh['username']], [false, ['parse' => []], 'Tripwire']);
 check('rally message: k-space', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 30000142, 'setBy' => 'A']))['content'],
-    "Tripwire rally point from *A*: **Jita** (HS, The Forge)\n<" . discord_app_url() . "?system=Jita>");
+    "Fight here: **Jita** (HS) — set by *A*\n<" . discord_app_url() . "?system=Jita>");
 check('rally message: {time} is a Discord timestamp, not escaped', discord_payload(discord_rally_context(['action' => 'set', 'template' => '{who} at {time}'] + $rbase, ['systemID' => 30000142, 'setBy' => 'A']))['content'],
     'A at <t:2000:t>');
 check('rally message: moved again before it was sent shows the stored rally', discord_rally_context(['action' => 'clear', 'who' => 'Clearer'] + $rbase, ['systemID' => 30000142, 'setBy' => 'Mover'])['who'], 'Mover');
@@ -436,26 +436,26 @@ check('rally message: names cannot ping or format', [strpos($hostile['content'],
     [false, false, false, ['parse' => []]]);
 $pingedCtx = discord_rally_context(['action' => 'set', 'ping' => '<@&111111111111111111> @here'] + $rbase, ['systemID' => 31001880, 'setBy' => 'Kytus Bos'], function () { return 'AABCA'; });
 $pinged = discord_payload($pingedCtx);
-check('rally message: pings from the ping field only', [$pinged['allowed_mentions'], strpos($pinged['content'], '<@&111111111111111111> @here Tripwire') === 0],
+check('rally message: pings from the ping field only', [$pinged['allowed_mentions'], strpos($pinged['content'], '<@&111111111111111111> @here Fight here') === 0],
     [['parse' => ['everyone'], 'roles' => ['111111111111111111']], true]);
 
 // The edit that ends a rally message: struck through, no pings left, nobody pinged
 check('strike: pings and the link line go, each line struck', discord_rally_strike($pinged['content']),
-    '~~Tripwire rally point from *Kytus Bos*: **AABCA · J152820** (C5, E\\-R00024)~~');
+    '~~Fight here: **AABCA · J152820** (C5) — set by *Kytus Bos*~~');
 check('strike: several lines, mentions anywhere', discord_rally_strike("a <@333333333333333333> b\n\n@everyone c\n<https://x.example/?s=1>\nd"), "~~a b~~\n~~c~~\n~~d~~");
 check('strike: escaped game data is kept as it is', discord_rally_strike("x @\u{200B}here \\<@&1\\>"), "~~x @\u{200B}here \\<@&1\\>~~");
 check('strip mentions: only what an admin can write', discord_strip_mentions('<@&111111111111111111> hi <@!222222222222222222> ops@here.com @here'), 'hi ops@here.com');
 check('timestamp', [discord_timestamp(1760123280), discord_timestamp('5', 'R'), discord_timestamp(5, 'x')], ['<t:1760123280:t>', '<t:5:R>', '<t:5:t>']);
 $cleared = discord_payload(['previous' => $pinged['content']] + discord_rally_context(['action' => 'clear', 'who' => 'Aashai Modor', 'time' => 1760123280, 'ping' => '<@&111111111111111111> @here'] + $rbase, null));
 check('rally cleared: the message struck through, who and when', $cleared,
-    ['content' => "~~Tripwire rally point from *Kytus Bos*: **AABCA · J152820** (C5, E\\-R00024)~~\nCleared by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
+    ['content' => "~~Fight here: **AABCA · J152820** (C5) — set by *Kytus Bos*~~\nCleared by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
 $moved = discord_payload(['moved' => true, 'previous' => $pinged['content']]
     + discord_rally_context(['action' => 'set', 'time' => 1760123280] + $pingedCtx, ['systemID' => 31000003, 'setBy' => 'Aashai Modor'], function () { return 'AB'; }));
 check('rally moved: the old message struck through, where to, who and when', $moved,
-    ['content' => "~~Tripwire rally point from *Kytus Bos*: **AABCA · J152820** (C5, E\\-R00024)~~\nMoved to **AB · " . discord_system(31000003)[0] . "** by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
+    ['content' => "~~Fight here: **AABCA · J152820** (C5) — set by *Kytus Bos*~~\nMoved to **AB · " . discord_system(31000003)[0] . "** by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
 $custom = discord_payload(['previous' => $pinged['content']] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'templateClear' => '{pings} @here Gone <@333333333333333333>, said {who}'] + $rbase, null));
 check('rally cleared: a text without {rally} still strikes the message; its own pings are dropped', $custom,
-    ['content' => "~~Tripwire rally point from *Kytus Bos*: **AABCA · J152820** (C5, E\\-R00024)~~\nGone , said C", 'allowed_mentions' => ['parse' => []]]);
+    ['content' => "~~Fight here: **AABCA · J152820** (C5) — set by *Kytus Bos*~~\nGone , said C", 'allowed_mentions' => ['parse' => []]]);
 check('rally cleared: {rally} where the admin puts it', discord_payload(['previous' => "@here Rally *A*\n<https://x.example/>"]
     + discord_rally_context(['action' => 'clear', 'who' => 'C', 'templateClear' => 'Over. {rally} ({who})'] + $rbase, null))['content'], 'Over. ~~Rally *A*~~ (C)');
 check('rally cleared: empty text falls back to the default', discord_payload(['previous' => 'Rally'] + discord_rally_context(['action' => 'clear', 'who' => 'C', 'templateClear' => '{pings}'] + $rbase, null))['content'],
@@ -511,7 +511,7 @@ $req = discord_rally_request($rx, $rrow, $url, $setCtx, 1000);
 check('rally send: first change posts', [$req['method'], $req['url'], $req['payload']['username']], ['POST', $sendUrl, 'Tripwire']);
 $ok = ['result' => 'sent', 'delay' => 0, 'error' => ''];
 check('rally send: posted message remembered with its text', [discord_rally_after_send($rx, $rrow, $req, 200, '{"id":"1111111111"}', $ok, 1000), discord_rally_last($rx, '98000001.2')],
-    [$ok, ['webhookID' => 5, 'messageID' => '1111111111', 'content' => $setText, 'postedAt' => 1000]]);
+    [$ok, ['webhookID' => 5, 'messageID' => '1111111111', 'content' => $setText, 'postedAt' => 1000, 'systemID' => 31001880]]);   // the system it shows (column added on this first write)
 $moveCtx = discord_rally_context(['action' => 'set', 'ping' => '@here', 'time' => 1020] + $rbase, ['systemID' => 30000142, 'setBy' => 'B']);
 $req = discord_rally_request($rx, $rrow, $url, $moveCtx, 1020);
 check('rally send: a change in the window edits it', [$req['method'], $req['url'], isset($req['payload']['username']), $req['payload']['allowed_mentions']],
@@ -560,7 +560,8 @@ check('rally current: no table', discord_rally_current($rx, '98000001.2'), false
 $rx->exec('CREATE TABLE fork_rally (maskID TEXT PRIMARY KEY, systemID INTEGER, setBy TEXT)');
 check('rally current: none', discord_rally_current($rx, '98000001.2'), null);
 $rx->exec("INSERT INTO fork_rally VALUES ('98000001.2', 30000142, 'Chribba')");
-check('rally current: stored', discord_rally_current($rx, '98000001.2'), ['systemID' => 30000142, 'setBy' => 'Chribba']);
+check('rally current: stored (a table from before Fight here: no comp)', discord_rally_current($rx, '98000001.2'),
+    ['systemID' => 30000142, 'setBy' => 'Chribba', 'setAt' => null, 'age' => null, 'comp' => null]);
 
 // Which masks have the type (the same corporation rule as every other type)
 $rx->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
@@ -629,9 +630,9 @@ $rbase = ['template' => $tpl['rally'], 'templateClear' => $tpl['rallyClear'], 'p
 $labelled = function ($id) { return 'AABCA'; };
 $none = function ($id) { return ''; };
 check('rally label: default text with a label', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31001880, 'setBy' => 'Chribba'], $labelled))['content'],
-    "Tripwire rally point from *Chribba*: **AABCA · J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+    "Fight here: **AABCA · J152820** (C5) — set by *Chribba*\n<" . discord_app_url() . "?system=J152820>");
 check('rally label: without a label no separator or empty bold', discord_payload(discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $none))['content'],
-    "Tripwire rally point from *C*: **J152820** (C5, E\\-R00024)\n<" . discord_app_url() . "?system=J152820>");
+    "Fight here: **J152820** (C5) — set by *C*\n<" . discord_app_url() . "?system=J152820>");
 check('rally label: looked up for the rally system', discord_rally_context(['action' => 'set'] + $rbase, ['systemID' => 31000003, 'setBy' => 'C'], $label)['label'], 'AB');
 check('rally label: {label} on its own', discord_payload(discord_rally_context(['action' => 'set', 'template' => '{label}|{labelSystem}|{system}'] + $rbase, ['systemID' => 31001880, 'setBy' => 'C'], $labelled))['content'],
     'AABCA|AABCA · J152820|J152820');
@@ -757,9 +758,9 @@ $seqReset = function () use ($sq, &$channel, &$requests, &$seqClock) {
     $sq->exec('DELETE FROM discord_rally_message'); $sq->exec('DELETE FROM discord_outbox'); $sq->exec('DELETE FROM fork_rally');
     $channel = []; $requests = []; $seqClock = 100000;
 };
-$A = "Tripwire rally point from *Kytus Bos*: **J163701** (C5, E\\-R00025)";
+$A = "Fight here: **J163701** (C5) — set by *Kytus Bos*";
 $liveA = "@here $A\n<" . discord_app_url() . '?system=J163701>';
-$B = "Tripwire rally point from *Aashai Modor*: **J152820** (C5, E\\-R00024)";
+$B = "Fight here: **J152820** (C5) — set by *Aashai Modor*";
 $liveB = "@here $B\n<" . discord_app_url() . '?system=J152820>';
 $jA = 31002012; $jB = 31001880;
 check('sequence: the systems', [discord_system($jA)[0], discord_system($jB)[0]], ['J163701', 'J152820']);

@@ -63,5 +63,6 @@ CREATE TABLE IF NOT EXISTS `discord_rally_message` (
   `messageID` varchar(32) NOT NULL,
   `content` text NOT NULL,
   `postedAt` datetime NOT NULL,
+  `systemID` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`maskID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

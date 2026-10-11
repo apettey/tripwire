@@ -1,0 +1,182 @@
+/* Jump planner (fork-owned, see app/js/fork/jump-planner.js) */
+
+/* Range-ring icon on low-sec / null-sec exits: the node's top-right corner, outside it (top-left: threat badge,
+   bottom-right: intel dot; the pilots marker and the watchlist eye sit in the centred 50px icon row inside the node) */
+#chainMap .jp-ring {
+	position: absolute;
+	z-index: 2;
+	top: -9px;
+	right: -11px;
+	width: 14px;
+	height: 14px;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: #0c2a3a;
+	border: 1px solid #5cc8f5;
+	color: #5cc8f5;
+	cursor: pointer;
+	line-height: 0;
+}
+/* Pilots in the system: upstream's count badge sticks out of a narrow node's top-right corner, so move up clear of it */
+#chainMap .node:has(> .nodeIcons > div > i[data-icon='user']:not(.invisible)) > .jp-ring { top: -19px; }
+#chainMap .jp-ring:hover { background: #164a66; color: #fff; border-color: #fff; }
+#chainMap .jp-ring svg { display: block; }
+/* Root nodes of the radial renderer are rounded: keep the icon on the ring */
+#chainMap .radial-map .top-level > .jp-ring { top: -6px; right: -2px; }
+
+/* Panel */
+#jumpPlannerWidget .controls { white-space: nowrap; }
+#jumpPlannerWidget .jp-title { color: #e0b080; font-weight: bold; cursor: default; }
+#jumpPlannerWidget .jp-close { float: right; color: #aaa; }
+#jumpPlannerWidget .jp-close:hover { color: #fff; }
+#jumpPlannerWidget .content {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	text-align: left;
+	font-size: 11px;
+}
+.jp-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 8px;
+	padding: 4px 4px 6px;
+}
+.jp-head .jp-ship { max-width: 180px; background: #23262b; color: #eee; border: 1px solid #444; border-radius: 3px; padding: 2px 4px; font-size: 11px; }
+.jp-jdc { display: inline-flex; border: 1px solid #444; border-radius: 3px; overflow: hidden; }
+.jp-jdc button {
+	background: transparent;
+	color: #888;
+	border: 0;
+	padding: 2px 6px;
+	font: inherit;
+	cursor: pointer;
+}
+.jp-jdc button:hover { color: #fff; }
+.jp-jdc button.active { background: #f0a030; color: #111; font-weight: bold; }
+.jp-jdc-label { color: #8a939e; }
+.jp-range { margin-left: auto; color: #5cc8f5; font-weight: bold; font-size: 13px; }
+
+.jp-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 0 4px;
+	border-bottom: 1px solid #262b31;
+}
+.jp-tab {
+	background: transparent;
+	color: #8a939e;
+	border: 1px solid transparent;
+	border-bottom: 0;
+	border-radius: 4px 4px 0 0;
+	padding: 4px 8px;
+	font: inherit;
+	cursor: pointer;
+}
+.jp-tab:hover { color: #ddd; }
+.jp-tab.active { background: #1b2026; border-color: #3b4652; color: #fff; }
+.jp-tab-count { color: #5cc8f5; }
+
+.jp-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.jp-state { padding: 10px 6px; color: #8a939e; }
+.jp-map {
+	position: relative;
+	flex: 0 0 auto;
+	margin: 6px 4px 0;
+	background: #080a0d;
+	border: 1px solid #22272d;
+	border-radius: 4px;
+	line-height: 0;
+}
+.jp-svg { width: 100%; height: auto; max-height: 330px; display: block; font-family: Verdana, Tahoma, sans-serif; }
+.jp-svg .jp-ring-label { font-size: 10px; font-weight: bold; paint-order: stroke; stroke: #080a0d; stroke-width: 3px; }
+.jp-svg .jp-gates line { stroke: #2c3138; stroke-width: 1; }
+.jp-svg .jp-pt { cursor: pointer; }
+.jp-svg .jp-pt-exit { fill: #f0a030; stroke: #fff; stroke-width: 1.5; }
+.jp-svg .jp-pt-out { fill: #3a3f46; }
+.jp-svg .jp-pt-hs { opacity: 0.5; }
+.jp-svg .jp-pt-hs { fill: none; stroke: #44cc44; stroke-width: 1.2; }
+.jp-svg .jp-pt-jammed circle, .jp-svg .jp-pt-jammed line { fill: none; stroke: #ff5a5a; stroke-width: 1.5; }
+.jp-svg .jp-pt-jamring { fill: none; stroke: #ff5a5a; stroke-width: 1; pointer-events: none; }
+.jp-svg .jp-pt.jp-focus { stroke: #fff; stroke-width: 2; }
+.jp-svg .jp-labels text { font-size: 10px; pointer-events: none; paint-order: stroke; stroke: #080a0d; stroke-width: 3px; stroke-linejoin: round; }
+.jp-svg .jp-l-exit { fill: #fff; font-weight: bold; }
+.jp-svg .jp-l-focus { fill: #fff; }
+.jp-svg .jp-l-in { fill: #ddd; }
+.jp-svg .jp-l-jammed { fill: #ff7b7b; }
+.jp-map-note { position: absolute; right: 6px; bottom: 8px; color: #555; font-size: 9px; line-height: 1; pointer-events: none; }
+.jp-tip {
+	position: absolute;
+	z-index: 3;
+	min-width: 150px;
+	max-width: 230px;
+	box-sizing: border-box;
+	background: #1a1f25;
+	border: 1px solid #4a5662;
+	border-radius: 4px;
+	padding: 6px 8px;
+	font-size: 11px;
+	line-height: 1.45;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.jp-tip.jp-tip-pinned { border-color: #f0a030; }
+.jp-tip-title { color: #fff; font-weight: bold; }
+.jp-tip-title span { font-weight: normal; }
+.jp-tip-sub, .jp-tip-note { color: #8a939e; }
+.jp-tip-jam { color: #ff7b7b; }
+.jp-tip-links { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+
+.jp-hubs { flex: 0 0 auto; margin: 6px 4px 0; padding: 4px 6px; background: #121417; border: 1px solid #262b31; border-radius: 4px; line-height: 1.5; }
+.jp-hub { display: flex; flex-wrap: wrap; gap: 0 8px; }
+.jp-hub-name { color: #ddd; font-weight: bold; min-width: 38px; }
+.jp-hub-line { color: #c8ccd0; }
+.jp-hub-ok { color: #7ddc7d; }
+.jp-hub-ok2 { color: #d8e070; }
+.jp-hub-no { color: #8a939e; }
+.jp-dim { color: #8a939e; }
+
+.jp-list-wrap { flex: 1 1 auto; min-height: 40px; overflow-y: auto; margin: 6px 4px 0; }
+.jp-list { width: 100%; border-collapse: collapse; }
+.jp-list th { color: #8a939e; font-weight: normal; text-align: left; padding: 2px 4px; cursor: pointer; white-space: nowrap; position: sticky; top: 0; background: #0b0d10; }
+.jp-list th.active { color: #ddd; }
+.jp-list td { padding: 2px 4px; white-space: nowrap; }
+.jp-list tr[data-jp-id] { cursor: pointer; }
+.jp-list tr[data-jp-id]:hover td, .jp-list tr.jp-row-focus td { background: #1b2026; color: #fff; }
+.jp-list .jp-col-ly, .jp-list .jp-col-gates, .jp-list .jp-col-act { text-align: right; }
+.jp-list .jp-col-region { color: #aaa; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+.jp-list .jp-row-blocked .jp-col-name { color: #ff7b7b; }
+.jp-jammed-text, .jp-jammed-tag { color: #ff7b7b; }
+.jp-jammed-tag { font-size: 9px; }
+.jp-empty { color: #8a939e; }
+.jp-band-0 { color: #5cc8f5; }
+.jp-band-1 { color: #3d9cc8; }
+.jp-band-2 { color: #4f7f99; }
+.jp-band-out { color: #888; }
+.jp-hs { color: #44cc44; }
+.jp-ls { color: #ff9900; }
+.jp-ns { color: #ff4d4d; }
+
+.jp-foot {
+	flex: 0 0 auto;
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 4px;
+	padding: 5px 4px 2px;
+	border-top: 1px solid #262b31;
+	color: #8a939e;
+}
+.jp-clip { position: fixed; left: -1000px; top: 0; }
+
+/* Settings > Jump Planner */
+.jp-options .jp-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin: 0 4px 0 8px; vertical-align: middle; }
+.jp-options .jp-swatch:first-child { margin-left: 0; }
+.jp-options .jp-sep td { border-top: 1px solid #2c2c2c; padding: 0; height: 4px; }
+.jp-options .jp-cap-label { color: #5cc8f5; font-weight: bold; }
+.jp-options input[type='range'] { vertical-align: middle; width: 140px; }
+.jp-state.jp-error, .jp-settings-error { color: #ff7b7b; }

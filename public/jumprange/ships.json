@@ -1,0 +1,461 @@
+{
+	"meta": {
+		"version": 3586130,
+		"source": "EVE Online Static Data Export (developers.eveonline.com), types + groups + typeDogma attribute 867 (jumpDriveRange)",
+		"sdeBuild": 3586130,
+		"sdeReleaseDate": "2026-10-07T11:10:05Z",
+		"sdeZip": "eve-online-static-data-3586130-jsonl.zip",
+		"sdeZipSha256": "b6efc200ec30911e5d22decc8ee3c34cafeac1ecc49faa76491fd75fa6c36045",
+		"covert": "true for the Black Ops group (898): the only hulls that can jump to a covert cynosural field"
+	},
+	"ships": [
+		{
+			"typeID": 44996,
+			"name": "Marshal",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 22440,
+			"name": "Panther",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 85236,
+			"name": "Python",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 22428,
+			"name": "Redeemer",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 22430,
+			"name": "Sin",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 22436,
+			"name": "Widow",
+			"groupID": 898,
+			"group": "Black Ops",
+			"baseLy": 4,
+			"covert": true
+		},
+		{
+			"typeID": 28352,
+			"name": "Rorqual",
+			"groupID": 883,
+			"group": "Capital Industrial Ship",
+			"baseLy": 5,
+			"covert": false
+		},
+		{
+			"typeID": 23757,
+			"name": "Archon",
+			"groupID": 547,
+			"group": "Carrier",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 23915,
+			"name": "Chimera",
+			"groupID": 547,
+			"group": "Carrier",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 24483,
+			"name": "Nidhoggur",
+			"groupID": 547,
+			"group": "Carrier",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 23911,
+			"name": "Thanatos",
+			"groupID": 547,
+			"group": "Carrier",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 92824,
+			"name": "Gaia",
+			"groupID": 5120,
+			"group": "Command Carrier",
+			"baseLy": 3.75,
+			"covert": false
+		},
+		{
+			"typeID": 92822,
+			"name": "Salvation",
+			"groupID": 5120,
+			"group": "Command Carrier",
+			"baseLy": 3.75,
+			"covert": false
+		},
+		{
+			"typeID": 92823,
+			"name": "Simurgh",
+			"groupID": 5120,
+			"group": "Command Carrier",
+			"baseLy": 3.75,
+			"covert": false
+		},
+		{
+			"typeID": 92825,
+			"name": "Ymir",
+			"groupID": 5120,
+			"group": "Command Carrier",
+			"baseLy": 3.75,
+			"covert": false
+		},
+		{
+			"typeID": 45647,
+			"name": "Caiman",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 42243,
+			"name": "Chemosh",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 19724,
+			"name": "Moros",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 73792,
+			"name": "Moros Navy Issue",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 19722,
+			"name": "Naglfar",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 73787,
+			"name": "Naglfar Fleet Issue",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 19726,
+			"name": "Phoenix",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 73793,
+			"name": "Phoenix Navy Issue",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 19720,
+			"name": "Revelation",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 73790,
+			"name": "Revelation Navy Issue",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 87381,
+			"name": "Sarathiel",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 42124,
+			"name": "Vehement",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 52907,
+			"name": "Zirnitra",
+			"groupID": 485,
+			"group": "Dreadnought",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 37604,
+			"name": "Apostle",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 42242,
+			"name": "Dagon",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 37606,
+			"name": "Lif",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 45645,
+			"name": "Loggerhead",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 37605,
+			"name": "Minokawa",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 37607,
+			"name": "Ninazu",
+			"groupID": 1538,
+			"group": "Force Auxiliary",
+			"baseLy": 3.5,
+			"covert": false
+		},
+		{
+			"typeID": 28848,
+			"name": "Anshar",
+			"groupID": 902,
+			"group": "Jump Freighter",
+			"baseLy": 5,
+			"covert": false
+		},
+		{
+			"typeID": 28850,
+			"name": "Ark",
+			"groupID": 902,
+			"group": "Jump Freighter",
+			"baseLy": 5,
+			"covert": false
+		},
+		{
+			"typeID": 28846,
+			"name": "Nomad",
+			"groupID": 902,
+			"group": "Jump Freighter",
+			"baseLy": 5,
+			"covert": false
+		},
+		{
+			"typeID": 28844,
+			"name": "Rhea",
+			"groupID": 902,
+			"group": "Jump Freighter",
+			"baseLy": 5,
+			"covert": false
+		},
+		{
+			"typeID": 77283,
+			"name": "Bane",
+			"groupID": 4594,
+			"group": "Lancer Dreadnought",
+			"baseLy": 4,
+			"covert": false
+		},
+		{
+			"typeID": 77281,
+			"name": "Hubris",
+			"groupID": 4594,
+			"group": "Lancer Dreadnought",
+			"baseLy": 4,
+			"covert": false
+		},
+		{
+			"typeID": 77284,
+			"name": "Karura",
+			"groupID": 4594,
+			"group": "Lancer Dreadnought",
+			"baseLy": 4,
+			"covert": false
+		},
+		{
+			"typeID": 77288,
+			"name": "Valravn",
+			"groupID": 4594,
+			"group": "Lancer Dreadnought",
+			"baseLy": 4,
+			"covert": false
+		},
+		{
+			"typeID": 23919,
+			"name": "Aeon",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 22852,
+			"name": "Hel",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 23913,
+			"name": "Nyx",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 3514,
+			"name": "Revenant",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 42125,
+			"name": "Vendetta",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 23917,
+			"name": "Wyvern",
+			"groupID": 659,
+			"group": "Supercarrier",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 11567,
+			"name": "Avatar",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 78576,
+			"name": "Azariel",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 671,
+			"name": "Erebus",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 45649,
+			"name": "Komodo",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 3764,
+			"name": "Leviathan",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 42241,
+			"name": "Molok",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 23773,
+			"name": "Ragnarok",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		},
+		{
+			"typeID": 42126,
+			"name": "Vanquisher",
+			"groupID": 30,
+			"group": "Titan",
+			"baseLy": 3,
+			"covert": false
+		}
+	]
+}
