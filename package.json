@@ -19,5 +19,8 @@
     "gulp-util": "^3.0.8",
     "gulp-watch": "^4.3.11",
     "pump": "^1.0.3"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
   }
 }

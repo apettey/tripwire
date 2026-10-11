@@ -21,19 +21,33 @@ if(!isset($_SESSION['userID'])) {
 
 require_once('../config.php');
 require_once('../db.inc.php');
+require_once('../note-html.inc.php');
 
 header('Content-Type: application/json');
 
 $maskID = 		$_SESSION['mask'];
 $characterID = 	$_SESSION['characterID'];
 $characterName = $_SESSION['characterName'];
-$systemID = 	isset($_REQUEST['systemID']) ? $_REQUEST['systemID'] : null;
-$commentID = 	isset($_REQUEST['commentID']) ? $_REQUEST['commentID'] : null;
-$comment = 		isset($_REQUEST['comment']) ? $_REQUEST['comment'] : null;
-$mode = 		isset($_REQUEST['mode']) ? $_REQUEST['mode'] : null;
+// fork: state-changing, so POST only (a note's <img src> must not be able to fire it with a GET); the app already POSTs
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+	http_response_code(405);
+	header('Allow: POST');
+	exit();
+}
+$systemID = 	isset($_POST['systemID']) ? $_POST['systemID'] : null;
+$commentID = 	isset($_POST['commentID']) ? $_POST['commentID'] : null;
+$comment = 		isset($_POST['comment']) ? $_POST['comment'] : null;
+$mode = 		isset($_POST['mode']) ? $_POST['mode'] : null;
 $output = 		null;
 
 if ($mode == 'save') {
+	// Notes are shared stored content: clean them on the way in as well as on the way out (refresh.php).
+	if (!noteHtmlSanitizerAvailable()) {
+		http_response_code(503);
+		echo json_encode(array('result' => false, 'error' => 'PHP DOM extension is required to save notes.'));
+		exit();
+	}
+	$comment = sanitizeNoteHtml($comment);
 	$query = 'INSERT INTO comments (id, systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
 				VALUES (:commentID, :systemID, :comment, NOW(), :createdByID, :createdByName, :modifiedByID, :modifiedByName, :maskID)
 				ON DUPLICATE KEY UPDATE

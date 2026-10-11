@@ -3,9 +3,7 @@ tripwire.comments = function() {
 
     this.comments.parse = function(data) {
 		function sanitise(html) {
-			const validTags = [ 'b', 'i', 'em', 'strong', 'font', 's', 'pre', 'span', 'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'div', 'a', 'img' ];
-			return html.replaceAll(/<\s*(\/?)\s*(\w+)([^>]*)>/g, (match, p0, p1, p2) => validTags.indexOf(p1) >= 0 ? match : '') // remove bad tags (especially <script> but default to not allowing anything new we don't know
-				.replaceAll(/(on\w+)=/g, 'x_$1='); // remove JS event handlers
+			return sanitiseHtml(html); // DOM allow-list sanitiser, app/js/fork/sanitise-html.js
 		}
 		
         for (var x in data) {

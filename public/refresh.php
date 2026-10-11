@@ -17,6 +17,7 @@ if(!isset($_SESSION['userID'])) {
 require_once('../config.php');
 require_once('../settings.php');
 require_once('../db.inc.php');
+require_once('../note-html.inc.php');
 
 header('Content-Type: application/json');
 /**
@@ -94,6 +95,13 @@ if (isset($_SESSION['oauth']) && isset($_SESSION['oauth']['tokenExpire'])) {
 			$_SESSION['oauth']['tokenExpire'] = $esi->tokenExpire;
 		} else if ($esi->httpCode >= 400 && $esi->httpCode < 500) {
 			error_log("unable to refresh account oauth token");
+			// fork: the SSO refused the token (revoked / invalid_grant): nothing is left to act with, so end the
+			// session. The client treats a 403 from refresh as "signed out" and returns to the sign-in page.
+			if (strpos((string)$esi->lastError, 'invalid_grant') !== false) {
+				session_destroy();
+				http_response_code(403);
+				exit();
+			}
 		}
 	}
 	$output['oauth'] = $_SESSION['oauth'];
@@ -196,7 +204,8 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 				$character->accessToken = $esi->accessToken;
 				$character->refreshToken = $esi->refreshToken;
 				$character->tokenExpire = $esi->tokenExpire;
-			} else if ($esi->httpCode >= 400 && $esi->httpCode < 500) {
+			} else if ($esi->httpCode == 401 || $esi->httpCode == 403 || ($esi->httpCode == 400 && strpos((string)$esi->lastError, 'invalid_grant') !== false)) {
+				// fork: only a real refusal drops the character; 420/429/5xx or a paused ESI keep it (stale token) for the next poll
 				$query = 'DELETE FROM esi WHERE characterID = :characterID';
 				$stmt = $mysql->prepare($query);
 				$stmt->bindValue(':characterID', $character->characterID);
@@ -284,7 +293,7 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 	$stmt->bindValue(':maskID', $maskID);
 	$stmt->execute();
 	while ($row = $stmt->fetchObject()) {
-		$output['comments'][] = array('id' => $row->id, 'comment' => $row->comment, 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
+		$output['comments'][] = array('id' => $row->id, 'comment' => sanitizeNoteHtml($row->comment), 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
 	}
 } else if ((isset($_REQUEST['mode']) && ($_REQUEST['mode'] == 'refresh')) || $refresh['sigUpdate'] == true || $refresh['chainUpdate'] == true) {
 	$signatureCount 	= isset($_REQUEST['signatureCount']) ? $_REQUEST['signatureCount'] : null;
@@ -354,7 +363,7 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 		$stmt->bindValue(':maskID', $maskID);
 		$stmt->execute();
 		while ($row = $stmt->fetchObject()) {
-			$output['comments'][] = array('id' => $row->id, 'comment' => $row->comment, 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
+			$output['comments'][] = array('id' => $row->id, 'comment' => sanitizeNoteHtml($row->comment), 'created' => $row->createdDate, 'createdByName' => $row->createdByName, 'modified' => $row->modifiedDate, 'modifiedByName' => $row->modifiedByName, 'sticky' => $row->systemID == 0 ? true : false);
 		}
 	}
 }
