@@ -210,7 +210,7 @@ const structureTimers = {
 			const html = on ? structureTimers.markerHtml(structureTimers.markerForSystem(parseInt($node.attr("data-nodeid"), 10))) : "";
 			if (!html !== !$old.length) {
 				redraw = true;	// added / removed: the renderers lay out the measured markup
-			} else if (html && $old.prop("outerHTML") !== html) {
+			} else if (html && $old.prop("outerHTML") !== $(html).prop("outerHTML")) {	// both through the browser's serialisation
 				$old.replaceWith(html);	// another glyph, colour or tooltip: swapped in place
 			}
 		});
