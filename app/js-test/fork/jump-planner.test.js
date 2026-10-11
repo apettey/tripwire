@@ -36,7 +36,7 @@ describe('jumpPlanner', () => {
 		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
-				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, open: false, mode: 'exit', origin: null });
+				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, fuel: true, hull: null, fuelSkills: { 21610: 5 }, open: false, mode: 'exit', origin: null });
 			assert.strictEqual(jumpPlanner.settings({ jumpRange: { search: false } }).search, false);
 			assert.strictEqual(jumpPlanner.enabled({}), true);
 			assert.strictEqual(jumpPlanner.enabled({ jumpRange: { enabled: false } }), false);
@@ -512,7 +512,8 @@ describe('jumpPlanner', () => {
 			const n = id => S[id].name;
 			assert.strictEqual(jumpPlanner.routeText({ jumps: 1, legs: [6.24] }, n), '1 jump 6.2 LY');
 			assert.strictEqual(jumpPlanner.routeText({ jumps: 2, legs: [5.81, 5.6], via: AMAMAKE }, n), '2 jumps via Amamake (5.8 + 5.6 LY)');
-			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'range', reach: { direct: 13.94 } }, n), 'out of range within 2 jumps (13.9 LY)');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'range', reach: { direct: 13.94 } }, n), 'out of range within 5 jumps (13.9 LY)');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'range', direct: 13.94 }, n), 'out of range within 5 jumps (13.9 LY)');
 			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'jammed', reach: {} }, n), 'cyno-jammed (normal cyno)');
 			assert.strictEqual(jumpPlanner.routeText({ id: EC, sec: -0.4, jumps: null, reason: 'target', reach: {} }, n), 'null-sec targets are off in Settings');
 		});
@@ -528,7 +529,7 @@ describe('jumpPlanner', () => {
 		it('HTML builders escape system and hole names', () => {
 			const nameOf = () => EVIL;
 			const holes = [{ name: EVIL, signatureID: EVIL, realType: EVIL, size: 'L', certain: true, eol: true }];
-			const rows = [{ id: EGG, name: EVIL, sec: 0.4, secText: '0.4', jumps: 2, legs: [1, 2], via: AMAMAKE, cyno: AMAMAKE, total: 3, home: J152820, holes: holes,
+			const rows = [{ id: EGG, name: EVIL, sec: 0.4, secText: '0.4', jumps: 2, legs: [1, 2], path: [AMAMAKE], via: AMAMAKE, cyno: AMAMAKE, total: 3, home: J152820, holes: holes,
 				warnings: jumpPlanner.holeWarnings(holes, 'XL', EVIL), reach: { direct: 3 } },
 				{ id: KBP, name: EVIL, sec: -0.3, secText: '-0.3', jumps: null, reason: 'range', legs: [], home: J152820, holes: holes, warnings: [], reach: { direct: 20 } }];
 			const model = { rows: rows, counts: { reachable: 1, total: 2 }, preset: { label: EVIL }, range: 7 };
@@ -548,7 +549,7 @@ describe('jumpPlanner', () => {
 		it('mode switch, home line and footer', () => {
 			assert.ok(/data-jp-mode='home' class='active'/.test(jumpPlanner.modeHtml('home')));
 			assert.ok(/data-jp-mode='exit' class='active'/.test(jumpPlanner.modeHtml('exit')));
-			assert.strictEqual(jumpPlanner.homeFooterText({ counts: { reachable: 2, total: 3 } }), '2 of 3 exits reachable within 2 jumps');
+			assert.strictEqual(jumpPlanner.homeFooterText({ counts: { reachable: 2, total: 3 } }), '2 of 3 exits reachable within 5 jumps');
 			assert.strictEqual(jumpPlanner.homeText([], String), 'no home on this chain');
 			assert.strictEqual(jumpPlanner.homeText([J152820], id => S[id].name), 'Home: J152820');
 		});
@@ -558,6 +559,267 @@ describe('jumpPlanner', () => {
 			const narrow = jumpPlanner.mapModel(c, m), wide = jumpPlanner.mapModel(Object.assign({}, c, { fitLy: 14 }), m);
 			assert.ok(wide.scale < narrow.scale);
 			assert.deepStrictEqual(jumpPlanner.projectPoint(wide, INDEX.pos[AMAMAKE]), { x: wide.cx, y: wide.cy });
+		});
+	});
+
+	describe('Get home: up to 5 jumps', () => {
+		const JITA = sid('Jita');
+		const all = COORDS.ids.filter(id => jumpRange.isValidCynoTarget(id, S[id], {}));
+		const far = jumpRange.routesFrom(JITA, all, 7, INDEX, S, {}, 5);
+		const pick = k => far.filter(r => r.jumps === k)[0];
+		const pathsFor = ids => {
+			const paths = {};
+			ids.forEach(id => { paths[id] = { home: J152820, holes: [{ name: 'A', signatureID: 'aaa111', wormholeID: 1, from: J152820, to: id, size: 'XL', certain: true }] }; });
+			return paths;
+		};
+		const model = (exits, extra, settings) => jumpPlanner.homeModel(Object.assign({ startID: JITA, exits: exits, paths: pathsFor(exits), index: INDEX, systems: S,
+			settings: jumpPlanner.settings({ jumpRange: settings || {} }), presets: PRESETS, jammed: {} }, extra || {}));
+		const name = id => S[id].name;
+
+		it('the limit is 5 jumps', () => {
+			assert.strictEqual(jumpPlanner.HOME_MAX_JUMPS, 5);
+			assert.ok(pick(3) && pick(4) && pick(5), 'the real map has 3-, 4- and 5-jump exits from Jita for a Carrier');
+			assert.ok(far.every(r => r.jumps === null || r.jumps <= 5));
+		});
+		it('homeModel lists 3-, 4- and 5-jump exits with every leg; Dest is the first midpoint', () => {
+			const ids = [pick(3).id, pick(4).id, pick(5).id];
+			const m = model(ids);
+			assert.deepStrictEqual(m.rows.map(r => r.jumps), [3, 4, 5]);
+			m.rows.forEach(r => {
+				assert.strictEqual(r.legs.length, r.jumps);
+				assert.strictEqual(r.path.length, r.jumps - 1);
+				assert.ok(r.legs.every(l => l <= 7 + 1e-9));
+				assert.strictEqual(r.cyno, r.path[0]);
+				assert.strictEqual(r.via, r.path[0]);
+				const text = jumpPlanner.routeText(r, name);
+				assert.strictEqual(text, r.jumps + ' jumps via ' + r.path.map(name).join(' → ') + ' (' + r.legs.map(l => l.toFixed(1)).join(' + ') + ' LY)');
+			});
+			assert.deepStrictEqual(m.counts, { reachable: 3, total: 3 });
+			// 1 jump: Dest is the exit itself, 2 jumps: the midpoint
+			const one = far.filter(r => r.jumps === 1)[0], two = far.filter(r => r.jumps === 2)[0];
+			const m2 = model([one.id, two.id]);
+			assert.deepStrictEqual(m2.rows.map(r => r.cyno), [one.id, two.path[0]]);
+		});
+		it('beyond 5 jumps: "out of range within 5 jumps" with the straight-line distance, and the footer says 5', () => {
+			const out = far.filter(r => r.jumps === null && r.reason === 'range')[0];
+			const m = model([out.id]);
+			assert.strictEqual(m.rows[0].jumps, null);
+			assert.strictEqual(jumpPlanner.routeText(m.rows[0], name), 'out of range within 5 jumps (' + out.direct.toFixed(1) + ' LY)');
+			assert.strictEqual(jumpPlanner.homeFooterText(m), '0 of 1 exit reachable within 5 jumps');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: 0 }, name), 'you are here');
+		});
+		it('a Jump Freighter (10 LY) needs fewer jumps than a Carrier (7 LY)', () => {
+			const ids = [pick(5).id, pick(4).id];
+			const jfm = model(ids, null, { ship: 'group-902' });
+			const carrier = model(ids);
+			assert.ok(jfm.rows.every((r, i) => r.jumps < carrier.rows.find(c => c.id === r.id).jumps));
+			assert.ok(jfm.rows.every(r => r.legs.every(l => l <= 10 + 1e-9)));
+		});
+		it('the search is kept in ctx.cache: the same inputs reuse it, other inputs redo it, and the cached rows are not changed', () => {
+			const ids = [pick(3).id, pick(4).id];
+			const cache = {};
+			const a = model(ids, { cache: cache });
+			const routes = cache.routes;
+			assert.ok(routes && cache.key);
+			const b = model(ids, { cache: cache });
+			assert.strictEqual(cache.routes, routes);
+			assert.deepStrictEqual(b.rows.map(r => r.id), a.rows.map(r => r.id));
+			assert.ok(!('name' in routes[0]) && !('fuel' in routes[0]), 'cached rows stay plain routes');
+			model(ids, { cache: cache }, { cap: 5 });
+			assert.notStrictEqual(cache.routes, routes);
+			const key = cache.key;
+			model(ids.slice(0, 1), { cache: cache });
+			assert.notStrictEqual(cache.key, key);
+			const jam = {}; jam[pick(3).path[0]] = { setBy: 'x', age: 1 };
+			const jammedKey = (model(ids, { cache: cache, jammed: jam }), cache.key);
+			assert.notStrictEqual(jammedKey, key);
+		});
+		it('homeModel with fuel: each route\'s fuel is the sum of its jumps; "Show jump fuel" off gives none', () => {
+			const ids = [pick(3).id];
+			const m = model(ids);
+			const archon = PRESETS.find(p => p.key === 'group-547').hulls[0];
+			const r = m.rows[0];
+			assert.strictEqual(m.fuel.hull, archon);
+			assert.deepStrictEqual(r.legFuel, r.legs.map(l => jumpRange.fuelPerJump(l, archon, {})));
+			assert.strictEqual(r.fuel, r.legFuel.reduce((x, y) => x + y, 0));
+			const off = model(ids, null, { fuel: false });
+			assert.deepStrictEqual([off.fuel, off.rows[0].fuel, off.rows[0].legFuel], [null, null, []]);
+			assert.ok(!/jp-route-fuel/.test(jumpPlanner.homeListHtml(off, name, jumpPlanner.settings({}), [J152820])));
+			const html = jumpPlanner.homeListHtml(m, name, jumpPlanner.settings({}), [J152820]);
+			assert.ok(html.indexOf("<div class='jp-route-fuel'") > 0 && html.indexOf(jumpRange.formatFuel(r.fuel, archon)) > 0 && html.indexOf('Isotopes per jump: ') > 0);
+			const levels = model(ids, null, { fuelSkills: { 21610: 0 } });
+			assert.strictEqual(levels.rows[0].fuel, levels.rows[0].legs.reduce((sum, l) => sum + jumpRange.fuelPerJump(l, archon, { 21610: 0 }), 0));
+		});
+		it('copy text: fuel per route, and what it is based on', () => {
+			const m = model([pick(3).id]);
+			const text = jumpPlanner.homeCopyText(m, 'Jita', name, 5);
+			const lines = text.split('\n');
+			assert.ok(/^Get home from Jita/.test(lines[0]));
+			assert.strictEqual(lines[1], 'Fuel for Archon, Jump Fuel Conservation V');
+			assert.ok(lines[2].split('\t').length === 5 && lines[2].indexOf(m.rows[0].fuel.toLocaleString('en-US')) > 0, lines[2]);
+			const off = jumpPlanner.homeCopyText(model([pick(3).id], null, { fuel: false }), 'Jita', name, 5);
+			assert.ok(off.indexOf('Fuel for') < 0 && off.split('\n')[1].split('\t').length === 4);
+		});
+		it('the map overlay draws the whole route: a line through every midpoint, each marked and named', () => {
+			const r = pick(5);
+			const m = model([r.id]);
+			const c = ctx({}, { exitID: JITA, fitLy: 30 });
+			const mm = jumpPlanner.mapModel(c, jumpPlanner.model(c));
+			const svg = jumpPlanner.homeOverlaySvg(mm, m.rows, INDEX.pos, r.id, name);
+			assert.strictEqual((svg.match(/class='jp-route-mid'/g) || []).length, r.path.length);
+			assert.strictEqual((svg.match(/class='jp-l-mid'/g) || []).length, r.path.length);
+			const pts = svg.match(/<polyline class='jp-route' points='([^']*)'/)[1].split(' ');
+			assert.strictEqual(pts.length, r.jumps + 1);
+			r.path.forEach(id => assert.ok(svg.indexOf('>' + name(id) + '</text>') > 0, name(id)));
+			// a route without a path (older shape) still draws via
+			const old = jumpPlanner.homeOverlaySvg(mm, [{ id: r.id, jumps: 2, via: r.path[0], name: 'x' }], INDEX.pos, r.id, name);
+			assert.strictEqual((old.match(/class='jp-route-mid'/g) || []).length, 1);
+		});
+		it('the tooltip of a multi-jump route has Set destination (first cyno) and the per-jump fuel; text escaped', () => {
+			const html = jumpPlanner.tooltipHtml({ id: 1, name: EVIL, sec: -0.3, region: EVIL, ly: 20, kind: 'out', route: '3 jumps via ' + EVIL, cyno: 4242, fuel: '6,150 + 5,850 = 12,000 ' + EVIL });
+			noRawHtml(html);
+			assert.ok(/data-jp-cyno='4242'/.test(html) && /jp-tip-fuel/.test(html) && /6,150 \+ 5,850 = 12,000/.test(html));
+			assert.ok(!/jp-tip-fuel/.test(jumpPlanner.tooltipHtml({ id: 1, name: 'x', sec: 0.4, ly: 3, kind: 'out', fuel: '' })));
+		});
+	});
+
+	describe('jump fuel (panel)', () => {
+		const carrier = PRESETS.find(p => p.key === 'group-547');
+		const jfPreset = PRESETS.find(p => p.group === 'Jump Freighter');
+		const rorqual = PRESETS.find(p => p.group === 'Capital Industrial Ship');
+		const archon = carrier.hulls[0];
+		const cfg = (o) => jumpPlanner.settings({ jumpRange: o || {} });
+
+		it('settings: Show jump fuel on by default; hull and skill levels checked', () => {
+			const d = cfg();
+			assert.deepStrictEqual([d.fuel, d.hull, d.fuelSkills], [true, null, { 21610: 5 }]);
+			assert.strictEqual(cfg({ fuel: false }).fuel, false);
+			assert.strictEqual(cfg({ fuel: 0 }).fuel, true);		// only an explicit false turns it off, like the others
+			assert.strictEqual(cfg({ hull: 23757 }).hull, 23757);
+			['abc', -3, 1.5, 0, null, '<x>'].forEach(h => assert.strictEqual(cfg({ hull: h }).hull, null, String(h)));
+			const skills = cfg({ fuelSkills: { 21610: 3, 29029: 9, x: 2, 5: 'a', 7: null, 8: '', 9: -4, 10: '2' } }).fuelSkills;
+			assert.deepStrictEqual(skills, { 21610: 3, 29029: 5, 9: 0, 10: 2 });
+			assert.deepStrictEqual(cfg({ fuelSkills: { 29029: 2 } }).fuelSkills, { 21610: 5, 29029: 2 });		// Jump Fuel Conservation defaults to V
+			assert.deepStrictEqual(cfg({ fuelSkills: 'x' }).fuelSkills, { 21610: 5 });
+			assert.deepStrictEqual(cfg({ fuelSkills: [3] }).fuelSkills, { 21610: 5, 0: 3 });
+			// the settings object is never changed
+			const raw = { jumpRange: { fuelSkills: { 21610: 2 } } };
+			jumpPlanner.settings(raw);
+			assert.deepStrictEqual(raw, { jumpRange: { fuelSkills: { 21610: 2 } } });
+		});
+		it('the ships.json cache is busted when its fields change without a new SDE build', () => {
+			assert.ok(Number.isInteger(jumpPlanner.SHIPS_REV) && jumpPlanner.SHIPS_REV >= 2);
+		});
+		it('hullFor: the saved hull when it belongs to the ship group, else the first; none without fuel data', () => {
+			const thanatos = carrier.hulls.find(h => h.name === 'Thanatos');
+			assert.strictEqual(jumpPlanner.hullFor(carrier, cfg({ hull: thanatos.typeID })), thanatos);
+			assert.strictEqual(jumpPlanner.hullFor(carrier, cfg({ hull: jfPreset.hulls[0].typeID })), archon);		// another group's hull
+			assert.strictEqual(jumpPlanner.hullFor(carrier, cfg()), archon);
+			assert.strictEqual(jumpPlanner.hullFor({ hulls: [] }, cfg()), null);
+			assert.strictEqual(jumpPlanner.hullFor(null, cfg()), null);
+			assert.strictEqual(jumpPlanner.fuelSetup(carrier, cfg({ fuel: false })), null);
+			assert.strictEqual(jumpPlanner.fuelSetup({ hulls: [] }, cfg()), null);
+			assert.deepStrictEqual(Object.keys(jumpPlanner.fuelSetup(carrier, cfg())), ['hull', 'levels']);
+		});
+		it('model: each in-range system has the fuel of that jump; nothing when off', () => {
+			const m = jumpPlanner.model(ctx({}));
+			assert.strictEqual(m.fuel.hull, archon);
+			assert.ok(m.rows.length > 3);
+			m.rows.forEach(r => assert.strictEqual(r.fuel, jumpRange.fuelPerJump(r.ly, archon, {})));
+			assert.strictEqual(m.rows[0].fuel, Math.ceil(3000 * m.rows[0].ly * 0.5 - 1e-6));
+			const lv = jumpPlanner.model(ctx({ fuelSkills: { 21610: 0 } }));
+			assert.strictEqual(lv.rows[0].fuel, Math.ceil(3000 * lv.rows[0].ly - 1e-6));
+			const off = jumpPlanner.model(ctx({ fuel: false }));
+			assert.strictEqual(off.fuel, null);
+			assert.ok(off.rows.every(r => r.fuel === null));
+		});
+		it('list: a Fuel column with the amount and isotope, sortable like LY; none without fuel; escaped', () => {
+			const m = jumpPlanner.model(ctx({}));
+			const html = jumpPlanner.listHtml(m.rows.slice(0, 3), { key: 'ly', dir: 1 }, cfg(), false, m.fuel);
+			assert.ok(/data-jp-sort='fuel' class='jp-col-fuel'/.test(html) && />Fuel</.test(html));
+			assert.strictEqual((html.match(/class='jp-col-fuel'/g) || []).length, 4);
+			assert.ok(html.indexOf(jumpRange.formatFuel(m.rows[0].fuel, archon)) > 0 && /Helium/.test(html));
+			assert.ok(jumpPlanner.listHtml(m.rows.slice(0, 3), { key: 'ly', dir: 1 }, cfg(), false, null).indexOf('jp-col-fuel') < 0);
+			assert.ok(/colspan='7'/.test(jumpPlanner.listHtml([], { key: 'ly', dir: 1 }, cfg(), false, m.fuel)));
+			assert.ok(/colspan='6'/.test(jumpPlanner.listHtml([], { key: 'ly', dir: 1 }, cfg(), false, null)));
+			const evil = { hull: Object.assign({}, archon, { fuelName: EVIL + ' Isotopes' }), levels: {} };
+			noRawHtml(jumpPlanner.listHtml(m.rows.slice(0, 2).map(r => Object.assign({}, r, { fuel: 123456 })), { key: 'fuel', dir: 1 }, cfg(), false, evil));
+			const sorted = jumpPlanner.sortRows(m.rows, 'fuel', -1).map(r => r.id);
+			assert.deepStrictEqual(sorted, jumpPlanner.sortRows(m.rows, 'ly', -1).map(r => r.id));
+			assert.strictEqual(jumpPlanner.SORT_NAMES.fuel, 'Fuel');
+		});
+		it('fuel bar: hull select only with several hulls; Jump Fuel Conservation and the hull\'s skills as level buttons', () => {
+			const bar = jumpPlanner.fuelBarHtml(carrier, cfg({ fuelSkills: { 21610: 3 } }));
+			assert.ok(/<select class='jp-hull'/.test(bar));
+			assert.strictEqual((bar.match(/<option /g) || []).length, 4);
+			assert.ok(/Archon \(Helium\)/.test(bar) && /Thanatos \(Oxygen\)/.test(bar));
+			assert.strictEqual((bar.match(/data-fskill='21610'/g) || []).length, 6);
+			assert.ok(/data-fskill='21610' data-level='3' class='active'/.test(bar));
+			assert.ok(!/data-fskill='29029'/.test(bar) && />JFC</.test(bar));
+			const jf = jumpPlanner.fuelBarHtml(jfPreset, cfg({ ship: 'group-902', fuelSkills: { 29029: 2 } }));
+			assert.strictEqual((jf.match(/data-fskill='29029'/g) || []).length, 6);
+			assert.ok(/data-fskill='29029' data-level='2' class='active'/.test(jf) && />JF</.test(jf));
+			assert.ok(/data-fskill='29029' data-level='5' class=''/.test(jumpPlanner.fuelBarHtml(jfPreset, cfg())) === false, 'missing = V is active');
+			assert.ok(/data-fskill='29029' data-level='5' class='active'/.test(jumpPlanner.fuelBarHtml(jfPreset, cfg())));
+			const single = jumpPlanner.fuelBarHtml(rorqual, cfg());
+			assert.ok(single.indexOf('<select') < 0 && /data-fskill='21610'/.test(single));
+			assert.strictEqual(jumpPlanner.fuelBarHtml(carrier, cfg({ fuel: false })), '');
+			assert.strictEqual(jumpPlanner.fuelBarHtml({ hulls: [] }, cfg()), '');
+			assert.strictEqual(jumpPlanner.fuelBarHtml(null, cfg()), '');
+		});
+		it('fuel bar: the chosen hull is selected; names are escaped', () => {
+			const t = carrier.hulls.find(h => h.name === 'Thanatos');
+			assert.ok(new RegExp("<option value='" + t.typeID + "' selected>").test(jumpPlanner.fuelBarHtml(carrier, cfg({ hull: t.typeID }))));
+			const evil = { hulls: [Object.assign({}, archon, { name: EVIL, fuelBonuses: [{ skillID: 1, skill: EVIL, perLevel: 0.1 }] }), Object.assign({}, archon, { typeID: 9, name: EVIL })] };
+			const html = jumpPlanner.fuelBarHtml(evil, cfg());
+			noRawHtml(html);
+			assert.ok(/aria-label='&lt;img/.test(html));
+		});
+		it('fuelDetail / fuelBasis / skillAbbr', () => {
+			const setup = jumpPlanner.fuelSetup(carrier, cfg());
+			assert.strictEqual(jumpPlanner.fuelDetail(setup, [4.1]), '6,150 Helium');
+			assert.strictEqual(jumpPlanner.fuelDetail(setup, [4.1, 3.9]), '6,150 + 5,850 = 12,000 Helium');
+			assert.strictEqual(jumpPlanner.fuelDetail(setup, []), '0 Helium');
+			assert.strictEqual(jumpPlanner.fuelDetail(null, [4.1]), '');
+			assert.strictEqual(jumpPlanner.fuelDetail(setup, null), '');
+			assert.strictEqual(jumpPlanner.fuelDetail({ hull: { name: 'x' }, levels: {} }, [4]), '');		// no fuel data
+			assert.strictEqual(jumpPlanner.fuelBasis(setup), 'Archon, Jump Fuel Conservation V');
+			const jf = jumpPlanner.fuelSetup(jfPreset, cfg({ fuelSkills: { 21610: 4, 29029: 3 } }));
+			assert.strictEqual(jumpPlanner.fuelBasis(jf), jfPreset.hulls[0].name + ', Jump Fuel Conservation IV, Jump Freighters III');
+			assert.strictEqual(jumpPlanner.fuelBasis(null), '');
+			assert.deepStrictEqual(['Jump Fuel Conservation', 'Jump Freighters', 'x', ''].map(jumpPlanner.skillAbbr), ['JFC', 'JF', 'X', '']);
+		});
+		it('hub lines: the fuel of the route shown', () => {
+			const fuel = jumpPlanner.fuelSetup(carrier, cfg());
+			const results = [{ hubID: sid('Jita'), to: { jumps: 1, direct: 6.2, via: [] }, back: null },
+				{ hubID: sid('Amarr'), to: { jumps: 2, direct: 11, via: [{ id: AMAMAKE, ly1: 5.5, ly2: 5.5 }] },
+					back: { systemID: AMAMAKE, gates: 2, reach: { jumps: 2, direct: 11, via: [{ id: HEK, ly1: 4, ly2: 3 }] } } }];
+			const html = jumpPlanner.hubsHtml(results, 'EC-P8R', id => S[id].name, fuel);
+			assert.ok(html.indexOf('(6.2 LY, 9,300 Helium)') > 0, html);
+			assert.ok(html.indexOf('5.5 + 5.5 LY, 8,250 + 8,250 = 16,500 Helium') > 0);
+			assert.ok(html.indexOf('via Hek, 6,000 + 4,500 = 10,500 Helium, then 2 gates') > 0);
+			const plain = jumpPlanner.hubsHtml(results, 'EC-P8R', id => S[id].name);
+			assert.ok(plain.indexOf('Helium') < 0 && plain.indexOf('(6.2 LY)') > 0);
+			assert.strictEqual(jumpPlanner.hubsHtml(results, 'EC-P8R', id => S[id].name, null), plain);
+			noRawHtml(jumpPlanner.hubsHtml(results, EVIL, () => EVIL, { hull: Object.assign({}, archon, { fuelName: EVIL + ' Isotopes' }), levels: {} }));
+		});
+		it('copy text: a fuel column and its basis; none when off', () => {
+			const m = jumpPlanner.model(ctx({}));
+			const text = jumpPlanner.copyText(m.rows.slice(0, 2), 'Amamake', 'Carrier', 5, 7, m.fuel);
+			const lines = text.split('\n');
+			assert.strictEqual(lines[1], 'Fuel per jump for Archon, Jump Fuel Conservation V');
+			assert.strictEqual(lines[2].split('\t').length, 6);
+			assert.ok(lines[2].indexOf(jumpRange.formatFuel(m.rows[0].fuel, archon)) > 0);
+			const plain = jumpPlanner.copyText(m.rows.slice(0, 2), 'Amamake', 'Carrier', 5, 7);
+			assert.strictEqual(plain.split('\n').length, 3);
+			assert.strictEqual(plain.split('\n')[1].split('\t').length, 5);
+		});
+		it('Settings rows: Show jump fuel and Jump Fuel Conservation', () => {
+			const html = jumpPlanner.fuelSettingsHtml();
+			assert.ok(/name='jumpPlanner-fuel' value='1'/.test(html) && /name='jumpPlanner-fuel' value='0'/.test(html));
+			assert.strictEqual((html.match(/name='jumpPlanner-jfc'/g) || []).length, 6);
+			assert.ok(/Show jump fuel:/.test(html) && /Jump Fuel Conservation:/.test(html));
+			assert.ok(jumpPlanner.settingsHtml(PRESETS).indexOf('jumpPlanner-fuel') < 0, 'its own block');
 		});
 	});
 });

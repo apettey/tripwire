@@ -17,9 +17,22 @@ const jumpRange = {
 	// - A cyno-jammed system (Tenebrex Cyno Jammer, Sansha incursion) blocks normal cynos; covert cynos still work,
 	//   and only Black Ops battleships can jump to them. https://wiki.eveuniversity.org/Jump_drives
 	// - High-sec as the game rounds it: security >= 0.45 (like systemAnalysis.js).
+	// - Jump fuel: isotopes used per jump = distance in LY x the hull's base amount per LY (SDE attribute
+	//   jumpDriveConsumptionAmount, 868; the isotope is attribute 866) x (1 - 10% x Jump Fuel Conservation level)
+	//   x (1 - 10% x Jump Freighters level, Jump Freighters only) x the hull's role bonus (none today), the factors
+	//   multiplied; it depends on the straight-line distance, not on the number of jumps, and a route's fuel is
+	//   the sum of its jumps. Jump Drive Economizer rigs (Jump Freighters / Rorqual) are not counted. The skill
+	//   amounts are read from the SDE (dogma effects that modify 868: skill 21610 JFC attribute 1296 = -10 per
+	//   level; Jump Freighters effect eliteBonusJumpFreighterJumpDriveConsumptionAmount2, attribute 1312 = -10 per
+	//   level) and stored in ships.json by jumprange/tools/generate-coords.js. Formula:
+	//   https://wiki.eveuniversity.org/Jump_drives (section on fuel). The source gives no rounding rule: the
+	//   total of each jump is rounded up to whole units (assumed, so the estimate is never short).
 	LY_M: 9.4607e15,
 	SCALE: 1000,				// systems.json stores positions in 0.001 LY
 	JDC_STEP: 0.2,
+	JFC_ID: 21610,				// Jump Fuel Conservation: -10% jump fuel per level, every hull (SDE: ships.json meta.fuelSkill)
+	JFC_STEP: 0.1,
+	SKILL_MAX: 5,
 	POCHVEN_REGION: 10000070,
 	POCHVEN_FACTION: 500026,
 	ZARZAKH: 30100000,
@@ -227,7 +240,8 @@ const jumpRange = {
 
 	/**
 	 * Ship presets from ships.json: one per ship group (and base range, should a group ever have two), sorted by label.
-	 * @return [{key ("group-<groupID>" or "group-<groupID>-<LY>"), label, group, baseLy, covert, ships: [names]}]
+	 * @return [{key ("group-<groupID>" or "group-<groupID>-<LY>"), label, group, baseLy, covert, ships: [names],
+	 *   hulls: [{typeID, name, fuelTypeID, fuelName, fuelPerLy, fuelBonuses, fuelRole}] (the hulls with jump fuel data, by name)}]
 	 */
 	presets: function(shipsData) {
 		const ships = shipsData && Array.isArray(shipsData.ships) ? shipsData.ships : [];
@@ -238,13 +252,20 @@ const jumpRange = {
 			if (!(s.baseLy > 0)) { return; }
 			const split = Object.keys(ranges[s.groupID]).length > 1;
 			const key = "group-" + s.groupID + (split ? "-" + s.baseLy : "");
-			const p = byKey[key] = byKey[key] || { key: key, group: s.group, baseLy: s.baseLy, covert: false, ships: [] };
+			const p = byKey[key] = byKey[key] || { key: key, group: s.group, baseLy: s.baseLy, covert: false, ships: [], hulls: [] };
 			p.covert = p.covert || !!s.covert;
 			p.ships.push(s.name);
+			if (s.fuelPerLy > 0) {
+				p.hulls.push({
+					typeID: s.typeID, name: s.name, fuelTypeID: s.fuelTypeID, fuelName: s.fuelName || "", fuelPerLy: s.fuelPerLy,
+					fuelBonuses: Array.isArray(s.fuelBonuses) ? s.fuelBonuses : [], fuelRole: Number(s.fuelRole) || 0
+				});
+			}
 		});
 		return Object.keys(byKey).map(function(k) {
 			const p = byKey[k];
 			p.ships.sort();
+			p.hulls.sort(function(a, b) { return a.name.localeCompare(b.name); });
 			// A group of one or two hulls is better known by them (Capital Industrial Ship = Rorqual)
 			p.label = p.group + (p.ships.length <= 2 ? " (" + p.ships.join(", ") + ")" : "");
 			return p;
@@ -256,6 +277,59 @@ const jumpRange = {
 		const list = presets || [];
 		return list.filter(function(p) { return p.key === key; })[0]
 			|| list.filter(function(p) { return p.key === jumpRange.DEFAULT_PRESET; })[0] || list[0] || null;
+	},
+
+	// ---- Jump fuel ----
+
+	/** A skill level as an integer 0-5; a missing or invalid level counts as 5 (the default) */
+	skillLevel: function(level) {
+		if (level === undefined || level === null || level === "") { return jumpRange.SKILL_MAX; }
+		const n = Math.round(Number(level));
+		return isFinite(n) ? Math.max(0, Math.min(jumpRange.SKILL_MAX, n)) : jumpRange.SKILL_MAX;
+	},
+
+	/**
+	 * Isotopes one jump of ly light-years takes: ceil(fuelPerLy x ly x (1 - 0.1 x JFC) x (1 - perLevel x level for each
+	 * of the hull's skill bonuses) x (1 - fuelRole)); see "Game rules relied on".
+	 * @param ship a ships.json entry (or a preset's hull): {fuelPerLy, fuelBonuses: [{skillID, perLevel}], fuelRole}
+	 * @param levels {<skillID>: 0-5}; a skill that is missing counts as 5
+	 * @return whole units, or null when the ship has no fuel data or ly isn't a number
+	 */
+	fuelPerJump: function(ly, ship, levels) {
+		const n = Number(ly);
+		if (!ship || !(Number(ship.fuelPerLy) > 0) || ly === null || ly === undefined || !isFinite(n) || n < 0) { return null; }
+		const lv = levels || {};
+		let amount = Number(ship.fuelPerLy) * n * (1 - jumpRange.JFC_STEP * jumpRange.skillLevel(lv[jumpRange.JFC_ID]));
+		(Array.isArray(ship.fuelBonuses) ? ship.fuelBonuses : []).forEach(function(b) {
+			amount *= 1 - (Number(b.perLevel) || 0) * jumpRange.skillLevel(lv[b.skillID]);
+		});
+		amount *= 1 - (Number(ship.fuelRole) || 0);
+		return Math.max(0, Math.ceil(amount - 1e-6));		// the epsilon keeps 10500.000000001 from becoming 10501
+	},
+
+	/** Isotopes for a route: the sum of its jumps' fuel (legs: LY per jump); null when there is no fuel data */
+	routeFuel: function(legs, ship, levels) {
+		if (!Array.isArray(legs)) { return null; }
+		let sum = 0;
+		for (let i = 0; i < legs.length; i++) {
+			const f = jumpRange.fuelPerJump(legs[i], ship, levels);
+			if (f === null) { return null; }
+			sum += f;
+		}
+		return sum;
+	},
+
+	/** "Helium" from "Helium Isotopes" */
+	fuelShortName: function(name) {
+		return String(name === undefined || name === null ? "" : name).replace(/\s+Isotopes$/i, "");
+	},
+
+	/** "12,340 Helium" (or "12,340" without a ship / isotope name); "–" when the amount is unknown */
+	formatFuel: function(amount, ship) {
+		if (amount === null || amount === undefined || !isFinite(Number(amount))) { return "\u2013"; }
+		const text = String(Math.round(Number(amount))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		const name = ship ? jumpRange.fuelShortName(ship.fuelName) : "";
+		return name ? text + " " + name : text;
 	},
 
 	/** "7.0 LY" (one decimal; two when it isn't a multiple of 0.1, e.g. 7.5 / 3.75) */
@@ -319,7 +393,8 @@ const jumpRange = {
 	},
 
 	/**
-	 * Routes from one start to each of several destinations (e.g. the chain's exits), at most 2 jumps each, ranked:
+	 * Routes from one start to each of several destinations (e.g. the chain's exits), at most 2 jumps each (routesFrom
+	 * does any number of jumps; the panel's Get home uses it), ranked:
 	 * reachable first (fewer jumps first, then shorter total LY, then id), then the rest by id. For 2 jumps the total is
 	 * that of the midpoint shown (reach()'s first: the shortest longer leg, then the shortest total), not the shortest
 	 * total over every midpoint.
@@ -340,6 +415,92 @@ const jumpRange = {
 				// Only the jam in the way: a valid target without it
 				row.reason = jumpRange.isValidCynoTarget(id, systems[id], Object.assign({}, o, { jammed: null })) ? "jammed" : "target";
 			} else { row.reason = r.reason === "unknown" ? "nopos" : r.reason; }
+			return row;
+		});
+		out.sort(function(a, b) {
+			const ra = a.jumps === null ? 1 : 0, rb = b.jumps === null ? 1 : 0;
+			if (ra !== rb) { return ra - rb; }
+			if (ra) { return a.id - b.id; }
+			return a.jumps - b.jumps || a.total - b.total || a.id - b.id;
+		});
+		return out;
+	},
+
+	/**
+	 * Routes from one start to each of several destinations with at most maxJumps jumps (generic: any start, any
+	 * destinations, any limit; used for Get home today, meant for JF / Black Ops logistics too). One search per start,
+	 * hop-limited and layered: layer k holds the systems first reached in exactly k jumps, each with its least total LY.
+	 * That is exact for "fewest jumps, then least total LY": the cheapest k-jump route to a system first reached in k
+	 * jumps only passes through systems first reached in their own layer (it could be shortened otherwise), so every
+	 * system is expanded once. Midpoints and destinations must pass isValidCynoTarget; the start must pass canJumpFrom.
+	 * Total LY stands for fuel (it is linear in the distance).
+	 * @param opts see isValidCynoTarget (jammed, covert, lowsec, nullsec)
+	 * @param maxJumps default 5
+	 * @return [{id, jumps (0..maxJumps, or null), legs ([LY] per jump), path ([midpoint ids]), via (first midpoint id or null),
+	 *   total (LY), direct (straight-line LY, NaN when a position is missing), reason (null, or when not reachable:
+	 *   "range" | "jammed" | "target" | "origin" | "nopos")}], reachable first (fewer jumps, then shorter total LY, then id),
+	 *   then the rest by id
+	 */
+	routesFrom: function(startID, destIDs, rangeLy, index, systems, opts, maxJumps) {
+		const o = opts || {};
+		const max = maxJumps === undefined ? 5 : Math.max(0, Math.floor(Number(maxJumps)) || 0);
+		const start = Number(startID);
+		const pos = index ? index.pos : {};
+		const sys = systems || {};
+		const valid = {};
+		const isValid = function(id) {
+			if (valid[id] === undefined) { valid[id] = jumpRange.isValidCynoTarget(id, sys[id], o); }
+			return valid[id];
+		};
+		const ids = (destIDs || []).map(Number);
+		const startOk = !!pos[start] && jumpRange.canJumpFrom(start, sys[start]);
+		// The layered search, only when something can be reached
+		const first = {};		// id -> {jumps, total, from}: the layer a system is first reached in, its least total LY, the system before it
+		const want = {};
+		let wanted = 0;
+		ids.forEach(function(id) {
+			if (id !== start && pos[id] && isValid(id) && !want[id]) { want[id] = true; wanted++; }
+		});
+		if (startOk && wanted && max > 0) {
+			first[start] = { jumps: 0, total: 0, from: null };
+			let frontier = [start];
+			let left = wanted;
+			for (let k = 1; k <= max && frontier.length && left > 0; k++) {
+				const layer = {};
+				frontier.forEach(function(u) {
+					const base = first[u].total;
+					jumpRange.within(index, pos[u], rangeLy).forEach(function(hit) {
+						const v = hit.id;
+						if (first[v] !== undefined || !isValid(v)) { return; }
+						const total = base + hit.ly;
+						const cur = layer[v];
+						if (!cur || total < cur.total - 1e-9) {		// the frontier is in id order: the lowest id wins a tie
+							layer[v] = { jumps: k, total: total, from: u };
+						}
+					});
+				});
+				frontier = Object.keys(layer).map(Number).sort(function(a, b) { return a - b; });
+				frontier.forEach(function(v) { first[v] = layer[v]; if (want[v]) { left--; } });
+			}
+		}
+		const out = ids.map(function(id) {
+			const row = { id: id, jumps: null, legs: [], path: [], via: null, total: Infinity, direct: jumpRange.distanceLy(pos[start], pos[id]), reason: null };
+			if (!pos[start] || !pos[id]) { row.reason = "nopos"; return row; }
+			if (id === start) { row.jumps = 0; row.total = 0; return row; }
+			if (!jumpRange.canJumpFrom(start, sys[start])) { row.reason = "origin"; return row; }
+			if (!isValid(id)) {
+				// Only the jam in the way: a valid target without it
+				row.reason = jumpRange.isValidCynoTarget(id, sys[id], Object.assign({}, o, { jammed: null })) ? "jammed" : "target";
+				return row;
+			}
+			if (first[id] === undefined) { row.reason = "range"; return row; }
+			const chain = [id];
+			for (let cur = first[id]; cur && cur.from !== null; cur = first[cur.from]) { chain.unshift(cur.from); }		// ends with the start
+			row.jumps = first[id].jumps;
+			row.path = chain.slice(1, -1);
+			row.via = row.path.length ? row.path[0] : null;
+			for (let i = 1; i < chain.length; i++) { row.legs.push(jumpRange.distanceLy(pos[chain[i - 1]], pos[chain[i]])); }
+			row.total = row.legs.reduce(function(sum, ly) { return sum + ly; }, 0);
 			return row;
 		});
 		out.sort(function(a, b) {

@@ -3,7 +3,9 @@ const jumpPlanner = {
 	// with a top-down mini-map of the systems around that exit, the ones a jump ship can reach with one jump (by
 	// distance band), gate jumps, trade-hub reach and a destination button. The range maths is in jumpRange
 	// (app/js/fork/jump-range.js); static data in public/jumprange/ (jumprange/tools/generate-coords.js); cyno-jammed
-	// marks per mask in public/jump_jammed.php. Settings: options.jumpRange (a missing key means the default).
+	// marks per mask in public/jump_jammed.php. Jump fuel (isotopes per jump from the hull's SDE data and the skill
+	// levels set in the panel / Settings) is calculated by jumpRange. Get home routes take up to HOME_MAX_JUMPS jumps.
+	// Settings: options.jumpRange (a missing key means the default).
 	// Pure HTML builders and helpers first (tested), browser code at the bottom.
 	// Keep `const jumpPlanner` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "jumpPlannerWidget",
@@ -11,6 +13,8 @@ const jumpPlanner = {
 	MIN_SIZE: { x: 6, y: 8 },
 	COL_PX: 60,				// gridster widget_base_dimensions 50 + 2 * margin 5
 	DATA_VERSION: 3586130,	// meta.version of public/jumprange/*.json (SDE build): busts the browser cache
+	SHIPS_REV: 2,			// bump when ships.json changes without a new SDE build (2: jump fuel fields)
+	HOME_MAX_JUMPS: 5,		// Get home: at most this many jumps from the start to an exit
 	DATA_URL: "jumprange/",
 	JAMMED_URL: "jump_jammed.php",
 	JAMMED_REFRESH_MS: 60000,
@@ -23,7 +27,8 @@ const jumpPlanner = {
 	ROMAN: ["0", "I", "II", "III", "IV", "V"],
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
-		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true
+		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
+		fuel: true, hull: null
 	},
 
 	escape: function(text) {
@@ -59,12 +64,74 @@ const jumpPlanner = {
 			showHs: raw.showHs === true,
 			hubs: raw.hubs !== false,
 			search: raw.search !== false,
+			fuel: raw.fuel !== false,
+			hull: Number(raw.hull) > 0 && Number.isInteger(Number(raw.hull)) ? Number(raw.hull) : null,
+			fuelSkills: jumpPlanner.cleanSkills(raw.fuelSkills),
 			open: raw.open === true,
 			mode: pick(raw.mode, ["exit", "home"], "exit"),
 			origin: Number(raw.origin) > 0 && Number.isInteger(Number(raw.origin)) ? Number(raw.origin) : null
 		};
 		if (raw.position && typeof raw.position === "object") { s.position = raw.position; }
 		return s;
+	},
+
+	/** Skill levels for the fuel: {skillID: 0-5} from options.jumpRange.fuelSkills (bad entries dropped); Jump Fuel Conservation always there (5 unless set) */
+	cleanSkills: function(raw) {
+		const out = {};
+		if (raw && typeof raw === "object") {
+			Object.keys(raw).forEach(function(key) {
+				const n = Number(raw[key]);
+				if (/^\d+$/.test(key) && raw[key] !== null && raw[key] !== "" && isFinite(n)) { out[key] = Math.max(0, Math.min(jumpRange.SKILL_MAX, Math.round(n))); }
+			});
+		}
+		if (out[jumpRange.JFC_ID] === undefined) { out[jumpRange.JFC_ID] = jumpRange.SKILL_MAX; }
+		return out;
+	},
+
+	// ---- Jump fuel (pure) ----
+
+	/** The hull the fuel is calculated for: settings.hull when it is one of the preset's hulls, else the preset's first; null without fuel data */
+	hullFor: function(preset, settings) {
+		const hulls = preset && Array.isArray(preset.hulls) ? preset.hulls : [];
+		return hulls.filter(function(h) { return settings && h.typeID === settings.hull; })[0] || hulls[0] || null;
+	},
+
+	/** What fuel is calculated with: {hull, levels} (null when "Show jump fuel" is off or the preset has no fuel data) */
+	fuelSetup: function(preset, settings) {
+		if (!settings || settings.fuel === false) { return null; }
+		const hull = jumpPlanner.hullFor(preset, settings);
+		return hull ? { hull: hull, levels: settings.fuelSkills || {} } : null;
+	},
+
+	/** The skills that change a hull's fuel, in the order the panel shows them: [{skillID, name, perLevel}] (Jump Fuel Conservation first) */
+	fuelSkillList: function(hull) {
+		const list = [{ skillID: jumpRange.JFC_ID, name: "Jump Fuel Conservation", perLevel: jumpRange.JFC_STEP }];
+		((hull && hull.fuelBonuses) || []).forEach(function(b) { list.push({ skillID: b.skillID, name: b.skill || String(b.skillID), perLevel: b.perLevel }); });
+		return list;
+	},
+
+	/** "JFC" for Jump Fuel Conservation, else the initials ("Jump Freighters" is "JF") */
+	skillAbbr: function(name) {
+		return String(name || "").split(/\s+/).filter(Boolean).map(function(w) { return w.charAt(0).toUpperCase(); }).join("");
+	},
+
+	/** "10,500 Helium", or "4,100 + 3,900 = 8,000 Helium" for a route of several jumps; "" without fuel set up or data. legs: LY per jump */
+	fuelDetail: function(setup, legs) {
+		if (!setup || !Array.isArray(legs)) { return ""; }
+		const total = jumpRange.routeFuel(legs, setup.hull, setup.levels);
+		if (total === null) { return ""; }
+		if (legs.length < 2) { return jumpRange.formatFuel(total, setup.hull); }
+		const parts = legs.map(function(ly) { return jumpRange.formatFuel(jumpRange.fuelPerJump(ly, setup.hull, setup.levels)); });
+		return parts.join(" + ") + " = " + jumpRange.formatFuel(total, setup.hull);
+	},
+
+	/** What the fuel is based on, for a heading or a tooltip: "Archon, Jump Fuel Conservation V" (plus the hull's own skills) */
+	fuelBasis: function(setup) {
+		if (!setup) { return ""; }
+		const lv = setup.levels || {};
+		return [setup.hull.name].concat(jumpPlanner.fuelSkillList(setup.hull).map(function(sk) {
+			return sk.name + " " + jumpPlanner.ROMAN[jumpRange.skillLevel(lv[sk.skillID])];
+		})).join(", ");
 	},
 
 	/** Whether the feature is on (options.jumpRange.enabled; on unless explicitly false) */
@@ -174,7 +241,7 @@ const jumpPlanner = {
 	/**
 	 * Everything the panel shows for one exit.
 	 * @param ctx {exitID, index, systems, regions, map (gate map), settings, presets, jammed: {id: {setBy, age}}, gates: {id: jumps}}
-	 * @return {range, preset, rows: [{id, name, sec, secText, region, ly, band, gates, jammed, blocked, jam}], counts}
+	 * @return {range, preset, fuel ({hull, levels} or null), rows: [{id, name, sec, secText, region, ly, band, gates, jammed, blocked, jam, fuel}], counts}
 	 */
 	model: function(ctx) {
 		const s = ctx.settings;
@@ -187,6 +254,7 @@ const jumpPlanner = {
 			jammed: s.jammed === "ignore" ? {} : jammedIDs, showJammed: s.jammed === "mark"
 		};
 		const list = jumpRange.inRange(ctx.exitID, ctx.index, r.range, ctx.systems, opts);
+		const fuel = jumpPlanner.fuelSetup(r.preset, s);
 		const rows = list.map(function(hit) {
 			const sys = ctx.systems[hit.id] || {};
 			const region = ctx.regions && ctx.regions[sys.regionID] ? ctx.regions[sys.regionID].name : "";
@@ -194,16 +262,17 @@ const jumpPlanner = {
 			return {
 				id: hit.id, name: sys.name || String(hit.id), sec: Number(sys.security), secText: jumpPlanner.secText(sys.security),
 				region: region, ly: hit.ly, band: Math.min(hit.band, jumpPlanner.BAND_COLORS.length - 1), gates: gates === undefined ? null : gates,
-				jammed: !!jammedIDs[hit.id], blocked: !!hit.blocked, jam: (ctx.jammed || {})[hit.id] || null
+				jammed: !!jammedIDs[hit.id], blocked: !!hit.blocked, jam: (ctx.jammed || {})[hit.id] || null,
+				fuel: fuel ? jumpRange.fuelPerJump(hit.ly, fuel.hull, fuel.levels) : null
 			};
 		});
 		return {
-			range: r.range, max: r.max, preset: r.preset, covert: covert, opts: opts, rows: rows,
+			range: r.range, max: r.max, preset: r.preset, covert: covert, opts: opts, fuel: fuel, rows: rows,
 			counts: { inRange: rows.filter(function(x) { return !x.blocked; }).length, jammed: rows.filter(function(x) { return x.jammed; }).length }
 		};
 	},
 
-	/** Rows sorted by a column ("name", "sec", "region", "ly", "gates"); dir 1 or -1. Ties: by LY, then name. */
+	/** Rows sorted by a column ("name", "sec", "region", "ly", "fuel" (the same as LY), "gates"); dir 1 or -1. Ties: by LY, then name. */
 	sortRows: function(rows, key, dir) {
 		const d = dir === -1 ? -1 : 1;
 		const val = function(r) {
@@ -376,6 +445,31 @@ const jumpPlanner = {
 			+ esc(jumpRange.formatLy(range === undefined ? r.range : range)) + "</span>";
 	},
 
+	/**
+	 * The fuel bar under the ship controls: hull select (when the group has several hulls) and a level button group for
+	 * Jump Fuel Conservation and for each skill of the hull. "" when fuel is off or the ship has no fuel data.
+	 * @param preset the selected ship preset (with hulls); settings settings()
+	 */
+	fuelBarHtml: function(preset, settings) {
+		const esc = jumpPlanner.escape;
+		const setup = jumpPlanner.fuelSetup(preset, settings);
+		if (!setup) { return ""; }
+		const hulls = preset.hulls;
+		let html = "<span class='jp-fuel-label' title='" + esc("Isotopes one jump takes: the distance times the hull's amount per light-year, less the skill levels you set here (they are not read from your character). Turn this off in Settings > Jump Planner.") + "'>Fuel</span>";
+		if (hulls.length > 1) {
+			html += "<select class='jp-hull' aria-label='Hull the fuel is calculated for' title='Hull the fuel is calculated for (its drive burns its own isotope)'>" + hulls.map(function(h) {
+				return "<option value='" + h.typeID + "'" + (h.typeID === setup.hull.typeID ? " selected" : "") + ">" + esc(h.name + " (" + jumpRange.fuelShortName(h.fuelName) + ")") + "</option>";
+			}).join("") + "</select>";
+		}
+		jumpPlanner.fuelSkillList(setup.hull).forEach(function(sk) {
+			const level = jumpRange.skillLevel(setup.levels[sk.skillID]);
+			html += "<span class='jp-fskill-wrap'><span class='jp-fskill' role='group' aria-label='" + esc(sk.name) + "'>" + jumpPlanner.ROMAN.map(function(label, n) {
+				return "<button type='button' data-fskill='" + sk.skillID + "' data-level='" + n + "' class='" + (n === level ? "active" : "") + "' title='" + esc(sk.name + " " + label + ": " + Math.round(sk.perLevel * 100) + "% less fuel per level") + "'>" + label + "</button>";
+			}).join("") + "</span><span class='jp-fskill-label' title='" + esc(sk.name) + "'>" + esc(jumpPlanner.skillAbbr(sk.name)) + "</span></span>";
+		});
+		return html;
+	},
+
 	/** Tabs: one per exit with its in-range count (null: not known yet) */
 	tabsHtml: function(exits, selected, names, counts) {
 		const esc = jumpPlanner.escape;
@@ -386,17 +480,17 @@ const jumpPlanner = {
 		}).join("");
 	},
 
-	/** The list of in-range systems */
-	listHtml: function(rows, sort, settings, covert) {
+	/** The list of in-range systems; fuel: model.fuel ({hull, levels}) adds the Fuel column */
+	listHtml: function(rows, sort, settings, covert, fuel) {
 		const esc = jumpPlanner.escape;
-		const head = [["name", "System"], ["sec", "Sec"], ["region", "Region"], ["ly", "LY"], ["gates", "Gates"]];
+		const head = [["name", "System"], ["sec", "Sec"], ["region", "Region"], ["ly", "LY"]].concat(fuel ? [["fuel", "Fuel"]] : []).concat([["gates", "Gates"]]);
 		let html = "<table class='jp-list'><thead><tr>" + head.map(function(h) {
 			const active = sort.key === h[0];
 			return "<th data-jp-sort='" + h[0] + "' class='jp-col-" + h[0] + (active ? " active" : "") + "' title='Sort by " + h[1] + "'>" + h[1]
 				+ (active ? (sort.dir === -1 ? " ▴" : " ▾") : "") + "</th>";
 		}).join("") + "<th></th></tr></thead><tbody>";
 		if (!rows.length) {
-			html += "<tr><td colspan='6' class='jp-empty'>No " + (settings.lowsec && !settings.nullsec ? "low-sec " : !settings.lowsec && settings.nullsec ? "null-sec " : "")
+			html += "<tr><td colspan='" + (head.length + 1) + "' class='jp-empty'>No " + (settings.lowsec && !settings.nullsec ? "low-sec " : !settings.lowsec && settings.nullsec ? "null-sec " : "")
 				+ "systems in range.</td></tr>";
 		}
 		rows.forEach(function(r) {
@@ -407,13 +501,15 @@ const jumpPlanner = {
 				+ "<td class='jp-col-sec " + jumpPlanner.secClass(r.sec) + "'>" + esc(r.secText) + "</td>"
 				+ "<td class='jp-col-region'>" + esc(r.region) + "</td>"
 				+ "<td class='jp-col-ly jp-band-" + r.band + "'>" + r.ly.toFixed(1) + "</td>"
+				+ (fuel ? "<td class='jp-col-fuel' title='" + esc("Isotopes for this jump: " + jumpPlanner.fuelBasis(fuel)) + "'>" + esc(jumpRange.formatFuel(r.fuel, fuel.hull)) + "</td>" : "")
 				+ "<td class='jp-col-gates'>" + (r.gates === null ? "–" : r.gates) + "</td>"
 				+ "<td class='jp-col-act'>" + action + "</td></tr>";
 		});
 		return html + "</tbody></table>";
 	},
 
-	/** Tooltip for one system. info {id, name, sec, region, ly, gates, kind ("in"|"jammed"|"out"|"hs"|"exit"), jam: {setBy, age}, canMark} */
+	/** Tooltip for one system. info {id, name, sec, region, ly, gates, kind ("in"|"jammed"|"out"|"hs"|"exit"), jam: {setBy, age}, canMark,
+	 *  route (Get home), fuel (text from fuelDetail, "" for none)} */
 	tooltipHtml: function(info) {
 		const esc = jumpPlanner.escape;
 		const lines = [];
@@ -427,6 +523,7 @@ const jumpPlanner = {
 		// Get home: an exit's route from the start (instead of "out of range" for one jump)
 		if (info.route) { lines.push("<div class='jp-tip-route'>" + esc(info.route) + "</div>"); }
 		else if (note) { lines.push("<div class='jp-tip-note'>" + esc(note) + "</div>"); }
+		if (info.fuel) { lines.push("<div class='jp-tip-fuel'>Fuel: " + esc(info.fuel) + "</div>"); }
 		if (info.jam) {
 			lines.push("<div class='jp-tip-jam'>Marked jammed" + (info.jam.setBy ? " by " + esc(info.jam.setBy) : "") + ", " + esc(jumpPlanner.ageText(info.jam.age)) + (info.jam.age >= 60 ? " ago" : "") + "</div>");
 		}
@@ -441,10 +538,15 @@ const jumpPlanner = {
 
 	/**
 	 * Trade-hub reach lines for the selected exit.
-	 * @param results [{hubID, to: reach(hub -> exit), back: nearHub(exit -> near hub) or null}]; name: function(id)
+	 * @param results [{hubID, to: reach(hub -> exit), back: nearHub(exit -> near hub) or null}]; name: function(id);
+	 *   fuel: model.fuel ({hull, levels}) or null
 	 */
-	hubsHtml: function(results, exitName, name) {
+	hubsHtml: function(results, exitName, name, fuel) {
 		const esc = jumpPlanner.escape;
+		const fuelOf = function(legs) {
+			const text = fuel ? jumpPlanner.fuelDetail(fuel, legs) : "";
+			return text ? ", " + text : "";
+		};
 		return (results || []).map(function(h) {
 			const hub = esc(name(h.hubID));
 			let to;
@@ -454,10 +556,10 @@ const jumpPlanner = {
 			} else if (!r || r.jumps === null) {
 				to = "<span class='jp-hub-no'>not within 2 jumps</span>" + (r && isFinite(r.direct) ? " <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY)</span>" : "");
 			} else if (r.jumps === 1) {
-				to = "<span class='jp-hub-ok'>1 jump</span> <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY)</span>";
+				to = "<span class='jp-hub-ok'>1 jump</span> <span class='jp-dim'>(" + r.direct.toFixed(1) + " LY" + esc(fuelOf([r.direct])) + ")</span>";
 			} else {
 				const v = r.via[0];
-				to = "<span class='jp-hub-ok2'>2 jumps</span> via " + esc(name(v.id)) + " <span class='jp-dim'>(" + v.ly1.toFixed(1) + " + " + v.ly2.toFixed(1) + " LY"
+				to = "<span class='jp-hub-ok2'>2 jumps</span> via " + esc(name(v.id)) + " <span class='jp-dim'>(" + v.ly1.toFixed(1) + " + " + v.ly2.toFixed(1) + " LY" + esc(fuelOf([v.ly1, v.ly2]))
 					+ (r.via.length > 1 ? ", " + (r.via.length - 1) + " other midpoint" + (r.via.length === 2 ? "" : "s") : "") + ")</span>";
 			}
 			let back;
@@ -465,7 +567,8 @@ const jumpPlanner = {
 				back = "<span class='jp-hub-no'>no low/null-sec near " + hub + " in 2 jumps</span>";
 			} else {
 				const b = h.back.reach;
-				back = esc(name(h.back.systemID)) + " <span class='jp-dim'>(" + (b.jumps === 1 ? "1 jump" : "2 jumps via " + esc(name(b.via[0].id))) + ", then "
+				back = esc(name(h.back.systemID)) + " <span class='jp-dim'>(" + (b.jumps === 1 ? "1 jump" : "2 jumps via " + esc(name(b.via[0].id)))
+					+ esc(fuelOf(b.jumps === 1 ? [b.direct] : [b.via[0].ly1, b.via[0].ly2])) + ", then "
 					+ h.back.gates + (h.back.gates === 1 ? " gate" : " gates") + " to " + hub + ")</span>";
 			}
 			return "<div class='jp-hub'><span class='jp-hub-name'>" + hub + "</span>"
@@ -482,11 +585,12 @@ const jumpPlanner = {
 		return parts.join(" · ");
 	},
 
-	/** Plain-text list for the clipboard */
-	copyText: function(rows, exitName, presetLabel, jdc, range) {
-		const lines = ["Jump range from " + exitName + " (" + presetLabel + ", JDC " + jumpPlanner.ROMAN[jdc] + ", " + jumpRange.formatLy(range) + ")"];
+	/** Plain-text list for the clipboard; fuel: model.fuel ({hull, levels}) adds the fuel for each jump */
+	copyText: function(rows, exitName, presetLabel, jdc, range, fuel) {
+		const lines = ["Jump range from " + exitName + " (" + presetLabel + ", JDC " + jumpPlanner.ROMAN[jdc] + ", " + jumpRange.formatLy(range) + ")"
+			+ (fuel ? "\nFuel per jump for " + jumpPlanner.fuelBasis(fuel) : "")];
 		rows.forEach(function(r) {
-			lines.push([r.name, r.secText, r.region, r.ly.toFixed(2) + " LY", r.gates === null ? "-" : r.gates + " gates"].join("\t") + (r.jammed ? "\tjammed" : ""));
+			lines.push([r.name, r.secText, r.region, r.ly.toFixed(2) + " LY"].concat(fuel ? [jumpRange.formatFuel(r.fuel, fuel.hull)] : []).concat([r.gates === null ? "-" : r.gates + " gates"]).join("\t") + (r.jammed ? "\tjammed" : ""));
 		});
 		return lines.join("\n");
 	},
@@ -494,7 +598,7 @@ const jumpPlanner = {
 	// ---- System search (pure) ----
 
 	SEARCH_LIMIT: 8,
-	SORT_NAMES: { name: "System", sec: "Sec", region: "Region", ly: "LY", gates: "Gates" },
+	SORT_NAMES: { name: "System", sec: "Sec", region: "Region", ly: "LY", fuel: "Fuel", gates: "Gates" },
 
 	/** A name or query for matching: lower case, without dashes and spaces ("0sht-a" and "0 SHT A" both give "0shta") */
 	searchKey: function(text) {
@@ -720,10 +824,12 @@ const jumpPlanner = {
 	},
 
 	/**
-	 * Get home: from a start system, the routes to each exit on the chain (1-2 jumps), and the holes from there home.
-	 * @param ctx {startID, exits: [systemID], paths (homePaths().paths, holes annotated), index, systems, settings, presets, jammed}
-	 * @return {range, preset, covert, need, problem (jumpRange.startProblem), rows: [routesTo row + {name, sec, secText, cyno,
-	 *   home, holes, warnings}], counts: {reachable, total}}
+	 * Get home: from a start system, the routes to each exit on the chain (up to HOME_MAX_JUMPS jumps), and the holes from there home.
+	 * @param ctx {startID, exits: [systemID], paths (homePaths().paths, holes annotated), index, systems, settings, presets, jammed,
+	 *   cache: an object the caller keeps between calls, so the same search isn't run again (optional)}
+	 * @return {range, preset, covert, need, fuel, problem (jumpRange.startProblem), rows: [jumpRange.routesFrom row + {name, sec, secText,
+	 *   cyno (the first jump's target), home, holes, warnings, fuel (whole route, null when unknown), legFuel ([per jump])}],
+	 *   counts: {reachable, total}}
 	 */
 	homeModel: function(ctx) {
 		const s = ctx.settings;
@@ -736,30 +842,46 @@ const jumpPlanner = {
 		// Supercarriers and titans can't take the wormholes home: nothing to list
 		const problem = need === "none" ? "supercap" : ctx.startID ? jumpRange.startProblem(ctx.startID, ctx.systems[ctx.startID], ctx.index) : "none";
 		const exits = (ctx.exits || []).filter(function(id) { return ctx.paths && ctx.paths[id]; });
-		const routes = problem ? [] : jumpRange.routesTo(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts);
-		const rows = routes.map(function(route) {
+		let routes = [];
+		if (!problem) {
+			const key = JSON.stringify([ctx.startID, r.range, exits, opts.lowsec, opts.nullsec, opts.covert, Object.keys(opts.jammed).sort(), jumpPlanner.HOME_MAX_JUMPS]);
+			if (ctx.cache && ctx.cache.key === key) { routes = ctx.cache.routes; }
+			else {
+				routes = jumpRange.routesFrom(ctx.startID, exits, r.range, ctx.index, ctx.systems, opts, jumpPlanner.HOME_MAX_JUMPS);
+				if (ctx.cache) { ctx.cache.key = key; ctx.cache.routes = routes; }
+			}
+		}
+		const fuel = jumpPlanner.fuelSetup(r.preset, s);
+		const rows = routes.map(function(cached) {
+			const route = Object.assign({}, cached);		// the cached rows stay as they are
 			const sys = ctx.systems[route.id] || {};
 			const path = ctx.paths[route.id];
 			return Object.assign(route, {
 				name: sys.name || String(route.id), sec: Number(sys.security), secText: jumpPlanner.secText(sys.security),
-				cyno: route.jumps === 2 ? route.via : route.jumps === 1 ? route.id : null,
-				home: path.home, holes: path.holes, warnings: jumpPlanner.holeWarnings(path.holes, need, r.preset ? r.preset.group : "")
+				cyno: route.jumps ? (route.path.length ? route.path[0] : route.id) : null,
+				home: path.home, holes: path.holes, warnings: jumpPlanner.holeWarnings(path.holes, need, r.preset ? r.preset.group : ""),
+				fuel: fuel && route.jumps ? jumpRange.routeFuel(route.legs, fuel.hull, fuel.levels) : null,
+				legFuel: fuel && route.jumps ? route.legs.map(function(ly) { return jumpRange.fuelPerJump(ly, fuel.hull, fuel.levels); }) : []
 			});
 		});
 		return {
-			range: r.range, max: r.max, preset: r.preset, covert: covert, need: need, opts: opts, problem: problem, rows: rows,
+			range: r.range, max: r.max, preset: r.preset, covert: covert, need: need, fuel: fuel, opts: opts, problem: problem, rows: rows,
 			counts: { reachable: rows.filter(function(x) { return x.jumps !== null; }).length, total: rows.length }
 		};
 	},
 
-	/** "1 jump 6.2 LY", "2 jumps via M (5.8 + 5.6 LY)", or why not */
+	/** "1 jump 6.2 LY", "3 jumps via A → B (5.8 + 5.6 + 4.0 LY)", or why not */
 	routeText: function(row, name, settings) {
 		if (row.jumps === 0) { return "you are here"; }
 		if (row.jumps === 1) { return "1 jump " + row.legs[0].toFixed(1) + " LY"; }
-		if (row.jumps === 2) { return "2 jumps via " + name(row.via) + " (" + row.legs[0].toFixed(1) + " + " + row.legs[1].toFixed(1) + " LY)"; }
-		const direct = row.reach && isFinite(row.reach.direct) ? " (" + row.reach.direct.toFixed(1) + " LY)" : "";
+		if (row.jumps > 1) {
+			const mids = Array.isArray(row.path) ? row.path : row.via ? [row.via] : [];
+			return row.jumps + " jumps via " + mids.map(name).join(" → ") + " (" + row.legs.map(function(ly) { return ly.toFixed(1); }).join(" + ") + " LY)";
+		}
+		const straight = row.direct !== undefined ? row.direct : row.reach ? row.reach.direct : NaN;
+		const direct = isFinite(straight) ? " (" + straight.toFixed(1) + " LY)" : "";
 		switch (row.reason) {
-			case "range": return "out of range within 2 jumps" + direct;
+			case "range": return "out of range within " + jumpPlanner.HOME_MAX_JUMPS + " jumps" + direct;
 			case "jammed": return "cyno-jammed (normal cyno)";
 			case "target": return (jumpRange.kind(row.id, { security: row.sec }) === "ls" ? "low-sec" : "null-sec") + " targets are off in Settings";
 			case "nopos": return "no position known";
@@ -821,9 +943,11 @@ const jumpPlanner = {
 			const ok = r.jumps !== null;
 			const holes = r.holes.length + (r.holes.length === 1 ? " hole" : " holes") + " to " + (several ? name(r.home) : "home");
 			const dest = ok && r.cyno ? "<a href='#' class='jp-home-dest' data-jp-cyno='" + r.cyno + "' title='" + esc("Set destination in game: " + name(r.cyno)) + "'>Dest</a>" : "";
+			const fuelText = model.fuel && ok && r.jumps && r.fuel !== null ? jumpRange.formatFuel(r.fuel, model.fuel.hull) : "";
 			html += "<tr data-jp-id='" + r.id + "' class='jp-home-row" + (ok ? "" : " jp-row-out") + "'>"
 				+ "<td class='jp-col-name'>" + esc(r.name) + " <span class='" + jumpPlanner.secClass(r.sec) + "'>" + esc(r.secText) + "</span></td>"
-				+ "<td class='jp-col-route" + (ok ? "" : " jp-dim") + "'>" + esc(jumpPlanner.routeText(r, name, settings)) + "</td>"
+				+ "<td class='jp-col-route" + (ok ? "" : " jp-dim") + "'>" + esc(jumpPlanner.routeText(r, name, settings))
+				+ (fuelText ? "<div class='jp-route-fuel' title='" + esc("Isotopes per jump: " + jumpPlanner.fuelDetail(model.fuel, r.legs) + " (" + jumpPlanner.fuelBasis(model.fuel) + ")") + "'>" + esc(fuelText) + "</div>" : "") + "</td>"
 				+ "<td class='jp-col-holes' title='" + esc(r.holes.map(jumpPlanner.holeLabel).join(" → ") + " → " + name(r.home)) + "'>" + esc(holes) + "</td>"
 				+ "<td class='jp-col-act'>" + dest + "</td></tr>";
 			if (r.warnings.length) {
@@ -837,14 +961,15 @@ const jumpPlanner = {
 
 	/** Footer for Get home: "2 of 4 exits reachable" */
 	homeFooterText: function(model) {
-		return model.counts.reachable + " of " + model.counts.total + (model.counts.total === 1 ? " exit" : " exits") + " reachable within 2 jumps";
+		return model.counts.reachable + " of " + model.counts.total + (model.counts.total === 1 ? " exit" : " exits") + " reachable within " + jumpPlanner.HOME_MAX_JUMPS + " jumps";
 	},
 
 	/** Plain-text routes for the clipboard */
 	homeCopyText: function(model, startName, name, jdc) {
-		const lines = ["Get home from " + startName + " (" + (model.preset ? model.preset.label : "") + ", JDC " + jumpPlanner.ROMAN[jdc] + ", " + jumpRange.formatLy(model.range) + ")"];
+		const lines = ["Get home from " + startName + " (" + (model.preset ? model.preset.label : "") + ", JDC " + jumpPlanner.ROMAN[jdc] + ", " + jumpRange.formatLy(model.range) + ")"
+			+ (model.fuel ? "\nFuel for " + jumpPlanner.fuelBasis(model.fuel) : "")];
 		model.rows.forEach(function(r) {
-			lines.push([r.name, r.secText, jumpPlanner.routeText(r, name), r.holes.length + " holes to " + name(r.home)].join("\t")
+			lines.push([r.name, r.secText, jumpPlanner.routeText(r, name)].concat(model.fuel ? [r.jumps ? jumpPlanner.fuelDetail(model.fuel, r.legs) || "-" : "-"] : []).concat([r.holes.length + " holes to " + name(r.home)]).join("\t")
 				+ (r.warnings.length ? "\t" + r.warnings.map(function(w) { return w.text; }).join("; ") : ""));
 		});
 		return lines.join("\n");
@@ -858,7 +983,7 @@ const jumpPlanner = {
 
 	/**
 	 * Get home overlay on the mini-map (SVG, escaped): the chain's exits as diamonds with their names, and the selected
-	 * route as lines start → (midpoint) → exit.
+	 * route as lines start → midpoints → exit, every midpoint marked and named.
 	 * @param rows homeModel() rows; pos {systemID: {x, y, z}}; selectedID the route to draw
 	 */
 	homeOverlaySvg: function(mapModel, rows, pos, selectedID, name) {
@@ -868,14 +993,17 @@ const jumpPlanner = {
 		let svg = "<g class='jp-home-overlay'>";
 		const sel = (rows || []).filter(function(r) { return r.id === Number(selectedID) && r.jumps; })[0];
 		if (sel) {
-			const ids = [null].concat(sel.via ? [sel.via] : []).concat([sel.id]);
+			const mids = Array.isArray(sel.path) ? sel.path : sel.via ? [sel.via] : [];
+			const ids = [null].concat(mids).concat([sel.id]);
 			const pts = ids.map(function(id) { return id === null ? { x: mapModel.cx, y: mapModel.cy } : jumpPlanner.projectPoint(mapModel, pos[id]); });
 			if (pts.every(function(p) { return p; })) {
 				svg += "<polyline class='jp-route' points='" + pts.map(function(p) { return p.x + "," + p.y; }).join(" ") + "'></polyline>";
-				if (sel.via && inside(pts[1])) {
-					svg += "<circle class='jp-route-mid' cx='" + pts[1].x + "' cy='" + pts[1].y + "' r='4'></circle>"
-						+ "<text class='jp-l-mid' x='" + pts[1].x + "' y='" + (pts[1].y + 15) + "' text-anchor='middle'>" + esc(name(sel.via)) + "</text>";
-				}
+				mids.forEach(function(id, i) {
+					const p = pts[i + 1];
+					if (!inside(p)) { return; }
+					svg += "<circle class='jp-route-mid' cx='" + p.x + "' cy='" + p.y + "' r='4'></circle>"
+						+ "<text class='jp-l-mid' x='" + p.x + "' y='" + (p.y + 15) + "' text-anchor='middle'>" + esc(name(id)) + "</text>";
+				});
 			}
 		}
 		// Names beside the diamonds: right or left, above or below, whichever is free and inside the map
@@ -979,6 +1107,17 @@ const jumpPlanner = {
 		return "<tr><th>Jump planner:</th><td><label><input type='checkbox' id='jumpPlanner-enabled-general' /> Show the Jump planner and its ring on low/null-sec exits</label></td></tr>";
 	},
 
+	/** Settings > Jump Planner rows for the jump fuel (a second block, shown after the first): Show jump fuel, Jump Fuel Conservation */
+	fuelSettingsHtml: function() {
+		const radios = function(name, list) {
+			return list.map(function(o) { return "<label><input type='radio' name='" + name + "' value='" + jumpPlanner.escape(o[0]) + "' /> " + jumpPlanner.escape(o[1]) + "</label>"; }).join(" ");
+		};
+		return "<tr class='jp-sep'><td colspan='2'></td></tr>"
+			+ "<tr><th>Show jump fuel:</th><td>" + radios("jumpPlanner-fuel", [["1", "Yes"], ["0", "No"]]) + " <span class='jp-dim'>(isotopes each jump takes)</span></td></tr>"
+			+ "<tr><th>Jump Fuel Conservation:</th><td>" + radios("jumpPlanner-jfc", jumpPlanner.ROMAN.map(function(r, i) { return [String(i), r]; }))
+			+ " <span class='jp-dim'>(your skill level; ship skills are set in the panel)</span></td></tr>";
+	},
+
 	/** Settings section rows (HTML) */
 	settingsHtml: function(presets) {
 		const esc = jumpPlanner.escape;
@@ -1035,6 +1174,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			allExits: [],			// every LS/NS exit on the chain (Get home ignores "Exits that get a range")
 			start: null,			// the system to jump from (options.jumpRange.origin once a valid one is picked)
 			from: { matches: [], active: -1, refocusing: false },
+			homeCache: {},			// the last Get home search (homeModel's ctx.cache)
 			$from: null				// the "Jump from" row, kept across renders like the search row
 		};
 
@@ -1067,7 +1207,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function loadShips() {
 			if (presets) { return $.Deferred().resolve(presets).promise(); }
 			if (!presetsLoading) {
-				presetsLoading = $.getJSON(jp.DATA_URL + "ships.json?v=" + jp.DATA_VERSION).then(function(ships) {
+				presetsLoading = $.getJSON(jp.DATA_URL + "ships.json?v=" + jp.DATA_VERSION + "." + jp.SHIPS_REV).then(function(ships) {
 					presets = jumpRange.presets(ships);
 					return presets;
 				}, function() {
@@ -1178,7 +1318,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='controls'><span class='jp-title'>Jump planner</span>"
 				+ "<i class='jp-close' data-icon='times' title='Close the Jump planner'></i>"
 				+ "<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i></div>"
-				+ "<div class='content'><div class='jp-head'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
+				+ "<div class='content'><div class='jp-head'></div><div class='jp-fuelbar'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
 				+ "</li>";
 		}
 
@@ -1298,6 +1438,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!state.selected) { state.selected = exits[0] || null; }
 			const r = jp.range(s, state.data.presets);
 			$w.find(".jp-head").html(jp.headerHtml(state.data.presets, s, r.range));
+			$w.find(".jp-fuelbar").html(jp.fuelBarHtml(r.preset, s));
 			$w.find(".jp-modebar").html(jp.modeHtml(s.mode) + "<span class='jp-home-name'></span>");
 			const fromFocus = !!state.$from && state.$from.find(".jp-from-input").is(":focus");
 			if (state.$from) { state.$from.detach(); }
@@ -1331,12 +1472,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 						to: jumpRange.reach(hubID, state.selected, model.range, ctx.index, ctx.systems, hubOpts, 2),
 						back: jumpRange.nearHub(state.selected, hubID, model.range, ctx.index, ctx.systems, ctx.map, hubOpts, jp.HUB_GATES)
 					};
-				}), name(state.selected), name) + "</div>";
+				}), name(state.selected), name, model.fuel) + "</div>";
 			}
 			$body.html("<div class='jp-map'>" + mapHtml() + "<div class='jp-tip hidden'></div>"
 				+ "<span class='jp-map-note'>top-down, true scale · " + jp.escape(s.mapRadius + " LY") + "</span></div>"
 				+ hubs
-				+ "<div class='jp-list-wrap'>" + jp.listHtml(rows, state.sort, s, model.covert) + "</div>"
+				+ "<div class='jp-list-wrap'>" + jp.listHtml(rows, state.sort, s, model.covert, model.fuel) + "</div>"
 				+ "<div class='jp-foot'><span class='jp-foot-text'>" + jp.escape(jp.footerText(model, mapModel.outShown, s.showOut)) + "</span>"
 				+ "<a href='#' class='jp-copy-list'>Copy list</a></div>");
 			$body.find(".jp-list-wrap").scrollTop(scroll || 0);
@@ -1437,7 +1578,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const scroll = $body.find(".jp-list-wrap").scrollTop();
 			const ctx = context(start && state.data.index.pos[start] ? start : null);
 			const home = jp.homeModel({ startID: start, exits: state.allExits, paths: hp.paths, index: state.data.index, systems: systems(),
-				settings: s, presets: state.data.presets, jammed: ctx.jammed });
+				settings: s, presets: state.data.presets, jammed: ctx.jammed, cache: state.homeCache });
 			let html;
 			if (!hp.homes.length) {
 				html = "<div class='jp-state'>No chain on this tab. Get home needs a chain map with a home system (the system the chain starts from).</div>";
@@ -1447,7 +1588,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				state.last = null;
 			} else {
 				// The farthest reachable exit fits on the map (a little beyond, so it isn't lost to rounding at the edge)
-				ctx.fitLy = home.rows.reduce(function(m, r) { return r.jumps ? Math.max(m, r.reach.direct + 0.05) : m; }, 0);
+				// (and every midpoint of a route, which can lie farther out than the exit)
+				const startPos = state.data.index.pos[start];
+				ctx.fitLy = home.rows.reduce(function(m, r) {
+					return r.jumps ? r.path.concat([r.id]).reduce(function(far, id) { return Math.max(far, jumpRange.distanceLy(startPos, state.data.index.pos[id]) + 0.05 || 0); }, m) : m;
+				}, 0);
 				const model = jp.model(ctx);
 				const mapModel = jp.mapModel(ctx, model);
 				state.last = { ctx: ctx, model: model, mapModel: mapModel, home: home };
@@ -1622,6 +1767,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				band: row ? row.band : null, gates: l.ctx.gates[id] === undefined ? null : l.ctx.gates[id], kind: kind,
 				jam: l.ctx.jammed[id] || null, canMark: jp.isRangeExit(id, sys), point: point,
 				route: route ? jp.routeText(route, name) + " · " + route.holes.length + (route.holes.length === 1 ? " hole" : " holes") + " to " + name(route.home) : null,
+				fuel: route ? (route.jumps ? jp.fuelDetail(l.model.fuel, route.legs) : "")
+					: row && !row.blocked && l.model.fuel && row.fuel !== null ? jumpRange.formatFuel(row.fuel, l.model.fuel.hull) : "",
 				cyno: route && route.jumps ? route.cyno : null
 			};
 		}
@@ -1775,6 +1922,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					state.start = null;		// Get home's start goes with options.jumpRange.origin
 				}
 			});
+			// Jump fuel: Show jump fuel and the player's Jump Fuel Conservation level (the hull's own skills are set in the panel,
+			// where the hull is known). Its own keys in options.jumpRange; Settings > Reset deletes the whole object (above).
+			forkSettings.register({
+				section: "jumpPlanner", order: 1100, id: "jumpPlanner-fuel", type: "custom", rows: jp.fuelSettingsHtml(),
+				keywords: "jump fuel isotopes helium oxygen nitrogen hydrogen conservation",
+				load: function() {
+					const s = current();
+					$("#jumpPlanner-section input[name='jumpPlanner-fuel'][value='" + (s.fuel ? "1" : "0") + "']").prop("checked", true);
+					$("#jumpPlanner-section input[name='jumpPlanner-jfc'][value='" + jumpRange.skillLevel(s.fuelSkills[jumpRange.JFC_ID]) + "']").prop("checked", true);
+				},
+				save: function() {
+					const jfc = $("#jumpPlanner-section input[name='jumpPlanner-jfc']:checked").val();
+					const skills = Object.assign({}, current().fuelSkills);
+					if (jfc !== undefined) { skills[jumpRange.JFC_ID] = jumpRange.skillLevel(jfc); }
+					store({ fuel: $("#jumpPlanner-section input[name='jumpPlanner-fuel']:checked").val() !== "0", fuelSkills: skills });
+				},
+				reset: function() { /* nothing of its own: the Jump Planner row's reset deletes options.jumpRange, these keys included */ }
+			});
 			// Settings > Routes & Navigation: the same on/off as the section's first row (one key), kept in sync both
 			// ways; the section's row is what Save reads
 			forkSettings.register({
@@ -1831,6 +1996,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("click", sel + " .jp-settings", function(e) { e.preventDefault(); openSettings(); });
 			$doc.on("click", sel + " .jp-tab", function() { state.selected = parseInt($(this).attr("data-jp-tab"), 10); state.pinnedID = null; state.hoverID = null; state.search.scroll = true; render(); });
 			$doc.on("change", sel + " .jp-ship", function() { store({ ship: $(this).val() }, true); state.counts = {}; state.search.scroll = true; render(); });
+			$doc.on("change", sel + " .jp-hull", function() { store({ hull: Number($(this).val()) }, true); state.search.scroll = true; render(); });
+			$doc.on("click", sel + " .jp-fskill button", function() {
+				const skills = Object.assign({}, current().fuelSkills);
+				skills[$(this).attr("data-fskill")] = jumpRange.skillLevel($(this).attr("data-level"));
+				store({ fuelSkills: skills }, true);
+				render();
+			});
 			$doc.on("click", sel + " .jp-jdc button", function() { store({ jdc: Number($(this).attr("data-jdc")) }, true); state.counts = {}; state.search.scroll = true; render(); });
 			$doc.on("click", sel + " .jp-list th[data-jp-sort]", function() {
 				const key = $(this).attr("data-jp-sort");
@@ -1939,7 +2111,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (!l) { return; }
 				const s = current();
 				if (l.home) { copy(jp.homeCopyText(l.home, name(l.ctx.exitID), name, s.jdc), "The routes"); return; }
-				copy(jp.copyText(jp.sortRows(l.model.rows, state.sort.key, state.sort.dir), name(l.ctx.exitID), l.model.preset ? l.model.preset.label : "", s.jdc, l.model.range), "The list");
+				copy(jp.copyText(jp.sortRows(l.model.rows, state.sort.key, state.sort.dir), name(l.ctx.exitID), l.model.preset ? l.model.preset.label : "", s.jdc, l.model.range, l.model.fuel), "The list");
 			});
 			document.addEventListener("visibilitychange", function() { if (!document.hidden && $widget().length) { loadJammed(); } });
 			// The chain was drawn before this ready handler on some loads: draw it again with the icons
