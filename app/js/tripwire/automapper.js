@@ -80,6 +80,12 @@ tripwire.autoMapper = function(from, to) {
     var payload = {"signatures": {"add": [], "update": []}, "automap": { "character": tripwire.client.EVE.characterID } };
 
     var wormholes = wormholesForJump(from, to, tripwire.client.wormholes, tripwire.client.signatures);
+    var rejump = false;
+    if (!wormholes.length) {
+        // No hole out of `from` matches: the hole into `to` may already be scanned with its far side unset (re-jump)
+        wormholes = automapperRejump.holesIntoDestination(from, to, tripwire.client.wormholes, tripwire.client.signatures).map(function(c) { return c.wormhole; });
+        rejump = wormholes.length > 0;
+    }
 	
     if (wormholes.length) {
         if (wormholes.length > 1) {
@@ -102,15 +108,7 @@ tripwire.autoMapper = function(from, to) {
                             "wormhole": {
                                 "id": wormhole.id
                             },
-                            "signatures": [
-                                {
-                                    "id": signature.id
-                                },
-                                {
-                                    "id": signature2.id,
-                                    "systemID": to
-                                }
-                            ]
+                            "signatures": automapperRejump.linkSignatures(wormhole, tripwire.client.signatures, from, to, rejump)
                         });
 
                         var success = function(data) {
@@ -136,7 +134,7 @@ tripwire.autoMapper = function(from, to) {
 					document.getElementById('select-sig-to').innerHTML = formatSystem(to);
 
                     $.each(wormholes, function(i) {
-                        const signature = tripwire.client.signatures[wormholes[i].initialID];
+                        const signature = automapperRejump.pickerSignature(wormholes[i], tripwire.client.signatures, to, rejump);
 						const sigInfo = tripwire.makeSigInfo(signature, wormholes[i]);
 						
                         const tr = "<tr>"
@@ -166,15 +164,7 @@ tripwire.autoMapper = function(from, to) {
                 "wormhole": {
                     "id": wormhole.id
                 },
-                "signatures": [
-                    {
-                        "id": signature.id
-                    },
-                    {
-                        "id": signature2.id,
-                        "systemID": to
-                    }
-                ]
+                "signatures": automapperRejump.linkSignatures(wormhole, tripwire.client.signatures, from, to, rejump)
             });
             undo.push({"wormhole": wormhole, "signatures": [signature, signature2]});
         }
