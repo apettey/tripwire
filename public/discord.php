@@ -289,6 +289,8 @@ try {
 		'placeholders' => discord_placeholders(),
 		'names' => (object) $names,
 		'outbox' => discord_outbox_status($mysql, $mask),
+		// Chain kills paused (no home system): the notice posted to their channel, or null (discord/chain_notice.php)
+		'homeNotice' => discord_chain_notice_status($mysql, $mask),
 		// Upstream's server-wide DISCORD_WEB_HOOK has a webhook for this mask: rally changes go there while the rally
 		// type is off (only whether there is one, never the URL)
 		'legacyRally' => discord_rally_legacy_hook($mask) !== null,
