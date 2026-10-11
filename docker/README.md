@@ -68,7 +68,7 @@ On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECON
 
 Fork features that need their own tables create them on first use with `CREATE TABLE IF NOT EXISTS`
 (so existing databases need no migration and `.docker/mysql/tripwire.sql` stays upstream's): currently
-`fork_rally` / `fork_rally_discord_message` (chain map rally point, "Fight here", per mask with a copy of its fleet comp, and its live legacy Discord message, created by `public/rally.php`; the `comp*` columns are added to an older `fork_rally` the first time a fight point is set; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_fight_comps` (the [fleet comps](#fight-here) per mask, created by `public/fight.php`), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `fork_rolling` ("rolling" flags on chain connections: who (character ID and name), when, note; created by `public/rolling.php`, `rolling.inc.php`, built like `fork_preserve_mass`; tests: `php tests/rolling_test.php`), `zkill_kills` /
+`fork_rally` / `fork_rally_discord_message` (chain map rally point, "Fight here", per mask with a copy of its fleet comp, and its live legacy Discord message, created by `public/rally.php`; the `comp*` columns are added to an older `fork_rally` the first time a fight point is set; `fork_rally_discord` of 1.15-1.17 is no longer read), `fork_fight_comps` (the [fleet comps](#fight-here) per mask, created by `public/fight.php`), `fork_preserve_mass` ("preserve mass" flags on chain connections, created by `public/preserve_mass.php`, `preserve_mass.inc.php`; no foreign key to upstream's `wormholes`: flags of deleted wormholes are skipped when read and deleted when the mask's flags change; tests: `php tests/preserve_mass_test.php` against the dev database), `fork_rolling` ("rolling" flags on chain connections: who (character ID and name), when, note; created by `public/rolling.php`, `rolling.inc.php`, built like `fork_preserve_mass`; tests: `php tests/rolling_test.php`), `fork_system_residents` (residents of a system set by hand per mask, created by `public/system_residents.php`, `system_residents.inc.php`; see [System stats](#system-stats-system-threat)), `zkill_kills` /
 `zkill_feed_state` (created by `zkill_feed.worker.php`, DDL in `docker/sql/kill-reporting.sql`) and `zkill_killmails` /
 `zkill_state` / `zkill_backfill` / `zkill_names` / `zkill_system_stats` / `zkill_kill_lookup` (the [zKillboard integration](#zkillboard-integration), DDL in
 `docker/sql/zkill.sql`) and `discord_webhooks` / `discord_settings` / `discord_outbox` / `discord_sent` / `discord_rally_message`
@@ -328,6 +328,17 @@ entry or `null`), `fetchedAt`, `statsStatus`, `pending`, `queueFull`, `local` (`
 `systemID` a `detail` object. Poll again while `pending` is true. Browser consumer: `app/js/fork/system-threat.js`
 (badges every 5 minutes and when the chain changes, the viewed system after 1 s; 6 s while pending, paused while the
 tab is hidden). Tests: `php zkill/tests/stats_test.php`.
+
+The block shows in the Intel panel as a collapsible "Threat & residents" section (in the system info panel when the
+Intel panel is off). **Set residents** stores who lives in a system per mask in `fork_system_residents` (created on
+first use by `public/system_residents.php`, `system_residents.inc.php`; reference DDL `docker/sql/system-residents.sql`):
+GET `systemID=<id>`; POST (with `X-Requested-With: XMLHttpRequest`) `mode=set` with `entities` (JSON `[{kind, id}]`),
+`names` (JSON list of exact names) and `note` (200 characters), or `mode=clear`. Names and tickers never come from the
+browser: names are resolved with ESI's public `POST /universe/ids`, then each entity's name and ticker come from the
+stored row, `zkill_names` and the system's `zkill_system_stats` top lists, else ESI's public `GET /corporations/{id}` /
+`/alliances/{id}` (through `esi/esi.inc.php`, so ESI pauses apply; only on Save). The browser re-reads the residents with
+the viewed system's detail polls (every 5 minutes; while its stats are pending, not more than once a minute). Tests: `php tests/system_residents_test.php` (fake ESI; storage
+checks against the dev database).
 
 #### Smart notes
 

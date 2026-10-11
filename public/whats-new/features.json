@@ -13,6 +13,18 @@
       ]
     },
     {
+      "pr": 69,
+      "date": "2026-10-11",
+      "title": "Threat & residents in the Intel panel",
+      "description": "The threat level and the corporations active in a system now sit at the top of the Intel panel, in a \"Threat & residents\" section you can collapse (the threat level stays visible). Click \"Set residents\" to record which corporations or alliances live in a hole, with a short note; everyone on your mask sees them instead of the corporations guessed from kills.\n\nIf the Intel panel is turned off, the section stays in the system info panel. Turn it off entirely in Settings > Kills & Intel > System threat & residents.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-69-residents.png",
+          "caption": "Residents set for a wormhole, in the Intel panel"
+        }
+      ]
+    },
+    {
       "pr": 68,
       "date": "2026-10-11",
       "title": "Skyhook raids: lava or ice, and what they're worth",
