@@ -166,7 +166,7 @@ class esi {
 	}
 
 	public function getCharacter($characterID) {
-		$result = $this->getAPI(self::$esiUrl.'/latest/characters/'.$characterID.'/');
+		$result = $this->getAPI(self::$esiUrl.'/characters/'.$characterID.'/');
 
 		if ($result === false || !json_decode($result) || !isset(json_decode($result)->name)) {
 			return false;
@@ -176,7 +176,7 @@ class esi {
 	}
 
 	public function getCorporation($corporationID) {
-		$result = $this->getAPI(self::$esiUrl.'/v4/corporations/'.$corporationID.'/');
+		$result = $this->getAPI(self::$esiUrl.'/corporations/'.$corporationID.'/');
 
 		if ($result === false || !json_decode($result) || !isset(json_decode($result)->name)) {
 			return false;
@@ -186,7 +186,7 @@ class esi {
 	}
 
 	public function getAlliance($allianceID) {
-		$result = $this->getAPI(self::$esiUrl.'/v4/alliances/'.$allianceID.'/');
+		$result = $this->getAPI(self::$esiUrl.'/alliances/'.$allianceID.'/');
 
 		if ($result === false || !json_decode($result) || !isset(json_decode($result)->name)) {
 			return false;
@@ -201,7 +201,7 @@ class esi {
 			$characterIDs = array($characterIDs);
 		}
 
-		$result = $this->getAPI(self::$esiUrl . "/v2/characters/affiliation/", array(), json_encode($characterIDs));
+		$result = $this->getAPI(self::$esiUrl . "/characters/affiliation/", array(), json_encode($characterIDs));
 
 		$data = json_decode($result);
 
@@ -217,7 +217,7 @@ class esi {
 		{
 			$ids = array($ids);
 		}
-		$result = $this->getAPI(self::$esiUrl.'/v3/universe/names', array(), json_encode($ids));
+		$result = $this->getAPI(self::$esiUrl.'/universe/names', array(), json_encode($ids));
 		$data = json_decode($result);
 		$parsed = array();
 		foreach($data as $name)
@@ -229,7 +229,7 @@ class esi {
 
 	public function getCharacterRoles($characterID) {
 		$headers = array('Authorization: Bearer '. $this->accessToken);
-		$result = $this->getAPI(self::$esiUrl.'/v2/characters/'.$characterID.'/roles/', $headers);
+		$result = $this->getAPI(self::$esiUrl.'/characters/'.$characterID.'/roles/', $headers);
 
 		if ($result === false) {
 			return false;
@@ -240,7 +240,7 @@ class esi {
 
 	public function getCharacterTitles($characterID) {
 		$headers = array('Authorization: Bearer '. $this->accessToken);
-		$result = $this->getAPI(self::$esiUrl.'/v1/characters/'.$characterID.'/titles/', $headers);
+		$result = $this->getAPI(self::$esiUrl.'/characters/'.$characterID.'/titles/', $headers);
 
 		if ($result === false) {
 			return false;
@@ -256,7 +256,7 @@ class esi {
 	}
 
 	public function getJumps() {
-		$result = $this->getAPI(self::$esiUrl.'/v1/universe/system_jumps/');
+		$result = $this->getAPI(self::$esiUrl.'/universe/system_jumps/');
 
 		if ($result === false) {
 			return false;
@@ -266,7 +266,7 @@ class esi {
 	}
 
 	public function getKills() {
-		$result = $this->getAPI(self::$esiUrl.'/v2/universe/system_kills/');
+		$result = $this->getAPI(self::$esiUrl.'/universe/system_kills/');
 
 		if ($result === false) {
 			return false;

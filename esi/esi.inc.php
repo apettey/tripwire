@@ -255,6 +255,78 @@ function esi_after_response($url, $status, array $responseHeaders, array $reques
     }
 }
 
+// --- ETag cache (GET requests) ---
+// A GET with a stored ETag is sent with If-None-Match; ESI answers 304 (no body, cheaper on rate limits) and the
+// stored body is returned as a 200, so callers never see the 304. One small file per URL (and per access token,
+// so a character's data is never served to another) in cache/esi-etag/, shared by all PHP processes.
+
+const ESI_ETAG_MAX_BODY = 1048576;   // bytes; larger bodies are not stored
+const ESI_ETAG_MAX_AGE  = 604800;    // seconds; unused entries are deleted after a week
+
+function esi_etag_dir(?string $set = null) {
+    static $dir = null;
+    if ($set !== null) $dir = $set;
+    if ($dir === null) {
+        $base = dirname(__DIR__) . '/cache';
+        $dir = (is_dir($base) && is_writable($base) ? $base : sys_get_temp_dir()) . '/esi-etag';
+    }
+    return $dir;
+}
+
+function esi_etag_file($url, array $headers = []) {
+    $auth = '';
+    foreach ($headers as $header) {
+        if (stripos(ltrim((string) $header), 'authorization:') === 0) $auth = trim((string) $header);
+    }
+    return esi_etag_dir() . '/' . sha1(strtolower($url) . "\n" . $auth) . '.json';
+}
+
+/** @return array|null ['etag' => string, 'body' => string, 'headers' => array] stored for this request */
+function esi_etag_load($url, array $headers = []) {
+    $raw = @file_get_contents(esi_etag_file($url, $headers));
+    $entry = $raw ? json_decode($raw, true) : null;
+    return is_array($entry) && is_string($entry['etag'] ?? null) && is_string($entry['body'] ?? null) ? $entry : null;
+}
+
+/** Remember a 200 response that carries an ETag (weak or strong); anything else is ignored */
+function esi_etag_store($url, array $requestHeaders, $body, array $responseHeaders) {
+    $etag = $responseHeaders['etag'] ?? '';
+    if ($etag === '' || !is_string($body) || strlen($body) > ESI_ETAG_MAX_BODY) return;
+    $dir = esi_etag_dir();
+    if (!is_dir($dir) && !@mkdir($dir, 0777, true) && !is_dir($dir)) return;
+    $keep = array_intersect_key($responseHeaders, array_flip(['content-type', 'x-pages', 'expires', 'last-modified']));
+    $file = esi_etag_file($url, $requestHeaders);
+    $tmp = $file . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode(['etag' => $etag, 'body' => $body, 'headers' => $keep])) === false) return;
+    @chmod($tmp, 0666);
+    @rename($tmp, $file);
+    if (mt_rand(1, 200) === 1) esi_etag_prune();
+}
+
+function esi_etag_prune($now = null) {
+    $now = $now ?? time();
+    foreach (glob(esi_etag_dir() . '/*.json') ?: [] as $file) {
+        if (@filemtime($file) < $now - ESI_ETAG_MAX_AGE) @unlink($file);
+    }
+}
+
+/** Adds If-None-Match to $headers when a stored ETag exists; @return array|null the stored entry */
+function esi_etag_prepare($url, array &$headers) {
+    $entry = esi_etag_load($url, $headers);
+    if ($entry) $headers[] = 'If-None-Match: ' . $entry['etag'];
+    return $entry;
+}
+
+/** Hook for a finished GET: 304 => [200, stored body, headers], 200 => remember its ETag. @return array [status, body, headers] */
+function esi_etag_finish($url, array $requestHeaders, ?array $entry, $status, $body, array $responseHeaders) {
+    if ($status === 304 && $entry) {
+        @touch(esi_etag_file($url, $requestHeaders));   // keeps a used entry out of the prune
+        return [200, $entry['body'], $responseHeaders + ($entry['headers'] ?? [])];
+    }
+    if ($status === 200) esi_etag_store($url, $requestHeaders, $body, $responseHeaders);
+    return [$status, $body, $responseHeaders];
+}
+
 /**
  * Test hook: a callable($method, $url, $headers, $body) returning [status, body, headers] replaces the network
  * for esi_request(). null = real requests.
@@ -269,6 +341,7 @@ function esi_transport(?callable $set = null, $clear = false) {
 /** One ESI request through the hooks. @return array [status (0 = network error, -1 = paused, not sent), body or error, headers] */
 function esi_request($method, $url, array $headers = [], $body = null, $timeout = 30) {
     if ($error = esi_before_request($url, $headers)) return [-1, $error, []];
+    $entry = $method === 'GET' && esi_is_url($url) ? esi_etag_prepare($url, $headers) : null;
     $transport = esi_transport();
     if ($transport) {
         [$status, $response, $responseHeaders] = $transport($method, $url, $headers, $body);
@@ -293,6 +366,7 @@ function esi_request($method, $url, array $headers = [], $body = null, $timeout 
         curl_close($curl);
     }
     esi_after_response($url, $status, $responseHeaders, $headers);
+    if ($method === 'GET' && esi_is_url($url)) return esi_etag_finish($url, $headers, $entry, $status, $response, $responseHeaders);
     return [$status, $response, $responseHeaders];
 }
 

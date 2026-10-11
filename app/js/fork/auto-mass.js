@@ -291,7 +291,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 			function page(n) {
 				$.ajax({
-					url: ESI + "/v5/characters/" + characterID + "/assets/?" + $.param({ page: n, token: character.accessToken, user_agent: userAgent() }),
+					url: ESI + "/characters/" + characterID + "/assets/?" + $.param({ page: n, token: character.accessToken, user_agent: userAgent() }),
 					type: "GET",
 					dataType: "JSON"
 				}).done(function(body, status, xhr) {

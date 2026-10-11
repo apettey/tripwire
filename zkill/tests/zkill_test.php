@@ -188,5 +188,27 @@ check('system id: inside the old range check but not a system', zk_is_system_id(
 check('system id: strings are not accepted', zk_is_system_id('30000142'), false);
 check('iso', zk_iso('2026-10-10 09:41:57'), '2026-10-10T09:41:57Z');
 
+// --- worker HTTP client: ETags on ESI GETs (not on zKillboard) ---
+$etagDir = sys_get_temp_dir() . '/zk-etag-test-' . getmypid();
+esi_etag_dir($etagDir);
+$seen = [];
+$reply = [200, '{"k":1}', ['etag' => '"e1"']];
+zk_http_transport(function ($method, $url, $body, $extra = []) use (&$seen, &$reply) { $seen[] = $extra; return $reply; });
+$esiUrl = ZK_ESI_BASE . 'killmails/1/abc/';
+zk_http_pause('esi.evetech.net', 0);
+[$status, $text] = zk_http_get($esiUrl);
+check('worker etag: first ESI GET sends nothing extra', [$status, $text, $seen[0]], [200, '{"k":1}', []]);
+$reply = [304, '', []];
+zk_http_pause('esi.evetech.net', 0);
+[$status, $text] = zk_http_get($esiUrl);
+check('worker etag: second sends If-None-Match, 304 => stored 200', [$status, $text, $seen[1]], [200, '{"k":1}', ['If-None-Match: "e1"']]);
+$reply = [200, '[]', ['etag' => '"z"']];
+zk_http_get('https://zkillboard.com/api/stats/');
+zk_http_get('https://zkillboard.com/api/stats/');
+check('worker etag: zKillboard is untouched', end($seen), []);
+zk_http_transport(null, true);
+foreach (glob($etagDir . '/*') ?: [] as $f) @unlink($f);
+@rmdir($etagDir);
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);
