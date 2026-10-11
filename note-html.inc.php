@@ -28,6 +28,11 @@ function sanitizeNoteHtml($html) {
         return '';
     }
 
+    // Fast path: without a '<' there is no markup to clean (entities stay escaped text).
+    if (strpos((string)$html, '<') === false) {
+        return (string)$html;
+    }
+
     // Fail closed on installations missing the PHP DOM extension.
     if (!noteHtmlSanitizerAvailable()) {
         static $reportedMissingDom = false;
@@ -39,7 +44,7 @@ function sanitizeNoteHtml($html) {
     }
 
     $allowedTags = array_fill_keys([
-        'b', 'i', 'em', 'strong', 'u', 's', 'strike', 'sub', 'sup',
+        'b', 'i', 'em', 'strong', 'u', 's', 'strike', 'sub', 'sup', 'code', 'small',
         'font', 'span', 'p', 'br', 'hr', 'div', 'pre', 'blockquote',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'ul', 'ol', 'li',
@@ -50,18 +55,22 @@ function sanitizeNoteHtml($html) {
     $tagAttributes = [
         'a' => array_fill_keys(['href', 'target', 'rel'], true),
         'font' => array_fill_keys(['color', 'size', 'face'], true),
-        'td' => array_fill_keys(['colspan', 'rowspan'], true),
-        'th' => array_fill_keys(['colspan', 'rowspan'], true),
+        'table' => array_fill_keys(['border', 'cellpadding', 'cellspacing', 'align', 'width'], true),
+        'td' => array_fill_keys(['colspan', 'rowspan', 'align', 'width'], true),
+        'th' => array_fill_keys(['colspan', 'rowspan', 'align', 'width'], true),
         'img' => array_fill_keys(['src', 'alt', 'width', 'height'], true)
     ];
     $safeStyles = [
         'color' => '/^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([0-9.,%\s+-]+\)|[a-z]+)$/i',
         'background-color' => '/^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([0-9.,%\s+-]+\)|[a-z]+)$/i',
-        'font-size' => '/^(?:(?:8|9|10|11|12|13|14|16|18|20|24|28|32|36|48)px|(?:0\.75|0\.875|1|1\.125|1\.25|1\.5|2|2\.5|3)(?:em|rem)|(?:75|80|87\.5|100|112\.5|125|150|200|250|300)%|xx-small|x-small|small|medium|large|x-large|xx-large)$/i',
+        'font-size' => '/^(?:(?:8|9|10|11|12|13|14|16|18|20|22|24|26|28|32|36|48|72)px|(?:0\.75|0\.875|1|1\.125|1\.25|1\.5|2|2\.5|3)(?:em|rem)|(?:75|80|87\.5|100|112\.5|125|150|200|250|300)%|xx-small|x-small|small|medium|large|x-large|xx-large)$/i',
         'text-align' => '/^(?:left|right|center|justify|start|end)$/i',
         'font-weight' => '/^(?:normal|bold|bolder|lighter|[1-9]00)$/i',
         'font-style' => '/^(?:normal|italic|oblique)$/i',
-        'text-decoration' => '/^(?:(?:none|underline|overline|line-through)\s*)+$/i'
+        'text-decoration' => '/^(?:(?:none|underline|overline|line-through)\s*)+$/i',
+        'font-family' => '/^[a-z0-9 ,\'"\-]+$/i',
+        'margin-left' => '/^\d+px$/',
+        'padding-left' => '/^\d+px$/'
     ];
 
     $document = new DOMDocument('1.0', 'UTF-8');
@@ -83,11 +92,22 @@ function sanitizeNoteHtml($html) {
     }
 
     $cleanNode = function ($node) use (&$cleanNode, $allowedTags, $globalAttributes, $tagAttributes, $safeStyles) {
+        if ($node->nodeType === XML_CDATA_SECTION_NODE) {
+            // libxml would serialise CDATA raw; make it text so it is escaped
+            $node->parentNode->replaceChild($node->ownerDocument->createTextNode($node->nodeValue), $node);
+            return;
+        }
         if ($node->nodeType === XML_COMMENT_NODE) {
             $node->parentNode->removeChild($node);
             return;
         }
         if ($node->nodeType !== XML_ELEMENT_NODE) {
+            return;
+        }
+
+        $dropWithContent = ['script', 'style', 'xmp', 'iframe', 'noscript', 'template', 'object', 'embed', 'noembed', 'noframes', 'plaintext', 'textarea', 'title', 'head', 'svg', 'math'];
+        if (in_array(strtolower($node->nodeName), $dropWithContent, true)) {
+            $node->parentNode->removeChild($node);
             return;
         }
 
@@ -118,7 +138,16 @@ function sanitizeNoteHtml($html) {
             }
 
             if (($name === 'href' || $name === 'src') &&
-                !preg_match('/^(?:https?:|mailto:|\/|#|\.{0,2}\/)/i', trim($value))) {
+                !preg_match($name === 'src' ? '/^https?:\/\//i' : '/^(?:https?:|mailto:|\/|#|\.{0,2}\/)/i', trim($value))) {
+                $node->removeAttributeNode($attribute);
+                continue;
+            }
+            if ($name === 'href' && preg_match('/\.php/i', preg_split('/[?#]/', trim($value))[0])) {
+                $node->removeAttributeNode($attribute);
+                continue;
+            }
+            if (in_array($tag, ['table', 'td', 'th'], true) && $name !== 'colspan' && $name !== 'rowspan' &&
+                !preg_match('/^(?:\d+%?|left|right|center)$/i', trim($value))) {
                 $node->removeAttributeNode($attribute);
                 continue;
             }

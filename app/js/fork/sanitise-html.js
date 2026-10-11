@@ -20,7 +20,7 @@
 var sanitiseHtml = (function() {
 	// Formatting CKEditor produces, and nothing that can navigate or execute.
 	var ALLOWED_TAGS = {
-		b:1, i:1, em:1, strong:1, u:1, s:1, strike:1, sub:1, sup:1,
+		b:1, i:1, em:1, strong:1, u:1, s:1, strike:1, sub:1, sup:1, code:1, small:1,
 		font:1, span:1, p:1, br:1, hr:1, div:1, pre:1, blockquote:1,
 		h1:1, h2:1, h3:1, h4:1, h5:1, h6:1,
 		ul:1, ol:1, li:1,
@@ -35,8 +35,9 @@ var sanitiseHtml = (function() {
 		'*': {style: 1, title: 1, dir: 1},
 		a:   {href: 1, target: 1, rel: 1},
 		font:{color: 1, size: 1, face: 1},
-		td:  {colspan: 1, rowspan: 1},
-		th:  {colspan: 1, rowspan: 1},
+		table:{border: 1, cellpadding: 1, cellspacing: 1, align: 1, width: 1},
+		td:  {colspan: 1, rowspan: 1, align: 1, width: 1},
+		th:  {colspan: 1, rowspan: 1, align: 1, width: 1},
 		// img was in the previous allowlist, so it stays -- dropping it would
 		// silently strip pictures out of notes people already wrote. Worth
 		// knowing: an image from an arbitrary host reveals the viewer's IP to
@@ -48,6 +49,11 @@ var sanitiseHtml = (function() {
 	// Schemes a link may use. Relative URLs are allowed and everything else --
 	// javascript:, data:, vbscript: -- is not.
 	var SAFE_URL = /^(?:https?:|mailto:|\/|#|\.{0,2}\/)/i;
+	// Images: absolute http(s) only. A relative src would let a note fire a GET at this site (/comments.php?mode=delete).
+	var SAFE_IMG_URL = /^https?:\/\//i;
+	// Elements removed together with their content (their text is raw markup to some parsers).
+	var DROP_WITH_CONTENT = {script:1, style:1, xmp:1, iframe:1, noscript:1, template:1, object:1, embed:1, noembed:1, noframes:1, plaintext:1, textarea:1, title:1, head:1, svg:1, math:1};
+	var NUMERIC_ATTR = /^(?:\d+%?|left|right|center)$/i;
 
 	// style is kept because notes use colour, but anything that can fetch or
 	// execute from within CSS is removed.
@@ -58,11 +64,14 @@ var sanitiseHtml = (function() {
 		// A deliberately finite set keeps notes readable and prevents stored
 		// content from taking over the panel while preserving common rich-text
 		// sizes from older editors.
-		'font-size': /^(?:(?:8|9|10|11|12|13|14|16|18|20|24|28|32|36|48)px|(?:0\.75|0\.875|1|1\.125|1\.25|1\.5|2|2\.5|3)(?:em|rem)|(?:75|80|87\.5|100|112\.5|125|150|200|250|300)%|xx-small|x-small|small|medium|large|x-large|xx-large)$/i,
+		'font-size': /^(?:(?:8|9|10|11|12|13|14|16|18|20|22|24|26|28|32|36|48|72)px|(?:0\.75|0\.875|1|1\.125|1\.25|1\.5|2|2\.5|3)(?:em|rem)|(?:75|80|87\.5|100|112\.5|125|150|200|250|300)%|xx-small|x-small|small|medium|large|x-large|xx-large)$/i,
 		'text-align': /^(?:left|right|center|justify|start|end)$/i,
 		'font-weight': /^(?:normal|bold|bolder|lighter|[1-9]00)$/i,
 		'font-style': /^(?:normal|italic|oblique)$/i,
-		'text-decoration': /^(?:(?:none|underline|overline|line-through)\s*)+$/i
+		'text-decoration': /^(?:(?:none|underline|overline|line-through)\s*)+$/i,
+		'font-family': /^[a-z0-9 ,'"\-]+$/i,
+		'margin-left': /^\d+px$/,
+		'padding-left': /^\d+px$/
 	};
 
 	function cleanStyle(value) {
@@ -87,6 +96,8 @@ var sanitiseHtml = (function() {
 		if (node.nodeType !== 1) { return; }
 
 		var tag = node.tagName.toLowerCase();
+
+		if (DROP_WITH_CONTENT[tag]) { node.remove(); return; }
 
 		// Clean descendants before possibly unwrapping this element. Cleaning
 		// only the original top-level list lets a forbidden wrapper smuggle an
@@ -119,12 +130,16 @@ var sanitiseHtml = (function() {
 			if (!permitted[name] && !global[name]) { node.removeAttribute(attr.name); return; }
 
 			if (name === 'href' || name === 'src') {
-				if (!SAFE_URL.test(value.trim())) { node.removeAttribute(attr.name); return; }
+				var v = value.trim();
+				if (!(name === 'src' ? SAFE_IMG_URL : SAFE_URL).test(v) || (name === 'href' && /\.php/i.test(v.split(/[?#]/)[0]))) { node.removeAttribute(attr.name); return; }
 			}
 			if (name === 'style') {
 				var safe = cleanStyle(value);
 				if (safe === null) { node.removeAttribute(attr.name); return; }
 				node.setAttribute('style', safe);
+			}
+			if ((tag === 'table' || tag === 'td' || tag === 'th') && name !== 'colspan' && name !== 'rowspan' && !NUMERIC_ATTR.test(value.trim())) {
+				node.removeAttribute(attr.name); return;
 			}
 			if (tag === 'font' && name === 'size' && !/^[1-7]$/.test(value.trim())) {
 				node.removeAttribute(attr.name);
