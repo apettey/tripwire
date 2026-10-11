@@ -1,6 +1,12 @@
 {
   "features": [
     {
+      "pr": 0,
+      "date": "2026-10-11",
+      "title": "Settings grouped into sections",
+      "description": "Settings are now grouped by what you are doing: Chain Map, Map Markers, Wormhole Jumps & Mass, Signatures, Routes & Navigation, Kills & Intel and General, plus the Jump Planner and Kill Reporting sections. Each section is short, and nothing was reset: your choices are kept.\n\nCan't find something? Type in the new Find a setting box at the top of Settings to see only the matching settings."
+    },
+    {
       "pr": 50,
       "date": "2026-10-11",
       "title": "Jump planner",
