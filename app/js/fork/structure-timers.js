@@ -168,6 +168,56 @@ const structureTimers = {
 		return html;
 	},
 
+	// ---- Pure: in-app alerts (toast + sound) ----
+
+	ALERT_LEADS: [900, 0],		// seconds before the end: 15 minutes, and the end
+	ALERT_GRACE_S: 120,			// the "ended" alert is still given this long after the end
+	ALERT_SOUNDS: { 900: "tone-chime", 0: "tone-klaxon" },
+	ALERT_KEY: "tripwire.structureTimers.alerted",
+
+	alertsEnabled: function(opts) {
+		return !(opts && opts.structures && opts.structures.alerts === false);
+	},
+
+	/**
+	 * The alerts due now: per timer only the most recent due lead (a timer that is already 10 minutes away gives the
+	 * 15-minute alert, not the end), never one whose key (id:timerAt:lead) is in `seen`, nothing from 2 minutes after the end.
+	 * @param next the mask's next timers (rows as the server sends them)
+	 * @return [{key, lead, row}] soonest first
+	 */
+	dueAlerts: function(next, nowSec, seen) {
+		const out = [];
+		(next || []).forEach(function(r) {
+			if (!r || !r.timerAt || !r.timerKind || nowSec >= r.timerAt + structureTimers.ALERT_GRACE_S) { return; }
+			let lead = null;
+			structureTimers.ALERT_LEADS.forEach(function(l) {
+				// Due, and not one that fell due before the timer was entered (the same rule as the Discord reminders)
+				if (r.timerAt - l <= nowSec && r.timerAt - l >= (r.timerSetAt || 0) && (lead === null || l < lead)) { lead = l; }
+			});
+			if (lead === null) { return; }
+			const key = r.id + ":" + r.timerAt + ":" + lead;
+			if (seen && seen[key]) { return; }
+			out.push({ key: key, lead: lead, row: r });
+		});
+		return out.sort(function(a, z) { return a.row.timerAt - z.row.timerAt; });
+	},
+
+	/** "Hull timer in 9 m: Fortizar "Fort Knox" in J163701" (the real minutes left when it is shown, "ended" from the end on) */
+	alertText: function(alert, systemName, nowSec) {
+		const r = alert.row;
+		const kind = (structureTimers.KIND_SHORT[r.timerKind] || "Timer") + " timer";
+		const left = nowSec === undefined ? alert.lead : r.timerAt - nowSec;
+		const when = left <= 0 ? " ended" : left < 60 ? " in under a minute" : " in " + Math.ceil(left / 60) + " m";
+		return kind + when + ": " + r.typeName + (r.name ? " \"" + structures.splitName(r.name).rest + "\"" : "") + " in " + systemName;
+	},
+
+	alertHtml: function(alert, systemName, nowSec) {
+		const esc = structures.escape;
+		return "<div class='kill-toast kill-toast-timer" + (alert.lead === 0 ? " kill-toast-timer-end" : "") + "' data-key='" + esc(alert.key) + "' title='Open the Timers board'>"
+			+ "<span class='kill-toast-close' title='Dismiss'>&#10005;</span>"
+			+ "<div class='kill-toast-text'><span class='str-alert-ico'>" + structures.icon("clock") + "</span> " + esc(structureTimers.alertText(alert, systemName, nowSec)) + "</div></div>";
+	},
+
 	// ---- Browser state ----
 
 	data: {},		// systemID => markers entry
@@ -230,11 +280,11 @@ const structureTimers = {
 	},
 
 	/** Whether anything uses the markers poll's answer (the node icons) */
-	consumers: function() { return structureTimers.active(); },
+	consumers: function() { return structures.enabled(structureTimers.opts()) && (structureTimers.mapMarkerEnabled(structureTimers.opts()) || structureTimers.alertsEnabled(structureTimers.opts())); },
 
 	fetchMarkers: function() {
-		// Only while something uses the answer (the node icons)
-		if (!structureTimers.consumers() || !structureTimers.chainIDs.length) { return; }
+		// Only while something uses the answer (the node icons, the alerts)
+		if (!structureTimers.consumers()) { return; }
 		if (document.hidden) { structureTimers.missed = true; return; }
 		if (structureTimers.xhr) { structureTimers.xhr.abort(); }
 		const xhr = $.ajax({ url: structureTimers.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000,
@@ -270,6 +320,45 @@ const structureTimers = {
 			if (structureTimers.boardXhr === xhr) { structureTimers.boardXhr = null; }
 			if (structures.view === "timers") { structures.renderPanel(); }
 		});
+	},
+
+	alerted: {},	// key => true: alerts already given in this browser (kept in localStorage too)
+
+	loadAlerted: function() {
+		try {
+			(JSON.parse(window.localStorage.getItem(structureTimers.ALERT_KEY) || "[]") || []).forEach(function(k) { structureTimers.alerted[k] = true; });
+		} catch (e) { /* private mode: memory only */ }
+	},
+
+	saveAlerted: function() {
+		try { window.localStorage.setItem(structureTimers.ALERT_KEY, JSON.stringify(Object.keys(structureTimers.alerted).slice(-200))); } catch (e) { /* not remembered */ }
+	},
+
+	/** Toast + sound for the timers that reached 15 minutes / the end; called every 10 s with the markers poll's next timers */
+	checkAlerts: function() {
+		const opts = structureTimers.opts();
+		if (!structures.enabled(opts) || !structureTimers.alertsEnabled(opts)) { return; }
+		const due = structureTimers.dueAlerts(structureTimers.next, structureTimers.nowSec(), structureTimers.alerted);
+		if (!due.length) { return; }
+		let $box = $("#kill-reporting-toasts");
+		if (!$box.length) {
+			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo("body");
+			$box.on("click", ".kill-toast-close", function(e) { e.stopPropagation(); $(this).closest(".kill-toast").remove(); });
+		}
+		let sound = null;
+		due.forEach(function(a) {
+			structureTimers.alerted[a.key] = true;
+			const $toast = $(structureTimers.alertHtml(a, structures.systemName(a.row.systemID), structureTimers.nowSec()));
+			$toast.on("click", function() { structureTimers.showPanel("timers"); $toast.remove(); });
+			$box.append($toast);
+			setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, 20000);
+			if (sound === null || a.lead === 0) { sound = a.lead; }
+		});
+		structureTimers.saveAlerted();
+		// The kill-reporting sound helper (it honours the Mute button); a toast alone without it
+		if (typeof killReporting !== "undefined" && typeof killReporting.play === "function") {
+			killReporting.play(structureTimers.ALERT_SOUNDS[sound], 80, "neutral");
+		}
 	},
 
 	/** Every second while the board is open: move the countdowns on without rebuilding the rows */
@@ -391,6 +480,14 @@ const structureTimers = {
 			set: function(o, on) { o.structures = Object.assign({}, o.structures, { mapMarker: on }); },
 			reset: function(o) { if (o.structures) { delete o.structures.mapMarker; } }
 		});
+		// Settings > Kills & Intel; Reset removes the key (on)
+		forkSettings.register({
+			section: "intel", order: 46, id: "structures-alerts", type: "checkbox", key: "structures",
+			label: "Timer alerts:", text: "Pop-up and sound when a structure timer is 15 minutes away and when it ends",
+			get: function(o) { return structureTimers.alertsEnabled(o); },
+			set: function(o, on) { o.structures = Object.assign({}, o.structures, { alerts: on }); },
+			reset: function(o) { if (o.structures) { delete o.structures.alerts; } }
+		});
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.structureTimersWrapped) {
 			const apply = options.apply;
 			const wrappedApply = function() {
@@ -409,6 +506,7 @@ const structureTimers = {
 	init: function() {
 		structureTimers.loadFilters();
 		$(document).on("click", "#structuresInfoLine", function() { structureTimers.showPanel("system"); });
+		structureTimers.loadAlerted();
 		structureTimers.setupSettings();
 		structureTimers.setupMenu();
 		if (typeof chain !== "undefined") { structureTimers.install(chain); }
@@ -416,6 +514,8 @@ const structureTimers = {
 			if (!document.hidden && structureTimers.missed) { structureTimers.missed = false; structureTimers.fetchMarkers(); }
 		});
 		setInterval(structureTimers.fetchMarkers, structureTimers.POLL_MS);
+		setInterval(structureTimers.checkAlerts, 10000);
+		setTimeout(structureTimers.fetchMarkers, 1500);	// alerts need the next timers even before the chain is drawn
 		setInterval(structureTimers.patchChain, 30000);	// glyphs appear 48 h ahead and turn red under 1 h
 	}
 };

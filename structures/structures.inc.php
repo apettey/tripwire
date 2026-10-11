@@ -258,7 +258,7 @@ function structures_timer_in_range($timerAt, $now) {
 
 function structures_select() {
     return 'SELECT id, systemID, typeID, typeName, kind, name, ownerID, ownerType, ownerName, ownerTicker, ownerText, state, timerKind, '
-        . structures_ts('timerAt') . ' AS timerAt, timerSetBy, note, ' . structures_ts('firstSeenAt') . ' AS firstSeenAt, firstSeenBy, '
+        . structures_ts('timerAt') . ' AS timerAt, timerSetBy, ' . structures_ts('timerSetAt') . ' AS timerSetAt, note, ' . structures_ts('firstSeenAt') . ' AS firstSeenAt, firstSeenBy, '
         . structures_ts('lastSeenAt') . ' AS lastSeenAt, lastSeenBy, lastDistanceKm, ' . structures_ts('updatedAt') . ' AS updatedAt, updatedBy, '
         . structures_ts('goneAt') . ' AS goneAt, goneBy FROM fork_structures';
 }
@@ -279,7 +279,7 @@ function structures_format(array $r, array $friendly) {
         'kind' => $r['kind'], 'name' => $r['name'],
         'ownerID' => $int($r['ownerID']), 'ownerType' => $r['ownerType'], 'ownerName' => $r['ownerName'], 'ownerTicker' => $r['ownerTicker'],
         'ownerText' => $r['ownerText'], 'side' => $side,
-        'state' => $r['state'], 'timerKind' => $r['timerKind'], 'timerAt' => $int($r['timerAt']), 'timerSetBy' => $r['timerSetBy'],
+        'state' => $r['state'], 'timerKind' => $r['timerKind'], 'timerAt' => $int($r['timerAt']), 'timerSetBy' => $r['timerSetBy'], 'timerSetAt' => $int($r['timerSetAt']),
         'note' => $r['note'],
         'firstSeenAt' => $int($r['firstSeenAt']), 'lastSeenAt' => $int($r['lastSeenAt']), 'lastSeenBy' => $r['lastSeenBy'],
         'lastDistanceKm' => $r['lastDistanceKm'] === null ? null : (float) $r['lastDistanceKm'],
@@ -322,6 +322,7 @@ function structures_list(PDO $db, $mask, $systemID, array $friendly) {
 const STRUCTURES_MARKERS_MAX = 500;   // systems per markers request
 const STRUCTURES_BOARD_MAX   = 200;   // rows of the timers board
 const STRUCTURES_NEXT        = 20;    // next timers sent with the markers
+const STRUCTURES_NEXT_GRACE  = 120;   // ... which include ones that ended this many seconds ago (the alert for "ended")
 
 /** WHERE part for live rows (not gone, deployables not seen for a week hidden as in structures_list) */
 function structures_live_where() {
@@ -332,11 +333,11 @@ function structures_live_where() {
  * Active timers of the mask, soonest first: not ended more than 2 hours ago, whatever the system (in the chain or not).
  * @return array rows as structures_format()
  */
-function structures_timers(PDO $db, $mask, array $friendly, $now, $limit = STRUCTURES_BOARD_MAX) {
+function structures_timers(PDO $db, $mask, array $friendly, $now, $limit = STRUCTURES_BOARD_MAX, $grace = STRUCTURES_TIMER_PAST) {
     $stmt = $db->prepare(structures_select() . ' WHERE maskID = :mask AND ' . structures_live_where() . ' AND timerAt IS NOT NULL
         AND timerAt >= DATE_ADD(\'1970-01-01\', INTERVAL :from SECOND) ORDER BY timerAt, id LIMIT ' . max(1, (int) $limit));
     $stmt->bindValue(':mask', $mask);
-    $stmt->bindValue(':from', (int) $now - STRUCTURES_TIMER_PAST, PDO::PARAM_INT);
+    $stmt->bindValue(':from', (int) $now - (int) $grace, PDO::PARAM_INT);
     if (!$stmt->execute()) throw new PDOException('Could not read fork_structures');
     return array_map(function ($r) use ($friendly) { return structures_format($r, $friendly); }, $stmt->fetchAll(PDO::FETCH_ASSOC));
 }

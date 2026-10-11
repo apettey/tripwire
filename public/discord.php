@@ -131,6 +131,12 @@ function discord_sample_context($kind, $template, $ping, $maskName, $comp = null
 		return discord_rolling_context(array('action' => 'set', 'who' => 'Example Pilot', 'wormholeID' => 1) + $base,
 			array('setBy' => 'Example Pilot', 'note' => 'rolling it closed', 'setAt' => time() - 300), $ends);
 	}
+	if ($kind === 'structureTimer') {
+		// A hull timer 15 minutes from now on a hostile Fortizar in J152820 (C5)
+		return $base + array('systemID' => 31001880, 'system' => 'J152820', 'chainLabel' => 'AB', 'structure' => 'J152820 - Fort Knox', 'type' => 'Fortizar',
+			'owner' => '[HSTL] Hostile Haulers', 'timer' => 'Hull timer', 'timerAt' => time() + 900, 'lead' => 15, 'setBy' => 'Example Pilot',
+			'note' => 'bring dreads', 'map' => discord_map_url(31001880));
+	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
 			'effect' => 'Wolf-Rayet', 'region' => 'E-R00028', 'map' => discord_map_url(31001882), 'dotlan' => discord_dotlan_url(31001882),

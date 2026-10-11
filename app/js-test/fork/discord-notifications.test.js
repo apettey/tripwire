@@ -374,7 +374,7 @@ describe('Discord notifications', function() {
 
 	describe('Preserve mass type', function() {
 		it('is a type of its own, after the others', function() {
-			assert.strictEqual(dn.KINDS[dn.KINDS.length - 2], 'preserveMass');
+			assert.strictEqual(dn.KINDS[dn.KINDS.length - 3], 'preserveMass');
 			assert.strictEqual(dn.LABELS.preserveMass, 'Preserve mass');
 			assert.ok(/strikes through the message/.test(dn.HELP.preserveMass) && /Every member's change is posted/.test(dn.HELP.preserveMass));
 		});
@@ -427,6 +427,36 @@ describe('Discord notifications', function() {
 		it('names a failed edit of an old mark message', function() {
 			const st = Object.assign({}, state, { outbox: { failures: [{ kind: 'preserveMassEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] } });
 			assert.ok(dn.pageHtml(st, settings()).indexOf('<li>Preserve mass (old message) to #ops') > 0);
+		});
+	});
+
+	describe('Structure timers type', function() {
+		it('is the last type, with its label and help', function() {
+			assert.strictEqual(dn.KINDS[dn.KINDS.length - 1], 'structureTimer');
+			assert.strictEqual(dn.LABELS.structureTimer, 'Structure timers');
+			assert.ok(/latest due reminder/.test(dn.HELP.structureTimer));
+		});
+		it('collects the ticked reminders (longest first) and the hostile-only option', function() {
+			const v = formValues();
+			v.types.structureTimer = Object.assign(v.types.structureTimer, { enabled: true, webhookID: '3', leads: ['15', 1440, 7, 0], hostileOnly: true });
+			const r = dn.collectSettings(v);
+			assert.deepStrictEqual(r.errors, []);
+			assert.deepStrictEqual(r.settings.types.structureTimer, { enabled: true, webhookID: 3, template: 'T structureTimer', ping: '', leads: [1440, 15, 0], hostileOnly: true });
+			v.types.structureTimer.leads = [];
+			assert.deepStrictEqual(dn.collectSettings(v).errors, ['Structure timers: tick at least one reminder']);
+		});
+		it('shows the four reminders (ticked as saved) and the hostile-only box', function() {
+			const state = { mask: { name: 'Corp' }, encrypted: true, webhooks: [], placeholders: { structureTimer: { endsEve: 'when <b>' } }, names: {}, outbox: {} };
+			const s = { types: {}, corporations: [], alliances: [], homeSystemID: 1 };
+			dn.KINDS.forEach(k => { s.types[k] = { enabled: false, webhookID: 0, template: 'x', ping: '' }; });
+			s.types.structureTimer = { enabled: true, webhookID: 0, template: 'x', ping: '', leads: [60, 0], hostileOnly: false };
+			const html = dn.pageHtml(state, s);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-lead' value='1440' />") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-lead' value='60' checked />") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-lead' value='15' />") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-lead' value='0' checked />") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-hostileOnly' />") > 0);
+			assert.ok(html.indexOf("<code title='when &lt;b&gt;'>{endsEve}</code>") > 0);
 		});
 	});
 });

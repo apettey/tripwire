@@ -10,6 +10,7 @@
 //     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
 //     preserveMass: {enabled, webhookID, template (marked / changed), templateClear (cleared), ping, chainOnly}   (discord/preserve_mass.php)
 //     rolling:   {enabled, webhookID, template (marked / changed), templateClear (done / hole gone), ping, chainOnly}   (discord/rolling.php)
+//     structureTimer: {enabled, webhookID, template, ping, leads: [1440, 60, 15, 0] (minutes before the end, 0 = at the end), hostileOnly}   (discord/structure_timers.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
 //   homeSystemID: systemID or 0   (where the chain starts: chainKill and watchlist count only systems connected to it, discord/chain.php)
@@ -42,6 +43,8 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
                 'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
             'rolling' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['rolling'], 'templateClear' => $templates['rollingClear'],
                 'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
+            'structureTimer' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['structureTimer'], 'ping' => '', 'enabledAt' => 0,
+                'leads' => DISCORD_STIMER_LEADS, 'hostileOnly' => false],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
@@ -145,6 +148,15 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
         } elseif ($kind === 'preserveMass' || $kind === 'rolling') {
             // Only connections of the chain (connected to home, discord/chain.php) unless unticked
             if (array_key_exists('chainOnly', $in)) $type['chainOnly'] = $in['chainOnly'] === true || $in['chainOnly'] === 1 || $in['chainOnly'] === '1' || $in['chainOnly'] === 'true';
+        } elseif ($kind === 'structureTimer') {
+            // Which reminders: any of 24 h / 1 h / 15 m before and at the end (longest first); and only hostile structures
+            if (array_key_exists('leads', $in)) {
+                $leads = discord_int_list($in['leads'], count(DISCORD_STIMER_LEADS), function ($id) { return in_array($id, DISCORD_STIMER_LEADS, true); });
+                rsort($leads);
+                $type['leads'] = $leads;
+            }
+            if (array_key_exists('hostileOnly', $in)) $type['hostileOnly'] = $in['hostileOnly'] === true || $in['hostileOnly'] === 1 || $in['hostileOnly'] === '1' || $in['hostileOnly'] === 'true';
+            if ($type['enabled'] && !$type['leads']) { $errors[] = 'structureTimer: tick at least one reminder'; $type['enabled'] = false; }
         } elseif ($kind === 'rally' || $kind === 'watchlist') {
             // Nothing else: on/off, webhook, ping and the template(s); the watchlist's filters are in Mask Admin > Watchlist
         } else {

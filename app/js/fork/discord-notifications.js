@@ -4,7 +4,8 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass", "rolling"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass", "rolling", "structureTimer"],
+	LEADS: [[1440, "24 hours before"], [60, "1 hour before"], [15, "15 minutes before"], [0, "when it ends"]],
 	LABELS: {
 		kspace: "New k-space near a ping system",
 		chainKill: "Any kill in our chain",
@@ -13,7 +14,8 @@ const discordNotifications = {
 		rally: "Fight here",
 		watchlist: "Watchlist match",
 		preserveMass: "Preserve mass",
-		rolling: "Rolling"
+		rolling: "Rolling",
+		structureTimer: "Structure timers"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
@@ -23,7 +25,8 @@ const discordNotifications = {
 		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Map Markers > Fight here).",
 		watchlist: "A system connected to your home system (above) through live wormholes matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. Old chain fragments no longer connected to home are not posted; a system there is posted if it gets connected again while it still matches. What is already on the chain when you turn this on (or save or turn on a filter, or change the home system) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
 		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing.",
-		rolling: "Someone marks a connection \"rolling\" on the chain map (right-click a system > Rolling, or the Mass dialog): we are rolling this hole. Pick your hole-roll channel. The message is short: the hole's name, the system it is in and the EVE time. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. When rolling is done (Stop rolling), the message is struck through with the time it was done; when the hole is gone from the map, it says the hole collapsed (checked every 10 minutes). Neither posts a new message or pings. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing."
+		rolling: "Someone marks a connection \"rolling\" on the chain map (right-click a system > Rolling, or the Mass dialog): we are rolling this hole. Pick your hole-roll channel. The message is short: the hole's name, the system it is in and the EVE time. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. When rolling is done (Stop rolling), the message is struck through with the time it was done; when the hole is gone from the map, it says the hole collapsed (checked every 10 minutes). Neither posts a new message or pings. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing.",
+		structureTimer: "A reminder before a structure timer entered in the Structures panel ends (any system of the mask, in the chain or not): tick which ones to send. Only the latest due reminder is sent (a timer entered 30 minutes before its end gets the 15-minute one) and nothing after the timer ended. Timers that were already close when you turned this on or entered the timer are not announced retroactively."
 	},
 	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" (and \"Preserve mass\" and \"Rolling\", unless you untick their chain option) only count systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass or rolling marks, while they are limited to the chain).",
@@ -206,6 +209,10 @@ const discordNotifications = {
 			} else if (kind === "preserveMass" || kind === "rolling") {
 				type.templateClear = String(v.templateClear || "").trim();
 				type.chainOnly = v.chainOnly !== false;
+			} else if (kind === "structureTimer") {
+				type.leads = (v.leads || []).map(Number).filter(function(l) { return dn.LEADS.some(function(x) { return x[0] === l; }); }).sort(function(a, z) { return z - a; });
+				type.hostileOnly = !!v.hostileOnly;
+				if (type.enabled && !type.leads.length) { errors.push(dn.LABELS[kind] + ": tick at least one reminder"); }
 			} else if (kind === "watchlist") {
 				// Only on/off, channel, ping and the text: the filters are in Mask Admin > Watchlist
 			} else if (kind === "kspace") {
@@ -375,6 +382,13 @@ const discordNotifications = {
 						+ "<div class='dn-small'>Replaces the rolling message when rolling is done or the hole is gone from the map (an edit: no new message, nobody pinged; pings in this text are left out). <code>{mark}</code> is that message struck through; without <code>{mark}</code> it is put above your text. <code>{outcome}</code> is \"Rolled by Kytus\" (after Rolled (closed)), \"Hole closed\" (the hole vanished from the map; \" (rolling by Kytus)\" is added) or \"Done\", <code>{time}</code> the EVE time it happened. Nothing is sent when there is no rolling message to edit.</div></td></tr>";
 				extra = "<tr><th>Connections:</th><td><label title='Off: every connection of the mask marked rolling is posted, also old fragments that no longer connect to home'><input type='checkbox' class='dn-chainOnly'"
 					+ (t.chainOnly !== false ? " checked" : "") + " /> only connections in our chain (connected to the home system above)</label></td></tr>";
+			} else if (kind === "structureTimer") {
+				const leads = Array.isArray(t.leads) ? t.leads : [1440, 60, 15, 0];
+				extra = "<tr><th>Remind:</th><td>" + dn.LEADS.map(function(l) {
+					return "<label class='dn-lead-label'><input type='checkbox' class='dn-lead' value='" + l[0] + "'" + (leads.indexOf(l[0]) >= 0 ? " checked" : "") + " /> " + esc(l[1]) + "</label>";
+				}).join(" ") + "</td></tr>"
+					+ "<tr><th>Structures:</th><td><label title='On: structures of our own corporation / alliance (listed above) are not reminded'><input type='checkbox' class='dn-hostileOnly'"
+					+ (t.hostileOnly ? " checked" : "") + " /> only hostile or unowned structures (skip our own)</label></td></tr>";
 			} else if (kind === "watchlist") {
 				extra = "";
 			} else if (kind === "kspace") {
@@ -468,7 +482,9 @@ const discordNotifications = {
 				includeNpc: $t.find(".dn-includeNpc").prop("checked"),
 				excludePods: $t.find(".dn-excludePods").prop("checked"),
 				includeHighsec: $t.find(".dn-includeHighsec").prop("checked"),
-				chainOnly: $t.find(".dn-chainOnly").prop("checked")
+				chainOnly: $t.find(".dn-chainOnly").prop("checked"),
+				leads: $t.find(".dn-lead:checked").map(function() { return Number($(this).val()); }).get(),
+				hostileOnly: $t.find(".dn-hostileOnly").prop("checked")
 			};
 		});
 		return values;

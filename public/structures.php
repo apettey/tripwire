@@ -162,7 +162,8 @@ try {
 					if (trim((string) $id) !== '') $systemIDs[] = structures_system_param(trim((string) $id));
 				}
 				$output['systems'] = (object) structures_markers($mysql, $mask, $systemIDs, $friendly, $now);
-				$output['next'] = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_NEXT);
+				// For the in-app alerts: upcoming timers and ones that ended in the last 2 minutes (not the 2 h an "elapsed" timer stays listed)
+				$output['next'] = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_NEXT, STRUCTURES_NEXT_GRACE);
 			}
 			$hash = md5(json_encode(array($output['systems'] ?? null, $output['next'] ?? null, $output['timers'] ?? null, $output['capped'] ?? null)));
 			$have = isset($_GET['have']) ? $_GET['have'] : '';
