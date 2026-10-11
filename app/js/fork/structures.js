@@ -627,7 +627,7 @@ const structures = {
 		}
 	},
 
-	renderPanel: function() {
+	renderPanel: function(force) {
 		const $w = structures.$widget();
 		if (!$w.length) { return; }
 		const nowSec = structures.nowSec();
@@ -639,12 +639,15 @@ const structures = {
 			structures.editing = null;
 			structures.notice = "This structure was removed by someone else";
 		}
-		// While the form has focus only the numbers move (header, timers, ages); the rest is rebuilt when focus leaves
-		const $form = $w.find(".str-form");
-		if (structures.editing && $form.length && $form[0].contains(document.activeElement)) {
+		// While a form is open (poll, another row's action) only the rows are refreshed; the form is never rebuilt.
+		// Everything is rebuilt when the form closes (Save, Cancel, Esc) or another form opens (redraw).
+		if (structures.editing && !force && $w.find(".str-form").length) {
+			const live = {};
 			structures.rows.forEach(function(r) {
+				live[r.id] = true;
 				$w.find(".str-row[data-id='" + r.id + "']:not(.str-gonerow)").replaceWith(structures.rowHtml(r, nowSec, structures.highlight));
 			});
+			$w.find(".str-row:not(.str-gonerow)").each(function() { if (!live[$(this).attr("data-id")]) { $(this).remove(); } });
 			return;
 		}
 		const cap = structures.editing ? structures.captureForm($w) : null;
@@ -654,12 +657,13 @@ const structures = {
 			rows: structures.rows, gone: structures.gone, nowSec: nowSec, highlight: structures.highlight, editing: structures.editing, moreID: structures.moreID,
 			showGone: structures.showGone, extraCorps: structures.threatCorps(), types: structures.types(), error: structures.error || structures.notice, loaded: structures.loaded
 		}));
+		structures.notice = "";	// shown once
 		$content.scrollTop(scroll);
 		structures.restoreForm($w, cap);
 	},
 
 	redraw: function() {
-		structures.renderPanel();
+		structures.renderPanel(true);
 		const $f = structures.$widget().find(".str-form");
 		if ($f.length) { structures.updatePreview($f); }
 	},
@@ -694,9 +698,8 @@ const structures = {
 	bindPanel: function() {
 		const sel = "#" + structures.WIDGET_ID;
 		const rowID = function(el) { return parseInt($(el).closest("[data-id]").attr("data-id"), 10); };
-		$(document).on("focusout", sel + " .str-form", function() {
-			// Focus left the form: bring the panel up to date (rows changed meanwhile)
-			setTimeout(function() { if (structures.editing && !$(sel + " .str-form").find(":focus").length) { structures.redraw(); } }, 0);
+		$(document).on("keydown", sel + " .str-form", function(e) {
+			if (e.which === 27) { e.preventDefault(); structures.editing = null; structures.redraw(); }
 		}).on("click", sel + " .str-add", function(e) {
 			e.preventDefault();
 			structures.notice = "";
@@ -937,6 +940,13 @@ const structures = {
 			return result;
 		};
 		intelScans.renderPreview.structuresWrapped = true;
+		// The shared scan's own request failing leaves "Save structures only" disabled: refresh the buttons
+		$(document).ajaxComplete(function(e, xhr, settings) {
+			if (settings && settings.url === intelScans.URL && settings.type === "POST") {
+				const $d = $("#" + intelScans.DIALOG_ID);
+				if ($d.length && $d.dialog("isOpen")) { structures.renderDialogSection(); }
+			}
+		});
 		const share = intelScans.share;
 		intelScans.share = function() {
 			const self = this, args = arguments;
