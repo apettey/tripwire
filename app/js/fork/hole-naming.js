@@ -165,6 +165,18 @@ const holeNaming = {
 		if (sig) { parts.push(sig); }
 		if (args.eol) { parts.push("EOL"); }
 		return parts.join(" ");
+	},
+
+	/** Settings > Signatures "Suggest hole names" (a missing key means on) */
+	enabled: function(opts) {
+		return !(opts && opts.holeNaming && opts.holeNaming.enabled === false);
+	},
+
+	/** Suggest a name when editing an existing sig (e.g. a hole added by a scan paste)? Only when it has no name
+		yet and its other side isn't a named hole: then this side is the way back into the chain, not a new hole. */
+	suggestOnEdit: function(name, otherSideName) {
+		const own = String(name === undefined || name === null ? "" : name).trim();
+		return own === "" && !holeNaming.leadingToken(otherSideName);
 	}
 };
 
@@ -172,6 +184,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 	$(function() {
 		const dialogSel = "#dialog-signature";
 		let userEdited = false;
+		let allowed = false;
 
 		function field(name) { return $(dialogSel + " [name='" + name + "']"); }
 		function isAddMode() { return typeof sigDialogVM !== "undefined" && sigDialogVM.mode !== "update"; }
@@ -202,20 +215,48 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return holeNaming.nextName(prefix, used, holeNaming.sizeClass(effectiveType()));
 		};
 
+		/** Whether this dialog may get a suggestion: Add mode, or editing a sig that has no name yet */
+		function suggestionAllowed() {
+			if (isAddMode()) { return true; }
+			const sig = tripwire.client.signatures[sigDialogVM.sigId];
+			if (!sig) { return false; }
+			const other = tripwire.client.signatures[$(dialogSel).data("signature2id")];
+			// Non-wormhole sigs keep their site name elsewhere; the hole Name field starts empty for them
+			return holeNaming.suggestOnEdit(sig.type === "wormhole" ? sig.name : "", other ? other.name : "");
+		}
+
 		function autoFill() {
-			if (userEdited || !isAddMode() || !isWormholeSelected()) { return; }
+			if (userEdited || !allowed || !isWormholeSelected()) { return; }
+			if (typeof options !== "undefined" && !holeNaming.enabled(options)) { return; }
 			try {
 				const suggestion = holeNaming.suggestForDialog();
-				field("wormholeName").val(suggestion || "");
+				const $name = field("wormholeName");
+				$name.val(suggestion || "");
+				// Edit mode focuses the Name field: keep the suggestion selected so typing replaces it
+				if ($name.length && document.activeElement === $name[0]) { $name.select(); }
 			} catch (e) {
 				console.warn("hole-naming: could not suggest a name", e);
 			}
 		}
 
 		// jQuery UI fires the 'dialogopen' event before the dialog's own open callback (which clears inputs), so defer
+		// Decided once the open callback has filled the form (it fires type changes before setting the name)
 		$(document).on("dialogopen", dialogSel, function() {
 			userEdited = false;
-			setTimeout(autoFill, 0);
+			allowed = false;
+			setTimeout(function() {
+				try { allowed = suggestionAllowed(); } catch (e) { allowed = false; }
+				autoFill();
+			}, 0);
+		});
+		$(document).on("dialogclose", dialogSel, function() { allowed = false; });
+
+		// --- Settings > Signatures (takes effect on Save; Reset = on) ---
+		forkSettings.register({
+			section: "signatures", order: 50, id: "holeNaming-enabled", type: "checkbox", key: "holeNaming",
+			label: "Suggest hole names:", text: "Fill in the Name of new and pasted wormholes (A, AB, AB6 ...)",
+			get: function(o) { return holeNaming.enabled(o); },
+			set: function(o, on) { o.holeNaming = { enabled: on }; }
 		});
 		$(document).on("input", dialogSel + " [name='wormholeName']", function() { userEdited = true; });
 		$(document).on("change input", dialogSel + " [name='wormholeType'], " + dialogSel + " [name='wormholeType2']", autoFill);

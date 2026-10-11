@@ -224,4 +224,19 @@ describe('Hole naming', () => {
 		it('Name only', () => assert.equal(holeNaming.bookmarkString({ name: 'A' }), '=A'));
 		it('No name gives null', () => assert.equal(holeNaming.bookmarkString({ name: '', classText: 'C5', sigAlpha: 'ABC' }), null));
 	});
+
+	describe('enabled', () => {
+		it('Missing options mean on', () => assert.deepEqual([holeNaming.enabled(undefined), holeNaming.enabled({}), holeNaming.enabled({ holeNaming: {} })], [true, true, true]));
+		it('On', () => assert.equal(holeNaming.enabled({ holeNaming: { enabled: true } }), true));
+		it('Off', () => assert.equal(holeNaming.enabled({ holeNaming: { enabled: false } }), false));
+	});
+
+	describe('suggestOnEdit', () => {
+		it('Pasted hole, both sides unnamed', () => assert.equal(holeNaming.suggestOnEdit(null, null), true));
+		it('Blank name', () => assert.equal(holeNaming.suggestOnEdit('  ', ''), true));
+		it('Already named', () => assert.equal(holeNaming.suggestOnEdit('AB', ''), false));
+		it('Return bookmark is a name', () => assert.equal(holeNaming.suggestOnEdit('!A', 'A'), false));
+		it('Far side is a named hole: this is the way back', () => assert.equal(holeNaming.suggestOnEdit('', 'A - frig'), false));
+		it('Far side is only a return bookmark', () => assert.equal(holeNaming.suggestOnEdit('', '!B'), true));
+	});
 });
