@@ -6,9 +6,10 @@
 //	Purpose:	Structures (Upwell, POS, deployables) of a system, shared with the current mask (structures/structures.inc.php).
 //				GET  action=list&systemID=<id>[&have=<hash>]  -> the system's live and recently gone structures; with a
 //				                                                matching have=<hash> only {unchanged: true, serverTime}
-//				POST action=scan&systemID=<id>&text=<d-scan>[&keep=[0,2]][&systemName=J123456]
+//				POST action=scan&systemID=<id>&text=<d-scan>[&keep=[0,2]][&systemName=J123456][&format=overview]
 //				                                              -> save the structures of a d-scan (keep = indexes of the
-//				                                                 structure rows to save, default all)
+//				                                                 structure rows to save, default all); format=overview reads
+//				                                                 text as a copied overview selection (structures_parse_overview)
 //				POST action=add&systemID=<id>&typeName=<name>[&typeID=][&name=][&owner=][&state=][&timerKind=&timerAt=][&note=]
 //				POST action=update&id=<id>[&owner= | &ownerID=&ownerType=][&state=][&timerKind=&timerAt=][&note=][&seenNow=1]
 //				POST action=gone&id=<id>&state=destroyed|removed|restore
@@ -17,7 +18,9 @@
 //				                                                 and the mask's next 20 timers (chain map markers, in-app alerts)
 //				GET  action=timers                            -> every active timer of the mask (the Structures panel's Timers view)
 //				Every write needs X-Requested-With: XMLHttpRequest (like intel_scans.php) and returns the system's list. Anyone with access to the mask may write. Every query filters on the session's mask.
-//				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups).
+//				Never calls ESI or zKillboard (owners come from the cache of the pilot lookups; an owner text the cache does not
+//				know is queued in fork_structure_owner_lookups for the zKillboard worker, structures/owners.inc.php). A list also
+//				carries `suggestions`: hints per structure from the kills the pooled feed stored (possible owner, destroyed?).
 //***********************************************************
 $startTime = microtime(true);
 
@@ -31,6 +34,7 @@ if (!isset($_SESSION['userID']) || !isset($_SESSION['mask'])) {
 require_once('../config.php');
 require_once('../db.inc.php');
 require_once('../structures/structures.inc.php');
+require_once('../structures/owners.inc.php');
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -86,7 +90,8 @@ try {
 		if ($action === 'scan') {
 			$text = isset($_POST['text']) ? $_POST['text'] : '';
 			if (!is_string($text) || strlen($text) > INTEL_MAX_BYTES) structures_fail(400, 'Invalid scan');
-			$parsed = structures_parse_scan($text, isset($_POST['systemName']) && is_string($_POST['systemName']) ? $_POST['systemName'] : null);
+			$systemName = isset($_POST['systemName']) && is_string($_POST['systemName']) ? $_POST['systemName'] : null;
+			$parsed = isset($_POST['format']) && $_POST['format'] === 'overview' ? structures_parse_overview($text, $systemName) : structures_parse_scan($text, $systemName);
 			$rows = $parsed['structures'];
 			$keep = null;
 			if (isset($_POST['keep'])) {
@@ -126,6 +131,7 @@ try {
 				$id = structures_insert($mysql, $mask, $systemID, $typeID, $typeName, $kind, $changes, $by);
 				structures_update($mysql, $mask, $id, array_diff_key($changes, array('name' => 1, 'state' => 1, 'note' => 1)), $by);
 				$output['added'] = $id;
+				structures_queue_owner_text($mysql, $changes);
 			}
 		} else if ($action === 'update') {
 			[$changes, $error, $choices] = structures_changes($mysql, $_POST, $now, $existing);
@@ -139,6 +145,7 @@ try {
 				}
 				$seen = isset($_POST['seenNow']) && $_POST['seenNow'] === '1';
 				if (!structures_update($mysql, $mask, $existing['id'], $changes, $by, $seen)) structures_fail(404, 'Not found');
+				structures_queue_owner_text($mysql, $changes);
 			}
 		} else {
 			$state = isset($_POST['state']) ? $_POST['state'] : '';
@@ -183,6 +190,9 @@ try {
 	}
 
 	$list = structures_list($mysql, $mask, $systemID, $friendly);
+	// Hints from the stored kills (only the database is read); part of the hash, so a poll sees them change
+	$list['suggestions'] = (object) structures_suggestions($mysql, $systemID, $list['structures'], $now);
+	$list['hash'] = md5(json_encode(array($list['structures'], $list['gone'], $list['suggestions'])));
 	$output['systemID'] = $systemID;
 	$output['serverTime'] = time();
 	$have = $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['have']) ? $_GET['have'] : '';

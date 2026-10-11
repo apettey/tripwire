@@ -168,6 +168,53 @@ function structures_parse_scan($text, $systemName = null) {
 }
 
 /**
+ * Structures of a copied overview selection (spec 3.3, best effort). Overview rows are tab-separated with the columns the
+ * pilot chose, so a row is read by cell content: the first cell that is exactly a structure type name is the type, the first
+ * cell that reads as a distance (intel_parse_distance_km) the distance, and the name is the longest other cell, preferring
+ * those that contain " - " (Upwell names); a name equal to the type name is no name. Rows without a type cell are not
+ * structures. Same result as structures_parse_scan (JS mirror: structures.parseOverview).
+ * @return array ['structures' => [[typeID, typeName, kind, name, km|null, prefix, rest, wrong], ...], 'modules' => n, 'notRecognised' => n, 'invalid' => 0]
+ */
+function structures_parse_overview($text, $systemName = null) {
+    $out = [];
+    $modules = 0;
+    $other = 0;
+    foreach (intel_lines($text) as $line) {
+        $cells = array_map(function ($c) { return intel_clean_field($c); }, explode("\t", $line));
+        $typeAt = null;
+        $info = null;
+        foreach ($cells as $i => $cell) {
+            if ($cell === '') continue;
+            $found = structures_type_info(null, $cell);
+            if ($found && mb_strtolower($found[1], 'UTF-8') === mb_strtolower($cell, 'UTF-8')) { $typeAt = $i; $info = $found; break; }
+        }
+        if ($info === null) { $other++; continue; }
+        [$id, $canonical, $kind, $tower] = $info;
+        if ($kind === 'starbase' && !$tower) { $modules++; continue; }
+        $km = null;
+        $kmAt = null;
+        foreach ($cells as $i => $cell) {
+            if ($i === $typeAt || $cell === '') continue;
+            $value = intel_parse_distance_km($cell);
+            if ($value !== null) { $km = $value; $kmAt = $i; break; }
+        }
+        $name = '';
+        $withDash = false;
+        foreach ($cells as $i => $cell) {
+            if ($i === $typeAt || $i === $kmAt || $cell === '' || $cell === '-') continue;
+            $dash = strpos($cell, ' - ') !== false;
+            if (($dash && !$withDash) || ($dash === $withDash && mb_strlen($cell, 'UTF-8') > mb_strlen($name, 'UTF-8'))) { $name = $cell; $withDash = $dash; }
+        }
+        if (mb_strtolower($name, 'UTF-8') === mb_strtolower($canonical, 'UTF-8')) $name = '';
+        [$prefix, $rest] = structures_split_name($name);
+        $wrong = $kind === 'upwell' && $prefix !== '' && $systemName !== null && $systemName !== ''
+            && preg_match('/^J[0-9]{6}$/', $prefix) === 1 && strcasecmp($prefix, $systemName) !== 0;
+        $out[] = [$id, $canonical, $kind, $name, $km, $prefix, $rest, $wrong];
+    }
+    return ['structures' => $out, 'modules' => $modules, 'notRecognised' => $other, 'invalid' => 0];
+}
+
+/**
  * Match scanned structures with stored rows of the same mask and system. Pure function (JS mirror: structures.merge).
  * @param array $existing [['id', 'typeID', 'name', 'removed' (bool)], ...] live rows and removed rows (not destroyed ones)
  * @param array $incoming [['typeID', 'name'], ...]
@@ -391,6 +438,95 @@ function structures_markers(PDO $db, $mask, array $systemIDs, array $friendly, $
     }
     unset($e);
     ksort($out);
+    return $out;
+}
+
+// ---- Suggestions from stored kills (phase 4) ----
+
+const STRUCTURES_SUGGEST_DAYS = 30;   // killmails looked at (the pooled zKillboard feed keeps its own, shorter, window)
+const STRUCTURES_SUGGEST_OWNERS = 2;  // owner candidates per structure
+
+/**
+ * Hints from the structure / starbase losses the pooled zKillboard feed stored for the system (zkill_killmails; only the
+ * database is read, nothing is fetched). Never applied by themselves: the panel shows them as clickable chips.
+ *  - 'destroyed': a kill of this structure's type here after the row was first seen (and, when the owner is known, of that
+ *    owner): "was it killed?" -> [killID, killTime]
+ *  - 'owner' (rows without an owner): the corporations that lost this type of structure here, most losses first, only those
+ *    whose name the entity cache knows (others are queued for the worker, so they show up on a later poll):
+ *    [[id, 'corporation', name, ticker, losses]]
+ * @param array $live structures_list()['structures']
+ * @return array rowID => ['destroyed' => [killID, killTime] (optional), 'owner' => [...] (optional)]; rows without a hint are left out
+ */
+function structures_suggestions(PDO $db, $systemID, array $live, $now) {
+    $typeIDs = [];
+    foreach ($live as $r) if ($r['typeID'] !== null) $typeIDs[(int) $r['typeID']] = true;
+    if (!$typeIDs) return [];
+    try {
+        $stmt = $db->prepare('SELECT killID, ' . structures_ts('killTime') . ' AS killTime, victimShipTypeID, victimCorporationID, victimAllianceID FROM zkill_killmails
+            WHERE systemID = :s AND victimShipTypeID IN (' . implode(',', array_keys($typeIDs)) . ') AND killTime >= DATE_ADD(\'1970-01-01\', INTERVAL :from SECOND)
+            ORDER BY killTime DESC LIMIT 200');
+        $stmt->bindValue(':s', (int) $systemID, PDO::PARAM_INT);
+        $stmt->bindValue(':from', (int) $now - STRUCTURES_SUGGEST_DAYS * 86400, PDO::PARAM_INT);
+        if (!$stmt->execute()) return [];
+        $kills = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $error) {
+        if ((string) $error->getCode() === '42S02') return [];   // the feed has never run
+        throw $error;
+    }
+    if (!$kills) return [];
+    $out = [];
+    $corps = [];
+    foreach ($live as $r) {
+        if ($r['typeID'] === null) continue;
+        $own = array_values(array_filter($kills, function ($k) use ($r) { return (int) $k['victimShipTypeID'] === (int) $r['typeID']; }));
+        if (!$own) continue;
+        $hint = [];
+        foreach ($own as $k) {   // newest first
+            if ((int) $k['killTime'] <= (int) $r['firstSeenAt']) continue;
+            if ($r['ownerID'] !== null) {
+                $victim = $r['ownerType'] === 'alliance' ? $k['victimAllianceID'] : $k['victimCorporationID'];
+                if ($victim === null || (int) $victim !== (int) $r['ownerID']) continue;
+            }
+            $hint['destroyed'] = [(int) $k['killID'], (int) $k['killTime']];
+            break;
+        }
+        if ($r['ownerID'] === null) {
+            $count = [];
+            foreach ($own as $k) {
+                $c = $k['victimCorporationID'];
+                if ($c === null || (function_exists('intel_is_npc_corp') && intel_is_npc_corp((int) $c))) continue;
+                $count[(int) $c] = ($count[(int) $c] ?? 0) + 1;   // keeps first-seen (newest) order for ties
+            }
+            arsort($count);
+            $ids = array_slice(array_keys($count), 0, STRUCTURES_SUGGEST_OWNERS);
+            if ($ids) { $hint['owner_ids'] = $ids; foreach ($ids as $c) $corps[$c] = true; $hint['owner_n'] = $count; }
+        }
+        if ($hint) $out[(int) $r['id']] = $hint;
+    }
+    // Names and tickers of the candidate corporations from the entity cache; the unknown ones are queued for the worker
+    $known = [];
+    if ($corps) {
+        try {
+            $in = implode(',', array_keys($corps));
+            foreach ($db->query("SELECT id, name, ticker FROM fork_pilot_entities WHERE kind = 'corporation' AND name IS NOT NULL AND id IN ($in)")->fetchAll(PDO::FETCH_ASSOC) as $e) {
+                $known[(int) $e['id']] = [(string) $e['name'], (string) $e['ticker']];
+            }
+            $missing = array_diff_key($corps, $known);
+            if ($missing && function_exists('intel_queue_entities')) intel_queue_entities($db, array_fill_keys(array_keys($missing), 'corporation'));
+        } catch (PDOException $error) {
+            if ((string) $error->getCode() !== '42S02') throw $error;
+        }
+    }
+    foreach ($out as $id => &$hint) {
+        if (isset($hint['owner_ids'])) {
+            $list = [];
+            foreach ($hint['owner_ids'] as $c) if (isset($known[$c])) $list[] = [$c, 'corporation', $known[$c][0], $known[$c][1], (int) $hint['owner_n'][$c]];
+            if ($list) $hint['owner'] = $list;
+        }
+        unset($hint['owner_ids'], $hint['owner_n']);
+        if (!$hint) unset($out[$id]);
+    }
+    unset($hint);
     return $out;
 }
 

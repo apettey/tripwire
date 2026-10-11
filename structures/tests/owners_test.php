@@ -1,0 +1,154 @@
+<?php
+// Fork-owned: tests of the smart input of the Structures feature (spec phase 4): the owner lookups the zKillboard worker
+// resolves (structures/owners.inc.php) with ESI replaced by a fake transport (zk_http_transport: nothing leaves the
+// container, anything unexpected fails), and the hints from stored kills (structures_suggestions). Against the dev database
+// with a mask no real user has and IDs / names "Zzo ..."; the rows are removed afterwards.
+//   docker compose -f docker-compose.dev.yml exec -T app php structures/tests/owners_test.php
+if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
+
+chdir(__DIR__ . '/../../public');
+require_once(__DIR__ . '/../../config.php');
+require_once(__DIR__ . '/../../db.inc.php');
+require_once(__DIR__ . '/../structures.inc.php');
+require_once(__DIR__ . '/../owners.inc.php');
+require_once(__DIR__ . '/../../zkill/zkill.inc.php');
+
+$failures = 0;
+$count = 0;
+function check($name, $actual, $expected) {
+    global $failures, $count;
+    $count++;
+    if ($actual !== $expected) {
+        $failures++;
+        fwrite(STDERR, "FAIL $name\n  expected: " . var_export($expected, true) . "\n  actual:   " . var_export($actual, true) . "\n");
+    }
+}
+
+// Every outgoing request goes through this fake
+$calls = [];
+$handler = function ($method, $url, $body) { return [599, 'unexpected request', []]; };
+zk_http_transport(function ($method, $url, $body) use (&$calls, &$handler) {
+    $calls[] = [$method, $url, $body];
+    return $handler($method, $url, $body);
+});
+zk_log_sink(function ($message) { });
+function limiter_reset() {
+    $state = &zk_http_state();
+    $state = [];
+}
+
+const MASK_A = '999999995.1';
+const SYSTEM = 31001240;
+const GHOST = 2100000010;      // a corporation ESI knows by name
+const VICTIM = 2100000011;     // lost a structure in the system
+const KILLS = [9990000001, 9990000002, 9990000003];
+
+function cleanup($db) {
+    $db->exec('DELETE FROM fork_structures WHERE maskID = ' . MASK_A);
+    $db->exec("DELETE FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo %'");
+    $db->exec('DELETE FROM fork_pilot_entities WHERE id IN (' . GHOST . ', ' . VICTIM . ')');
+    $db->exec('DELETE FROM zkill_killmails WHERE killID IN (' . implode(',', KILLS) . ')');
+}
+structures_schema($mysql);
+structures_owner_schema($mysql);
+intel_pilots_schema($mysql);
+zk_ensure_schema($mysql);
+cleanup($mysql);
+
+// --- queueing (web side) ---
+check('queue: a short text is not worth asking', structures_owner_queue($mysql, 'ab'), false);
+check('queue: a name is queued', structures_owner_queue($mysql, 'Zzo Ghost Corp'), true);
+check('queue: the same name in another case is the same row', [structures_owner_queue($mysql, 'zzo ghost corp'), (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo Ghost%'")->fetchColumn()], [true, 1]);
+check('queue: changes with a resolved owner or none queue nothing', [structures_queue_owner_text($mysql, ['ownerID' => 5, 'ownerText' => null]), structures_queue_owner_text($mysql, ['note' => 'x']), structures_queue_owner_text($mysql, ['ownerID' => null, 'ownerText' => ''])], [false, false, false]);
+check('queue: unresolved text from a request is queued', [structures_queue_owner_text($mysql, ['ownerID' => null, 'ownerText' => 'Zzo Nobody Inc']), (int) $mysql->query("SELECT COUNT(*) FROM fork_structure_owner_lookups WHERE name = 'Zzo Nobody Inc'")->fetchColumn()], [true, 1]);
+
+// Two unresolved structures typed by hand (one of them with other letter case) and one that stays unknown
+$scan = structures_parse_scan("35832\tJ163702 - One\tAstrahus\t1 km\n35833\tJ163702 - Two\tFortizar\t2 km\n35835\tJ163702 - Three\tAthanor\t3 km", 'J163702');
+structures_apply_scan($mysql, MASK_A, SYSTEM, $scan['structures'], 0, 'Scout');
+$ids = [];
+foreach (structures_list($mysql, MASK_A, SYSTEM, ['corporations' => [], 'alliances' => []])['structures'] as $r) $ids[$r['typeName']] = $r['id'];
+$mysql->exec("UPDATE fork_structures SET ownerText = 'zzo ghost corp' WHERE id = " . $ids['Astrahus']);
+$mysql->exec("UPDATE fork_structures SET ownerText = 'Zzo Ghost Corp' WHERE id = " . $ids['Fortizar']);
+$mysql->exec("UPDATE fork_structures SET ownerText = 'Zzo Nobody Inc' WHERE id = " . $ids['Athanor']);
+
+// --- the worker pass: ESI /universe/ids, then the entity queue, then the rows ---
+limiter_reset();
+$handler = function ($method, $url, $body) {
+    $names = json_decode($body, true);
+    $corporations = [];
+    foreach ($names as $n) if (strcasecmp($n, 'Zzo Ghost Corp') === 0) $corporations[] = ['id' => GHOST, 'name' => 'Zzo Ghost Corp'];
+    return [200, json_encode(['corporations' => $corporations]), []];
+};
+$line = structures_owner_run($mysql);
+check('run: one POST /universe/ids with the queued names', [count($calls), $calls[0][0], $calls[0][1], $calls[0][2] !== null], [1, 'POST', ZK_ESI_BASE . 'universe/ids', true]);
+$sent = json_decode($calls[0][2], true);
+sort($sent);
+check('run: ... both names', $sent, ['Zzo Ghost Corp', 'Zzo Nobody Inc']);
+check('run: the log line', $line, 'structure owners: 1 names resolved, 1 unknown, 2 rows updated');
+$lookups = $mysql->query("SELECT name, status, entityID, entityType FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo %' ORDER BY name")->fetchAll(PDO::FETCH_NUM);
+check('run: lookup answers', $lookups, [['Zzo Ghost Corp', 'done', GHOST, 'corporation'], ['Zzo Nobody Inc', 'none', null, null]]);
+$rows = $mysql->query('SELECT typeName, ownerID, ownerType, ownerName, ownerText, ownerTicker FROM fork_structures WHERE maskID = ' . MASK_A . ' ORDER BY typeName')->fetchAll(PDO::FETCH_NUM);
+check('run: the typed owners are resolved (any letter case), the unknown one stays text',
+    $rows, [['Astrahus', GHOST, 'corporation', 'Zzo Ghost Corp', null, null], ['Athanor', null, null, null, 'Zzo Nobody Inc', null], ['Fortizar', GHOST, 'corporation', 'Zzo Ghost Corp', null, null]]);
+check('run: the entity is queued for its name and ticker', $mysql->query('SELECT status FROM fork_pilot_entities WHERE id = ' . GHOST)->fetchColumn(), 'queued');
+// intel_entities_step of the same worker fetches the ticker; then the next pass fills it in
+$mysql->exec("UPDATE fork_pilot_entities SET name = 'Zzo Ghost Corp', ticker = 'ZZG', status = 'done', fetchedAt = UTC_TIMESTAMP() WHERE id = " . GHOST);
+limiter_reset();
+$calls = [];
+$line = structures_owner_run($mysql);
+check('run: the ticker is filled from the entity cache, no request', [$line, count($calls), $mysql->query('SELECT COUNT(DISTINCT ownerTicker) FROM fork_structures WHERE ownerTicker = \'ZZG\' AND maskID = ' . MASK_A)->fetchColumn()], ['structure owners: 0 names resolved, 0 unknown, 2 rows updated', 0, 1]);
+check('run: nothing left to do', structures_owner_run($mysql), null);
+check('run: a name ESI did not know is not asked again by a retype', [structures_owner_queue($mysql, 'Zzo Nobody Inc'), $mysql->query("SELECT status FROM fork_structure_owner_lookups WHERE name = 'Zzo Nobody Inc'")->fetchColumn()], [true, 'none']);
+
+// ESI failures: 5xx / rate limit keep the queue, a 4xx counts attempts and ends in 'failed'
+$mysql->exec("DELETE FROM fork_structure_owner_lookups WHERE name LIKE 'Zzo %'");
+structures_owner_queue($mysql, 'Zzo Broken Corp');
+$handler = function () { return [503, 'down', []]; };
+limiter_reset();
+check('failure: a 5xx leaves it queued', [structures_owner_run($mysql), $mysql->query("SELECT status, attempts FROM fork_structure_owner_lookups WHERE name = 'Zzo Broken Corp'")->fetch(PDO::FETCH_NUM)], [null, ['queued', 0]]);
+$handler = function () { return [400, 'bad', []]; };
+for ($i = 1; $i <= STRUCTURES_OWNER_MAX_TRIES; $i++) {
+    limiter_reset();
+    structures_owner_run($mysql);
+}
+check('failure: three 4xx answers make it failed', $mysql->query("SELECT status, attempts FROM fork_structure_owner_lookups WHERE name = 'Zzo Broken Corp'")->fetch(PDO::FETCH_NUM), ['failed', STRUCTURES_OWNER_MAX_TRIES]);
+$handler = function ($method, $url, $body) { return [599, 'unexpected request', []]; };
+
+// --- hints from stored kills ---
+cleanup($mysql);
+$scan = structures_parse_scan("35832\tJ163702 - One\tAstrahus\t1 km\n35832\tJ163702 - Owned\tAstrahus\t2 km\n35833\tJ163702 - Fort\tFortizar\t3 km", 'J163702');
+structures_apply_scan($mysql, MASK_A, SYSTEM, $scan['structures'], 0, 'Scout');
+$friendly = ['corporations' => [], 'alliances' => []];
+$byName = [];
+foreach (structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'] as $r) $byName[$r['name']] = $r['id'];
+$now = time();
+$mysql->exec('UPDATE fork_structures SET firstSeenAt = UTC_TIMESTAMP() - INTERVAL 2 DAY WHERE maskID = ' . MASK_A);
+$mysql->exec("INSERT INTO fork_pilot_entities (id, kind, name, ticker, status, requestedAt, wantedAt, fetchedAt) VALUES (" . VICTIM . ", 'corporation', 'Zzo Victim Corp', 'ZZV', 'done', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+$kill = function ($killID, $typeID, $corp, $secondsAgo) use ($mysql) {
+    $mysql->prepare('INSERT INTO zkill_killmails (killID, systemID, killTime, receivedAt, victimShipTypeID, victimCorporationID) VALUES (?, ?, ?, UTC_TIMESTAMP(), ?, ?)')
+        ->execute([$killID, SYSTEM, gmdate('Y-m-d H:i:s', time() - $secondsAgo), $typeID, $corp]);
+};
+$kill(KILLS[0], 35832, VICTIM, 3600);            // an Astrahus of VICTIM died here an hour ago, after the rows were first seen
+$kill(KILLS[1], 35832, VICTIM, 4 * 86400);       // and another 4 days ago (before: still a hint for the owner, not for "destroyed")
+$kill(KILLS[2], 35835, VICTIM, 600);             // an Athanor: no row of that type here
+$live = structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'];
+$mysql->exec("UPDATE fork_structures SET ownerID = 2100000099, ownerType = 'corporation', ownerName = 'Someone Else', ownerTicker = 'SOME' WHERE id = " . $byName['J163702 - Owned']);
+$live = structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'];
+$s = structures_suggestions($mysql, SYSTEM, $live, $now);
+check('hints: only the ownerless Astrahus gets any', array_keys($s), [$byName['J163702 - One']]);
+check('hints: an ownerless Astrahus: destroyed? (the newer kill) and the likeliest owner with its cached name', [$s[$byName['J163702 - One']]['destroyed'][0], $s[$byName['J163702 - One']]['owner']],
+    [KILLS[0], [[VICTIM, 'corporation', 'Zzo Victim Corp', 'ZZV', 2]]]);
+check('hints: an Astrahus owned by someone else: no destroyed? (the victim is another corporation) and no owner hint', $s[$byName['J163702 - Owned']] ?? 'none', 'none');
+$mysql->exec("UPDATE fork_structures SET ownerID = " . VICTIM . ", ownerType = 'corporation', ownerName = 'Zzo Victim Corp', ownerTicker = 'ZZV' WHERE id = " . $byName['J163702 - Owned']);
+$s = structures_suggestions($mysql, SYSTEM, structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'], $now);
+check('hints: an Astrahus owned by the victim: destroyed?, no owner hint', [$s[$byName['J163702 - Owned']]['destroyed'][0], isset($s[$byName['J163702 - Owned']]['owner'])], [KILLS[0], false]);
+// An owner candidate the entity cache does not know yet is queued for the worker and not shown until it is known
+$mysql->exec('DELETE FROM fork_pilot_entities WHERE id = ' . VICTIM);
+$s = structures_suggestions($mysql, SYSTEM, structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'], $now);
+check('hints: an unknown candidate is queued, not shown', [isset($s[$byName['J163702 - One']]['owner']), $mysql->query('SELECT status FROM fork_pilot_entities WHERE id = ' . VICTIM)->fetchColumn(), isset($s[$byName['J163702 - One']]['destroyed'])], [false, 'queued', true]);
+check('hints: kills older than the window are ignored', structures_suggestions($mysql, SYSTEM, structures_list($mysql, MASK_A, SYSTEM, $friendly)['structures'], $now + 40 * 86400), []);
+check('hints: no rows, no query', structures_suggestions($mysql, SYSTEM, [], $now), []);
+
+cleanup($mysql);
+fwrite(STDOUT, ($failures ? 'FAILED' : 'OK') . ": $count checks, $failures failures\n");
+exit($failures ? 1 : 0);

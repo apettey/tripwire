@@ -37,6 +37,13 @@ foreach ($fixtures['parse'] as $case) {
     check('parse modules: ' . $case['name'], [$r['modules'], $r['notRecognised'], $r['invalid']], [$case['modules'], $case['notRecognised'], $case['invalid']]);
 }
 
+// --- Overview parity (spec 3.3) ---
+foreach ($fixtures['overview'] as $case) {
+    $r = structures_parse_overview(implode("\n", $case['lines']), $case['systemName']);
+    check('overview: ' . $case['name'], $r['structures'], floatKm($case['structures']));
+    check('overview modules: ' . $case['name'], [$r['modules'], $r['notRecognised'], $r['invalid']], [$case['modules'], $case['notRecognised'], 0]);
+}
+
 // --- Merge parity ---
 foreach ($fixtures['merge'] as $case) {
     check('merge: ' . $case['name'], structures_merge($case['existing'], $case['incoming']), $case['expected']);

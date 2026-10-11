@@ -81,5 +81,47 @@
 			"incoming": [{ "typeID": 35833, "name": "J163701 - Home Base" }, { "typeID": 35832, "name": "J163701 - Renamed" }],
 			"expected": [{ "id": null, "restore": false }, { "id": null, "restore": false }]
 		}
+	],
+	"overviewComment": "Overview pastes (spec 3.3): rows are tab-separated with the columns of the pilot's choice; same parsed-row format as 'parse'.",
+	"overview": [
+		{
+			"name": "columns in any order: type, distance and name are found by their content",
+			"systemName": "J163701",
+			"lines": [
+				"Distance\tName\tType",
+				"4,200 km\tJ163701 - Home Base\tAstrahus",
+				"12 km\t\tMobile Depot",
+				"7,000 km\tCaldari Control Tower\tCaldari Control Tower",
+				"5 km\tWarp Scrambling Battery\tWarp Scrambling Battery",
+				"Fortizar\tJ123456 - Elsewhere\t1,000 km",
+				"Athanor\tMoon Mining - Beta\t30 km\tsome long trailing corporation text",
+				"Bob\tSabre\t1 AU"
+			],
+			"structures": [
+				[35832, "Astrahus", "upwell", "J163701 - Home Base", 4200, "J163701", "Home Base", false],
+				[33474, "Mobile Depot", "deployable", "", 12, "", "", false],
+				[16213, "Caldari Control Tower", "starbase", "", 7000, "", "", false],
+				[35833, "Fortizar", "upwell", "J123456 - Elsewhere", 1000, "J123456", "Elsewhere", true],
+				[35835, "Athanor", "upwell", "Moon Mining - Beta", 30, "Moon Mining", "Beta", false]
+			],
+			"modules": 1,
+			"notRecognised": 2
+		},
+		{
+			"name": "no distance column, a name that is only a distance-less cell, an AU distance",
+			"systemName": "Jita",
+			"lines": [
+				"Jita - Trade Hub\tAstrahus",
+				"Keepstar\t1.5 AU\tThera - Main Keep",
+				"Mobile Depot"
+			],
+			"structures": [
+				[35832, "Astrahus", "upwell", "Jita - Trade Hub", null, "Jita", "Trade Hub", false],
+				[35834, "Keepstar", "upwell", "Thera - Main Keep", 224396806.1, "Thera", "Main Keep", false],
+				[33474, "Mobile Depot", "deployable", "", null, "", "", false]
+			],
+			"modules": 0,
+			"notRecognised": 0
+		}
 	]
 }
