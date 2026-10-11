@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 52,
+      "date": "2026-10-11",
+      "title": "Jump planner: find a system",
+      "description": "Type a system name in the new \"Find system…\" box in the Jump planner to see where it is in the list: its row is highlighted and scrolled to, and it is ringed on the mini-map. If it isn't listed, the box says why (high-sec, out of range, Pochven, cyno-jammed, …).\n\nThe planner's on/off switch is now also in Settings > General Preferences > Jump planner, and the gear in the panel opens its settings. Hide the search box in Settings > Jump Planner > System search.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-52-jump-planner-search.png",
+          "caption": "Finding O3Z5-G: its row and its spot on the mini-map"
+        }
+      ]
+    },
+    {
       "pr": 50,
       "date": "2026-10-11",
       "title": "Jump planner",
