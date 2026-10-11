@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-11 | [ESI paths and ETags](2026-10-11-esi-paths-etags/README.md) | Every ESI call uses unversioned paths (the compatibility-date header replaces `/latest/`; 26 routes checked against ESI's OpenAPI); server and zKillboard-worker ESI GETs for re-fetched routes send `If-None-Match` and reuse the stored body on 304 (`cache/esi-etag/`, per token/date/language, hourly prune); adapted from squizzlabs/tripwire (MIT); no UI change |
 | 2026-10-11 | [Hole names when editing pasted holes](2026-10-11-hole-naming-on-edit/README.md) | Editing a pasted, unnamed hole pre-fills the suggested name (A, AB, AB6 ...) like Add does; the way-back side of a named hole stays empty; toggle in Settings > Signatures |
 | 2026-10-11 | [Jump mass prompt no longer covers the return bookmark](2026-10-11-jump-return-notice-overlap/README.md) | While the Return bookmark panel is open, jBox notices (the jump mass "Log as" prompt and others) move down below it instead of covering its copy button; fork CSS/JS only, no toggle |
 | 2026-10-11 | [Stacked PRs](2026-10-11-stacked-prs/README.md) | Features and fixes stack on the newest open PR (branch from and target its branch; `main` only when nothing is open), merged bottom-up, so parallel PRs stop conflicting; tripwire-feature skill + AGENTS.md §5; docs only |
