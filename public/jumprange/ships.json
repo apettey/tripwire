@@ -1,12 +1,18 @@
 {
 	"meta": {
 		"version": 3586130,
-		"source": "EVE Online Static Data Export (developers.eveonline.com), types + groups + typeDogma attribute 867 (jumpDriveRange)",
+		"source": "EVE Online Static Data Export (developers.eveonline.com), types + groups + typeDogma attributes 867 (jumpDriveRange), 866 (jumpDriveConsumptionType), 868 (jumpDriveConsumptionAmount) + dogmaEffects that modify 868 + typeBonus traits",
 		"sdeBuild": 3586130,
 		"sdeReleaseDate": "2026-10-07T11:10:05Z",
 		"sdeZip": "eve-online-static-data-3586130-jsonl.zip",
 		"sdeZipSha256": "b6efc200ec30911e5d22decc8ee3c34cafeac1ecc49faa76491fd75fa6c36045",
-		"covert": "true for the Black Ops group (898): the only hulls that can jump to a covert cynosural field"
+		"covert": "true for the Black Ops group (898): the only hulls that can jump to a covert cynosural field",
+		"fuel": "fuelTypeID/fuelName: isotope (attribute 866); fuelPerLy: units per LY before skills (attribute 868); fuelBonuses: hull skill bonuses [{skillID, skill, perLevel}] (fraction per level); fuelRole: fixed role bonus (fraction); per jump: ceil(fuelPerLy x LY x (1 - perLevel x level) for the fuel skill and each hull skill x (1 - fuelRole))",
+		"fuelSkill": {
+			"skillID": 21610,
+			"skill": "Jump Fuel Conservation",
+			"perLevel": 0.1
+		}
 	},
 	"ships": [
 		{
@@ -15,7 +21,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 22440,
@@ -23,7 +34,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 85236,
@@ -31,7 +47,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 22428,
@@ -39,7 +60,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 22430,
@@ -47,7 +73,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 22436,
@@ -55,7 +86,12 @@
 			"groupID": 898,
 			"group": "Black Ops",
 			"baseLy": 4,
-			"covert": true
+			"covert": true,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 700,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 28352,
@@ -63,7 +99,12 @@
 			"groupID": 883,
 			"group": "Capital Industrial Ship",
 			"baseLy": 5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 4000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23757,
@@ -71,7 +112,12 @@
 			"groupID": 547,
 			"group": "Carrier",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23915,
@@ -79,7 +125,12 @@
 			"groupID": 547,
 			"group": "Carrier",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 24483,
@@ -87,7 +138,12 @@
 			"groupID": 547,
 			"group": "Carrier",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23911,
@@ -95,7 +151,12 @@
 			"groupID": 547,
 			"group": "Carrier",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 92824,
@@ -103,7 +164,12 @@
 			"groupID": 5120,
 			"group": "Command Carrier",
 			"baseLy": 3.75,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 92822,
@@ -111,7 +177,12 @@
 			"groupID": 5120,
 			"group": "Command Carrier",
 			"baseLy": 3.75,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 92823,
@@ -119,7 +190,12 @@
 			"groupID": 5120,
 			"group": "Command Carrier",
 			"baseLy": 3.75,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 92825,
@@ -127,7 +203,12 @@
 			"groupID": 5120,
 			"group": "Command Carrier",
 			"baseLy": 3.75,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 45647,
@@ -135,7 +216,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42243,
@@ -143,7 +229,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 19724,
@@ -151,7 +242,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 73792,
@@ -159,7 +255,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 19722,
@@ -167,7 +268,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 73787,
@@ -175,7 +281,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 19726,
@@ -183,7 +294,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 73793,
@@ -191,7 +307,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 19720,
@@ -199,7 +320,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 73790,
@@ -207,7 +333,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 87381,
@@ -215,7 +346,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42124,
@@ -223,7 +359,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 52907,
@@ -231,7 +372,12 @@
 			"groupID": 485,
 			"group": "Dreadnought",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 37604,
@@ -239,7 +385,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42242,
@@ -247,7 +398,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 37606,
@@ -255,7 +411,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 45645,
@@ -263,7 +424,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 37605,
@@ -271,7 +437,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 37607,
@@ -279,7 +450,12 @@
 			"groupID": 1538,
 			"group": "Force Auxiliary",
 			"baseLy": 3.5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 28848,
@@ -287,7 +463,18 @@
 			"groupID": 902,
 			"group": "Jump Freighter",
 			"baseLy": 5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 9400,
+			"fuelBonuses": [
+				{
+					"skillID": 29029,
+					"skill": "Jump Freighters",
+					"perLevel": 0.1
+				}
+			],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 28850,
@@ -295,7 +482,18 @@
 			"groupID": 902,
 			"group": "Jump Freighter",
 			"baseLy": 5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 8800,
+			"fuelBonuses": [
+				{
+					"skillID": 29029,
+					"skill": "Jump Freighters",
+					"perLevel": 0.1
+				}
+			],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 28846,
@@ -303,7 +501,18 @@
 			"groupID": 902,
 			"group": "Jump Freighter",
 			"baseLy": 5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 8200,
+			"fuelBonuses": [
+				{
+					"skillID": 29029,
+					"skill": "Jump Freighters",
+					"perLevel": 0.1
+				}
+			],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 28844,
@@ -311,7 +520,18 @@
 			"groupID": 902,
 			"group": "Jump Freighter",
 			"baseLy": 5,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 10000,
+			"fuelBonuses": [
+				{
+					"skillID": 29029,
+					"skill": "Jump Freighters",
+					"perLevel": 0.1
+				}
+			],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 77283,
@@ -319,7 +539,12 @@
 			"groupID": 4594,
 			"group": "Lancer Dreadnought",
 			"baseLy": 4,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 77281,
@@ -327,7 +552,12 @@
 			"groupID": 4594,
 			"group": "Lancer Dreadnought",
 			"baseLy": 4,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 77284,
@@ -335,7 +565,12 @@
 			"groupID": 4594,
 			"group": "Lancer Dreadnought",
 			"baseLy": 4,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 77288,
@@ -343,7 +578,12 @@
 			"groupID": 4594,
 			"group": "Lancer Dreadnought",
 			"baseLy": 4,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23919,
@@ -351,7 +591,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 22852,
@@ -359,7 +604,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23913,
@@ -367,7 +617,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 3514,
@@ -375,7 +630,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42125,
@@ -383,7 +643,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23917,
@@ -391,7 +656,12 @@
 			"groupID": 659,
 			"group": "Supercarrier",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 11567,
@@ -399,7 +669,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 78576,
@@ -407,7 +682,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 671,
@@ -415,7 +695,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 45649,
@@ -423,7 +708,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 3764,
@@ -431,7 +721,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17888,
+			"fuelName": "Nitrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42241,
@@ -439,7 +734,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 16274,
+			"fuelName": "Helium Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 23773,
@@ -447,7 +747,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17889,
+			"fuelName": "Hydrogen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		},
 		{
 			"typeID": 42126,
@@ -455,7 +760,12 @@
 			"groupID": 30,
 			"group": "Titan",
 			"baseLy": 3,
-			"covert": false
+			"covert": false,
+			"fuelTypeID": 17887,
+			"fuelName": "Oxygen Isotopes",
+			"fuelPerLy": 3000,
+			"fuelBonuses": [],
+			"fuelRole": 0
 		}
 	]
 }
