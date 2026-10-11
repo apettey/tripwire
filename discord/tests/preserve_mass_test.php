@@ -247,5 +247,25 @@ check('prune', [discord_preserve_prune($db, 100000 + 2 * 86400), $db->query('SEL
 discord_preserve_forget_webhook($db, 5);
 check('a replaced webhook URL forgets its messages', discord_preserve_last($db, $mask, 1), null);
 
-echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
+// Holes gone from the map: their live messages are found (once struck, or still on the map, they are not)
+$db->exec('DELETE FROM discord_preserve_message');
+$db->exec('CREATE TABLE wormholes (id INTEGER PRIMARY KEY, maskID TEXT)');
+$db->exec("INSERT INTO wormholes (id, maskID) VALUES (1, '98000001.2'), (4, '98000002.2')");
+foreach ([1, 2, 3, 4] as $wh) discord_preserve_remember($db, $mask, $wh, 5, (string) $wh, 'm', 100000);
+$db->exec('UPDATE discord_preserve_message SET clearedAt = postedAt WHERE wormholeID = 3');
+check('gone: live messages whose hole is gone (or now in another mask)', discord_preserve_gone($db), [[$mask, 2], [$mask, 4]]);
+$gone = discord_payload(['previous' => $live] + discord_preserve_context(['action' => 'clear', 'who' => DISCORD_PRESERVE_GONE_WHO] + $base, null, null));
+check('gone: struck through, says the hole is gone, nobody pinged', $gone,
+    ['content' => "$struck\nCleared by *Tripwire \\(the hole is gone from the map\\)* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
+
+// A mark (or a fight point) that can't be read at send time waits and is tried again; a clear is still a clear
+$broken = new PDO('sqlite::memory:');   // no tables at all: every read fails
+$broken->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$prow = ['id' => 1, 'maskID' => $mask, 'webhookID' => 5, 'kind' => 'preserveMass', 'age' => 0];
+check('unreadable: a mark waits (null), never "unreadable message data"', discord_row_context($broken, $prow + ['data' => json_encode(['action' => 'set', 'chainOnly' => true, 'homeSystemID' => J163701] + $base)]), null);
+$cleared = discord_row_context($broken, $prow + ['data' => json_encode(['action' => 'clear', 'who' => 'A', 'chainOnly' => true] + $base)]);
+check('unreadable: a clear is still sent as a clear', [$cleared['cleared'], $cleared['who']], [true, 'A']);
+check('unreadable: a fight point set waits too', discord_row_context($broken, ['kind' => 'rally', 'data' => json_encode(['action' => 'set', 'template' => 'x'])] + $prow), null);
+
+echo ($failures ?"$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);

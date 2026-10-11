@@ -19,6 +19,8 @@
 //   - cleared: the live message is edited into its text struck through + the cleared text (no new message, no ping);
 //     marked again within DISCORD_PRESERVE_WINDOW seconds of that clear: the struck message is edited back (no new
 //     message), so toggling the mark doesn't spam the channel. A clear without a live message sends nothing.
+//   - a hole gone from the map (collapsed, expired, deleted) with a live message: the worker queues a clear for it once
+//     (discord_preserve_clear_gone, every 10 minutes), "Cleared by *Tripwire (the hole is gone from the map)*".
 // Every edit has empty allowed_mentions; the edits that end a message have no pings in their text. A live message
 // deleted in Discord (404 Unknown Message) is forgotten: a mark is posted again, a clear sends nothing.
 
@@ -135,8 +137,11 @@ function discord_preserve_data(array $type, $homeSystemID, $maskName, $wormholeI
     ];
 }
 
-/** Queue a change of a hole's flag (public/preserve_mass.php). Returns the outbox id, or null (type off, queue full). */
-function discord_preserve_enqueue(PDO $db, $maskID, $wormholeID, $action, $who) {
+/**
+ * Queue a change of a hole's flag (public/preserve_mass.php, discord_preserve_clear_gone). Returns the outbox id, or
+ * null (type off, queue full, or $claim() said no: then nothing is queued, in one transaction with the claim).
+ */
+function discord_preserve_enqueue(PDO $db, $maskID, $wormholeID, $action, $who, ?callable $claim = null) {
     $target = discord_preserve_target($db, $maskID);
     if (!$target) return null;
     [$type, $home] = $target;
@@ -144,10 +149,35 @@ function discord_preserve_enqueue(PDO $db, $maskID, $wormholeID, $action, $who) 
     $ends = $hole ? discord_preserve_ends($hole, function ($systemID) use ($db, $maskID) { return discord_chain_label($db, $maskID, $systemID); }, $home) : null;
     $data = discord_preserve_data($type, $home, discord_mask_name($db, $maskID), $wormholeID, $action, $who, $ends);
     if ($data === null) return null;
-    $id = discord_enqueue($db, (string) $maskID, $type['webhookID'], 'preserveMass', $data, DISCORD_PRIORITY_PRESERVE);
     // Debounce: the row waits a little, so a quick mark + clear (or several edits) collapse into the last one
-    if ($id !== null) $db->prepare('UPDATE discord_outbox SET nextAttemptAt = UTC_TIMESTAMP() + INTERVAL ' . DISCORD_PRESERVE_DELAY . ' SECOND WHERE id = ?')->execute([$id]);
-    return $id;
+    if ($claim) return discord_enqueue_once($db, (string) $maskID, $type['webhookID'], 'preserveMass', $data, $claim, DISCORD_PRIORITY_PRESERVE, DISCORD_PRESERVE_DELAY);
+    return discord_enqueue($db, (string) $maskID, $type['webhookID'], 'preserveMass', $data, DISCORD_PRIORITY_PRESERVE, DISCORD_PRESERVE_DELAY);
+}
+
+/** Who a message of a hole gone from the map is "cleared by" (the cleared text's {who}) */
+const DISCORD_PRESERVE_GONE_WHO = 'Tripwire (the hole is gone from the map)';
+
+/** Live (not struck) messages whose wormhole is gone from its mask (collapsed, expired, deleted): [[maskID, wormholeID], ...] */
+function discord_preserve_gone(PDO $db) {
+    $rows = $db->query('SELECT m.maskID, m.wormholeID FROM discord_preserve_message m
+        LEFT JOIN wormholes w ON w.id = m.wormholeID AND w.maskID = m.maskID
+        WHERE m.clearedAt IS NULL AND w.id IS NULL')->fetchAll(PDO::FETCH_NUM);
+    return array_map(function ($r) { return [(string) $r[0], (int) $r[1]]; }, $rows);
+}
+
+/**
+ * Worker, with the outbox prune: queue a clear for every live message whose hole is gone, so the channel doesn't keep
+ * marks that look live. Once per message: the claim ('pmGone' + wormholeID in discord_sent, kept 7 days like the
+ * messages) is written with the outbox row. The clear is an ordinary one (the flag is gone with the hole): the message
+ * struck through, "Cleared by *Tripwire (the hole is gone from the map)*", nobody pinged. Returns the number queued.
+ */
+function discord_preserve_clear_gone(PDO $db) {
+    $queued = 0;
+    foreach (discord_preserve_gone($db) as [$maskID, $wormholeID]) {
+        $claim = function () use ($db, $maskID, $wormholeID) { return discord_dedupe_once($db, $maskID, 'pmGone', (string) $wormholeID); };
+        if (discord_preserve_enqueue($db, $maskID, $wormholeID, 'clear', DISCORD_PRESERVE_GONE_WHO, $claim) !== null) $queued++;
+    }
+    return $queued;
 }
 
 /** The flag of a hole as stored now: ['setBy', 'reason'], null when there is none (or its hole is gone), false when it can't be read */
@@ -340,13 +370,18 @@ function discord_preserve_superseded(PDO $db, array $row) {
     return false;
 }
 
-/** Message context of an outbox row: the flag and the hole as stored now, the chain when the type is limited to it */
+/**
+ * Message context of an outbox row: the flag and the hole as stored now, the chain when the type is limited to it.
+ * Null when a mark can't be read now (a database error): the sender tries again a little later.
+ */
 function discord_preserve_row_context(PDO $db, $maskID, array $data) {
     $wormholeID = (int) ($data['wormholeID'] ?? 0);
     $flag = discord_preserve_flag($db, $maskID, $wormholeID);
+    if ($flag === false && ($data['action'] ?? '') !== 'clear') return null;
     $hole = discord_preserve_hole($db, $maskID, $wormholeID);
     $ends = $hole ? discord_preserve_ends($hole, function ($systemID) use ($db, $maskID) { return discord_chain_label($db, $maskID, $systemID); }, (int) ($data['homeSystemID'] ?? 0)) : null;
-    $chain = !empty($data['chainOnly']) ? discord_chain_systems_cached($db, $maskID, (int) ($data['homeSystemID'] ?? 0)) : null;
+    // The chain only matters for a mark (a clear never posts anything new)
+    $chain = $flag && !empty($data['chainOnly']) ? discord_chain_systems_cached($db, $maskID, (int) ($data['homeSystemID'] ?? 0)) : null;
     return discord_preserve_context($data, $flag, $ends, $chain);
 }
 

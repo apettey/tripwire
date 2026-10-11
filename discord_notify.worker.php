@@ -115,7 +115,10 @@ function dn_run() {
                 $lastPrune = $now;
                 [$expired, $deleted] = discord_outbox_prune($db);
                 if ($expired || $deleted) dn_log("outbox: expired $expired, deleted $deleted old messages");
-                discord_preserve_prune($db);   // old preserve mass messages are no longer edited
+                // Preserve mass: strike the messages of holes gone from the map (once each), forget old messages
+                $gone = discord_preserve_clear_gone($db);
+                if ($gone) dn_log("preserve mass: queued $gone clears of holes gone from the map");
+                discord_preserve_prune($db);
             }
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();

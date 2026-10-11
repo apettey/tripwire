@@ -35,12 +35,18 @@ connection connected to the home system; untick it to post every marked connecti
 - The sender (`discord/dispatch.php`) handles the rows like Fight here's: one live message per (mask, wormhole) in
   the new `discord_preserve_message` table; edit within 30 s, post + strike ("Changed by ...") later, clear = strike,
   re-mark within 30 s of a clear = the message comes back; edits never ping; `allowed_mentions` only from the admin's
-  text and ping field; names, reasons and labels escaped. The worker prunes old message rows.
+  text and ping field; names, reasons and labels escaped.
+- Holes gone from the map: the worker's 10-minute prune pass queues one clear per live message whose wormhole is gone
+  (claimed once in `discord_sent`), struck through as "Cleared by *Tripwire (the hole is gone from the map)*" (the
+  cleared text with that `{who}`, so customised texts still work), nobody pinged. Then old message rows are pruned.
+- `discord_enqueue` takes an optional delay (default 0), so the debounced rows are inserted already due 10 s later.
+- Fix (also Fight here): a mark / fight point that can't be read when its row is sent (database error) is deferred
+  and retried (`discord_row_context` returns null, "waiting for the database") instead of failing for good.
 - Mask Admin > Discord: the type with channel, ping, chain option, both texts, placeholders and a preview (the mark,
   cleared and changed messages). The home-system warning also shows for this type while it is limited to the chain.
-- Tests: `discord/tests/preserve_mass_test.php` (97 checks), end to end `tests/preserve_mass_discord_flow_test.php`
-  against the dev worker and discord-mock (20 checks), mocha `discord-notifications.test.js` (+6).
+- Tests: `discord/tests/preserve_mass_test.php` (102 checks), end to end `tests/preserve_mass_discord_flow_test.php`
+  against the dev worker and discord-mock (26 checks), mocha `discord-notifications.test.js` (+6).
 - No upstream files touched. Fork files changed: `discord/template.php`, `discord/settings.php`, `discord/schema.php`
   (+ `docker/sql/discord.sql`), `discord/dispatch.php`, `discord/discord.inc.php`, `discord_notify.worker.php`,
-  `public/discord.php`, `public/preserve_mass.php`, `preserve_mass.inc.php` (`preserve_mass_get`),
+  `discord/outbox.php`, `public/discord.php`, `public/preserve_mass.php`, `preserve_mass.inc.php` (`preserve_mass_get`),
   `app/js/fork/discord-notifications.js`, `docker/README.md`. No new outbound hosts (Discord only, through the worker).

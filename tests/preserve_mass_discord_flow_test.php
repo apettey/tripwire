@@ -184,6 +184,9 @@ reset_all();
 [$status, $out] = pm_mark($inChain, 'home static');
 check('mark: the endpoint answers at once', [$status, $out['result'], count($out['flags'])], [200, true, 1]);
 check('mark: queued on the server, waiting for the debounce', pm_queued_soon(), 1);
+$stmt = $db->prepare("SELECT TIMESTAMPDIFF(SECOND, createdAt, nextAttemptAt) FROM discord_outbox WHERE maskID = ? AND kind = 'preserveMass' AND status = 'queued'");
+$stmt->execute([$mask]);
+check('mark: due 10 s after it was queued, from the insert on', (int) $stmt->fetchColumn(), DISCORD_PRESERVE_DELAY);
 pm_flush();
 check('mark: posted with the pings', channel('mark'), [[$live('home static'), true, false]]);
 pm_mark($inChain, 'home static');
@@ -213,6 +216,21 @@ check('cleared, then marked again later: struck, and a new message', channel('cl
     [$struck('fleet out') . "\nChanged by *$who* at <t:…:t>", true, true],
     [$struck('rolling the static') . "\nCleared by *$who* at <t:…:t>", true, true],
     [$live(''), true, false]]);
+
+// A marked hole that is deleted from the map (collapsed): the worker's prune pass strikes its message, once
+reset_all();
+$doomed = hole($J163701, $J152820);
+pm_mark($doomed, 'closing it');
+pm_flush();
+$db->prepare('DELETE FROM wormholes WHERE id = ?')->execute([$doomed]);
+$db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'pmGone']);
+check('hole gone: the prune pass queues one clear', [discord_preserve_clear_gone($db), discord_preserve_clear_gone($db)], [1, 0]);
+pm_flush();
+check('hole gone: struck through, nobody pinged', channel('hole gone from the map'),
+    [['~~Preserve mass on **J163701 ↔ J152820** (K162, C5) by *' . $who . "*: closing it~~\nCleared by *Tripwire \\(the hole is gone from the map\\)* at <t:…:t>", true, true]]);
+check('hole gone: not again on the next pass', discord_preserve_clear_gone($db), 0);
+$db->prepare('DELETE FROM discord_sent WHERE maskID = ? AND kind = ?')->execute([$mask, 'pmGone']);
+check('hole gone: ... even without the claim (the message is struck now)', discord_preserve_clear_gone($db), 0);
 
 reset_all();
 pm_mark($inChain, 'x');

@@ -196,7 +196,8 @@ function discord_handle_response($bucket, $status, array $headers, $body, $attem
     return ['result' => 'failed', 'delay' => 0, 'error' => discord_error_text($status, $body)];
 }
 
-/** The message context of an outbox row, or null when it should wait for names a little longer */
+/** The message context of an outbox row, or null when it should wait a little: for names (kills), or for a fight point /
+    preserve mass flag that can't be read right now (a database error; a set can't be shown without it) */
 function discord_row_context(PDO $db, array $row) {
     $data = json_decode($row['data'], true);
     if (!is_array($data)) return [];
@@ -211,9 +212,9 @@ function discord_row_context(PDO $db, array $row) {
     }
     if ($row['kind'] === 'rally') {
         $labelOf = function ($systemID) use ($db, $row) { return discord_chain_label($db, $row['maskID'], $systemID); };
-        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf) ?? [];
+        return discord_rally_context($data, discord_rally_current($db, $row['maskID']), $labelOf);
     }
-    if ($row['kind'] === 'preserveMass') return discord_preserve_row_context($db, $row['maskID'], $data) ?? [];
+    if ($row['kind'] === 'preserveMass') return discord_preserve_row_context($db, $row['maskID'], $data);
     return $data;
 }
 
@@ -293,7 +294,7 @@ function discord_dispatch(PDO $db, $limit = 20, $budget = 5.0) {
         }
         $context = discord_row_context($db, $row);
         if ($context === null) {
-            discord_outbox_mark($db, $row['id'], 'queued', 'waiting for names', 5, false);
+            discord_outbox_mark($db, $row['id'], 'queued', in_array($row['kind'], ['rally', 'preserveMass'], true) ? 'waiting for the database' : 'waiting for names', 5, false);
             $counts['deferred']++;
             continue;
         }
