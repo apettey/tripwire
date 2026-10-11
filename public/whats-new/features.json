@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 74,
+      "date": "2026-10-11",
+      "title": "Hole names for pasted holes",
+      "description": "When you open a pasted wormhole that has no name yet, the Edit Signature dialog now fills in the suggested name (A, AB, AB6 ...) just like adding a hole does. It is selected, so just type to replace it, for example when a K162 turns out to be a medium or small hole. The way-back side of an already named hole stays empty.\n\nDon't want suggestions? Turn them off in Settings > Signatures > Suggest hole names.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-74-hole-name-on-edit.png",
+          "caption": "A pasted hole in a system reached through A gets the name AA"
+        }
+      ]
+    },
+    {
       "pr": 71,
       "date": "2026-10-11",
       "title": "Mute button",
