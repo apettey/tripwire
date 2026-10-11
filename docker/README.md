@@ -79,7 +79,8 @@ and `fork_watchlist` (the corporation's [watchlist](#watchlist) filters per mask
 mask for the [Jump planner](#jump-planner), created by `public/jump_jammed.php`, DDL in `jumprange/jammed.inc.php`, reference
 copy `docker/sql/jump-jammed.sql`) and `fork_pilot_affiliation` / `fork_pilot_entities` / `fork_intel_lookups` /
 `fork_pilot_threat` ([who is in local](#who-is-in-local), created by `public/intel_scans.php` and the zKillboard worker,
-DDL in `intel/pilots.inc.php`). The app user therefore
+DDL in `intel/pilots.inc.php`) and `fork_structures` / `fork_structure_writes` (the [Structures](#structures) panel, created by
+`public/structures.php`, DDL in `structures/structures.inc.php`, reference copy `docker/sql/structures.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
@@ -636,6 +637,23 @@ and `queueFull`. The Intel panel (`app/js/fork/intel-pilots.js`) polls every 5 s
 & Intel > D-scan & local intel (groups, threat; display only). Tests (fake ESI / zKillboard transport, dev
 database): `docker compose -f docker-compose.dev.yml exec -T app php intel/tests/pilots_test.php`; mocha
 `app/js-test/fork/intel-pilots.test.js`.
+
+### Structures
+
+A small **Structures** panel (own layout widget, Settings > Kills & Intel > Structures panel) lists the Upwell structures,
+POS towers and deployables recorded for the viewed system, with owner, state and one timer each, and a residents strip
+(one chip per owner: ours / hostile / unresolved, plus corporations System Threat saw in kills here). Structures come
+from the d-scan dialog (a "Save structures to ..." section, with "Save structures only" for no 24 h scan) or are added
+by hand. Data is per mask and system, not per chain: it stays when the system leaves the chain.
+`public/structures.php` (`list` / `scan` / `add` / `update` / `gone`, same session / mask / `X-Requested-With`
+rules as `intel_scans.php`; at most 20 writes per user per minute, 200 live rows per mask and system) uses
+`structures/structures.inc.php` and creates `fork_structures` / `fork_structure_writes` on first use (DDL in that file,
+reference copy `docker/sql/structures.sql`). Owners are looked up only in the cache of the pilot lookups
+(`fork_pilot_entities`); this feature never calls ESI or zKillboard. Destroyed / removed rows are kept 30 days (Undo);
+deployables not seen for 7 days and old gone rows are pruned on `list`; Upwell and POS rows are never removed
+automatically. No configuration. Tests: `docker compose -f docker-compose.dev.yml exec -T app php
+structures/tests/structures_test.php` and `php structures/tests/structures_endpoint_test.php` (dev database; the
+browser parse and merge share `structures/tests/fixtures.json`), mocha `app/js-test/fork/structures.test.js`.
 
 ### Watchlist
 
