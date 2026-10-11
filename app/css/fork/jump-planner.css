@@ -32,6 +32,8 @@
 #jumpPlannerWidget .jp-title { color: #e0b080; font-weight: bold; cursor: default; }
 #jumpPlannerWidget .jp-close { float: right; color: #aaa; }
 #jumpPlannerWidget .jp-close:hover { color: #fff; }
+#jumpPlannerWidget .jp-settings { float: right; margin-right: 8px; color: #aaa; cursor: pointer; }
+#jumpPlannerWidget .jp-settings:hover { color: #fff; }
 #jumpPlannerWidget .content {
 	display: flex;
 	flex-direction: column;
@@ -140,7 +142,52 @@
 .jp-hub-no { color: #8a939e; }
 .jp-dim { color: #8a939e; }
 
-.jp-list-wrap { flex: 1 1 auto; min-height: 40px; overflow-y: auto; margin: 6px 4px 0; }
+/* System search: one slim row above the list (input, then the result) */
+.jp-search { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin: 5px 4px 0; min-width: 0; }
+.jp-search-input {
+	flex: 0 0 130px;
+	box-sizing: border-box;
+	background: #23262b;
+	color: #eee;
+	border: 1px solid #444;
+	border-radius: 3px;
+	padding: 2px 5px;
+	font: inherit;
+}
+.jp-search-input:focus { outline: none; border-color: #5cc8f5; }
+.jp-search-input::placeholder { color: #707880; }
+.jp-search-result { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c8ccd0; }
+.jp-search-name { color: #fff; font-weight: bold; }
+.jp-search-ok { color: #5cc8f5; }
+.jp-search-jammed { color: #ff7b7b; }
+.jp-search-no { color: #e0b080; }
+.jp-search-menu {
+	position: absolute;
+	z-index: 4;
+	top: 100%;
+	left: 0;
+	min-width: 220px;
+	max-width: 100%;
+	margin: 2px 0 0;
+	padding: 2px 0;
+	list-style: none;
+	background: #1a1f25;
+	border: 1px solid #4a5662;
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.jp-search-menu li { padding: 2px 8px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.jp-search-menu li.active, .jp-search-menu li:hover { background: #2a3440; color: #fff; }
+.jp-search-wh { color: #c08cff; }
+.jp-search-menu li.jp-search-none { color: #8a939e; cursor: default; background: none; }
+.jp-list tr.jp-row-found td { background: #33281a; color: #fff; }
+.jp-list tr.jp-row-found td:first-child { box-shadow: inset 2px 0 #f0a030; }
+.jp-svg .jp-found-ring { fill: none; stroke: #f0a030; stroke-width: 2; pointer-events: none; }
+.jp-svg .jp-found-pulse { fill: none; stroke: #f0a030; stroke-width: 1.5; pointer-events: none; transform-box: fill-box; transform-origin: center; animation: jp-found-pulse 1.6s ease-out infinite; }
+@keyframes jp-found-pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(2.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .jp-svg .jp-found-pulse { animation: none; opacity: 0; } }
+
+.jp-list-wrap { flex: 1 1 auto; min-height: 40px; overflow-y: auto; margin: 4px 4px 0; }
 .jp-list { width: 100%; border-collapse: collapse; }
 .jp-list th { color: #8a939e; font-weight: normal; text-align: left; padding: 2px 4px; cursor: pointer; white-space: nowrap; position: sticky; top: 0; background: #0b0d10; }
 .jp-list th.active { color: #ddd; }

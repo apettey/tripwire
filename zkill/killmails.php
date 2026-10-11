@@ -93,7 +93,11 @@ function zk_stream_window(PDO $db) {
 /** Delete kills, back-fill rows and names that are past their retention. Returns the number of kills deleted. */
 function zk_prune(PDO $db) {
     $retention = zk_retention_seconds();
-    $deleted = $db->exec('DELETE FROM zkill_killmails WHERE killTime < UTC_TIMESTAMP() - INTERVAL ' . $retention . ' SECOND');
+    // Kills fetched for a note (source 'lookup', often older than the retention) stay ZK_LOOKUP_KEEP_DAYS after they arrived
+    $deleted = $db->exec('DELETE FROM zkill_killmails WHERE killTime < UTC_TIMESTAMP() - INTERVAL ' . $retention . " SECOND
+        AND (source <> 'lookup' OR receivedAt < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY)');
+    $db->exec("DELETE FROM zkill_kill_lookup WHERE status IN ('done', 'failed')
+        AND COALESCE(attemptedAt, requestedAt) < UTC_TIMESTAMP() - INTERVAL " . ZK_LOOKUP_KEEP_DAYS . ' DAY');
     $db->exec("DELETE FROM zkill_backfill WHERE status IN ('done', 'failed') AND requestedAt < UTC_TIMESTAMP() - INTERVAL " . $retention . ' SECOND');
     // Names are re-resolved after 30 days (renames), unresolvable ones are retried after a day
     $db->exec("DELETE FROM zkill_names WHERE (name IS NOT NULL AND name <> '' AND resolvedAt < UTC_TIMESTAMP() - INTERVAL 30 DAY)

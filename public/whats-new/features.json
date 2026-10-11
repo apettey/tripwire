@@ -1,6 +1,30 @@
 {
   "features": [
     {
+      "pr": 53,
+      "date": "2026-10-11",
+      "title": "Smart notes: kill cards and link chips",
+      "description": "zKillboard kill links in system notes now show as a compact kill card: ship, pilot and corporation, system, ISK value, age (EVE time in the tooltip) and the number of attackers, with a red edge for your losses and a green edge for your kills. zKillboard, Dotlan and EveWho links become small chips, long links are shortened, and system names written in a note (like J163701) become chips you can click to view that system. Your notes are not changed; editing shows the plain links as before.\n\nTurn it off in Settings > General Preferences > Smart notes.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-53-smart-notes.png",
+          "caption": "A kill card and link chips in a system note"
+        }
+      ]
+    },
+    {
+      "pr": 52,
+      "date": "2026-10-11",
+      "title": "Jump planner: find a system",
+      "description": "Type a system name in the new \"Find system…\" box in the Jump planner to see where it is in the list: its row is highlighted and scrolled to, and it is ringed on the mini-map. If it isn't listed, the box says why (high-sec, out of range, Pochven, cyno-jammed, …).\n\nThe planner's on/off switch is now also in Settings > General Preferences > Jump planner, and the gear in the panel opens its settings. Hide the search box in Settings > Jump Planner > System search.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-52-jump-planner-search.png",
+          "caption": "Finding O3Z5-G: its row and its spot on the mini-map"
+        }
+      ]
+    },
+    {
       "pr": 51,
       "date": "2026-10-11",
       "title": "Fight here: pick the fleet comp",
