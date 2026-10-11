@@ -150,7 +150,9 @@ try {
 		if ($action === 'markers' || $action === 'timers') {
 			$output['serverTime'] = $now;
 			if ($action === 'timers') {
-				$output['timers'] = structures_timers($mysql, $mask, $friendly, $now);
+				$timers = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_BOARD_MAX + 1);
+				$output['capped'] = count($timers) > STRUCTURES_BOARD_MAX;	// the panel says "showing the first 200"
+				$output['timers'] = array_slice($timers, 0, STRUCTURES_BOARD_MAX);
 			} else {
 				$raw = isset($_GET['systemIDs']) ? $_GET['systemIDs'] : '';
 				$ids = is_array($raw) ? $raw : explode(',', is_string($raw) ? $raw : '');
@@ -162,7 +164,7 @@ try {
 				$output['systems'] = (object) structures_markers($mysql, $mask, $systemIDs, $friendly, $now);
 				$output['next'] = structures_timers($mysql, $mask, $friendly, $now, STRUCTURES_NEXT);
 			}
-			$hash = md5(json_encode(array($output['systems'] ?? null, $output['next'] ?? null, $output['timers'] ?? null)));
+			$hash = md5(json_encode(array($output['systems'] ?? null, $output['next'] ?? null, $output['timers'] ?? null, $output['capped'] ?? null)));
 			$have = isset($_GET['have']) ? $_GET['have'] : '';
 			if ($have !== '' && is_string($have) && hash_equals($hash, $have)) {
 				$output = array('unchanged' => true, 'serverTime' => $now);

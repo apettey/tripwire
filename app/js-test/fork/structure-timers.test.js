@@ -108,6 +108,11 @@ describe('Structure timers', () => {
 			assert.ok(!html.includes('<b>Fort') && html.includes('&lt;b&gt;Fort'));
 			assert.ok(html.includes('data-sys=\'31001235\''));
 		});
+		it('says when the server capped the list', () => {
+			const base = { rows: [row({ id: 1 })], filters: {}, nowSec: NOW_S, inChain: {}, systemName: String, loaded: true };
+			assert.ok(!structureTimers.boardHtml(base).includes('Showing the first'));
+			assert.ok(structureTimers.boardHtml(Object.assign({ capped: true }, base)).includes('Showing the first 1 timers'));
+		});
 		it('empty and loading states, and the countdown helper', () => {
 			const base = { rows: [], filters: {}, nowSec: NOW_S, inChain: {}, systemName: String };
 			assert.ok(structureTimers.boardHtml(Object.assign({ loaded: true }, base)).includes('No active timers'));

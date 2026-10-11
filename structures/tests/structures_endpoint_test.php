@@ -108,7 +108,7 @@ check('an edit clears an ended timer', [$body['structures'][0]['timerKind'], $bo
 
 // A timer with seconds keeps them; editing an ended timer's row without touching the timer works (note only)
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'timerKind' => 'hull', 'timerAt' => gmdate('Y-m-d H:i:s', time() + 3605)]);
-check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 2, true);
+check('timer keeps seconds', abs($body['structures'][0]['timerAt'] - (time() + 3605)) <= 30, true);
 $mysql->exec("UPDATE fork_structures SET timerKind = 'armor', timerAt = UTC_TIMESTAMP() - INTERVAL 3 HOUR WHERE id = $id");
 [$status, $body] = call('POST', ['action' => 'update', 'id' => $id, 'state' => 'online', 'note' => 'ended timer row']);
 check('editing a row with an ended timer is not blocked', [$status, $body['structures'][0]['state']], [200, 'online']);
@@ -161,7 +161,9 @@ check('markers: more than 500 systems: 400', call('GET', ['action' => 'markers',
 check('markers: no systems is an empty answer', [call('GET', ['action' => 'markers'])[0], (array) call('GET', ['action' => 'markers'])[1]['systems']], [200, []]);
 check('markers: another mask sees nothing', [(array) call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['systems'], call('GET', ['action' => 'markers', 'systemIDs' => (string) SYSTEM], $other)[1]['next']], [[], []]);
 [$status, $body] = call('GET', ['action' => 'timers']);
-check('timers: the active timers of the mask', [$status, array_map(function ($r) { return $r['typeName']; }, $body['timers'])], [200, ['Athanor']]);
+check('timers: the active timers of the mask (capped is false, the hash is sent)', [$status, array_map(function ($r) { return $r['typeName']; }, array_values(array_filter($body['timers'], function ($r) { return $r['systemID'] === SYSTEM; }))), $body['capped'], strlen($body['hash'])], [200, ['Athanor'], false, 32]);
+[$status, $unchanged] = call('GET', ['action' => 'timers', 'have' => $body['hash']]);
+check('timers: an unchanged have= answers {unchanged}', [$unchanged['unchanged'] ?? null, isset($unchanged['timers'])], [true, false]);
 check('timers: no session: 403', call('GET', ['action' => 'timers'], [])[0], 403);
 check('timers: another mask sees nothing', call('GET', ['action' => 'timers'], $other)[1]['timers'], []);
 

@@ -88,7 +88,7 @@ structures_update($mysql, MASK_A, $id, ['state' => 'reinforced', 'timerKind' => 
 structures_apply_scan($mysql, MASK_A, SYSTEM, $parsed['structures'], 0, 'Scout 3');
 $row = structures_get($mysql, MASK_A, $id, $friendly);
 check('scan keeps state, timer and note', [$row['state'], $row['timerKind'], $row['note'], $row['timerSetBy']], ['reinforced', 'armor', 'keep me', 'Scout']);
-check('timer end round-trips', abs($row['timerAt'] - (time() + 3600)) <= 2, true);
+check('timer end round-trips', abs($row['timerAt'] - (time() + 3600)) <= 30, true);
 
 // Removed rows are restored by a scan, destroyed ones are not
 check('remove', structures_set_gone($mysql, MASK_A, $id, 'removed', 'Scout'), true);

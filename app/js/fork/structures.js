@@ -619,7 +619,8 @@ const structures = {
 		if (!structures.isSystem(structures.systemID)) { return; }
 		if (document.hidden) { structures.missed = true; return; }
 		if (structures.xhr) { structures.xhr.abort(); }
-		structures.fetchSetResidents();
+		// Residents set by hand: with the system change (setSystem) and every 5 minutes, not with every 60 s poll
+		if (Date.now() - structures.setResAt > 300000) { structures.fetchSetResidents(); }
 		const id = structures.systemID;
 		const xhr = $.ajax({ url: structures.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000,
 			data: { action: "list", systemID: id, have: structures.hash } });
@@ -688,7 +689,7 @@ const structures = {
 			const inChain = {};
 			structureTimers.chainIDs.forEach(function(sid) { inChain[sid] = true; });
 			const board = { rows: structureTimers.boardData || [], filters: structureTimers.filters, nowSec: nowSec, inChain: inChain,
-				systemName: structures.systemName, loaded: structureTimers.boardData !== null, error: structureTimers.boardError || "" };
+				systemName: structures.systemName, loaded: structureTimers.boardData !== null, error: structureTimers.boardError || "", capped: structureTimers.boardCapped };
 			$w.find(".str-system").text("");
 			$w.find(".str-count").text(String(structureTimers.boardRows(board.rows, board.filters, nowSec).length || ""));
 			const top = $w.find(".content").scrollTop();
@@ -953,6 +954,7 @@ const structures = {
 			structures.rows = []; structures.gone = []; structures.hash = ""; structures.loaded = false; structures.setRes = null; structures.setResAt = 0;
 			structures.editing = null; structures.moreID = null; structures.highlight = null; structures.showGone = false;
 			structures.renderPanel();
+			if (structures.systemID) { structures.fetchSetResidents(); }
 		}
 		structures.fetch();
 	},

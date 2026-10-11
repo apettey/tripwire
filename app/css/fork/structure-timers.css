@@ -39,7 +39,7 @@
 .str-trow .str-owner { max-width: 48px; }
 
 /* System info line */
-.str-infoline { clear: both; text-align: left; padding: 0 0 3px; color: #e8c060; font-size: 11px; cursor: pointer; }
+.str-infoline { text-align: left; padding: 0 0 3px; color: #e8c060; font-size: 11px; cursor: pointer; }
 .str-infoline:hover { text-decoration: underline; }
 #structuresWidget.str-flash { box-shadow: 0 0 0 2px #4fb3d9; }
 

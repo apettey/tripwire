@@ -164,6 +164,7 @@ const structureTimers = {
 		if (s.error) { html += "<div class='str-error'>" + esc(s.error) + "</div>"; }
 		if (!rows.length) { return html + "<div class='str-empty'>" + (s.loaded ? "No active timers." : "Loading…") + "</div>"; }
 		rows.forEach(function(r) { html += structureTimers.boardRowHtml(r, s.nowSec, s); });
+		if (s.capped) { html += "<div class='str-empty'>Showing the first " + (s.rows || []).length + " timers.</div>"; }
 		return html;
 	},
 
@@ -176,6 +177,7 @@ const structureTimers = {
 	chainIDs: [],
 	filters: { hostileOnly: false, hideEnded: false },
 	boardData: null,	// timers of the mask for the board (null until loaded)
+	boardCapped: false,	// the server sent only the first STRUCTURES_BOARD_MAX
 	boardHash: "",
 
 	opts: function() { return typeof options !== "undefined" ? options : null; },
@@ -206,10 +208,10 @@ const structureTimers = {
 			if ($node.closest(".destination-node").length) { return; }
 			const $old = $node.children(".str-marker");
 			const html = on ? structureTimers.markerHtml(structureTimers.markerForSystem(parseInt($node.attr("data-nodeid"), 10))) : "";
-			if (!html !== !$old.length || (html && $(html).attr("class") !== $old.attr("class"))) {
-				redraw = true;
-			} else if (html) {
-				$old.replaceWith(html);
+			if (!html !== !$old.length) {
+				redraw = true;	// added / removed: the renderers lay out the measured markup
+			} else if (html && $old.prop("outerHTML") !== html) {
+				$old.replaceWith(html);	// another glyph, colour or tooltip: swapped in place
 			}
 		});
 		if (redraw && typeof chain !== "undefined" && chain.data && chain.data.rawMap) {
@@ -227,8 +229,12 @@ const structureTimers = {
 		structureTimers.hash = response.hash || "";
 	},
 
+	/** Whether anything uses the markers poll's answer (the node icons) */
+	consumers: function() { return structureTimers.active(); },
+
 	fetchMarkers: function() {
-		if (!structures.enabled(structureTimers.opts()) || !structureTimers.chainIDs.length) { return; }
+		// Only while something uses the answer (the node icons)
+		if (!structureTimers.consumers() || !structureTimers.chainIDs.length) { return; }
 		if (document.hidden) { structureTimers.missed = true; return; }
 		if (structureTimers.xhr) { structureTimers.xhr.abort(); }
 		const xhr = $.ajax({ url: structureTimers.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000,
@@ -246,11 +252,15 @@ const structureTimers = {
 	fetchBoard: function() {
 		if (!structures.enabled(structureTimers.opts())) { return; }
 		if (structureTimers.boardXhr) { structureTimers.boardXhr.abort(); }
-		const xhr = $.ajax({ url: structureTimers.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000, data: { action: "timers" } });
+		const xhr = $.ajax({ url: structureTimers.URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000, data: { action: "timers", have: structureTimers.boardHash } });
 		structureTimers.boardXhr = xhr;
 		xhr.done(function(response) {
 			if (response && typeof response.serverTime === "number") { structures.offset = response.serverTime - Math.floor(Date.now() / 1000); }
-			structureTimers.boardData = response && response.timers ? response.timers : [];
+			if (!response || !response.unchanged) {
+				structureTimers.boardData = response && response.timers ? response.timers : [];
+				structureTimers.boardCapped = !!(response && response.capped);
+				structureTimers.boardHash = response && response.hash ? response.hash : "";
+			}
 			structureTimers.boardError = "";
 		}).fail(function(x, status) {
 			if (status === "abort") { return; }
@@ -264,10 +274,14 @@ const structureTimers = {
 
 	/** Every second while the board is open: move the countdowns on without rebuilding the rows */
 	tick: function() {
+		if (document.hidden) { return; }
 		const now = structures.nowSec();
 		$("#" + structures.WIDGET_ID + " .str-tcd").each(function() {
 			const c = structureTimers.countdown({ timerKind: "other", timerAt: parseInt($(this).attr("data-at"), 10) }, now);
-			$(this).attr("class", "str-timer str-tcd " + c.cls).find(".str-tcd-t").text(c.text);
+			const cls = "str-timer str-tcd " + c.cls;
+			if (this.className !== cls) { this.className = cls; }
+			const t = this.querySelector(".str-tcd-t");
+			if (t && t.textContent !== c.text) { t.textContent = c.text; }
 		});
 	},
 
@@ -316,7 +330,7 @@ const structureTimers = {
 		const text = structures.enabled(structureTimers.opts()) && structures.loaded ? structureTimers.infoLine(structures.rows, structures.nowSec()) : "";
 		if (!text) { $line.remove(); return; }
 		if (!$line.length) {
-			const $anchor = $("#infoExtra").next("br");
+			const $anchor = $("#infoFaction");	// the last line of the system's name block, a stable anchor
 			if (!$anchor.length) { return; }
 			$line = $("<div id='structuresInfoLine' class='str-infoline' title='Open the Structures panel'></div>");
 			$anchor.after($line);
@@ -394,6 +408,7 @@ const structureTimers = {
 
 	init: function() {
 		structureTimers.loadFilters();
+		$(document).on("click", "#structuresInfoLine", function() { structureTimers.showPanel("system"); });
 		structureTimers.setupSettings();
 		structureTimers.setupMenu();
 		if (typeof chain !== "undefined") { structureTimers.install(chain); }
