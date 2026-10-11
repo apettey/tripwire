@@ -93,12 +93,13 @@ PATCH â€¦/messages/<first>         {"content":"~~Fight here: **J152820** (C5) â€
   with a role picked after "no comp"): edits never notify, so it is posted as a new message with the pings and the old
   one struck through. The preview uses the
   mask's first comp (or an example). Legacy `DISCORD_WEB_HOOK` texts (`rally_discord.inc.php`) name the comp, no pings.
-- **Tests**: mocha `app/js-test/fork/fight-comps.test.js` (comp normalisation, menu entries and escaping, banner
-  text/age/classes, admin form validation, node/route colours, banner toggle); `fight/tests/fight_test.php` (82 checks:
-  validation, storage, removed comps, payload with comp + mention, escaping, old-default upgrade, legacy texts);
+- **Tests**: mocha `app/js-test/fork/fight-comps.test.js` (31 tests: comp normalisation, menu entries and escaping,
+  the one-click entry without comps, banner text/age/classes, admin form validation, node/route colours, banner toggle);
+  `fight/tests/fight_test.php` (85 checks: validation, storage, removed comps, payload with comp + mention, new
+  mentions within the window with and without `{pings}`, "Changed to", escaping, old-default upgrade, legacy texts);
   `tests/fight_endpoint_test.php` (42 checks on the dev stack: admin / non-admin 403 / CSRF / Origin / JSON, comps and
-  fight point over HTTP, removed comp, and the Discord flow to the mock above). Existing Discord/rally tests updated
-  for the new texts. All PHP and mocha tests pass.
+  fight point over HTTP, removed comp, and the Discord flows to the mock above; it puts the dev mask's rows back
+  afterwards). Existing Discord/rally tests updated for the new texts. All PHP and mocha tests pass.
 - Docs: `docker/README.md` (new "Fight here" section, Discord type row, `DISCORD_WEB_HOOK`, tables);
   `docker/Dockerfile` leaves `fight/tests/` out of the image.
 - **Deploy note:** the `discord-notify` worker must run the new code to render `{withComp}` (it does after an image

@@ -9,7 +9,8 @@
 // 3. Discord: the "Fight here" type of the dev corp mask posting to the mock: set with a comp (comp + mention), moved
 //    within 30 s (the message edited), cleared (struck through). Prints the captured payloads.
 // Logs in as the dev user (DEV_USERNAME / DEV_PASSWORD, as docker/dev-seed.sh); flips its characters.admin flag for the
-// non-admin checks and puts it back. Replaces the dev corp mask's comps, rally type settings and fight point.
+// non-admin checks. Everything it changes on the dev corp mask (admin flag, comps, fight point, live Discord messages,
+// Discord settings) is snapshotted first and put back when it ends; its own webhook and outbox rows are deleted.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
 require_once(__DIR__ . '/../discord/discord.inc.php');
@@ -65,10 +66,46 @@ $stmt = $db->prepare('SELECT c.characterID, c.corporationID FROM accounts a INNE
 $stmt->execute([$user]);
 $me = $stmt->fetch(PDO::FETCH_ASSOC);
 $mask = $me['corporationID'] . '.2';
-$db->prepare('UPDATE characters SET admin = 1 WHERE characterID = ?')->execute([$me['characterID']]);
 fight_ensure_schema($db);
+fight_rally_ensure_table($db);
+discord_ensure_schema($db);
+
+// Snapshot everything this test changes for the dev mask, put back when it ends (also after a failure): the admin flag,
+// the comps, the fight point, the live Discord messages and the Discord settings. Its own webhook and the outbox rows
+// queued for it are deleted.
+$stmt = $db->prepare('SELECT admin FROM characters WHERE characterID = ?');
+$stmt->execute([$me['characterID']]);
+$savedAdmin = (int) $stmt->fetchColumn();
+$snapshotTables = ['fork_fight_comps', 'fork_rally', 'discord_rally_message', 'fork_rally_discord_message', 'discord_settings'];
+$snapshot = [];
+foreach ($snapshotTables as $table) {
+    try {
+        $stmt = $db->prepare("SELECT * FROM $table WHERE maskID = ?");
+        $stmt->execute([$mask]);
+        $snapshot[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) { /* table not created yet */ }
+}
+$webhookRow = 0;
+register_shutdown_function(function () use ($db, $mask, $me, $savedAdmin, &$snapshot, &$webhookRow) {
+    $db->prepare('UPDATE characters SET admin = ? WHERE characterID = ?')->execute([$savedAdmin, $me['characterID']]);
+    foreach ($snapshot as $table => $rows) {
+        $db->prepare("DELETE FROM $table WHERE maskID = ?")->execute([$mask]);
+        foreach ($rows as $row) {
+            $columns = array_keys($row);
+            $db->prepare("INSERT INTO $table (" . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')')
+                ->execute(array_values($row));
+        }
+    }
+    if ($webhookRow) {
+        $db->prepare('DELETE FROM discord_outbox WHERE webhookID = ?')->execute([$webhookRow]);
+        $db->prepare('DELETE FROM discord_webhooks WHERE id = ?')->execute([$webhookRow]);
+    }
+    echo "(dev mask put back as it was)\n";
+});
+
+$db->prepare('UPDATE characters SET admin = 1 WHERE characterID = ?')->execute([$me['characterID']]);
 $db->prepare('DELETE FROM fork_fight_comps WHERE maskID = ?')->execute([$mask]);
-try { $db->prepare('DELETE FROM fork_rally WHERE maskID = ?')->execute([$mask]); } catch (PDOException $e) { /* first run */ }
+$db->prepare('DELETE FROM fork_rally WHERE maskID = ?')->execute([$mask]);
 
 // ---------- 1. fight.php as an admin ----------
 $session = login($jar);
@@ -151,9 +188,6 @@ $db->prepare("DELETE FROM discord_webhooks WHERE maskID = ? AND name = 'fight-te
 $db->prepare("INSERT INTO discord_webhooks (maskID, name, url, urlHint, status, createdAt, updatedAt) VALUES (?, 'fight-test', ?, '', 'ok', UTC_TIMESTAMP(), UTC_TIMESTAMP())")
     ->execute([$mask, discord_seal("https://discord.com/api/webhooks/$hookID/$token")]);
 $webhookRow = (int) $db->lastInsertId();
-$stmt = $db->prepare('SELECT settings FROM discord_settings WHERE maskID = ?');
-$stmt->execute([$mask]);
-$savedSettings = $stmt->fetchColumn();
 $settings = discord_settings_defaults((int) $me['corporationID']);
 // Stored with the 1.17 default text: it must read as today's default
 $settings['types']['rally'] = ['enabled' => true, 'webhookID' => $webhookRow, 'ping' => '@here', 'enabledAt' => time() - 60,
@@ -233,10 +267,7 @@ echo "\n### Captured Discord requests (discord-mock)\n";
 foreach ($requests as $r) echo $r['method'] . ' /api/webhooks/' . $r['webhook'] . '/…' . ($r['method'] === 'PATCH' ? '/messages/' . $r['message'] : '?' . $r['query']) . "\n"
     . json_encode($r['body'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
 
-// Put the mask back as it was (comps stay for screenshots)
-$db->prepare("DELETE FROM discord_webhooks WHERE id = ?")->execute([$webhookRow]);
-if ($savedSettings === false) $db->prepare('DELETE FROM discord_settings WHERE maskID = ?')->execute([$mask]);
-else $db->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute([$savedSettings, $mask]);
+// The dev mask is put back by the shutdown function registered at the start
 @unlink($jar);
 @unlink($jarMember);
 
