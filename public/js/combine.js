@@ -67874,7 +67874,7 @@ var appData = {
                 "Low-Sec",
                 "Null-Sec"
             ],
-            "leadsTo": "J055520",
+            "leadsTo": "Class-14",
             "mass": 750000000,
             "jump": 375000000
         },
@@ -67885,7 +67885,7 @@ var appData = {
                 "Low-Sec",
                 "Null-Sec"
             ],
-            "leadsTo": "J110145",
+            "leadsTo": "Class-15",
             "mass": 750000000,
             "jump": 375000000
         },
@@ -67896,7 +67896,7 @@ var appData = {
                 "Low-Sec",
                 "Null-Sec"
             ],
-            "leadsTo": "J164710",
+            "leadsTo": "Class-16",
             "mass": 750000000,
             "jump": 375000000
         },
@@ -67907,7 +67907,7 @@ var appData = {
                 "Low-Sec",
                 "Null-Sec"
             ],
-            "leadsTo": "J200727",
+            "leadsTo": "Class-17",
             "mass": 750000000,
             "jump": 375000000
         },
@@ -67918,7 +67918,7 @@ var appData = {
                 "Low-Sec",
                 "Null-Sec"
             ],
-            "leadsTo": "J174618",
+            "leadsTo": "Class-18",
             "mass": 750000000,
             "jump": 375000000
         },
