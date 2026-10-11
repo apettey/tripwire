@@ -424,6 +424,25 @@ intel_pilots_housekeeping($mysql, time(), false);
 check('prune: unknown name gone', (int) $mysql->query("SELECT COUNT(*) FROM fork_pilot_affiliation WHERE name = 'Zzt Hostile 08'")->fetchColumn(), 0);
 check('prune: known names kept', $get('Zzt Hostile 09')[0], 2100000109);
 
+// --- Entity refresh: failed lookups retried after a day, stale names after a week, the rest untouched ---
+$mysql->exec("INSERT INTO fork_pilot_entities (id, kind, name, ticker, status, requestedAt, wantedAt, fetchedAt, attempts) VALUES
+    (2100007001, 'corporation', NULL, NULL, 'failed', UTC_TIMESTAMP() - INTERVAL 2 DAY, UTC_TIMESTAMP() - INTERVAL 2 DAY, NULL, 3),
+    (2100007002, 'corporation', NULL, NULL, 'failed', UTC_TIMESTAMP() - INTERVAL 2 HOUR, UTC_TIMESTAMP() - INTERVAL 2 HOUR, NULL, 3),
+    (2100007003, 'alliance', 'Old Name', 'OLD', 'done', UTC_TIMESTAMP() - INTERVAL 8 DAY, UTC_TIMESTAMP() - INTERVAL 8 DAY, UTC_TIMESTAMP() - INTERVAL 8 DAY, 0),
+    (2100007004, 'corporation', 'Fresh', 'FRSH', 'done', UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() - INTERVAL 1 DAY, 0)");
+intel_queue_entities($mysql, [2100007001 => 'corporation', 2100007002 => 'corporation', 2100007003 => 'alliance', 2100007004 => 'corporation']);
+$entity = function ($id) use ($mysql) {
+    return array_map('strval', $mysql->query("SELECT status, attempts, requestedAt > UTC_TIMESTAMP() - INTERVAL 1 MINUTE, wantedAt > UTC_TIMESTAMP() - INTERVAL 1 MINUTE
+        FROM fork_pilot_entities WHERE id = $id")->fetch(PDO::FETCH_NUM));
+};
+check('entities: failed more than a day ago is queued again', $entity(2100007001), ['queued', '0', '1', '1']);
+check('entities: failed recently is left alone', $entity(2100007002), ['failed', '3', '0', '1']);
+check('entities: stale name is queued again', $entity(2100007003), ['queued', '0', '1', '1']);
+check('entities: fresh name is left alone', $entity(2100007004), ['done', '0', '0', '1']);
+intel_queue_entities($mysql, [2100007002 => 'corporation']);
+check('entities: asking again does not reset the retry clock', $entity(2100007002), ['failed', '3', '0', '1']);
+$mysql->exec('DELETE FROM fork_pilot_entities WHERE id BETWEEN 2100007001 AND 2100007004');
+
 // --- Wall-clock budget: no new ESI request after INTEL_AFF_PASS_SECONDS ---
 $budget = ['requests' => 0, 'max' => 8, 'until' => microtime(true) - 1];
 check('budget: past the deadline', [intel_esi_take($budget), $budget['requests']], [false, 0]);

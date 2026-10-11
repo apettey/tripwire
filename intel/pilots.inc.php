@@ -583,19 +583,19 @@ function intel_reject(PDO $db, $table, $key, array $batch, $error, $single = nul
 /** Queue corporations / alliances (id => kind) whose name and ticker are missing or older than INTEL_ENTITY_TTL */
 function intel_queue_entities(PDO $db, array $entities) {
     if (!$entities) return;
-    // Refresh stale names and tickers; retry failed lookups after a day (MySQL assigns left to right: status goes last)
+    // Refresh stale names and tickers, and retry failed lookups after a day. A separate UPDATE evaluates the condition
+    // once on the old values (in ON DUPLICATE KEY UPDATE, later assignments see the columns earlier ones changed)
     $again = "((status = 'done' AND fetchedAt < UTC_TIMESTAMP() - INTERVAL " . INTEL_ENTITY_TTL . " SECOND)
         OR (status = 'failed' AND requestedAt < UTC_TIMESTAMP() - INTERVAL 1 DAY))";
     foreach (array_chunk($entities, 500, true) as $chunk) {
+        $ids = array_map('intval', array_keys($chunk));
+        $db->prepare("UPDATE fork_pilot_entities SET status = 'queued', attempts = 0, requestedAt = UTC_TIMESTAMP()
+            WHERE id IN (" . implode(',', array_fill(0, count($ids), '?')) . ") AND $again")->execute($ids);
         $values = implode(',', array_fill(0, count($chunk), "(?, ?, 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())"));
         $params = [];
         foreach ($chunk as $id => $kind) { $params[] = (int) $id; $params[] = $kind; }
         $db->prepare("INSERT INTO fork_pilot_entities (id, kind, status, requestedAt, wantedAt) VALUES $values
-            ON DUPLICATE KEY UPDATE wantedAt = VALUES(wantedAt),
-                requestedAt = IF($again, VALUES(requestedAt), requestedAt),
-                attempts = IF($again, 0, attempts),
-                status = IF($again, 'queued', status)")
-            ->execute($params);
+            ON DUPLICATE KEY UPDATE wantedAt = VALUES(wantedAt)")->execute($params);
     }
 }
 

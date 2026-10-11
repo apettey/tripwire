@@ -56,7 +56,7 @@ stops the zKillboard step (corporations / alliances from ESI still work).
 - Fork-owned files changed: `public/intel_scans.php`, `zkill_feed.worker.php` (one call for the zKillboard API priority
   chain, ESI pass for local pilots), `zkill/names.php` (3-second budget per name pass), `docker/config.php`,
   `.env.example`, `docker-compose.dev.yml`, `docker-compose.prod.yml`, `docker/README.md`. No upstream files touched.
-- Tests: `php intel/tests/pilots_test.php` (123 checks: grouping inputs, name charset, caps, worker steps against a
-  fake ESI / zKillboard transport, expiry and renames, NPC corps, the 20-pilot cap, priority order, pass budget,
+- Tests: `php intel/tests/pilots_test.php` (128 checks: grouping inputs, name charset, caps, worker steps against a
+  fake ESI / zKillboard transport, expiry and renames, entity retries, NPC corps, the 20-pilot cap, priority order, pass budget,
   zKillboard answer shapes) and new checks in `intel/tests/intel_endpoint_test.php`; mocha
   `app/js-test/fork/intel-pilots.test.js`.
