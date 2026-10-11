@@ -46,20 +46,20 @@ check('unknown', rally_discord_system_label(null, null), null);
 
 // --- rally_discord_payload ---
 $set = rally_discord_payload('set', 'Chribba', 'J152820 (C5, E-R00024)', 'J152820', 'https://tw.example');
-check('set content', $set['content'], "Tripwire rally point from *Chribba*: **J152820 (C5, E-R00024)**\n<https://tw.example/?system=J152820>");
+check('set content', $set['content'], "Fight here: **J152820 (C5, E-R00024)** — set by *Chribba*\n<https://tw.example/?system=J152820>");
 check('no mentions allowed', $set['allowed_mentions'], ['parse' => []]);
-check('set without url', rally_discord_payload('set', 'A', 'Jita (High-Sec, The Forge)', 'Jita', null)['content'], 'Tripwire rally point from *A*: **Jita (High-Sec, The Forge)**');
-check('clear', rally_discord_payload('clear', 'Chribba')['content'], 'Tripwire rally point cleared by *Chribba*');
-check('hostile name', rally_discord_payload('clear', "@everyone *x*\n<@1>")['content'], "Tripwire rally point cleared by *@{$zw}everyone \\*x\\* @{$zw}1*");
-check('no name', rally_discord_payload('clear', null)['content'], 'Tripwire rally point cleared by *someone*');
+check('set without url', rally_discord_payload('set', 'A', 'Jita (High-Sec, The Forge)', 'Jita', null)['content'], 'Fight here: **Jita (High-Sec, The Forge)** — set by *A*');
+check('clear', rally_discord_payload('clear', 'Chribba')['content'], 'Fight here cleared by *Chribba*');
+check('hostile name', rally_discord_payload('clear', "@everyone *x*\n<@1>")['content'], "Fight here cleared by *@{$zw}everyone \\*x\\* @{$zw}1*");
+check('no name', rally_discord_payload('clear', null)['content'], 'Fight here cleared by *someone*');
 // The chain label (discord_chain_label), same text as the Mask Admin > Discord default templates
-check('set with chain label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, 'AABCA')['content'], 'Tripwire rally point from *A*: **AABCA · J152820 (C5, E-R00024)**');
-check('set, empty label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, '  ')['content'], 'Tripwire rally point from *A*: **J152820 (C5, E-R00024)**');
-check('clear with system and label', rally_discord_payload('clear', 'A', null, 'J152820', null, 'AABCA')['content'], 'Tripwire rally point cleared by *A* (was on AABCA · J152820)');
-check('clear with system, no label', rally_discord_payload('clear', 'A', null, 'J152820')['content'], 'Tripwire rally point cleared by *A* (was on J152820)');
+check('set with chain label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, 'AABCA')['content'], 'Fight here: **AABCA · J152820 (C5, E-R00024)** — set by *A*');
+check('set, empty label', rally_discord_payload('set', 'A', 'J152820 (C5, E-R00024)', 'J152820', null, '  ')['content'], 'Fight here: **J152820 (C5, E-R00024)** — set by *A*');
+check('clear with system and label', rally_discord_payload('clear', 'A', null, 'J152820', null, 'AABCA')['content'], 'Fight here cleared by *A* (was on AABCA · J152820)');
+check('clear with system, no label', rally_discord_payload('clear', 'A', null, 'J152820')['content'], 'Fight here cleared by *A* (was on J152820)');
 $evilLabel = rally_discord_payload('set', 'A', 'J152820', 'J152820', null, "@everyone <@&42> **x** [l](https://e.example)\n");
 check('hostile label', [$evilLabel['content'], $evilLabel['allowed_mentions']],
-	array("Tripwire rally point from *A*: **@{$zw}everyone @{$zw}&42 \\*\\*x\\*\\* \\[l\\](https\\://e.example) · J152820**", array('parse' => array())));
+	array("Fight here: **@{$zw}everyone @{$zw}&42 \\*\\*x\\*\\* \\[l\\](https\\://e.example) · J152820** — set by *A*", array('parse' => array())));
 check('hostile label when cleared', strpos(rally_discord_payload('clear', 'A', null, 'J152820', null, '@here <@1>')['content'], "(was on @{$zw}here @{$zw}1 · J152820)") !== false, true);
 check('chain label helper without a database', rally_discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
 check('json has allowed_mentions', json_encode($set['allowed_mentions']), '{"parse":[]}');
@@ -67,9 +67,9 @@ check('json has allowed_mentions', json_encode($set['allowed_mentions']), '{"par
 // --- rally_discord_end_payload: the edit that ends a rally message (cleared / moved), never a new message ---
 $posted = rally_discord_payload('set', 'Kytus Bos', 'J163701 (C5, E-R00025)', 'J163701', 'https://tw.example', 'AABCA');
 check('end: cleared', rally_discord_end_payload($posted['content'], 'clear', 'Aashai Modor', 1760123280),
-	array('content' => "~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701 (C5, E-R00025)**~~\nCleared by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => array('parse' => array())));
+	array('content' => "~~Fight here: **AABCA · J163701 (C5, E-R00025)** — set by *Kytus Bos*~~\nCleared by *Aashai Modor* at <t:1760123280:t>", 'allowed_mentions' => array('parse' => array())));
 check('end: moved', rally_discord_end_payload($posted['content'], 'moved', 'Aashai Modor', 1760123280, 'J170122', 'AB')['content'],
-	"~~Tripwire rally point from *Kytus Bos*: **AABCA · J163701 (C5, E-R00025)**~~\nMoved to **AB · J170122** by *Aashai Modor* at <t:1760123280:t>");
+	"~~Fight here: **AABCA · J163701 (C5, E-R00025)** — set by *Kytus Bos*~~\nMoved to **AB · J170122** by *Aashai Modor* at <t:1760123280:t>");
 check('end: cleared by someone else', rally_discord_end_payload('Rally', 'clear', null, 5)['content'], "~~Rally~~\nCleared by *someone* at <t:5:t>");
 check('end: hostile name cannot ping or format', rally_discord_end_payload('Rally', 'clear', "@here <@&1> *x*", 5)['content'], "~~Rally~~\nCleared by *@{$zw}here @{$zw}&1 \\*x\\** at <t:5:t>");
 check('end: no earlier text', rally_discord_end_payload('', 'clear', 'A', 5)['content'], 'Cleared by *A* at <t:5:t>');
@@ -102,7 +102,7 @@ $_SERVER['REQUEST_URI'] = '/rally.php?x=>**PWNED**[Tripwire](https://evil.exampl
 check('hostile request ignored', rally_discord_url_base('https://tw.example/index.php?mode=sso', '/rally.php'), 'https://tw.example');
 // And the payload can't be broken out of even with a bad base
 $hostile = rally_discord_payload('set', 'A', 'Jita', 'Jita', 'http://x/>**PWNED**[T](https://evil.example)< a');
-check('hostile base neutralised', $hostile['content'], "Tripwire rally point from *A*: **Jita**\n<http://x/**PWNED**[T](https://evil.example)a/?system=Jita>");
+check('hostile base neutralised', $hostile['content'], "Fight here: **Jita** — set by *A*\n<http://x/**PWNED**[T](https://evil.example)a/?system=Jita>");
 check('hostile base single autolink', substr_count($hostile['content'], '<') + substr_count($hostile['content'], '>'), 2);
 
 // --- rally_discord_redact ---

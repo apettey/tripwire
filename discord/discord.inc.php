@@ -16,7 +16,8 @@
 //   discord/chain_label.php chain labels: the name of the hole leading into a system (A, AB, AABCA...)
 //   discord/kspace.php      type 1: new k-space systems near the ping systems (polls signatures/wormholes)
 //   discord/kills.php       types 2-4: kills in the chain / by the corporation / losses, fed by zkill_feed.worker.php
-//   discord/rally.php       type 5: the chain map's rally point, queued by public/rally.php; edits its last message
+//   discord/rally.php       type 5: the chain map's rally point ("Fight here", with the fleet comp of fight/fight.inc.php),
+//                           queued by public/rally.php; edits its last message
 //   discord/watchlist.php   type 6: watchlist matches (filters of watchlist/watchlist.inc.php), polls the chain
 //   discord/dispatch.php    the sender: rate limits (429, X-RateLimit-*, global), retries, broken webhooks
 // (The rally point's first version still posts directly to upstream's DISCORD_WEB_HOOK for masks without type 5,
@@ -36,6 +37,7 @@ require_once(__DIR__ . '/chain.php');
 require_once(__DIR__ . '/chain_label.php');
 require_once(__DIR__ . '/kspace.php');
 require_once(__DIR__ . '/kills.php');
+require_once(__DIR__ . '/../fight/fight.inc.php');
 require_once(__DIR__ . '/rally.php');
 require_once(__DIR__ . '/../watchlist/watchlist.inc.php');
 require_once(__DIR__ . '/watchlist.php');

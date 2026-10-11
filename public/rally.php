@@ -3,17 +3,20 @@
 //	File: 		rally.php
 //	Author: 	Tripwire fork
 //
-//	Purpose:	Stores the chain map rally point for the current mask.
-//				GET                          -> current rally for the session mask
-//				POST mode=set&systemID=<id>  -> set the rally point
-//				POST mode=clear              -> clear the rally point
+//	Purpose:	Stores the chain map's fight point ("Fight here", first called the rally point) for the current
+//				mask, with the fleet comp it is for (fight/fight.inc.php).
+//				GET                                        -> current fight point of the session mask (with its
+//				                                              chain label) and the mask's fleet comps (no mentions)
+//				POST mode=set&systemID=<id>[&compID=<id>]  -> set / move the fight point (no compID: no comp)
+//				POST mode=clear                            -> clear the fight point
 //				Changes must be POSTed with the X-Requested-With: XMLHttpRequest header.
 //				Add discord=1 to a change to also post it to Discord: the channel a corp admin chose for the
-//				rally type in Mask Admin > Discord (queued in the Discord outbox, discord/rally.php), or else
+//				"Fight here" type in Mask Admin > Discord (queued in the Discord outbox, discord/rally.php), or else
 //				upstream's server-wide DISCORD_WEB_HOOK of the mask (posted directly, rally_discord.inc.php).
 //				"discord" in every answer says whether either is there.
 //
-//	The fork_rally table is created on first use, so existing databases need no migration.
+//	The fork_rally table (and its comp columns) is created on first use, so existing databases need no migration.
+//	Internal names stay "rally" (table, endpoint, Discord type key): only what users read says "Fight here".
 //***********************************************************
 $startTime = microtime(true);
 
@@ -34,7 +37,7 @@ header('Cache-Control: no-store');
 
 $mask = $_SESSION['mask'];
 $output = array();
-$discordAction = null;	// 'set' / 'clear' when the rally actually changed
+$discordAction = null;	// 'set' / 'clear' when the fight point actually changed
 
 function rally_fail($code, $message) {
 	http_response_code($code);
@@ -42,30 +45,9 @@ function rally_fail($code, $message) {
 	exit();
 }
 
-function rally_current($mysql, $mask) {
-	$stmt = $mysql->prepare('SELECT systemID, setBy, setAt FROM fork_rally WHERE maskID = :mask');
-	if (!$stmt) throw new PDOException('Could not read fork_rally');
-	$stmt->bindValue(':mask', $mask);
-	if (!$stmt->execute()) {
-		throw new PDOException('Could not read fork_rally');
-	}
-	$row = $stmt->fetch(PDO::FETCH_ASSOC);
-	if (!$row) return null;
-	return array('systemID' => (int)$row['systemID'], 'setBy' => $row['setBy'], 'setAt' => $row['setAt']);
-}
-
 try {
-	// Don't change the connection's error mode (it may be persistent and shared); check results instead.
-	$created = $mysql->exec('CREATE TABLE IF NOT EXISTS fork_rally (
-		maskID decimal(12,1) NOT NULL,
-		systemID int NOT NULL,
-		setBy varchar(100) DEFAULT NULL,
-		setAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (maskID)
-	)');
-	if ($created === false) {
-		throw new PDOException('Could not create fork_rally: ' . implode(' ', $mysql->errorInfo()));
-	}
+	// Don't change the connection's error mode (it may be persistent and shared)
+	fight_rally_ensure_table($mysql);
 
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		$requestedWith = isset($_SERVER['HTTP_X_REQUESTED_WITH']) ? $_SERVER['HTTP_X_REQUESTED_WITH'] : '';
@@ -74,23 +56,25 @@ try {
 		}
 
 		$mode = isset($_POST['mode']) ? $_POST['mode'] : '';
-		$previous = rally_current($mysql, $mask);
+		$previous = fight_rally_read($mysql, $mask);
 
 		if ($mode === 'set') {
 			$systemID = isset($_POST['systemID']) ? filter_var($_POST['systemID'], FILTER_VALIDATE_INT) : false;
 			if ($systemID === false || $systemID < 30000000 || $systemID >= 32000000) {
 				rally_fail(400, 'Invalid systemID');
 			}
+			// The comp is looked up here, never taken from the browser (its name, colour and mention are the admins')
+			$compID = isset($_POST['compID']) && is_string($_POST['compID']) ? $_POST['compID'] : '';
+			$comp = null;
+			if ($compID !== '') {
+				$comp = fight_find_comp(fight_comps_load($mysql, $mask), $compID);
+				if (!$comp) rally_fail(400, 'That fleet comp no longer exists');
+			}
 			$setBy = isset($_SESSION['characterName']) ? substr($_SESSION['characterName'], 0, 100) : null;
 
-			$stmt = $mysql->prepare('INSERT INTO fork_rally (maskID, systemID, setBy, setAt) VALUES (:mask, :systemID, :setBy, CURRENT_TIMESTAMP)
-				ON DUPLICATE KEY UPDATE systemID = VALUES(systemID), setBy = VALUES(setBy), setAt = CURRENT_TIMESTAMP');
-			$stmt->bindValue(':mask', $mask);
-			$stmt->bindValue(':systemID', $systemID, PDO::PARAM_INT);
-			$stmt->bindValue(':setBy', $setBy);
-			if (!$stmt->execute()) throw new PDOException('Could not set rally: ' . implode(' ', $stmt->errorInfo()));
+			fight_rally_store($mysql, $mask, $systemID, $setBy, $comp);
 			$output['result'] = true;
-			if (!$previous || $previous['systemID'] !== $systemID) $discordAction = 'set';
+			if (fight_rally_changes($previous, $systemID, $comp)) $discordAction = 'set';
 		} else if ($mode === 'clear') {
 			$stmt = $mysql->prepare('DELETE FROM fork_rally WHERE maskID = :mask');
 			$stmt->bindValue(':mask', $mask);
@@ -104,7 +88,11 @@ try {
 		rally_fail(405, 'Method not allowed');
 	}
 
-	$output['rally'] = rally_current($mysql, $mask);
+	$current = fight_rally_read($mysql, $mask);
+	$output['rally'] = fight_rally_public($current);
+	// The system's chain label, as the Discord message shows it ("AB · J163701")
+	if ($current) $output['rally']['label'] = rally_discord_chain_label($mysql, $mask, $current['systemID']);
+	$output['comps'] = fight_public_comps(fight_comps_load($mysql, $mask));
 } catch (PDOException $e) {
 	error_log('rally.php: ' . $e->getMessage());
 	rally_fail(500, 'Database error');

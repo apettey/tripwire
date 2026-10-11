@@ -196,7 +196,7 @@ describe('Discord notifications', function() {
 		});
 	});
 
-	describe('collectSettings: rally point', function() {
+	describe('collectSettings: fight here (rally point)', function() {
 		it('keeps both texts and nothing of the other types', function() {
 			const v = formValues();
 			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '2', ping: ' @here ', templateClear: '  Cleared by {who} ' });
@@ -208,8 +208,8 @@ describe('Discord notifications', function() {
 			const v = formValues();
 			v.types.rally = Object.assign(v.types.rally, { enabled: true, webhookID: '0', ping: 'everyone' });
 			assert.deepStrictEqual(dn.collectSettings(v).errors, [
-				'Rally point: the ping field takes only <@&roleID>, <@userID>, @here or @everyone',
-				'Rally point: choose a webhook to turn it on'
+				'Fight here: the ping field takes only <@&roleID>, <@userID>, @here or @everyone',
+				'Fight here: choose a webhook to turn it on'
 			]);
 		});
 	});
@@ -302,16 +302,16 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf('Our Corp (98000001)') > 0);
 			assert.ok(html.indexOf(dn.SAFE_RULE) > 0);
 		});
-		it('shows the rally point type with its second text, escaped', function() {
+		it('shows the Fight here (rally point) type with its second text, escaped', function() {
 			const s = JSON.parse(JSON.stringify(settings));
 			s.types.rally.templateClear = "Cleared by {who} <script>";
 			const html = dn.pageHtml(state, s);
 			assert.ok(html.indexOf("data-kind='rally'") > 0);
 			assert.ok(html.indexOf('Set or moved:') > 0);
 			assert.ok(html.indexOf("<textarea class='dn-templateClear' rows='1'>Cleared by {who} &lt;script&gt;</textarea>") > 0);
-			assert.ok(html.indexOf('Replaces the rally message (an edit: no new message, nobody pinged') > 0);
+			assert.ok(html.indexOf('Replaces the fight message (an edit: no new message, nobody pinged') > 0);
 			assert.ok(html.indexOf('<code>{rally}</code> is that message struck through; without <code>{rally}</code> it is put above your text') > 0);
-			assert.ok(html.indexOf('Nothing is sent when there is no rally message to edit') > 0);
+			assert.ok(html.indexOf('Nothing is sent when there is no fight message to edit') > 0);
 			assert.ok(html.indexOf('<code>{labelSystem}</code>, <code>{was}</code>') > 0);
 			assert.ok(html.indexOf('DISCORD_WEB_HOOK') < 0);
 		});
@@ -332,7 +332,7 @@ describe('Discord notifications', function() {
 		});
 		it('names a failed edit of an old rally message', function() {
 			const st = Object.assign({}, state, { outbox: Object.assign({}, state.outbox, { failures: [{ kind: 'rallyEdit', webhook: '#ops', error: 'HTTP 500', createdAt: null }] }) });
-			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Rally point (old message) to #ops') > 0);
+			assert.ok(dn.pageHtml(st, settings).indexOf('<li>Fight here (old message) to #ops') > 0);
 		});
 	});
 });
