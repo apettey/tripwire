@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 66,
+      "date": "2026-10-11",
+      "title": "Raidable skyhooks",
+      "description": "Low-sec and null-sec systems on the chain map now have a small skyhook icon next to the Jump planner ring (clicking such a system's name opens it too). It opens a box, \"Raidable skyhooks near <system>\", listing the skyhooks that can be raided now or soon within a number of gate jumps of that system: the system, region, jumps, and the raid window in EVE time with a countdown. The blue button sets the gate route in game. Close the box with its X and open it again from the icon.\n\nIn the box, choose how far away to look, low-sec and/or null-sec, whether to show only open windows or those opening within a few hours, and how to sort. Turn the icon off, or the opening on name click, or change the default distance in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-66-raidable-skyhooks.png",
+          "caption": "The skyhook icon on a low-sec system and the Raidable skyhooks box"
+        }
+      ]
+    },
+    {
       "pr": 65,
       "date": "2026-10-11",
       "title": "Routes avoid risky holes",

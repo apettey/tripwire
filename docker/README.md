@@ -204,6 +204,17 @@ response shapes, so it is a code change. It lives in `esi/esi.inc.php` (`ESI_COM
 Tests: `docker compose -f docker-compose.dev.yml exec -T app php esi/tests/esi_test.php` (fake transport, no
 network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test.js`.
 
+### Raidable skyhooks
+
+The Raidable skyhooks box (opened from the skyhook icon on low-sec / null-sec chain systems) reads `public/skyhooks.php`, which serves one server-wide copy of ESI's public
+`GET /skyhooks/raidable` (`skyhooks.inc.php`, cache in `cache/skyhooks.json`). Browsers never call ESI for it: the
+route's rate-limit group allows only 30 requests per 15 minutes per IP. The server asks ESI at most once per 5
+minutes (exclusive `flock`, so concurrent requests don't stampede; after an error not again for 60 s), sends
+`X-Compatibility-Date: 2026-10-01` for this one call (the pinned date answers 404), respects the pauses of
+`esi/esi.inc.php`, and serves the old list when ESI fails. No env vars. Tests:
+`docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network) and
+`app/js-test/fork/skyhooks-panel.test.js`.
+
 ### zKillboard integration
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process
