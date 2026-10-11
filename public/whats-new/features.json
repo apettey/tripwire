@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 56,
+      "date": "2026-10-11",
+      "title": "Discord: notice when chain kills are paused",
+      "description": "If \"Any kill in our chain\" is on but the mask has no home system, Tripwire can't tell which chain is yours and posts no chain kills. Instead of going quiet, it now posts one notice to that Discord channel saying chain kills are paused and where to set the home (Mask Admin > Discord). Once a home is set, it posts one line saying chain kills resumed.\n\nNobody is pinged by these messages, and the Mask Admin > Discord warning shows when the notice was posted. There is no setting for it: set a home system or turn chain kills off and it stops.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-56-discord-no-home-notice.png",
+          "caption": "The paused and resumed notices in the chain kills channel"
+        }
+      ]
+    },
+    {
       "pr": 53,
       "date": "2026-10-11",
       "title": "Smart notes: kill cards and link chips",

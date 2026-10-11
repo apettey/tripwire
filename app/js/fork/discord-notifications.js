@@ -23,6 +23,8 @@ const discordNotifications = {
 	},
 	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" only counts systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted.",
+	// The one notice the worker posts to the chain kill channel while there is no home (discord/chain_notice.php)
+	NOTICE_LABELS: { chainPaused: "Chain kills paused notice", chainResumed: "Chain kills resumed notice" },
 	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
@@ -97,6 +99,16 @@ const discordNotifications = {
 	homeWarning: function(settings) {
 		const chain = settings && settings.types && settings.types.chainKill;
 		return chain && chain.enabled && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
+	},
+
+	/** What happened to the "chain kills are paused" notice of this episode ({status, at} from discord.php, or null): "" when none */
+	homeNoticeText: function(notice) {
+		if (!notice || !notice.at) { return ""; }
+		const when = String(notice.at).replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, "") + " EVE time";
+		if (notice.status === "queued") { return "A notice to the chain kills channel is waiting to be sent."; }
+		if (notice.status === "failed") { return "The notice to the chain kills channel could not be sent (see Delivery below)."; }
+		if (notice.status === "old") { return "Chain kills paused since " + when + "."; }	// its outbox row is pruned: unknown whether it arrived
+		return "A notice was posted to the chain kills channel on " + when + ".";
 	},
 
 	removePingSystem: function(list, id) {
@@ -374,14 +386,15 @@ const discordNotifications = {
 		};
 		const outbox = state.outbox || {};
 		const failures = (outbox.failures || []).map(function(f) {
-			return "<li>" + esc(dn.LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
+			return "<li>" + esc(dn.LABELS[f.kind] || dn.NOTICE_LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
 		}).join("");
 
 		return "<div class='dn-page'>"
 			+ "<h2>Discord notifications for the " + esc(state.mask ? state.mask.name : "") + " mask</h2>"
 			+ "<p class='dn-small'>Only your corporation's Tripwire admins see this page. Nothing is posted until you add a webhook, pick it for a notification and turn the notification on.</p>"
 			+ dn.pausedText(outbox.paused, webhooks, now).map(function(t) { return "<p class='dn-bad'>" + esc(t) + "</p>"; }).join("")
-			+ (dn.homeWarning(settings) ? "<p class='dn-bad dn-home-warning'>" + esc(dn.homeWarning(settings)) + "</p>" : "")
+			+ (dn.homeWarning(settings) ? "<p class='dn-bad dn-home-warning'>" + esc(dn.homeWarning(settings))
+				+ (dn.homeNoticeText(state.homeNotice) ? " <span class='dn-home-notice'>" + esc(dn.homeNoticeText(state.homeNotice)) + "</span>" : "") + "</p>" : "")
 			+ (state.encrypted ? "" : "<p class='dn-small dn-bad'>Webhook URLs are stored unencrypted on this server (DISCORD_SECRET_KEY is not set). They are still never shown again.</p>")
 			+ "<h3>Webhooks (one per channel)</h3>"
 			+ "<table class='dn-webhooks'><thead><tr><th>Name</th><th>URL</th><th>Status</th><th></th></tr></thead><tbody>" + webhookRows + "</tbody></table>"

@@ -965,5 +965,19 @@ foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
 }
 check('kill label: placeholders listed', [isset(discord_placeholders()['chainKill']['labelSystem']), isset(discord_placeholders()['corpLoss']['label'])], [true, true]);
 
+// --- chain kills paused / resumed notice (discord/chain_notice.php; the flow against MySQL: chain_notice_flow_test.php) ---
+$np = discord_payload(['kind' => 'chainPaused', 'mask' => 'Corp']);
+check('notice: paused text, nobody pinged, no embed', $np, ['username' => 'Tripwire',
+    'content' => 'Chain kills are paused: no home system is set for the **Corp** mask. An admin can set it in Tripwire > Mask Admin > Discord.',
+    'allowed_mentions' => ['parse' => []]]);
+check('notice: resumed text', discord_payload(['kind' => 'chainResumed', 'mask' => 'Corp', 'home' => 'J160650'])['content'],
+    'Chain kills resumed for the **Corp** mask (home: J160650).');
+$np = discord_payload(['kind' => 'chainPaused', 'mask' => "@everyone **x** <@&999999999999999999>\n[l](https://e.example)"]);
+check('notice: a custom mask name is escaped, cannot ping, format or link', [strpos($np['content'], '@everyone'), strpos($np['content'], '<@&'),
+    strpos($np['content'], '**x'), strpos($np['content'], '](https:'), strpos($np['content'], "\n"), $np['allowed_mentions']], [false, false, false, false, false, ['parse' => []]]);
+check('notice: a template or ping in the data is ignored', discord_payload(['kind' => 'chainResumed', 'mask' => 'Corp', 'home' => 'J1',
+    'template' => '@here {mask}', 'ping' => '@everyone'])['allowed_mentions'], ['parse' => []]);
+check('notice: episode ref per webhook', discord_chain_notice_ref('12'), 'wh:12');
+
 echo ($failures ? "$failures of $count checks FAILED" : "$count checks passed") . "\n";
 exit($failures ? 1 : 0);
