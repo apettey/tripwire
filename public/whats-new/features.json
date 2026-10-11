@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 48,
+      "date": "2026-10-11",
+      "title": "Paste a d-scan anywhere",
+      "description": "Copy your d-scan results in EVE (click a result, Ctrl+A, Ctrl+C) and press Ctrl+V anywhere in Tripwire: the d-scan box opens for the system you are viewing with the scan already filled in and summarised. Nothing is shared until you click Share.\n\nSignature pastes work as before. Turn it off in Settings > General Preferences > D-scan & local intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-48-dscan-paste.png",
+          "caption": "Ctrl+V of a d-scan opens the d-scan box with the scan filled in"
+        }
+      ]
+    },
+    {
       "pr": 46,
       "date": "2026-10-10",
       "title": "Kill messages show the chain label",
@@ -37,6 +49,18 @@
       ]
     },
     {
+      "pr": 42,
+      "date": "2026-10-10",
+      "title": "Smaller return bookmark pop-up, only for the first pilot through",
+      "description": "The return bookmark pop-up after jumping out through a named hole is now a single small line at the top right, under the top bar, so it no longer covers the map. Click it to copy. The bookmark now starts with ! instead of <, for example !C (signatures already named <C still count).\n\nIt now only appears for the first pilot through. Once the far-side signature has an ID or name, or someone else has already jumped the hole, it stays quiet. To get it after every jump, or turn it off, use Settings > General Preferences > Return bookmark pop-up.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-42-jump-return-compact.png",
+          "caption": "The compact return bookmark pop-up, top right"
+        }
+      ]
+    },
+    {
       "pr": 41,
       "date": "2026-10-10",
       "title": "Watchlist: get told when the chain has what you're looking for",
@@ -69,6 +93,30 @@
       ]
     },
     {
+      "pr": 39,
+      "date": "2026-10-10",
+      "title": "High-sec region instead of hole type",
+      "description": "Holes into high-sec now show the system's region (for example \"The Forge\") on the chain map where the hole type used to be, so you can see at a glance where an exit lands. Hover the name to see the full region and the hole type.\n\nTurn it off in Settings > Chain Map Settings > High-sec region.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-39-highsec-region-label.png",
+          "caption": "High-sec exits labelled with their region"
+        }
+      ]
+    },
+    {
+      "pr": 38,
+      "date": "2026-10-10",
+      "title": "Fitted jump mass",
+      "description": "When a tracked character jumps through a mapped wormhole, Tripwire logs the mass the jump really took, using your ship's current fitting from ESI (armor plates, prop module, Higgs anchor), and asks whether you jumped hot or cold. The mass dialog marks each jump as \"fit\" or \"hull\", and clicking the prop icon switches a jump between hot and cold. Rolling guidance uses these masses.\n\nThe fit lookup needs asset access, which your Tripwire admin turns on; then remove your tracking characters and add them again. Until then, jumps are logged with the hull mass and your hot/cold answer. ESI can show a refit up to an hour late. Turn it off, or turn off the hot/cold question, in Settings > Chain Map Settings > Jump mass.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-38-auto-mass-logging.png",
+          "caption": "The jump log with fitted masses and the hot/cold question"
+        }
+      ]
+    },
+    {
       "pr": 37,
       "date": "2026-10-10",
       "title": "Routes through Thera and Turnur",
@@ -77,6 +125,22 @@
         {
           "src": "whats-new/img/pr-37-exit-finder-thera.png",
           "caption": "Routes through Turnur and Thera as jump markers, with the signatures to warp to"
+        }
+      ]
+    },
+    {
+      "pr": 36,
+      "date": "2026-10-10",
+      "title": "Preserve mass on a connection",
+      "description": "Mark a wormhole as \"preserve mass\" so nobody rolls it or burns its mass, for example your home static or the hole a fleet needs to come back through. Right-click the system on the chain map and choose \"Preserve mass…\", or use the link in the Mass dialog, and add a reason if you like.\n\nEveryone on your mask sees a violet ⊘ marker next to the connection's size tag (hover it to see who set it, when and why) and a \"don't roll this hole\" warning above the rolling guidance in the Mass dialog. Clear it from the same menu or the warning. The flag disappears when the wormhole is deleted. Hide the markers in Settings > Chain Map Settings > Preserve mass.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-36-preserve-mass.png",
+          "caption": "The marker on the chain map and the warning in the Mass dialog"
+        },
+        {
+          "src": "whats-new/img/pr-36-preserve-mass-menu.png",
+          "caption": "Right-click a system: Preserve mass…"
         }
       ]
     },
@@ -284,7 +348,7 @@
       "pr": 8,
       "date": "2026-10-10",
       "title": "Return bookmark after a jump",
-      "description": "When your tracked character jumps out through a named wormhole (for example AB), a panel appears at the top of the window with the return bookmark text, <AB. Click it (or press Enter) to copy it, then paste it into the bookmark for the wormhole you just came through.\n\nThe panel closes by itself after a minute, or with the small x.",
+      "description": "When your tracked character jumps out through a named wormhole (for example AB), a panel appears at the top of the window with the return bookmark text, !AB (older versions used <, as in the picture). Click it (or press Enter) to copy it, then paste it into the bookmark for the wormhole you just came through.\n\nThe panel closes by itself after a minute, or with the small x.",
       "images": [
         {
           "src": "whats-new/img/pr-8-jump-return.png",
