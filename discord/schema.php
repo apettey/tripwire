@@ -51,7 +51,8 @@ const DISCORD_DDL = [
       KEY `createdAt` (`createdAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
     // Dedupe: what has been notified (or evaluated) per mask: 'kill:<type>' + killID, 'kspace' + 'sys:<id>'
-    // (cooldown) and 'kspace' + 'wh:<wormholeID>:<systemID>' (one look per connection). Pruned after 7 days.
+    // (cooldown) and 'kspace' + 'wh:<wormholeID>:<systemID>' (one look per connection). Pruned after 7 days, except
+    // 'nohome' + 'wh:<webhookID>' (chain kills paused, notice posted: discord/chain_notice.php), kept until it ends.
     "CREATE TABLE IF NOT EXISTS `discord_sent` (
       `maskID` decimal(12,1) NOT NULL,
       `kind` varchar(16) NOT NULL,

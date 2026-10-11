@@ -3,7 +3,8 @@
 //
 // Long-running CLI process (supervisord [program:discord-notify]); the only process that calls Discord. It
 //   - polls the chain maps for new k-space connections near the ping systems (discord/kspace.php) every 15 s,
-//   - matches the watchlist filters against the chain maps of masks with that type on (discord/watchlist.php), every 15 s,
+//   - matches the watchlist filters against the chain connected to home of masks with that type on (discord/watchlist.php), every 15 s,
+//   - posts one notice to the chain kill channel while chain kills are on without a home system (discord/chain_notice.php), every 15 s,
 //   - sends the outbox (discord/dispatch.php): every second, at most 20 messages / 5 s per pass,
 //   - prunes the outbox and dedupe tables every 10 minutes.
 // Kill notifications are queued by zkill_feed.worker.php (discord_on_killmail), which sees every streamed killmail.
@@ -99,6 +100,8 @@ function dn_run() {
                 else $highWater = discord_kspace_start($db);   // take over from about now (the poll re-reads an overlap)
                 // Watchlist matches: same leader, same cadence (dedupe rows make a second poller harmless anyway)
                 if ($leader) $totals['watchlist'] += discord_watchlist_poll($db, dn_type_masks($db, 'watchlist'));
+                // Chain kills on without a home system: one notice to their channel (same leader, same cadence)
+                if ($leader) discord_chain_notice_poll($db, dn_type_masks($db, 'chainKill'));
             }
             if ($now - $lastDispatch >= DN_DISPATCH_EVERY) {
                 $lastDispatch = $now;
