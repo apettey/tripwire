@@ -1067,7 +1067,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function adminPageHtml() {
 			return "<div class='wl-admin'>"
 				+ "<h2 class='wl-admin-title'>Watchlist</h2>"
-				+ "<p class='wl-small'>Filters for everyone on this mask: when a system on the chain map matches one, they get a pop-up and a sound (each member can turn those off in Settings &gt; General Preferences), and the system, the hole into it and its signature are marked. To post matches to Discord, turn on <b>Watchlist match</b> in Mask Admin &gt; Discord.</p>"
+				+ "<p class='wl-small'>Filters for everyone on this mask: when a system on the chain map matches one, they get a pop-up and a sound (each member can turn those off in Settings &gt; General Preferences), and the system, the hole into it and its signature are marked. To post matches to Discord, turn on <b>Watchlist match</b> in Mask Admin &gt; Discord: only systems connected to the home system set there are posted, not old chain fragments.</p>"
 				+ "<p class='wl-admin-error dn-bad hidden'></p>"
 				+ "<div class='wl-toolbar'><input type='button' class='wl-new' value='New filter' /> <span class='wl-count wl-small'></span></div>"
 				+ "<ul class='wl-list'></ul>"

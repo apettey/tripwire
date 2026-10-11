@@ -17,8 +17,8 @@
 // EVE-Scout's Thera/Turnur connections that the chain map draws are not walked: they aren't in the mask's `wormholes` /
 // `signatures` tables (add the hole to the mask to make what's behind it count).
 //
-// discord/kills.php uses it for "Chain kills". It's written for any per-mask matcher (the Watchlist's Discord matcher
-// can switch to it): discord_chain_systems() for many masks at once (one query), discord_chain_systems_cached() for
+// discord/kills.php uses it for "Chain kills", discord/watchlist.php for "Watchlist match" (any per-mask matcher
+// can): discord_chain_systems() for many masks at once (one query), discord_chain_systems_cached() for
 // one mask with a DISCORD_CHAIN_CACHE seconds cache.
 
 const DISCORD_CHAIN_CACHE = 60;   // seconds a cached chain is reused (the kill notifications refresh every minute too)

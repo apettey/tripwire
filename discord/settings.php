@@ -10,7 +10,7 @@
 //     watchlist: {enabled, webhookID, template, ping}   (discord/watchlist.php; filters: Mask Admin > Watchlist)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
-//   homeSystemID: systemID or 0   (where the chain starts: chainKill counts only systems connected to it, discord/chain.php)
+//   homeSystemID: systemID or 0   (where the chain starts: chainKill and watchlist count only systems connected to it, discord/chain.php)
 // }
 // Everything is off until an admin enables a type and picks a webhook.
 

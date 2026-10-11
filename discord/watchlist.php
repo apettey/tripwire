@@ -2,9 +2,15 @@
 // Fork-owned: notification type 6, "Watchlist match" (see discord/discord.inc.php and watchlist/watchlist.inc.php).
 //
 // discord_notify.worker.php matches the mask's watchlist filters (set by the corporation's admins in Mask Admin >
-// Watchlist) against the mask's chain, every wormhole of the mask, on the same 15 s cadence as the k-space type, so
-// Discord hears about a match even when nobody has Tripwire open. Filters with "jumps from you / from home" are
-// skipped: those depend on who is looking.
+// Watchlist) against the mask's chain on the same 15 s cadence as the k-space type, so Discord hears about a match
+// even when nobody has Tripwire open. Filters with "jumps from you / from home" are skipped: those depend on who is
+// looking.
+//
+// Only matches in "the chain" count: systems connected to the mask's home system (Mask Admin > Discord) through live
+// wormholes right now, the rule chain kills use (discord/chain.php, walked on every poll). No home set: no matches,
+// no messages. A match outside the chain (an old fragment) is neither announced nor recorded, so a system that gets
+// connected to home later, while its hole is still there, is announced then. Changing the home system re-baselines
+// like saving a filter (it is part of the stamp): the new chain's current matches are recorded, not announced.
 //
 // What is new is decided from what the worker has seen, never from edit times (every edit of a hole rewrites its
 // signatures' modifiedTime): per filter, every (system, hole) that made a match is remembered in
@@ -24,16 +30,18 @@ function discord_watchlist_effect($effect) {
 
 /**
  * The mask's current matches for the Discord type: [[filter, systemID, wormholeIDs (ascending)], ...], only enabled
- * filters with conditions and without jump limits, only matches made by at least one hole.
+ * filters with conditions and without jump limits, only matches made by at least one hole. With $chain (systemID =>
+ * true, discord_chain_systems) only matches of systems in it; null = every system of the links.
  */
-function discord_watchlist_matches(array $filters, array $links, array $data) {
+function discord_watchlist_matches(array $filters, array $links, array $data, ?array $chain = null) {
     $usable = discord_watchlist_usable($filters);
     if (!$usable || !$links) return [];
     $filtersByID = [];
     foreach ($usable as $f) $filtersByID[$f['id']] = $f;
     $out = [];
     foreach (watchlist_match($usable, watchlist_entries_from_links([], $links), $data) as $match) {
-        $ids = array_values(array_unique(array_map('intval', $match['wormholeIDs'])));
+        if ($chain !== null && !isset($chain[(int) $match['systemID']])) continue;
+        $ids =array_values(array_unique(array_map('intval', $match['wormholeIDs'])));
         if (!$ids) continue;
         sort($ids);
         $out[] = [$filtersByID[$match['filterID']], (int) $match['systemID'], $ids];
@@ -48,9 +56,13 @@ function discord_watchlist_usable(array $filters) {
     }));
 }
 
-/** What a filter's records were made for: the type's enabledAt and the filter's updatedAt (saved / turned on) */
-function discord_watchlist_stamp(array $filter, $enabledAt) {
-    return (int) $enabledAt . ':' . (int) ($filter['updatedAt'] ?? 0);
+/**
+ * What a filter's records were made for: the type's enabledAt, the filter's updatedAt (saved / turned on) and the
+ * mask's home system (another home is another chain). Stamps from before the home was part of it ("enabledAt:updatedAt")
+ * never equal a new one, so every filter re-baselines once, silently, on the first poll after the upgrade.
+ */
+function discord_watchlist_stamp(array $filter, $enabledAt, $homeID = 0) {
+    return (int) $enabledAt . ':' . (int) ($filter['updatedAt'] ?? 0) . ':' . (int) $homeID;
 }
 
 /** Record a (filter, system, hole) as seen; false when it already was */
@@ -70,9 +82,11 @@ function discord_watchlist_see(PDO $db, $maskID, $filterID, $systemID, $wormhole
  * [[filter, systemID, link (the oldest of its holes), wormholeIDs], ...]. Forgets holes that are gone and filters that
  * are paused or deleted, records a new baseline for filters whose stamp changed (announcing none of their matches),
  * and silently records new holes of matches that were already seen. Announced matches are recorded by
- * discord_watchlist_claim when they are queued.
+ * discord_watchlist_claim when they are queued. $links are all the mask's holes (a hole missing from them is gone);
+ * only matches of systems in $chain (systemID => true: connected to $homeID now, discord_chain_systems) count, the
+ * others are left alone, neither announced nor recorded.
  */
-function discord_watchlist_sync(PDO $db, $maskID, array $filters, array $links, array $data, $enabledAt) {
+function discord_watchlist_sync(PDO $db, $maskID, array $filters, array $links, array $data, $enabledAt, $homeID, array $chain) {
     $maskID = (string) $maskID;
     $usable = [];
     foreach (discord_watchlist_usable($filters) as $f) $usable[$f['id']] = $f;
@@ -104,13 +118,13 @@ function discord_watchlist_sync(PDO $db, $maskID, array $filters, array $links, 
     }
 
     $byFilter = [];
-    foreach (discord_watchlist_matches(array_values($usable), $links, $data) as $match) $byFilter[$match[0]['id']][] = $match;
+    foreach (discord_watchlist_matches(array_values($usable), $links, $data, $chain) as $match) $byFilter[$match[0]['id']][] = $match;
     $out = [];
     foreach ($usable as $filterID => $filter) {
         $matches = $byFilter[$filterID] ?? [];
-        $stamp = discord_watchlist_stamp($filter, $enabledAt);
+        $stamp = discord_watchlist_stamp($filter, $enabledAt, $homeID);
         if (($stamps[$filterID] ?? null) !== $stamp) {
-            // Turned on, saved or seen for the first time: what is on the chain now is the baseline, not news
+            // Turned on, saved, home changed or seen for the first time: what is on the chain now is the baseline, not news
             $db->beginTransaction();
             try {
                 $db->prepare('DELETE FROM fork_watchlist_seen WHERE maskID = ? AND filterID = ?')->execute([$maskID, $filterID]);
@@ -171,20 +185,29 @@ function discord_watchlist_context(array $filter, $systemID, array $link, array 
 
 /**
  * One poll over the masks with the type on ($masks: maskID => settings). Queues one message per new match, at most
- * DISCORD_WATCHLIST_MAX_PER_POLL per mask. Returns the number of messages queued.
+ * DISCORD_WATCHLIST_MAX_PER_POLL per mask, for matches in the chain connected to the mask's home system ($now: the time
+ * the holes' lifeLeft is compared with, default now). Returns the number of messages queued.
  */
-function discord_watchlist_poll(PDO $db, array $masks) {
+function discord_watchlist_poll(PDO $db, array $masks, $now = null) {
     $queued = 0;
     $data = null;
+    $work = [];
     foreach ($masks as $maskID => $settings) {
         $type = $settings['types']['watchlist'] ?? null;
         if (!$type || !$type['enabled'] || $type['webhookID'] <= 0) continue;
+        $work[(string) $maskID] = [$settings, $type, discord_watchlist_filters($db, (string) $maskID)];
+    }
+    // The chain of each mask with filters, connected to its home now (one query for all; no home = an empty chain)
+    $homes = [];
+    foreach ($work as $maskID => [$settings, , $filters]) if ($filters) $homes[$maskID] = (int) ($settings['homeSystemID'] ?? 0);
+    $chains = $homes ? discord_chain_systems($db, $homes, $now) : [];
+    foreach ($work as $maskID => [$settings, $type, $filters]) {
         $maskID = (string) $maskID;
-        $filters = discord_watchlist_filters($db, $maskID);
         $data = $data ?? watchlist_data();
         // No filters: no need to read the chain, the sync only forgets what was recorded
         $links = $filters ? watchlist_mask_links($db, $maskID, $data) : [];
-        $candidates = discord_watchlist_sync($db, $maskID, $filters, $links, $data, $type['enabledAt'] ?? 0);
+        $homeID = (int) ($settings['homeSystemID'] ?? 0);
+        $candidates = discord_watchlist_sync($db, $maskID, $filters, $links, $data, $type['enabledAt'] ?? 0, $homeID, $chains[$maskID] ?? []);
         $count = 0;
         foreach ($candidates as [$filter, $systemID, $link, $ids]) {
             if ($count >= DISCORD_WATCHLIST_MAX_PER_POLL) break;   // not recorded: the next poll announces it

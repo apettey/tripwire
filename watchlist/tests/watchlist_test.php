@@ -112,13 +112,21 @@ $wl->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, ma
 $wlMask = '98000001.2';
 $wlFilters = [$filters[0], $filters[4]];   // C5 WR (J122515), C2 (J150627)
 // One poll as the worker does it (sync, then queue and record each announced match); the systems announced
-$wlData = $cases['data'];   // plus two more C2s
+$wlData = $cases['data'];   // plus more C2s
 $wlData['systems'][31000703] = ['name' => 'J100703', 'security' => -1, 'regionID' => 11000007, 'class' => 2];
 $wlData['systems'][31000704] = ['name' => 'J100704', 'security' => -1, 'regionID' => 11000007, 'class' => 2];
+foreach ([31000705, 31000706, 31000707, 31000708] as $id) $wlData['systems'][$id] = ['name' => 'J' . ($id - 30900000), 'security' => -1, 'regionID' => 11000007, 'class' => 2];   // the home chain checks
 $wlData = watchlist_index($wlData);
-$poll = function (array $filters, array $links, $enabledAt = 1000) use ($wl, $wlMask, $wlData) {
+// The chain: what $links connect to $home (the worker walks the mask's live holes, discord_chain_systems; same walk)
+$chainOf = function (array $links, $home) {
+    $pairs = [];
+    foreach ($links as $l) if ($l['a'] && $l['b']) $pairs[] = [$l['a'], $l['b']];
+    return discord_chain_walk($pairs, $home);
+};
+$poll = function (array $filters, array $links, $enabledAt = 1000, $home = 31002238, $mask = null) use ($wl, $wlMask, $wlData, $chainOf) {
+    $wlMask = $mask ?? $wlMask;
     $out = [];
-    foreach (discord_watchlist_sync($wl, $wlMask, $filters, $links, $wlData, $enabledAt) as [$filter, $systemID, $link, $ids]) {
+    foreach (discord_watchlist_sync($wl, $wlMask, $filters, $links, $wlData, $enabledAt, $home, $chainOf($links, $home)) as [$filter, $systemID, $link, $ids]) {
         $claim = function () use ($wl, $wlMask, $filter, $systemID, $ids) { return discord_watchlist_claim($wl, $wlMask, $filter['id'], $systemID, $ids); };
         if (discord_enqueue_once($wl, $wlMask, 1, 'watchlist', ['filter' => $filter['name'], 'hole' => $link['wormholeID']], $claim) === null) continue;
         $out[] = $filter['id'] . ':' . $systemID . ':' . $link['wormholeID'];
@@ -168,6 +176,41 @@ check('discord new: turning the type off and on again re-baselines', [$poll($ree
 check('discord new: no filters forgets everything', [$poll([], []), (int) $wl->query('SELECT COUNT(*) FROM fork_watchlist_seen')->fetchColumn(),
     (int) $wl->query('SELECT COUNT(*) FROM fork_watchlist_baseline')->fetchColumn()], [[], 0, 0]);
 check('discord new: claim records the holes once', [discord_watchlist_claim($wl, $wlMask, 'fx', $WR, [1, 4]), discord_watchlist_claim($wl, $wlMask, 'fx', $WR, [1, 4])], [true, false]);
+
+// --- the Discord type only counts the chain connected to the mask's home system (as chain kills do) ---
+check('discord matches: only systems in the chain', array_map(function ($m) { return [$m[0]['id'], $m[1]]; },
+    discord_watchlist_matches($filters, $links, $data, [$HOME => true, $WR => true])), [['fa', $WR], ['fb', $HOME], ['fb', $WR]]);
+check('discord matches: an empty chain (no home) matches nothing', discord_watchlist_matches($filters, $links, $data, []), []);
+check('discord stamp: the home system is part of it', [discord_watchlist_stamp(['updatedAt' => 100], 1000, $HOME), discord_watchlist_stamp(['updatedAt' => 100], 1000)],
+    ['1000:100:' . $HOME, '1000:100:0']);
+// Home H (J115405) - C2a; an old fragment C2b - C2c that nothing connects to home (the hole to it collapsed and was deleted)
+$hcMask = '98000002.2';
+$C2a = 31000702; $C2c = 31000704; $C2d = 31000708;
+$hc = function ($id, $a, $b) { return ['wormholeID' => $id, 'a' => $a, 'b' => $b, 'type' => null, 'size' => null, 'aSig' => 'h' . $id, 'bSig' => '', 'typedSide' => 'a']; };
+$hcFilters = [$filters[4]];   // C2
+$hcBase = [$hc(21, $HOME, $C2a), $hc(22, $C2b, $C2c)];
+$hcPoll = function (array $links, $home = 31002238, $enabledAt = 1000) use ($poll, $hcFilters, $hcMask) { return $poll($hcFilters, $links, $enabledAt, $home, $hcMask); };
+$hcSeen = function () use ($wl, $hcMask) { return array_map('intval', $wl->query("SELECT systemID FROM fork_watchlist_seen WHERE maskID = '$hcMask' ORDER BY systemID")->fetchAll(PDO::FETCH_COLUMN)); };
+check('home chain: the baseline records only the chain\'s matches, not the fragment\'s', [$hcPoll($hcBase), $hcSeen()], [[], [$C2a]]);
+check('home chain: a new hole in the detached fragment is not announced (nor recorded)', [$hcPoll(array_merge($hcBase, [$hc(23, $C2c, $C2d)])), $hcSeen()], [[], [$C2a]]);
+$hcJoined = array_merge($hcBase, [$hc(23, $C2c, $C2d), $hc(24, $C2a, $C2b)]);
+check('home chain: the fragment connected to home later, still matching: its systems are announced then',
+    $hcPoll($hcJoined), ['fe:' . $C2b . ':22', 'fe:' . $C2c . ':22', 'fe:' . $C2d . ':23']);
+check('home chain: ... once', $hcPoll($hcJoined), []);
+check('home chain: cut off again and reconnected by a new hole while its holes stay: not news again',
+    [$hcPoll(array_merge($hcBase, [$hc(23, $C2c, $C2d)])), $hcPoll(array_merge($hcBase, [$hc(23, $C2c, $C2d), $hc(25, $HOME, $C2b)]))], [[], []]);
+check('home chain: no home set: nothing announced, even a new hole from the old home', [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)]), 0),
+    $wl->query("SELECT stamp FROM fork_watchlist_baseline WHERE maskID = '$hcMask'")->fetchColumn()], [[], '1000:100:0']);
+check('home chain: no home set: nothing recorded either', $hcSeen(), []);
+check('home chain: setting a home records its chain without announcing', [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)])), $hcSeen()], [[], [$C2a, 31000705]]);
+check('home chain: moving home (another chain) re-baselines without announcing, the old chain no longer counts',
+    [$hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705)]), $C2b), $hcSeen(), $hcPoll(array_merge($hcBase, [$hc(26, $HOME, 31000705), $hc(27, $HOME, 31000706)]), $C2b)],
+    [[], [$C2b, $C2c], []]);
+check('home chain: ... a new hole on the new chain is announced', $hcPoll(array_merge($hcBase, [$hc(28, $C2c, 31000706)]), $C2b), ['fe:31000706:28']);
+// Records made before the home was part of the stamp ("enabledAt:updatedAt") re-baseline once, silently
+$wl->exec("UPDATE fork_watchlist_baseline SET stamp = '1000:100' WHERE maskID = '$hcMask'");
+check('home chain: stamps from before the upgrade re-baseline silently', [$hcPoll(array_merge($hcBase, [$hc(28, $C2c, 31000706), $hc(29, $C2b, 31000707)]), $C2b),
+    $wl->query("SELECT stamp FROM fork_watchlist_baseline WHERE maskID = '$hcMask'")->fetchColumn()], [[], '1000:100:' . $C2b]);
 
 // --- static data from public/js/combine.js (what the browser matches with) ---
 $app = watchlist_data_from_combine(__DIR__ . '/../../public/js/combine.js');
