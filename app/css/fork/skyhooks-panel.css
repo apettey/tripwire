@@ -206,7 +206,16 @@
 
 #skyhooksWidget .sky-value {
 	flex: 0 0 auto;
-	min-width: 112px;
-	text-align: right;
+	min-width: 4.2em;
+	text-align: left;
+	font-weight: normal;
+	white-space: nowrap;
+}
+
+#skyhooksWidget .sky-dollar-on {
 	color: #8fd18f;
+}
+
+#skyhooksWidget .sky-dollar-off {
+	color: #3d4a3d;
 }

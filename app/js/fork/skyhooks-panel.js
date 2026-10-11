@@ -138,10 +138,10 @@ const skyhooksPanel = {
 	A planet the list doesn't know (or no list yet) is "unknown": never hidden by the Planet filter.
 	@param planets the parsed planets.json (null while it isn't loaded) */
 	planetInfo: function(planets, planetID, systemName) {
-		if (!planets || typeof planets !== "object" || !planets.planets) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0 }; }
+		if (!planets || typeof planets !== "object" || !planets.planets) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0, cuts: null }; }
 		const p = planets.planets[planetID];
 		const reagent = p && planets.reagents ? planets.reagents[p[0]] : null;
-		if (!p || !reagent || (p[0] !== 1 && p[0] !== 2)) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0 }; }
+		if (!p || !reagent || (p[0] !== 1 && p[0] !== 2)) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0, cuts: null }; }
 		const perHour = Number(p[1]) || 0;
 		const numeral = skyhooksPanel.roman(p[2]);
 		return {
@@ -150,8 +150,29 @@ const skyhooksPanel = {
 			number: numeral,
 			reagent: String(reagent.name || ""),
 			perHour: perHour,
-			isk: perHour * (Number(reagent.price) || 0)
+			isk: perHour * (Number(reagent.price) || 0),
+			cuts: Array.isArray(planets.lavaCuts) ? planets.lavaCuts : null
 		};
+	},
+
+	/** Value rating 1-5 of a planetInfo() result, 0 = none: ice = 1; lava = 2-5 by quartile of the raidable ISK/h (half of
+	isk) of ALL lava planets, using the 3 cut points the generator stores in planets.json (`lavaCuts`, raidable ISK/h), so
+	it doesn't depend on which skyhooks are live; an unknown planet, or lava without cut points, has no rating. */
+	valueRating: function(planet) {
+		if (!planet) { return 0; }
+		if (planet.kind === "ice") { return 1; }
+		if (planet.kind !== "lava") { return 0; }
+		const cuts = planet.cuts;
+		if (!Array.isArray(cuts) || cuts.length !== 3 || !cuts.every(function(c) { return isFinite(Number(c)); })) { return 0; }
+		const raidable = planet.isk / 2;
+		return 2 + cuts.filter(function(c) { return raidable >= Number(c); }).length;
+	},
+
+	/** "$$$$" with the unearned ones of 5 dimmed; fixed width. "" for no rating. */
+	ratingHtml: function(rating) {
+		const n = Math.max(0, Math.min(5, Math.floor(Number(rating) || 0)));
+		if (!n) { return ""; }
+		return "<b class='sky-dollar-on'>" + new Array(n + 1).join("$") + "</b><b class='sky-dollar-off'>" + new Array(6 - n).join("$") + "</b>";
 	},
 
 	/** Whether a planet kind passes the lava / ice checkboxes (an unknown planet: always) */
@@ -470,8 +491,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const badge = pl.kind === "lava" || pl.kind === "ice"
 				? "<span class='sky-planet sky-planet-" + pl.kind + "' title='" + esc((pl.kind === "lava" ? "Lava" : "Ice") + " planet: " + pl.reagent + ", " + pl.perHour.toLocaleString("en-US") + " units/hour. About half of it sits in the raidable surplus bay.") + "'>" + (pl.kind === "lava" ? "Lava" : "Ice") + "</span>"
 				: "";
-			const value = pl.isk > 0
-				? "<span class='sky-value' title='" + esc(pl.reagent + ": " + pl.perHour.toLocaleString("en-US") + " units/hour at about " + sp.formatIsk(pl.isk / pl.perHour) + " ISK each. The whole planet makes about " + sp.formatIsk(pl.isk) + " ISK/h; half of it goes to the raidable surplus bay. Estimate: CCP average price, SDE yield.") + "'>~" + esc(sp.formatIsk(pl.isk / 2)) + " ISK/h raidable</span>"
+			const rating = sp.valueRating(pl);
+			const value = rating > 0
+				? "<span class='sky-value' aria-label='Value " + rating + " of 5' title='" + esc("Value " + rating + "/5 \u2014 ~" + sp.formatIsk(pl.isk / 2) + " ISK/h raidable (estimate: CCP average price, SDE yield). " + pl.reagent + ": " + pl.perHour.toLocaleString("en-US") + " units/hour at about " + sp.formatIsk(pl.isk / pl.perHour) + " ISK each; the whole planet makes about " + sp.formatIsk(pl.isk) + " ISK/h and half of it goes to the raidable surplus bay.") + "'>" + sp.ratingHtml(rating) + "</span>"
 				: "<span class='sky-value'></span>";
 			return "<li class='sky-row sky-" + st.state + "' data-systemid='" + esc(r.skyhook.systemID) + "' data-planet='" + esc(r.skyhook.planetID) + "'>"
 				+ "<span class='sky-system'><a class='" + esc(sys.systemTypeClass) + "' href='.?system=" + esc(encodeURIComponent(sys.name)) + "' title='View " + esc(sys.name) + "'>" + esc(sys.name || r.skyhook.systemID) + "</a>"

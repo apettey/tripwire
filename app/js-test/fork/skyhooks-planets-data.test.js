@@ -12,6 +12,11 @@ describe('Skyhook planet data (generated file)', () => {
 		assert.equal(data.reagents[2].name, 'Superionic Ice');
 		assert.ok(data.reagents[1].price > 0 && data.reagents[2].price > 0);
 	});
+	it('has 3 ascending lava rating cut points (raidable ISK/h) and the SDE build', () => {
+		assert.equal(data.lavaCuts.length, 3);
+		assert.ok(data.lavaCuts[0] > 0 && data.lavaCuts[0] < data.lavaCuts[1] && data.lavaCuts[1] < data.lavaCuts[2]);
+		assert.ok(/^\d+$/.test(data.sde));
+	});
 	it('has thousands of planets, each [kind, units per hour, planet number]', () => {
 		assert.ok(entries.length > 3000);
 		entries.forEach(([id, p]) => {

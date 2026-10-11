@@ -302,6 +302,7 @@ describe('Skyhooks panel', () => {
 		// [kind (1 lava, 2 ice), reagent units per hour, planet number]
 		const planets = {
 			reagents: { 1: { name: 'Magmatic Gas', price: 2000 }, 2: { name: 'Superionic Ice', price: 5000 } },
+			lavaCuts: [900000, 1100000, 1300000],	// raidable ISK/h quartile cut points
 			planets: { 100: [1, 1000, 4], 101: [2, 40, 9], 102: [1, 700, 12] }
 		};
 		const info = (id, name) => skyhooksPanel.planetInfo(planets, id, name);
@@ -314,7 +315,7 @@ describe('Skyhooks panel', () => {
 			assert.equal(skyhooksPanel.roman('x'), '');
 		});
 		it('lava planet: name, reagent, yield and value', () => {
-			assert.deepEqual(info(100, 'K4YZ-Y'), { kind: 'lava', name: 'K4YZ-Y IV', number: 'IV', reagent: 'Magmatic Gas', perHour: 1000, isk: 2000000 });
+			assert.deepEqual(info(100, 'K4YZ-Y'), { kind: 'lava', name: 'K4YZ-Y IV', number: 'IV', reagent: 'Magmatic Gas', perHour: 1000, isk: 2000000, cuts: [900000, 1100000, 1300000] });
 		});
 		it('ice planet', () => {
 			const i = info(101, 'Tama');
@@ -323,7 +324,7 @@ describe('Skyhooks panel', () => {
 			assert.equal(i.isk, 200000);
 		});
 		it('no system name: no planet name', () => assert.equal(info(100).name, ''));
-		it('a planet that is not in the list is unknown', () => assert.deepEqual(info(999, 'X'), { kind: 'unknown', name: '', number: '', reagent: '', perHour: 0, isk: 0 }));
+		it('a planet that is not in the list is unknown', () => assert.deepEqual(info(999, 'X'), { kind: 'unknown', name: '', number: '', reagent: '', perHour: 0, isk: 0, cuts: null }));
 		it('data not loaded: unknown', () => {
 			assert.equal(skyhooksPanel.planetInfo(null, 100, 'X').kind, 'unknown');
 			assert.equal(skyhooksPanel.planetInfo({}, 100, 'X').kind, 'unknown');
@@ -336,6 +337,31 @@ describe('Skyhooks panel', () => {
 			assert.equal(skyhooksPanel.planetPasses('ice', S({ ice: false })), false);
 		});
 		it('unknown planet kind is never hidden (list not loaded yet)', () => assert.equal(skyhooksPanel.planetPasses('unknown', S({ lava: false, ice: false })), true));
+		describe('value rating', () => {
+			// raidable ISK/h = perHour x price / 2: 1000 -> 1,000,000 ; cuts 900k / 1.1M / 1.3M
+			const lava = perHour => skyhooksPanel.planetInfo({ reagents: planets.reagents, lavaCuts: planets.lavaCuts, planets: { 1: [1, perHour, 1] } }, 1, 'X');
+			it('ice is always 1', () => assert.equal(skyhooksPanel.valueRating(info(101, 'X')), 1));
+			it('lava 2 to 5 by the cut points (not below a cut = next rating)', () => {
+				assert.equal(skyhooksPanel.valueRating(lava(800)), 2);
+				assert.equal(skyhooksPanel.valueRating(lava(1000)), 3);
+				assert.equal(skyhooksPanel.valueRating(lava(1200)), 4);
+				assert.equal(skyhooksPanel.valueRating(lava(1400)), 5);
+			});
+			it('exactly on a cut point rounds up', () => assert.equal(skyhooksPanel.valueRating(lava(900)), 3));
+			it('unknown planet: no rating', () => {
+				assert.equal(skyhooksPanel.valueRating(info(999, 'X')), 0);
+				assert.equal(skyhooksPanel.valueRating(null), 0);
+			});
+			it('lava without cut points: no rating', () => assert.equal(skyhooksPanel.valueRating({ kind: 'lava', isk: 1e6, cuts: null }), 0));
+			it('same rating whichever hooks are live (depends on the planet only)', () => assert.equal(skyhooksPanel.valueRating(info(100, 'A')), skyhooksPanel.valueRating(info(100, 'B'))));
+			it('rating text: earned and dimmed dollar signs, always 5', () => {
+				assert.equal(skyhooksPanel.ratingHtml(4), "<b class='sky-dollar-on'>$$$$</b><b class='sky-dollar-off'>$</b>");
+				assert.equal(skyhooksPanel.ratingHtml(5), "<b class='sky-dollar-on'>$$$$$</b><b class='sky-dollar-off'></b>");
+				assert.equal(skyhooksPanel.ratingHtml(1), "<b class='sky-dollar-on'>$</b><b class='sky-dollar-off'>$$$$</b>");
+				assert.equal(skyhooksPanel.ratingHtml(0), '');
+				assert.equal(skyhooksPanel.ratingHtml(9), skyhooksPanel.ratingHtml(5));
+			});
+		});
 		it('formatIsk', () => {
 			assert.equal(skyhooksPanel.formatIsk(2100000), '2.1M');
 			assert.equal(skyhooksPanel.formatIsk(177000), '177k');

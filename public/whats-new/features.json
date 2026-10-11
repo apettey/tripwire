@@ -4,7 +4,7 @@
       "pr": 68,
       "date": "2026-10-11",
       "title": "Skyhook raids: lava or ice, and what they're worth",
-      "description": "The Raidable skyhooks box now shows whether each planet is lava (Magmatic Gas) or ice (Superionic Ice), its number in the system, and an estimate of the ISK per hour that is raidable (the surplus bay). Lava hooks produce about 25 times more reagent than ice hooks, so they usually rank far higher. Use the Planet checkboxes to show only lava or only ice, and sort by Value to put the richest raids first. Open the box from the skyhook icon on a low-sec or null-sec system.",
+      "description": "The Raidable skyhooks box now shows whether each planet is lava (Magmatic Gas) or ice (Superionic Ice), its number in the system, and a value rating from $ to $$$$$ (hover it for the estimated raidable ISK per hour). Ice hooks are always $, because lava hooks produce about 25 times more reagent; lava gets $$ to $$$$$ by how rich the planet is. Use the Planet checkboxes to show only lava or only ice, and sort by Value to put the richest raids first. Open the box from the skyhook icon on a low-sec or null-sec system.",
       "images": [
         {
           "src": "whats-new/img/pr-68-skyhooks-planet-value.png",

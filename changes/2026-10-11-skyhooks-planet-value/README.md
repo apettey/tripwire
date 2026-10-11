@@ -5,8 +5,8 @@
 ## Description
 
 Each row of the Raidable skyhooks box now says whether the planet is lava or ice (a coloured badge with the word in it),
-shows the planet's name, and the estimated ISK per hour that is raidable ("~1.1M ISK/h raidable": half of what the planet
-produces, the surplus bay). New "Planet" checkboxes (Lava, Ice) filter the list and "Value" is a new sort. Stacked on PR #67 (`feature/rolling-followups`).
+shows the planet's number, and a value rating of $ to $$$$$ (unearned signs dimmed; the tooltip has "Value 4/5 - ~1.1M ISK/h
+raidable", half of what the planet produces, the surplus bay). New "Planet" checkboxes (Lava, Ice) filter the list and "Value" is a new sort. Stacked on PR #67 (`feature/rolling-followups`).
 
 ## Before / After
 
@@ -15,7 +15,7 @@ produces, the surplus bay). New "Planet" checkboxes (Lava, Ice) filter the list 
 | ![before](before.png) | ![after](after.png) |
 
 (Same stubbed list of 81 live skyhooks, 30 jumps from X-Z4JW, sorted by jumps. After: Lava / Ice badge, planet name and
-"ISK/h raidable" on every row, and the Planet checkboxes and Value sort in the box header.)
+the $ rating on every row, and the Planet checkboxes and Value sort in the box header.)
 
 ## Settings
 
@@ -36,14 +36,16 @@ default on; `sort: "value"`); Reset deletes them with the rest.
   `node tools/fork/build-skyhook-planets.mjs <dir with planetResources.jsonl + mapPlanets.jsonl> 2031.68 5208.25 3586130 2026-10-11 > public/skyhooks-data/planets.json`.
   Planet name = system name + roman planet number (so "K4YZ-Y IV", as ESI gives).
 - **Panel** (`app/js/fork/skyhooks-panel.js`, `.css`): planet badge (Lava orange / Ice blue, text as well as colour),
-  planet name (ellipsis when long), `~X ISK/h raidable` (hover: reagent, units per hour, price, whole-planet figure, "estimate:
-  CCP average price, SDE yield"). Planet filter checkboxes (Lava, Ice), sort "Value" (highest first, by the same figure).
+  planet number, the rating (hover: "Value N/5 - ~X ISK/h raidable (estimate: CCP average price, SDE yield)", reagent, units
+  per hour, price, whole-planet figure). Planet filter checkboxes (Lava, Ice), sort "Value" (highest first, by the same figure).
   A planet missing from the file (none of the 202 live skyhooks) is "unknown": no badge or value and never hidden by the
   Planet filter (so there is no "Other" checkbox). While the file isn't loaded rows show no planet details and the filter is
   skipped; if it can't be loaded the box says so in one line. When the Planet filter hides everything the empty-state text
   says so. At the box's minimum size the row scrolls horizontally like before (the box content already did).
-- **Value = units per hour x price**; the row shows half of it (the planet's whole production is split between the secure
-  bay and the raidable surplus bay).
+- **Value = units per hour x price / 2** (the planet's production is split between the secure bay and the raidable surplus
+  bay). **Rating** (`skyhooksPanel.valueRating`): ice = 1; lava = 2-5 by quartiles of that raidable ISK/h over ALL 2,337 lava
+  planets, with the 3 cut points stored in planets.json (`lavaCuts`, 752,737 / 870,575 / 987,396 ISK/h), so a planet's
+  rating never depends on which skyhooks are live; an unknown planet has no rating. The Value sort still orders by ISK/h.
   The price is a fixed rough number baked into the file (CCP's `average_price` from `GET /markets/prices` on 2026-10-11:
   Magmatic Gas 2,032 ISK, Superionic Ice 5,208 ISK). Regenerate the file to refresh.
 - **Tests**: `app/js-test/fork/skyhooks-panel.test.js` (planet info, roman numerals, filters, defaults, value sort, data

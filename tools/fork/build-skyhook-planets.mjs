@@ -9,7 +9,7 @@
 //      (prices: ESI GET /markets/prices average_price for types 81143 / 81144, just a rough ISK per unit)
 // planetResources: per planet, power or workforce, or a `reagent` {type_id, amount_per_cycle, cycle_period 3600 s,
 // secured_capacity, unsecured_capacity}. Reagent type 81143 = Magmatic Gas (lava planets, planet type 2015),
-// 81144 = Superionic Ice (ice planets, type 12). Output: {v, sde, date, reagents, planets: {planetID: [kind, perHour, index]}}
+// 81144 = Superionic Ice (ice planets, type 12). Output: {v, sde, date, reagents, lavaCuts, planets: {planetID: [kind, perHour, index]}}
 // kind 1 = lava, 2 = ice; index = celestialIndex (the roman numeral in the planet's name). Counts of rows left out
 // go to stderr.
 import { readFileSync } from 'node:fs';
@@ -34,11 +34,17 @@ for (const row of lines('planetResources.jsonl')) {
 	planets[row._key] = [KIND[r.type_id], r.amount_per_cycle, index.get(row._key)];
 }
 console.error('planets written: ' + Object.keys(planets).length + '; rows skipped: ' + JSON.stringify(skipped) + ' (noReagent = power / workforce planets, expected)');
+// Value rating cut points: quartiles of the raidable ISK/h (half the planet's production x price) over ALL lava planets,
+// so the panel's 2-5 rating of a lava planet doesn't depend on which skyhooks are live (ice is always 1)
+const lavaIsk = Object.values(planets).filter((p) => p[0] === 1).map((p) => (p[1] * Number(gasPrice)) / 2).sort((a, b) => a - b);
+const lavaCuts = [1, 2, 3].map((i) => Math.round(lavaIsk[Math.floor((lavaIsk.length * i) / 4)]));
+console.error('lava raidable ISK/h cut points (ratings 2|3|4|5): ' + lavaCuts.join(' | '));
 const out = {
 	v: 1,
 	sde: String(sde),
 	date,
 	reagents: { 1: { name: 'Magmatic Gas', typeID: 81143, price: Number(gasPrice) }, 2: { name: 'Superionic Ice', typeID: 81144, price: Number(icePrice) } },
+	lavaCuts,
 	planets,
 };
 console.log(JSON.stringify(out));
