@@ -47,7 +47,7 @@ if (!isset($mysql) || !($mysql instanceof PDO)) discord_fail(500, 'Database erro
 $maskCorporation = discord_mask_corporation_db($mysql, $mask);
 $sessionCorporation = isset($_SESSION['corporationID']) ? (int) $_SESSION['corporationID'] : 0;
 if ($maskCorporation === null || $maskCorporation !== $sessionCorporation) discord_fail(403, 'Discord notifications are for your corporation\'s masks');
-if (!checkAdmin($mask)) discord_fail(403, 'Only your corporation\'s Tripwire admins can change Discord notifications');
+if (!maskadmin_corp_admin($mask)) discord_fail(403, 'Only your corporation\'s Tripwire admins can change Discord notifications');
 
 if (empty($_SESSION['discordCsrf'])) $_SESSION['discordCsrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['discordCsrf'];

@@ -106,6 +106,7 @@ function doLogin(&$output, $account, $esi, $mysql, $ip, $username, $method) {
 		$_SESSION['super'] = $account->super;
 		$_SESSION['options'] = $options;
 		if (function_exists('tripwire_mask_guard')) tripwire_mask_guard($mysql); // fork: verify the stored active mask
+		if (function_exists('maskadmin_enforce_session')) { maskadmin_enforce_session($mysql); } // fork: blocked masks (after the mask guard)
 
 		$output['result'] = 'success';
 		$output['session'] = $_SESSION;
