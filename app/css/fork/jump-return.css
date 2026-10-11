@@ -110,11 +110,11 @@
 
 /* jBox notices (e.g. the jump mass prompt) share the top-right corner: move the whole stack below the panel
    while it is open, so neither covers the other's buttons. jBox stacks notices with an inline margin, so shift
-   them with a transform instead. */
+   them with `translate`, which adds to (not replaces) the flip animation's transform keyframes. */
 .jBox-wrapper.jBox-Notice {
-	transition: transform 0.2s ease;
+	transition: translate 0.2s ease;
 }
 
 body.jump-return-open .jBox-wrapper.jBox-Notice {
-	transform: translateY(calc(var(--jump-return-height, 26px) + 8px));
+	translate: 0 calc(var(--jump-return-height, 26px) + 8px);
 }

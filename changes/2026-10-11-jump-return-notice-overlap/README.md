@@ -21,5 +21,6 @@ No toggle, because this is a layout bug fix.
 
 `app/js/fork/jump-return.js` sets a `jump-return-open` class on `body` (and the panel's height in
 `--jump-return-height`) while the panel is shown; `app/css/fork/jump-return.css` then shifts every jBox notice
-down by that height with a transform (jBox stacks notices with an inline `margin-top`, so margin can't be used).
+down by that height with the CSS `translate` property (jBox stacks notices with an inline `margin-top`, and its flip
+animation runs `transform` keyframes on the same element, so neither margin nor transform can be used).
 Applies to all notices in that corner, not only the jump mass prompt. No upstream files touched.
