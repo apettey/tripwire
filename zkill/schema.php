@@ -93,6 +93,18 @@ const ZK_DDL = [
       KEY `requested_by` (`requestedBy`, `status`),
       KEY `wanted` (`wantedAt`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Systems people look at (System Threat 90-day profile, zkill/profile.php): their stored kills are kept for
+    // ZKILL_THREAT_KEEP_DAYS instead of ZKILL_RETENTION_HOURS. keepSince = when it was first watched (history before
+    // it is only what the retention window held); profile = cached computed profile (JSON), analysedAt = when.
+    "CREATE TABLE IF NOT EXISTS `zkill_system_keep` (
+      `systemID` int unsigned NOT NULL,
+      `keepSince` datetime NOT NULL,
+      `wantedAt` datetime NOT NULL,
+      `analysedAt` datetime DEFAULT NULL,
+      `profile` mediumtext DEFAULT NULL,
+      PRIMARY KEY (`systemID`),
+      KEY `wanted` (`wantedAt`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
     // Single-kill lookups (Smart notes kill cards, zkill/lookup.php): web endpoints queue kills that are not in
     // zkill_killmails ('queued'), the worker fetches them ('running' -> 'done' / 'failed', at most 3 attempts).
     // requestedBy = Tripwire userID (per-user cap).

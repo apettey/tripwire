@@ -1,0 +1,39 @@
+/* System Threat, 90 days (fork feature): switch, hour-of-day sparkline and top groups inside the Threat & residents section.
+   Bars use an Okabe-Ito pair (blue / orange) so they stay apart for colour-blind viewers. */
+.threat90d { margin-top: 4px; }
+.threat90d-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.threat90d-toggle { display: inline-flex; }
+.threat90d-toggle button {
+	margin: 0;
+	padding: 0 6px;
+	line-height: 14px;
+	font-size: 10px;
+	color: #aab4ba;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	cursor: pointer;
+}
+.threat90d-toggle button:first-child { border-radius: 4px 0 0 4px; }
+.threat90d-toggle button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+.threat90d-toggle button[aria-pressed='true'] { color: #fff; background: rgba(86, 180, 233, 0.35); border-color: #56b4e9; }
+.threat90d-level {
+	padding: 0 4px;
+	line-height: 13px;
+	font-weight: bold;
+	border: 1px solid #5c6870;
+	border-radius: 6px;
+	color: #cfd8dc;
+}
+.threat90d-moderate { color: #ffc040; border-color: #a07020; }
+.threat90d-high { color: #fff; background: #b04a10; border-color: #ff8a3a; }
+.threat90d-critical { color: #fff; background: #b01818; border-color: #ff6060; }
+.threat90d-chart { display: block; margin: 3px 0 1px; max-width: 100%; overflow: visible; }
+.threat90d-bar { fill: #56b4e9; }
+.threat90d-bar.threat90d-busy { fill: #e69f00; }
+.threat90d-bar.threat90d-zero { opacity: 0.35; }
+.threat90d-bar:hover { stroke: #fff; stroke-width: 1; }
+.threat90d-tick { fill: #8f9ba3; font-size: 8px; }
+.threat90d-window b { color: #e69f00; }
+.threat90d-groups { margin: 2px 0 0; padding: 0 0 0 4px; list-style: none; }
+.threat90d-groups li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.threat90d-note { margin-top: 2px; font-size: 10px; }
