@@ -4,6 +4,10 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
     // Grab any pending changes
     $.extend(true, data, tripwire.data);
 
+    // Whether this request carries a signature action, so the response can
+    // be checked for the list that action should have changed.
+    var sentAction = !!(data.signatures && (data.signatures.add || data.signatures.update || data.signatures.remove));
+
     // Remove old timer to prevent multiple
     if (this.timer) clearTimeout(this.timer);
     if (this.xhr) {
@@ -14,8 +18,17 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
 	}
 
     if (mode == 'refresh' || mode == 'change') {
-        data.signatureCount = tripwire.serverSignatureCount;
-        data.signatureTime = maxTimeByProperty(this.client.signatures, "modifiedTime");
+        // The server resends the signature list only when the count differs or
+        // the client's newest modifiedTime is OLDER than the database's -- at
+        // one-second resolution. Two edits inside the same second (a paste
+        // that adds, then a paste that updates the same row; or two people)
+        // leave count and time equal, and the second edit is invisible to
+        // every client until something else changes. After an action whose
+        // response omitted the list, the next request declares itself stale
+        // so the list comes back whole.
+        data.signatureCount = tripwire.forceFullSync ? -1 : tripwire.serverSignatureCount;
+        data.signatureTime = tripwire.forceFullSync ? "1970-01-01 00:00:00" : maxTimeByProperty(this.client.signatures, "modifiedTime");
+        tripwire.forceFullSync = false;
 
         data.flareCount = chain.data.flares ? chain.data.flares.flares.length : 0;
         data.flareTime = chain.data.flares ? chain.data.flares.last_modified : 0;
@@ -88,6 +101,11 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
 
             if (data.signatures) {
                 tripwire.parse(data, mode);
+            } else if (sentAction && data.resultSet && data.resultSet[0] && data.resultSet[0].result == true) {
+                // The action succeeded but the list did not come back: the
+                // same-second case. Ask again, stale, straight away.
+                tripwire.forceFullSync = true;
+                setTimeout(function() { tripwire.refresh(); }, 150);
             }
 
             if (data.comments) {
