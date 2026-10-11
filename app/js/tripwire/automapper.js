@@ -206,19 +206,22 @@ tripwire.autoMapper = function(from, to) {
             if (data.resultSet && data.resultSet[0].result == true) {
                 $("#undo").removeClass("disabled");
 
+                // The undo stack of a system of the jump, not whatever system is being viewed
+                var undoSystemID = automapperUndo.system(viewingSystemID, from, to);
+
                 if (data.results) {
-                    if (viewingSystemID in tripwire.signatures.undo) {
-                        tripwire.signatures.undo[viewingSystemID].push({action: "add", signatures: data.results});
+                    if (undoSystemID in tripwire.signatures.undo) {
+                        tripwire.signatures.undo[undoSystemID].push({action: "add", signatures: data.results});
                     } else {
-                        tripwire.signatures.undo[viewingSystemID] = [{action: "add", signatures: data.results}];
+                        tripwire.signatures.undo[undoSystemID] = [{action: "add", signatures: data.results}];
                     }
                 }
 
                 if (undo.length) {
-                    if (viewingSystemID in tripwire.signatures.undo) {
-                        tripwire.signatures.undo[viewingSystemID].push({action: "update", signatures: undo});
+                    if (undoSystemID in tripwire.signatures.undo) {
+                        tripwire.signatures.undo[undoSystemID].push({action: "update", signatures: undo});
                     } else {
-                        tripwire.signatures.undo[viewingSystemID] = [{action: "update", signatures: undo}];
+                        tripwire.signatures.undo[undoSystemID] = [{action: "update", signatures: undo}];
                     }
                 }
 
