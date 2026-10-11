@@ -23,7 +23,7 @@ const jumpPlanner = {
 	ROMAN: ["0", "I", "II", "III", "IV", "V"],
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
-		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true
+		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true
 	},
 
 	escape: function(text) {
@@ -58,6 +58,7 @@ const jumpPlanner = {
 			showOut: raw.showOut !== false,
 			showHs: raw.showHs === true,
 			hubs: raw.hubs !== false,
+			search: raw.search !== false,
 			open: raw.open === true
 		};
 		if (raw.position && typeof raw.position === "object") { s.position = raw.position; }
@@ -315,8 +316,8 @@ const jumpPlanner = {
 		return out;
 	},
 
-	/** SVG markup of the mini-map */
-	mapSvg: function(mapModel, labels, focusIDs) {
+	/** SVG markup of the mini-map; foundID (the system search's pick) gets a pulsing ring when it is on the map */
+	mapSvg: function(mapModel, labels, focusIDs, foundID) {
 		const esc = jumpPlanner.escape;
 		const focus = {};
 		(focusIDs || []).forEach(function(id) { if (id) { focus[id] = true; } });
@@ -345,6 +346,11 @@ const jumpPlanner = {
 				svg += "<circle" + attrs + " cx='" + p.x + "' cy='" + p.y + "' r='" + (p.kind === "hs" ? 2.4 : 2) + "'></circle>";
 			}
 		});
+		const found = foundID ? mapModel.points.filter(function(p) { return p.id === Number(foundID); })[0] : null;
+		if (found) {
+			svg += "<circle class='jp-found-ring' cx='" + found.x + "' cy='" + found.y + "' r='9'></circle>"
+				+ "<circle class='jp-found-pulse' cx='" + found.x + "' cy='" + found.y + "' r='9'></circle>";
+		}
 		svg += "</g><g class='jp-labels'>" + (labels || []).map(function(l) {
 			return "<text class='" + l.cls + "' x='" + l.x + "' y='" + l.y + "' text-anchor='" + l.anchor + "'>" + esc(l.text) + "</text>";
 		}).join("") + "</g></svg>";
@@ -478,6 +484,116 @@ const jumpPlanner = {
 		return lines.join("\n");
 	},
 
+	// ---- System search (pure) ----
+
+	SEARCH_LIMIT: 8,
+	SORT_NAMES: { name: "System", sec: "Sec", region: "Region", ly: "LY", gates: "Gates" },
+
+	/** A name or query for matching: lower case, without dashes and spaces ("0sht-a" and "0 SHT A" both give "0shta") */
+	searchKey: function(text) {
+		return String(text === undefined || text === null ? "" : text).toLowerCase().replace(/[-\s]/g, "");
+	},
+
+	/**
+	 * Systems whose name matches a query: exact first, then prefix matches, then substring matches (each by name),
+	 * case-insensitive and ignoring dashes and spaces. Every system in the lookup counts, not only those in range.
+	 * @param systems appData.systems-like {systemID: {name}}; limit default SEARCH_LIMIT
+	 * @return [systemID]
+	 */
+	searchSystems: function(query, systems, limit) {
+		const q = jumpPlanner.searchKey(query);
+		const max = limit === undefined ? jumpPlanner.SEARCH_LIMIT : limit;
+		if (!q || !systems || !(max > 0)) { return []; }
+		const hits = [];
+		Object.keys(systems).forEach(function(id) {
+			const sys = systems[id];
+			if (!sys || !sys.name) { return; }
+			const key = jumpPlanner.searchKey(sys.name);
+			const at = key.indexOf(q);
+			if (at < 0) { return; }
+			hits.push({ id: Number(id), name: String(sys.name), rank: key === q ? 0 : at === 0 ? 1 : 2 });
+		});
+		hits.sort(function(a, b) {
+			return a.rank - b.rank || a.name.length - b.name.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id);
+		});
+		return hits.slice(0, max).map(function(h) { return h.id; });
+	},
+
+	/**
+	 * Where a searched system is, or why it isn't in the list, for the panel's current exit, using the engine's rules.
+	 * @param id the system; ctx as model(); model model() output; rows the list as shown (sortRows output)
+	 * @return {id, name, status ("listed" | "exit" | "wh" | "pochven" | "zarzakh" | "hs" | "range" | "lowsec" | "nullsec"
+	 *   | "jammed" | "nopos" | "unknown" | "other"), rank (1-based, listed), total, ly (NaN without positions), range,
+	 *   row (listed)}
+	 */
+	searchStatus: function(id, ctx, model, rows) {
+		const systemID = Number(id);
+		const sys = ctx.systems ? ctx.systems[systemID] : null;
+		const list = rows || model.rows;
+		const out = { id: systemID, name: sys && sys.name ? sys.name : String(systemID), status: "other", rank: null, total: list.length,
+			ly: jumpRange.distanceLy(ctx.index.pos[ctx.exitID], ctx.index.pos[systemID]), range: model.range, row: null };
+		const set = function(status) { out.status = status; return out; };
+		for (let i = 0; i < list.length; i++) {
+			if (list[i].id === systemID) { out.rank = i + 1; out.row = list[i]; return set("listed"); }
+		}
+		if (systemID === Number(ctx.exitID)) { return set("exit"); }
+		const kind = jumpRange.kind(systemID, sys);
+		if (!kind) { return set("unknown"); }
+		if (kind === "wh" || kind === "pochven" || kind === "zarzakh" || kind === "hs") { return set(kind); }
+		if (!ctx.index.pos[systemID]) { return set("nopos"); }
+		if (out.ly > model.range) { return set("range"); }
+		const opts = model.opts || {};
+		if (!jumpRange.isValidCynoTarget(systemID, sys, Object.assign({}, opts, { jammed: null }))) { return set(kind === "ls" ? "lowsec" : "nullsec"); }
+		if (!jumpRange.isValidCynoTarget(systemID, sys, opts)) { return set("jammed"); }
+		return out;
+	},
+
+	/** The one-line search result (HTML, escaped). result searchStatus() output; sort {key, dir} */
+	searchResultHtml: function(result, sort) {
+		if (!result) { return ""; }
+		const esc = jumpPlanner.escape;
+		const ly = isFinite(result.ly) ? result.ly.toFixed(1) + " LY" : "";
+		const withLy = function(text) { return esc(text) + (ly ? " <span class='jp-dim'>(" + esc(ly) + ")</span>" : ""); };
+		let text, cls = "jp-search-no";
+		switch (result.status) {
+			case "listed": {
+				const by = (jumpPlanner.SORT_NAMES[sort && sort.key] || "LY") + (sort && sort.dir === -1 ? " (reversed)" : "");
+				cls = result.row && result.row.blocked ? "jp-search-jammed" : "jp-search-ok";
+				text = "#" + result.rank + " of " + result.total + " by " + esc(by)
+					+ (result.row && result.row.blocked ? " · cyno-jammed, no normal cyno" : result.row && result.row.jammed ? " · marked cyno-jammed" : "");
+				break;
+			}
+			case "exit": text = "the exit itself"; cls = "jp-search-ok"; break;
+			case "wh": text = "wormhole space, jump drives can't go there"; break;
+			case "pochven": text = withLy("Pochven, no cyno can be lit"); break;
+			case "zarzakh": text = withLy("Zarzakh, no cyno can be lit"); break;
+			case "hs": text = withLy("high-sec, can't light a cyno"); break;
+			case "range": text = "out of range: " + esc(ly) + " <span class='jp-dim'>(range " + esc(jumpRange.formatLy(result.range).replace(" LY", "")) + ")</span>"; break;
+			case "lowsec": text = withLy("low-sec, but Low-sec targets are off in Settings"); break;
+			case "nullsec": text = withLy("null-sec, but Null-sec targets are off in Settings"); break;
+			case "jammed": text = withLy("cyno-jammed (hidden by your setting)"); break;
+			case "nopos": text = "no position known"; break;
+			case "unknown": text = "unknown system"; break;
+			default: text = withLy("not in the list");
+		}
+		return "<span class='jp-search-name'>" + esc(result.name) + "</span> — <span class='" + cls + "'>" + text + "</span>";
+	},
+
+	/** Search suggestions (HTML, escaped): name, security and region; active the highlighted index */
+	searchMenuHtml: function(ids, active, systems, regions) {
+		const esc = jumpPlanner.escape;
+		return (ids || []).map(function(id, i) {
+			const sys = (systems && systems[id]) || {};
+			const kind = jumpRange.kind(id, sys);
+			const sec = kind === "wh" ? "<span class='jp-search-wh'>" + esc(sys.class ? "C" + sys.class : "W") + "</span>"
+				: "<span class='" + jumpPlanner.secClass(sys.security) + "'>" + esc(jumpPlanner.secText(sys.security)) + "</span>";
+			const region = regions && regions[sys.regionID] ? regions[sys.regionID].name : "";
+			return "<li role='option' data-jp-find='" + (parseInt(id, 10) || 0) + "' class='" + (i === active ? "active" : "") + "'"
+				+ (i === active ? " aria-selected='true'" : "") + ">" + esc(sys.name || String(id)) + " " + sec
+				+ (region ? " <span class='jp-dim'>" + esc(region) + "</span>" : "") + "</li>";
+		}).join("");
+	},
+
 	/**
 	 * Where the panel goes without a saved position (first open, after Settings > Reset).
 	 * "right": the highest free spot against the right edge of the window (the free space beside the chain map in the
@@ -547,6 +663,11 @@ const jumpPlanner = {
 		return strip(grid);
 	},
 
+	/** Settings > General Preferences row, next to the other panels' on/off rows (same key as "Enable jump planner") */
+	generalRowHtml: function() {
+		return "<tr><th>Jump planner:</th><td><label><input type='checkbox' id='jumpPlanner-enabled-general' /> Show the Jump planner and its ring on low/null-sec exits</label></td></tr>";
+	},
+
 	/** Settings section rows (HTML) */
 	settingsHtml: function(presets) {
 		const esc = jumpPlanner.escape;
@@ -572,6 +693,7 @@ const jumpPlanner = {
 			+ "<tr><th>Out-of-range systems:</th><td><label><input type='checkbox' id='jumpPlanner-showOut' /> Show greyed in mini-map</label></td></tr>"
 			+ "<tr><th>High-sec systems:</th><td><label><input type='checkbox' id='jumpPlanner-showHs' /> Show inside the range (no cyno there)</label></td></tr>"
 			+ "<tr><th>Trade-hub reach:</th><td>" + radios("jumpPlanner-hubs", [["1", "Show"], ["0", "Hide"]]) + "</td></tr>"
+			+ "<tr><th>System search:</th><td>" + radios("jumpPlanner-search", [["1", "Show"], ["0", "Hide"]]) + " <span class='jp-dim'>(find a system in the list)</span></td></tr>"
 			+ "</table></div>";
 	}
 };
@@ -594,7 +716,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			counts: {},			// {key: in-range count}
 			renderTimer: null,
 			hideTip: null,
-			last: null			// {ctx, model, mapModel} of the last render
+			last: null,			// {ctx, model, mapModel} of the last render
+			// System search (this page only): the picked system, the suggestions, and whether to scroll to it on the next render
+			search: { id: null, matches: [], active: -1, scroll: false },
+			$search: null			// the search row, kept across renders so typing isn't lost
 		};
 
 		function current() { return jp.settings(options); }
@@ -728,7 +853,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function widgetHtml() {
 			return "<li id='" + jp.WIDGET_ID + "' class='gridWidget'>"
 				+ "<div class='controls'><span class='jp-title'>Jump planner</span>"
-				+ "<i class='jp-close' data-icon='times' title='Close the Jump planner'></i></div>"
+				+ "<i class='jp-close' data-icon='times' title='Close the Jump planner'></i>"
+				+ "<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i></div>"
 				+ "<div class='content'><div class='jp-head'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
 				+ "</li>";
 		}
@@ -764,6 +890,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const api = gridApi();
 			const $w = $widget();
 			clearTimeout(state.jammedTimer);
+			resetSearch();	// the search lasts while the panel is open
 			if (!api || !$w.length) { return; }
 			// Remember where it was, so opening it again puts it back there (not when Settings > Reset removes it)
 			const entry = jp.gridEntry(api.serialize($w), jp.WIDGET_ID);
@@ -785,6 +912,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!current().open) { store({ open: true }, true); }
 			if ($w && !wasOpen && $w[0].scrollIntoView) { setTimeout(function() { $w[0].scrollIntoView({ block: "nearest", behavior: "smooth" }); }, 50); }
 			render();
+		}
+
+		/** Settings (the toolbar's path) with the Jump Planner section open */
+		function openSettings() {
+			$("#settings.options").first().trigger("click");
+			setTimeout(function() {
+				const $accordion = $("#dialog-options #optionsAccordion");
+				const index = $accordion.children("h3").index($("#jumpPlanner-header"));
+				if (index >= 0 && $accordion.hasClass("ui-accordion")) { $accordion.accordion("option", "active", index); }
+			}, 0);
 		}
 
 		function close() {
@@ -853,6 +990,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			state.last = { ctx: ctx, model: model, mapModel: mapModel };
 			const rows = jp.sortRows(model.rows, state.sort.key, state.sort.dir);
 			const scroll = $body.find(".jp-list-wrap").scrollTop();
+			const $search = searchRow();
+			const searchFocus = $search.find(".jp-search-input").is(":focus");
+			$search.detach();
+			if (!s.search) { resetSearch(); }
 			let hubs = "";
 			if (s.hubs) {
 				const hubOpts = { covert: model.covert, jammed: s.jammed === "ignore" ? {} : model.opts.jammed };
@@ -871,13 +1012,105 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='jp-foot'><span class='jp-foot-text'>" + jp.escape(jp.footerText(model, mapModel.outShown, s.showOut)) + "</span>"
 				+ "<a href='#' class='jp-copy-list'>Copy list</a></div>");
 			$body.find(".jp-list-wrap").scrollTop(scroll || 0);
-			if (state.pinnedID) { showTip(state.pinnedID); }
+			if (s.search) { $body.find(".jp-list-wrap").before($search); }
+			if (searchFocus) { $search.find(".jp-search-input")[0].focus({ preventScroll: true }); }
+			showSearch();
+			if (state.pinnedID) { showTip(state.pinnedID); } else if (state.search.id) { showTip(state.search.id); }
 		}
 
 		function mapHtml() {
 			const l = state.last;
-			const focus = [state.hoverID, state.pinnedID];
-			return jp.mapSvg(l.mapModel, jp.placeLabels(l.mapModel, focus), focus);
+			const focus = [state.hoverID, state.pinnedID, state.search.id];
+			return jp.mapSvg(l.mapModel, jp.placeLabels(l.mapModel, focus), focus, state.search.id);
+		}
+
+		// ---- System search ----
+
+		function resetSearch() {
+			state.search = { id: null, matches: [], active: -1, scroll: false };
+			state.$search = null;
+		}
+
+		/** The search row (built once; render() moves it into the new body) */
+		function searchRow() {
+			if (!state.$search) {
+				state.$search = $("<div class='jp-search'>"
+					+ "<input type='text' class='jp-search-input' placeholder='Find system…' aria-label='Find a system: where it is in the list, or why it is not there'"
+					+ " autocomplete='off' spellcheck='false' maxlength='40' role='combobox' aria-autocomplete='list' aria-expanded='false' />"
+					+ "<ul class='jp-search-menu hidden' role='listbox'></ul>"
+					+ "<span class='jp-search-result'></span></div>");
+			}
+			return state.$search;
+		}
+
+		/** Result line, row highlight and scroll for the picked system (after every render, so tab / ship changes re-run it) */
+		function showSearch() {
+			const $w = $widget();
+			const $result = searchRow().find(".jp-search-result");
+			$w.find(".jp-list tr.jp-row-found").removeClass("jp-row-found");
+			const l = state.last;
+			if (!state.search.id || !l || l.ctx.exitID !== state.selected) { $result.html("").removeAttr("title"); return; }
+			const rows = jp.sortRows(l.model.rows, state.sort.key, state.sort.dir);
+			const result = jp.searchStatus(state.search.id, l.ctx, l.model, rows);
+			$result.html(jp.searchResultHtml(result, state.sort)).attr("title", $result.text());
+			if (result.status !== "listed") { return; }
+			const $row = $w.find(".jp-list tr[data-jp-id='" + result.id + "']").addClass("jp-row-found");
+			if (!state.search.scroll || !$row.length) { return; }
+			state.search.scroll = false;
+			// Inside the list's own scroll box (not the page): the row in the middle, below the sticky header
+			const wrap = $w.find(".jp-list-wrap")[0];
+			const rowBox = $row[0].getBoundingClientRect(), wrapBox = wrap.getBoundingClientRect();
+			const head = $w.find(".jp-list thead")[0];
+			const headH = head ? head.getBoundingClientRect().height : 0;
+			const top = wrap.scrollTop + rowBox.top - wrapBox.top - headH;
+			wrap.scrollTop = Math.max(0, top - Math.max(0, (wrap.clientHeight - headH - rowBox.height) / 2));
+		}
+
+		function closeMenu() {
+			state.search.matches = [];
+			state.search.active = -1;
+			searchRow().find(".jp-search-menu").addClass("hidden").empty();
+			searchRow().find(".jp-search-input").attr("aria-expanded", "false");
+		}
+
+		function drawMenu() {
+			const $menu = searchRow().find(".jp-search-menu");
+			if (!state.search.matches.length) { closeMenu(); return; }
+			$menu.html(jp.searchMenuHtml(state.search.matches, state.search.active, systems(), regions())).removeClass("hidden");
+			searchRow().find(".jp-search-input").attr("aria-expanded", "true");
+		}
+
+		/** Typing: new suggestions (the picked system stays until another is picked or the box is cleared) */
+		function searchInput(text) {
+			if (!$.trim(text)) { clearSearch(); return; }
+			state.search.matches = jp.searchSystems(text, systems());
+			state.search.active = state.search.matches.length ? 0 : -1;
+			drawMenu();
+			if (!state.search.matches.length) { searchRow().find(".jp-search-menu").html("<li class='jp-search-none'>No system with that name</li>").removeClass("hidden"); }
+		}
+
+		function pick(id) {
+			if (!id) { return; }
+			state.search.id = id;
+			state.search.scroll = true;
+			state.pinnedID = null;
+			searchRow().find(".jp-search-input").val(name(id));
+			closeMenu();
+			refreshMap();
+			showSearch();
+			if (tipInfo(id) && tipInfo(id).point) { showTip(id); } else { $widget().find(".jp-tip").addClass("hidden"); }
+		}
+
+		function clearSearch() {
+			const had = !!state.search.id;
+			state.search.id = null;
+			closeMenu();
+			searchRow().find(".jp-search-input").val("");
+			if (had) {
+				refreshMap();
+				showSearch();
+				if (!state.pinnedID) { $widget().find(".jp-tip").addClass("hidden"); }
+			}
 		}
 
 		/** Re-draw the map only (hover), keeping the rest */
@@ -930,6 +1163,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			clearTimeout(state.hideTip);
 			state.hideTip = setTimeout(function() {
 				if (state.pinnedID) { showTip(state.pinnedID); return; }
+				const found = state.search.id ? tipInfo(state.search.id) : null;
+				if (found && found.point) { showTip(state.search.id); return; }
 				$widget().find(".jp-tip").addClass("hidden");
 			}, 350);
 		}
@@ -994,6 +1229,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$("#jumpPlanner-showOut").prop("checked", s.showOut);
 			$("#jumpPlanner-showHs").prop("checked", s.showHs);
 			$s.find("input[name='jumpPlanner-hubs'][value='" + (s.hubs ? "1" : "0") + "']").prop("checked", true);
+			$s.find("input[name='jumpPlanner-search'][value='" + (s.search ? "1" : "0") + "']").prop("checked", true);
+			$("#jumpPlanner-enabled-general").prop("checked", s.enabled);
 			updateCap(s.cap);
 			$("#jumpPlanner-radius-label").text(s.mapRadius + " LY");
 		}
@@ -1027,7 +1264,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				mapRadius: Number($("#jumpPlanner-radius").val()),
 				showOut: $("#jumpPlanner-showOut").prop("checked"),
 				showHs: $("#jumpPlanner-showHs").prop("checked"),
-				hubs: $("input[name='jumpPlanner-hubs']:checked").val() !== "0"
+				hubs: $("input[name='jumpPlanner-hubs']:checked").val() !== "0",
+				search: $("input[name='jumpPlanner-search']:checked").val() !== "0"
 			};
 		}
 
@@ -1039,6 +1277,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const $last = $accordion.children("h3").last();
 			if ($last.length) { $last.before(jp.settingsHtml(presets)); } else { $accordion.append(jp.settingsHtml(presets)); }
 			if ($accordion.hasClass("ui-accordion")) { $accordion.accordion("refresh"); }
+			// Settings > General Preferences: the same on/off as the section's first row (one key), kept in sync both ways.
+			// After the other ready handlers, so it can go under the Kills panels' rows (added from setTimeouts too).
+			setTimeout(function() {
+				const $table = $("#dialog-options #optionsAccordion > div").eq(2).find("table.optionsTable").first();
+				if (!$table.length || $("#jumpPlanner-enabled-general").length) { return; }
+				const $after = $table.find("#chainKillFeed-enabled, #systemKillFeed-enabled, #favouritesRouteStrip-enabled, #favouritesPanel-enabled").last().closest("tr");
+				if ($after.length) { $after.after(jp.generalRowHtml()); } else { $table.append(jp.generalRowHtml()); }
+				$("#jumpPlanner-enabled-general").prop("checked", current().enabled);
+			}, 0);
+			$(document).on("change", "#jumpPlanner-enabled-general", function() {
+				$("#jumpPlanner-section input[name='jumpPlanner-enabled'][value='" + ($(this).prop("checked") ? "1" : "0") + "']").prop("checked", true);
+			});
+			$(document).on("change", "input[name='jumpPlanner-enabled']", function() {
+				$("#jumpPlanner-enabled-general").prop("checked", $("input[name='jumpPlanner-enabled']:checked").val() !== "0");
+			});
 			$(document).on("change", "#jumpPlanner-ship, input[name='jumpPlanner-jdc']", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-cap", function() { updateCap(); });
 			$(document).on("input change", "#jumpPlanner-radius", function() { $("#jumpPlanner-radius-label").text($(this).val() + " LY"); });
@@ -1104,14 +1357,45 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (state.exits.indexOf(id) >= 0) { open(id); }
 			});
 			$doc.on("click", sel + " .jp-close", function(e) { e.preventDefault(); close(); });
-			$doc.on("click", sel + " .jp-tab", function() { state.selected = parseInt($(this).attr("data-jp-tab"), 10); state.pinnedID = null; state.hoverID = null; render(); });
-			$doc.on("change", sel + " .jp-ship", function() { store({ ship: $(this).val() }, true); state.counts = {}; render(); });
-			$doc.on("click", sel + " .jp-jdc button", function() { store({ jdc: Number($(this).attr("data-jdc")) }, true); state.counts = {}; render(); });
+			$doc.on("click", sel + " .jp-settings", function(e) { e.preventDefault(); openSettings(); });
+			$doc.on("click", sel + " .jp-tab", function() { state.selected = parseInt($(this).attr("data-jp-tab"), 10); state.pinnedID = null; state.hoverID = null; state.search.scroll = true; render(); });
+			$doc.on("change", sel + " .jp-ship", function() { store({ ship: $(this).val() }, true); state.counts = {}; state.search.scroll = true; render(); });
+			$doc.on("click", sel + " .jp-jdc button", function() { store({ jdc: Number($(this).attr("data-jdc")) }, true); state.counts = {}; state.search.scroll = true; render(); });
 			$doc.on("click", sel + " .jp-list th[data-jp-sort]", function() {
 				const key = $(this).attr("data-jp-sort");
 				state.sort = state.sort.key === key ? { key: key, dir: -state.sort.dir } : { key: key, dir: 1 };
+				state.search.scroll = true;
 				render();
 			});
+			// System search: suggestions while typing; arrows move, Enter picks, Escape closes the list, then clears
+			$doc.on("input", sel + " .jp-search-input", function() { searchInput($(this).val()); });
+			$doc.on("focus", sel + " .jp-search-input", function() {
+				const text = $(this).val();
+				if ($.trim(text) && !(state.search.id && text === name(state.search.id))) { searchInput(text); }
+			});
+			$doc.on("blur", sel + " .jp-search-input", function() {
+				// Not when render() only moved it (it is focused again by then)
+				setTimeout(function() { if (!searchRow().find(".jp-search-input").is(":focus")) { closeMenu(); } }, 150);
+			});
+			$doc.on("keydown", sel + " .jp-search-input", function(e) {
+				const s = state.search;
+				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+					e.preventDefault();
+					if (!s.matches.length) { searchInput($(this).val()); return; }
+					s.active = (s.active + (e.key === "ArrowDown" ? 1 : -1) + s.matches.length) % s.matches.length;
+					drawMenu();
+				} else if (e.key === "Enter") {
+					e.preventDefault();
+					const list = s.matches.length ? s.matches : jp.searchSystems($(this).val(), systems(), 1);
+					pick(list[Math.max(0, s.active)] || list[0]);
+				} else if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					if (s.matches.length) { closeMenu(); } else { clearSearch(); }
+				}
+			});
+			// mousedown, not click: it comes before the input's blur closes the list
+			$doc.on("mousedown", sel + " .jp-search-menu li[data-jp-find]", function(e) { e.preventDefault(); pick(parseInt($(this).attr("data-jp-find"), 10)); });
 			$doc.on("mouseenter", sel + " .jp-pt, " + sel + " .jp-list tr[data-jp-id]", function() { hover(parseInt($(this).attr("data-jp-id"), 10)); });
 			$doc.on("mouseleave", sel + " .jp-pt, " + sel + " .jp-list tr[data-jp-id]", function() { hover(null); });
 			$doc.on("mouseenter", sel + " .jp-tip", function() { clearTimeout(state.hideTip); });

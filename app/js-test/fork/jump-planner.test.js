@@ -36,7 +36,8 @@ describe('jumpPlanner', () => {
 		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
-				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, open: false });
+				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, open: false });
+			assert.strictEqual(jumpPlanner.settings({ jumpRange: { search: false } }).search, false);
 			assert.strictEqual(jumpPlanner.enabled({}), true);
 			assert.strictEqual(jumpPlanner.enabled({ jumpRange: { enabled: false } }), false);
 		});
@@ -224,6 +225,13 @@ describe('jumpPlanner', () => {
 		it('settings section', () => {
 			noRawHtml(jumpPlanner.settingsHtml([{ key: 'group-1', label: EVIL, ships: [EVIL], baseLy: 3 }]));
 		});
+		it('settings: the System search row in the section, the on/off row for General Preferences', () => {
+			const html = jumpPlanner.settingsHtml(PRESETS);
+			assert.ok(/System search:/.test(html) && /name='jumpPlanner-search' value='1'/.test(html) && /name='jumpPlanner-search' value='0'/.test(html));
+			assert.ok(/name='jumpPlanner-enabled' value='1'/.test(html));
+			const general = jumpPlanner.generalRowHtml();
+			assert.ok(/^<tr><th>Jump planner:<\/th>/.test(general) && /type='checkbox' id='jumpPlanner-enabled-general'/.test(general));
+		});
 	});
 
 	describe('trade-hub reach for real', () => {
@@ -267,6 +275,101 @@ describe('jumpPlanner', () => {
 		});
 		it('age text', () => {
 			assert.deepStrictEqual([30, 600, 7200, 200000].map(jumpPlanner.ageText), ['now', '10 min', '2 h', '2 d']);
+		});
+	});
+
+	describe('system search', () => {
+		const sort = { key: 'ly', dir: 1 };
+		const status = (name, settings, extra) => {
+			const c = ctx(settings, extra);
+			const m = jumpPlanner.model(c);
+			return jumpPlanner.searchStatus(sid(name), c, m, jumpPlanner.sortRows(m.rows, sort.key, sort.dir));
+		};
+		it('prefix before substring, case-insensitive, ignoring dashes and spaces, limited', () => {
+			const names = (q, limit) => jumpPlanner.searchSystems(q, S, limit).map(id => S[id].name);
+			const bos = names('BOS');
+			assert.ok(bos.length > 0 && bos.every(n => n.toLowerCase().indexOf('bos') >= 0));
+			const firstSub = bos.findIndex(n => n.toLowerCase().indexOf('bos') > 0);
+			assert.ok(firstSub < 0 || bos.slice(firstSub).every(n => n.toLowerCase().indexOf('bos') > 0), bos.join());
+			assert.ok(bos.indexOf('Bosboger') >= 0 && bos.indexOf('Bosboger') < (firstSub < 0 ? Infinity : firstSub));
+			assert.strictEqual(names('0sht-a')[0], '0SHT-A');
+			assert.strictEqual(names('0 sht a')[0], '0SHT-A');
+			assert.strictEqual(names('1pwgb')[0], '1P-WGB');
+			assert.strictEqual(names('jita')[0], 'Jita');
+			assert.strictEqual(names('a').length, jumpPlanner.SEARCH_LIMIT);
+			assert.strictEqual(names('a', 3).length, 3);
+			assert.deepStrictEqual([names(''), names('  '), names('-'), jumpPlanner.searchSystems('x', null)], [[], [], [], []]);
+		});
+		it('exact name first, then shorter names', () => {
+			const sys = { 1: { name: 'Amamake' }, 2: { name: 'Ama' }, 3: { name: 'Xama' }, 4: { name: 'Amarr' } };
+			assert.deepStrictEqual(jumpPlanner.searchSystems('ama', sys), [2, 4, 1, 3]);
+		});
+		it('in the list: rank in the current sort', () => {
+			const r = status('Auga');
+			assert.deepStrictEqual([r.status, r.rank, r.total], ['listed', 1, 81]);
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const byName = jumpPlanner.sortRows(m.rows, 'name', -1);
+			const r2 = jumpPlanner.searchStatus(sid('Auga'), c, m, byName);
+			assert.strictEqual(r2.rank, byName.findIndex(x => x.name === 'Auga') + 1);
+			assert.ok(/#\d+ of 81 by System \(reversed\)/.test(jumpPlanner.searchResultHtml(r2, { key: 'name', dir: -1 })));
+			assert.ok(/Auga<\/span> — <span class='jp-search-ok'>#1 of 81 by LY/.test(jumpPlanner.searchResultHtml(r, sort)));
+			assert.strictEqual(status('Amamake').status, 'exit');
+		});
+		it('why not listed: high-sec, W-space, Pochven, Zarzakh', () => {
+			const hs = status('Jita');
+			assert.strictEqual(hs.status, 'hs');
+			assert.ok(/high-sec, can&#39;t light a cyno/.test(jumpPlanner.searchResultHtml(hs, sort)) && /\(\d+\.\d LY\)/.test(jumpPlanner.searchResultHtml(hs, sort)));
+			assert.strictEqual(status('J152820').status, 'wh');
+			assert.ok(/wormhole space/.test(jumpPlanner.searchResultHtml(status('J152820'), sort)));
+			assert.strictEqual(status('Kino').status, 'pochven');
+			assert.ok(/Pochven/.test(jumpPlanner.searchResultHtml(status('Kino'), sort)));
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const z = jumpPlanner.searchStatus(jumpRange.ZARZAKH, c, m, m.rows);
+			assert.strictEqual(z.status, 'zarzakh');
+			assert.ok(/Zarzakh/.test(jumpPlanner.searchResultHtml(z, sort)));
+			assert.strictEqual(jumpPlanner.searchStatus(123, c, m, m.rows).status, 'unknown');
+		});
+		it('why not listed: out of range, with the distance and the range', () => {
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const far = jumpRange.within(INDEX, INDEX.pos[AMAMAKE], 12).filter(h => h.ly > 8 && jumpRange.isValidCynoTarget(h.id, S[h.id], {}))[0];
+			const r = jumpPlanner.searchStatus(far.id, c, m, m.rows);
+			assert.strictEqual(r.status, 'range');
+			assert.ok(new RegExp('out of range: ' + far.ly.toFixed(1) + ' LY <span class=\'jp-dim\'>\\(range 7.0\\)').test(jumpPlanner.searchResultHtml(r, sort)));
+		});
+		it('why not listed: jammed and hidden; low-sec or null-sec targets off', () => {
+			const jammed = {}; jammed[sid('Auga')] = { setBy: 'X', age: 60 };
+			const hidden = status('Auga', { jammed: 'hide' }, { jammed });
+			assert.strictEqual(hidden.status, 'jammed');
+			assert.ok(/cyno-jammed \(hidden by your setting\)/.test(jumpPlanner.searchResultHtml(hidden, sort)));
+			const marked = status('Auga', {}, { jammed });
+			assert.deepStrictEqual([marked.status, marked.row.blocked], ['listed', true]);
+			assert.ok(/cyno-jammed, no normal cyno/.test(jumpPlanner.searchResultHtml(marked, sort)));
+			const ls = status('Auga', { lowsec: false });
+			assert.strictEqual(ls.status, 'lowsec');
+			assert.ok(/low-sec, but Low-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(ls, sort)));
+			const ecCtx = s => ctx(s, { exitID: EC, gates: jumpRange.gateJumps(appData.map.shortest, EC) });
+			const nsIn = jumpPlanner.model(ecCtx({})).rows.filter(r => r.sec <= 0)[0];
+			const offCtx = ecCtx({ nullsec: false }); const offModel = jumpPlanner.model(offCtx);
+			const nsOff = jumpPlanner.searchStatus(nsIn.id, offCtx, offModel, offModel.rows);
+			assert.strictEqual(nsOff.status, 'nullsec');
+			assert.ok(/null-sec, but Null-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(nsOff, sort)));
+		});
+		it('escapes the system name in the result and the suggestions', () => {
+			const sys = {}; sys[30000001] = { name: EVIL, security: 0.3, regionID: 1 };
+			noRawHtml(jumpPlanner.searchResultHtml({ id: 30000001, name: EVIL, status: 'range', ly: 9.4, range: 8, total: 0 }, sort));
+			noRawHtml(jumpPlanner.searchResultHtml({ id: 30000001, name: EVIL, status: 'listed', rank: 1, total: 1, ly: 1, range: 8, row: {} }, sort));
+			const menu = jumpPlanner.searchMenuHtml([30000001], 0, sys, { 1: { name: EVIL } });
+			noRawHtml(menu);
+			assert.ok(/class='active'/.test(menu) && /data-jp-find='30000001'/.test(menu));
+			// The query itself never goes into HTML: matching on it is safe
+			assert.deepStrictEqual(jumpPlanner.searchSystems(EVIL, S), []);
+		});
+		it('found ring on the mini-map only when the system is drawn; its label is forced on', () => {
+			const c = ctx(); const m = jumpPlanner.model(c); const mm = jumpPlanner.mapModel(c, m);
+			const auga = sid('Auga');
+			assert.ok(/jp-found-ring/.test(jumpPlanner.mapSvg(mm, [], [auga], auga)));
+			assert.ok(!/jp-found-ring/.test(jumpPlanner.mapSvg(mm, [], [], sid('Jita'))));
+			assert.ok(jumpPlanner.placeLabels(mm, [auga]).some(l => l.id === auga && l.cls === 'jp-l-focus'));
 		});
 	});
 });
