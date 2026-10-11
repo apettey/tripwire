@@ -122,7 +122,9 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 
 ## 5. Commits and PRs
 
-- One feature per PR, branched from `main`. Describe what changed and link the change-log entry.
+- One feature per PR. **Stack PRs:** branch from the newest open PR's branch (from `main` only when no PR is
+  open) and target that branch, so open PRs form one chain and don't conflict; merge them bottom-up (head branches
+  are deleted on merge, so the next PR retargets to `main`). Describe what changed and link the change-log entry.
 - Every feature goes through a review loop before its PR: a fresh reviewer checks the diff, the author fixes,
   and it repeats until a review round has no findings (see the tripwire-feature skill, section 7).
 - Every merge to `main` is released automatically: it gets a `vX.Y.Z` tag, a GitHub Release and the
