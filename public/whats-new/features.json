@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 63,
+      "date": "2026-10-11",
+      "title": "Rolling: show which holes we are rolling",
+      "description": "Right-click a system on the chain map and choose Rolling… (or use the Mass dialog) to mark the hole you are rolling, with an optional note. Everyone on your mask sees an amber ↻ marker on the connection and \"Being rolled by … since HH:MM EVE\" in the mass dialog; choose Stop rolling when you're done. You can hide the markers in Settings > Map Markers.\n\nCorp admins can post these marks to your hole-roll channel: Mask Admin > Discord > Rolling sends the hole's name, its system and the EVE time, and strikes the message through when rolling is done or the hole collapses.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-63-hole-rolling.png",
+          "caption": "The ↻ rolling marker on a connection and the mass dialog line"
+        }
+      ]
+    },
+    {
       "pr": 62,
       "date": "2026-10-11",
       "title": "Settings grouped into sections",

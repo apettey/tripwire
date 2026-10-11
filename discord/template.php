@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass', 'rolling'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -49,6 +49,16 @@ function discord_placeholders() {
             'withReason' => '": home static" when a reason is given, else empty', 'map' => 'Tripwire link to {from}',
             'time' => 'when it was cleared, shown in each reader\'s own time zone (Discord timestamp)',
             'mark' => 'cleared text: the mark message as it was last posted, struck through, without its pings and link line (put in front of the cleared text when it doesn\'t use {mark})'],
+        'rolling' => ['pings' => 'the ping field of this type', 'mask' => 'mask name',
+            'name' => 'the hole\'s name: the chain label of the system it leads to, e.g. AB (its signature ID when it has none)',
+            'system' => 'the system the hole is in (the end closer to home), e.g. J163701', 'to' => 'the system on the other side, e.g. J152820',
+            'class' => 'class of {to}, e.g. C5 / HS', 'sig' => 'signature ID of the hole in {system}',
+            'connection' => 'both ends with their chain labels, e.g. "A · J163701 ↔ AB · J152820"',
+            'who' => 'who marked, changed or cleared it', 'note' => 'the note given with the mark (empty without one)',
+            'withNote' => '": closing it" when a note is given, else empty', 'map' => 'Tripwire link to {system}',
+            'time' => 'EVE time (UTC), e.g. 19:08: when rolling started; in the done text, when it was cleared or found gone',
+            'outcome' => 'done text: "Done", or "Hole collapsed" when the hole is gone from the map',
+            'mark' => 'done text: the rolling message as it was last posted, struck through, without its pings and link line (put in front of the done text when it doesn\'t use {mark})'],
     ];
 }
 
@@ -142,6 +152,9 @@ function discord_default_templates() {
         // Preserve mass (discord/preserve_mass.php): marked or changed, and cleared (an edit of the mark message)
         'preserveMass'      => "{pings} Preserve mass on **{connection}** ({details}) by *{who}*{withReason}\n{map}",
         'preserveMassClear' => "{mark}\nCleared by *{who}* at {time}",
+        // Rolling (discord/rolling.php): only the hole, its system and the EVE time; done / hole gone (an edit of the mark)
+        'rolling'      => '{pings} Rolling **{name}** in **{system}** — {time} EVE',
+        'rollingClear' => "{mark}\n{outcome} at {time} EVE",
     ];
 }
 
@@ -226,6 +239,7 @@ function discord_field($name, $value, $inline = true) {
 function discord_payload(array $ctx) {
     $kind = $ctx['kind'];
     if ($kind === 'preserveMass') return discord_preserve_payload($ctx);   // discord/preserve_mass.php
+    if ($kind === 'rolling') return discord_rolling_payload($ctx);   // discord/rolling.php
     if ($kind === 'chainPaused' || $kind === 'chainResumed') return discord_chain_notice_payload($ctx);   // discord/chain_notice.php
     $values = [
         'pings' => $ctx['ping'] ?? '', 'mask' => $ctx['mask'] ?? '', 'system' => $ctx['system'] ?? '',

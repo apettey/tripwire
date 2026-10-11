@@ -89,6 +89,18 @@ const DISCORD_DDL = [
       PRIMARY KEY (`maskID`, `wormholeID`),
       KEY `webhookID` (`webhookID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    // Rolling messages (discord/rolling.php): the same as discord_preserve_message, for the "Rolling" type
+    "CREATE TABLE IF NOT EXISTS `discord_rolling_message` (
+      `maskID` decimal(12,1) NOT NULL,
+      `wormholeID` int NOT NULL,
+      `webhookID` int unsigned NOT NULL,
+      `messageID` varchar(32) NOT NULL,
+      `content` text NOT NULL,
+      `postedAt` datetime NOT NULL,
+      `clearedAt` datetime DEFAULT NULL,
+      PRIMARY KEY (`maskID`, `wormholeID`),
+      KEY `webhookID` (`webhookID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
 function discord_ensure_schema(PDO $db) {

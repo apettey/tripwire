@@ -297,21 +297,23 @@ function discord_preserve_last(PDO $db, $maskID, $wormholeID) {
 
 /**
  * What the sender does with a row (pure). $ctx: discord_preserve_context, $live: the hole's message when it may be
- * edited (discord_rally_live: same webhook, posted after the type was turned on). Returns
+ * edited (discord_rally_live: same webhook, posted after the type was turned on), $payloadOf: the payload of a context
+ * (discord_preserve_payload; discord_rolling_payload for discord/rolling.php). Returns
  *   ['op' => 'skip', 'why' => ...]
  *   ['op' => 'post', 'payload' => ..., 'strike' => null | ['messageID', 'payload']]   a new message; then the old one ends
  *   ['op' => 'edit', 'payload' => ..., 'state' => 'live' | 'cleared' | 'revived']     edit the message
  * Edits never ping: no username (a message keeps its author), allowed_mentions empty.
  */
-function discord_preserve_plan(array $ctx, $live, $now = null, $window = DISCORD_PRESERVE_WINDOW) {
+function discord_preserve_plan(array $ctx, $live, $now = null, $window = DISCORD_PRESERVE_WINDOW, ?callable $payloadOf = null) {
     $now = $now ?? time();
+    $payloadOf = $payloadOf ?? 'discord_preserve_payload';   // discord/rolling.php plans its messages the same way
     $struck = $live && !empty($live['clearedAt']);
     if (!empty($ctx['cleared'])) {
         if (!$live) return ['op' => 'skip', 'why' => 'no preserve mass message to edit'];
         if ($struck) return ['op' => 'skip', 'why' => 'the message is already struck through'];
-        return ['op' => 'edit', 'payload' => discord_preserve_payload(['previous' => $live['content']] + $ctx), 'state' => 'cleared'];
+        return ['op' => 'edit', 'payload' => $payloadOf(['previous' => $live['content']] + $ctx), 'state' => 'cleared'];
     }
-    $payload = discord_preserve_payload($ctx);
+    $payload = $payloadOf($ctx);
     $asEdit = function ($payload, $state) {
         unset($payload['username']);
         $payload['allowed_mentions'] = ['parse' => []];
@@ -325,7 +327,7 @@ function discord_preserve_plan(array $ctx, $live, $now = null, $window = DISCORD
         if ($quiet && $age >= 0 && $age < $window) return $asEdit($payload, 'live');
         // Later: a new message (the old one says it was changed)
         return ['op' => 'post', 'payload' => $payload,
-            'strike' => ['messageID' => $live['messageID'], 'payload' => discord_preserve_payload(['changed' => true, 'previous' => $live['content']] + $ctx)]];
+            'strike' => ['messageID' => $live['messageID'], 'payload' => $payloadOf(['changed' => true, 'previous' => $live['content']] + $ctx)]];
     }
     if ($struck) {
         // Marked again soon after the clear: the struck message comes back instead of a new one
