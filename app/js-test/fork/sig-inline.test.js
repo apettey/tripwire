@@ -128,6 +128,11 @@ describe('Inline life / mass edits', () => {
 			assert.deepStrictEqual(act({ key: 'ArrowLeft', popoverField: 'mass' }), { type: 'move', delta: -1 });
 			assert.deepStrictEqual(act({ key: 'ArrowRight', popoverField: 'mass' }), { type: 'move', delta: 1 });
 		});
+		it('Tab closes the popover; digits and arrows are ignored while typing in a field', () => {
+			assert.deepStrictEqual(act({ key: 'Tab', popoverField: 'life' }), { type: 'close' });
+			assert.equal(act({ key: '1', popoverField: 'life', targetEditable: true }), null);
+			assert.equal(act({ key: 'ArrowLeft', popoverField: 'life', targetEditable: true }), null);
+		});
 		it('Escape is ignored when no popover is open', () => assert.equal(act({ key: 'Escape' }), null));
 		it('M inside the life popover switches to mass', () => {
 			assert.deepStrictEqual(act({ key: 'm', popoverField: 'life' }), { type: 'open', field: 'mass' });

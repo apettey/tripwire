@@ -85,6 +85,8 @@ const sigInline = {
 		if (s.ctrlKey || s.metaKey || s.altKey || s.repeat) { return null; }
 		const key = String(s.key || "").toLowerCase();
 		if (s.popoverField) {
+			if (s.targetEditable) { return null; }
+			if (key === "tab") { return { type: "close" }; }
 			if (key === "escape") { return { type: "close" }; }
 			if (key === "arrowleft" || key === "arrowup") { return { type: "move", delta: -1 }; }
 			if (key === "arrowright" || key === "arrowdown") { return { type: "move", delta: 1 }; }
@@ -118,6 +120,17 @@ const sigInline = {
 	Updates the table cell at once (restored if the save fails), and on success pushes the undo entry so Ctrl+Z
 	works. Returns a Promise of "saved" | "same" | "failed". */
 	setWormhole: function(wormholeID, change) {
+		// One save at a time: tripwire.sync merges a request made while another is in flight into the pending one
+		// and loses the first, so each save starts after the previous one's response.
+		const run = function() { return sigInline.saveNow(wormholeID, change); };
+		const result = sigInline.queue.then(run, run);
+		sigInline.queue = result.then(function() {}, function() {});
+		return result;
+	},
+
+	queue: Promise.resolve(),
+
+	saveNow: function(wormholeID, change) {
 		const field = Object.keys(change || {})[0];
 		const value = field ? change[field] : undefined;
 		const wh = tripwire.client.wormholes[wormholeID];
@@ -132,6 +145,7 @@ const sigInline = {
 			Notify.trigger("Could not save: the wormhole's signatures are missing", "red");
 			return Promise.resolve("failed");
 		}
+		sigInline.keepSelected = { ids: $("#sigTable tbody tr.selected").map(function() { return String($(this).data("id")); }).get(), until: Date.now() + 5000 };
 		const entry = sigInline.undoEntry(wh, s1, s2);
 		const systemID = viewingSystemID;	// the undo stack of the system the change was made in
 		const cells = sigInline.cellsFor(wh, field);
@@ -178,6 +192,8 @@ const sigInline = {
 
 	// ---- Popover ----
 
+	keepSelected: null,	// rows selected when a save started: re-selected when the refresh re-renders them
+
 	pop: null,	// {el, field, sigID, value, prevFocus}
 
 	isOpen: function() { return !!sigInline.pop; },
@@ -204,6 +220,9 @@ const sigInline = {
 		html += "<span class='sig-inline-note' role='status' aria-live='polite'></span>";
 		el.innerHTML = html;
 		// Clicks inside must not reach upstream's "click outside the table clears the selection" handler
+		el.addEventListener("focusout", function(e) {
+			if (e.relatedTarget && !el.contains(e.relatedTarget)) { sigInline.close(true); }
+		});
 		el.addEventListener("click", function(e) {
 			e.stopPropagation();
 			const btn = e.target.closest("button[data-value]");
@@ -217,6 +236,8 @@ const sigInline = {
 
 		tripwire.activity = tripwire.activity || {};
 		tripwire.activity.editSig = row.dataset.id;
+		// The widget can be dragged or resized (gridster) while the popover is open: follow the cell
+		sigInline.pop.timer = setInterval(sigInline.onRowsChanged, 200);
 		return true;
 	},
 
@@ -234,6 +255,7 @@ const sigInline = {
 		const p = sigInline.pop;
 		if (!p) { return; }
 		sigInline.pop = null;
+		clearInterval(p.timer);
 		p.el.remove();
 		if (tripwire.activity && String(tripwire.activity.editSig) === String(p.sigID)) { delete tripwire.activity.editSig; }
 		if (!keepFocus && p.prevFocus && p.prevFocus.isConnected && typeof p.prevFocus.focus === "function") { p.prevFocus.focus(); }
@@ -260,6 +282,11 @@ const sigInline = {
 	/** After upstream re-rendered the rows (the 10 s refresh replaces edited rows): follow the new cell,
 	say so if somebody changed the value meanwhile, close if the row is gone. */
 	onRowsChanged: function() {
+		const keep = sigInline.keepSelected;
+		if (keep && Date.now() < keep.until && !document.querySelector("#sigTable tbody tr.selected")) {
+			keep.ids.forEach(function(id) { $("#sigTable tbody tr[data-id='" + id + "']").addClass("selected"); });
+			sigInline.keepSelected = null;
+		}
 		const p = sigInline.pop;
 		if (!p) { return; }
 		const row = document.querySelector("#sigTable tbody tr[data-id='" + p.sigID + "']");
@@ -360,6 +387,10 @@ const sigInline = {
 		$("#sigTable tbody").on("dblclick", "td:nth-child(5), td:nth-child(6)", function() { sigInline.close(true); });
 		document.addEventListener("mousedown", function(e) {
 			if (sigInline.pop && !sigInline.pop.el.contains(e.target) && !e.target.closest("#sigTable tbody td:nth-child(5), #sigTable tbody td:nth-child(6)")) { sigInline.close(true); }
+		}, true);
+		// Scrolling (capture: scroll events do not bubble) would leave the popover behind its cell
+		document.addEventListener("scroll", function(e) {
+			if (sigInline.pop && !sigInline.pop.el.contains(e.target)) { sigInline.close(true); }
 		}, true);
 		window.addEventListener("resize", function() { sigInline.onRowsChanged(); });
 		const tbody = document.querySelector("#sigTable > tbody");

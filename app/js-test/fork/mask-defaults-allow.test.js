@@ -19,7 +19,7 @@ describe('maskDefaults allow-list', () => {
 				if (m) { keys.add(m[1]); }
 			});
 		});
-		assert.deepStrictEqual(maskDefaults.ALLOWED.slice(0, 26).sort(), server);
+		assert.deepStrictEqual(maskDefaults.ALLOWED.slice(0, 27).sort(), server);
 		keys.delete('favoritesPanel');   // left out on purpose: it carries the admin's own favourite systems
 		assert.deepStrictEqual([...keys].sort(), server);
 	});

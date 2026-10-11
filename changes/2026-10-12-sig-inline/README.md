@@ -44,3 +44,9 @@ key means on). Off means clicks on the cells and the L / M keys do nothing.
   updates and says "Changed by <name>"; if the row is gone it closes.
 - `sigInline.setWormhole(wormholeID, {life: ...} | {mass: ...})` is the save path and returns a Promise
   (`"saved"`, `"same"` or `"failed"`); the command palette will reuse it.
+- Review fixes: saves are queued (one at a time, since `tripwire.sync` merges overlapping requests and loses the
+  first), the pop-over closes on scroll, Tab or focus leaving it and follows its cell while the widget is dragged or
+  resized, digits/arrows are ignored while typing in a field, and the selected row stays selected after a save so
+  L / M can be used repeatedly.
+- `cache/.gitignore` now ignores `esi-etag/` (runtime files that were once committed by accident).
+- New setting key `sigInline` added to the mask-defaults allow-list (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`, test count 26 to 27), as the allow-list test requires.
