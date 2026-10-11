@@ -1,0 +1,21 @@
+/* Fork: mute button next to Settings (app/js/fork/sound-mute.js) */
+#sound-mute {
+	display: inline-block;
+	font-size: 1.7em;
+	line-height: 1;
+	cursor: pointer;
+	vertical-align: -0.1em;
+	margin-right: 0.2em;
+}
+#sound-mute svg {
+	display: block;
+}
+#sound-mute.sound-mute-on {
+	color: #e0533b;
+}
+#sound-mute:focus {
+	outline: none;
+}
+#sound-mute:focus-visible {
+	outline: 1px dotted currentColor;
+}

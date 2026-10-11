@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 71,
+      "date": "2026-10-11",
+      "title": "Mute button",
+      "description": "A new speaker button next to Settings in the top bar mutes all Tripwire sounds (kill sounds and voice, watchlist alerts) with one click, so you can work undisturbed. Click it again to unmute; it turns red while muted, and your sound settings stay as they are.\n\nDon't want the button? Hide it in Settings > General > Mute button.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-71-mute-button.png",
+          "caption": "The mute button (red: muted) next to Settings"
+        }
+      ]
+    },
+    {
       "pr": 70,
       "date": "2026-10-11",
       "title": "Structures panel",
