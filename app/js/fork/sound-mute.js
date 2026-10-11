@@ -144,11 +144,14 @@ const soundMute = {
 			if (e.key !== "tripwire_options" || !e.newValue || typeof options === "undefined") { return; }
 			try {
 				const other = JSON.parse(e.newValue);
-				if (other && other.soundMute && typeof other.soundMute === "object") {
+				if (!other || typeof other !== "object") { return; }
+				if (other.soundMute && typeof other.soundMute === "object") {
 					options.soundMute = { enabled: other.soundMute.enabled !== false, muted: other.soundMute.muted === true };
-					if (soundMute.isMuted()) { soundMute.silence(); }
-					soundMute.render();
+				} else {
+					delete options.soundMute;	// Settings > Reset there: back to the default here too
 				}
+				if (soundMute.isMuted()) { soundMute.silence(); }
+				soundMute.render();
 			} catch (err) { /* ignore */ }
 		});
 
