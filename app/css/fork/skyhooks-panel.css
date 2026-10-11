@@ -171,7 +171,7 @@
 
 #skyhooksWidget .sky-planetcell {
 	flex: 0 0 auto;
-	min-width: 118px;
+	min-width: 78px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
@@ -195,18 +195,18 @@
 	background: #7fd0ee;
 }
 
-#skyhooksWidget .sky-planet-other {
-	background: #666;
-	color: #DDD;
-}
-
 #skyhooksWidget .sky-planetname {
+	display: inline-block;
+	max-width: 4em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: bottom;
 	color: #AAA;
 }
 
 #skyhooksWidget .sky-value {
 	flex: 0 0 auto;
-	min-width: 72px;
+	min-width: 112px;
 	text-align: right;
 	color: #8fd18f;
 }

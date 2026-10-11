@@ -7,7 +7,7 @@ const skyhooksPanel = {
 	// 15 minutes per IP). Jumps use guidance's costs (the user's route security preference and avoid list). Saved per user in
 	// options.skyhooksPanel = {enabled (the icon), clickOpen, maxJumps, low, null, window, soonHours, sort, position}; a
 	// missing key means the default (icon on, opens on click, 10 jumps, low-sec and null-sec, opens within 2 h, by jumps).
-	// Also {lava, ice, other} (planet filter; lava and ice on) and sort "value": planet type, name and yield come from the static
+	// Also {lava, ice} (planet filter; both on) and sort "value": planet type, name and yield come from the static
 	// public/skyhooks-data/planets.json (SDE), see planetInfo.
 	// Keep `const skyhooksPanel` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "skyhooksWidget",
@@ -18,7 +18,7 @@ const skyhooksPanel = {
 	REDRAW_MS: 30000,
 	DEFAULT_SIZE: { x: 12, y: 8 },
 	MIN_SIZE: { x: 5, y: 3 },
-	DEFAULTS: { enabled: true, clickOpen: true, maxJumps: 10, low: true, null: true, lava: true, ice: true, other: false, window: "soon", soonHours: 2, sort: "jumps" },
+	DEFAULTS: { enabled: true, clickOpen: true, maxJumps: 10, low: true, null: true, lava: true, ice: true, window: "soon", soonHours: 2, sort: "jumps" },
 	MAX_JUMPS_CHOICES: [3, 5, 10, 15, 20, 30],
 	MAX_SEARCH_JUMPS: 60,       // "any distance" still stops here
 	WINDOWS: ["now", "soon", "all"],
@@ -49,7 +49,6 @@ const skyhooksPanel = {
 			null: s.null !== false,
 			lava: s.lava !== false,
 			ice: s.ice !== false,
-			other: s.other === true,
 			window: skyhooksPanel.WINDOWS.indexOf(s.window) >= 0 ? s.window : d.window,
 			soonHours: isFinite(soonHours) && soonHours > 0 && soonHours <= 168 ? soonHours : d.soonHours,
 			sort: skyhooksPanel.SORTS.indexOf(s.sort) >= 0 ? s.sort : d.sort
@@ -134,30 +133,31 @@ const skyhooksPanel = {
 		return out;
 	},
 
-	/** {kind: "lava"|"ice"|"other"|"unknown", name (system + roman number, "" when unknown), reagent, perHour, isk} for a planet;
+	/** {kind: "lava"|"ice"|"unknown", name (system + roman number, "" when unknown), number (the roman number), reagent, perHour, isk} for a planet;
 	isk = estimated ISK per hour of all the reagent the planet produces (half of it ends up in the raidable surplus bay).
-	@param planets the parsed planets.json (null while it isn't loaded: kind is then "unknown") */
+	A planet the list doesn't know (or no list yet) is "unknown": never hidden by the Planet filter.
+	@param planets the parsed planets.json (null while it isn't loaded) */
 	planetInfo: function(planets, planetID, systemName) {
-		if (!planets || typeof planets !== "object" || !planets.planets) { return { kind: "unknown", name: "", reagent: "", perHour: 0, isk: 0 }; }
+		if (!planets || typeof planets !== "object" || !planets.planets) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0 }; }
 		const p = planets.planets[planetID];
 		const reagent = p && planets.reagents ? planets.reagents[p[0]] : null;
-		if (!p || !reagent || (p[0] !== 1 && p[0] !== 2)) { return { kind: "other", name: "", reagent: "", perHour: 0, isk: 0 }; }
+		if (!p || !reagent || (p[0] !== 1 && p[0] !== 2)) { return { kind: "unknown", name: "", number: "", reagent: "", perHour: 0, isk: 0 }; }
 		const perHour = Number(p[1]) || 0;
 		const numeral = skyhooksPanel.roman(p[2]);
 		return {
 			kind: p[0] === 1 ? "lava" : "ice",
 			name: systemName && numeral ? systemName + " " + numeral : "",
+			number: numeral,
 			reagent: String(reagent.name || ""),
 			perHour: perHour,
 			isk: perHour * (Number(reagent.price) || 0)
 		};
 	},
 
-	/** Whether a planet kind passes the lava / ice / other checkboxes (not yet known: always) */
+	/** Whether a planet kind passes the lava / ice checkboxes (an unknown planet: always) */
 	planetPasses: function(kind, settings) {
 		if (kind === "lava") { return settings.lava; }
 		if (kind === "ice") { return settings.ice; }
-		if (kind === "other") { return settings.other; }
 		return true;
 	},
 
@@ -335,7 +335,7 @@ const skyhooksPanel = {
 		if (unavailable) { return { kind: "unavailable", text: "Skyhook data unavailable." }; }
 		if (!count) { return { kind: "none", text: "No raidable skyhooks right now." }; }
 		if (!exits || !exits.length) { return { kind: "noexits", text: "No k-space exit on your chain yet: jumps are counted from the chain's k-space systems." }; }
-		return { kind: "filtered", text: "No raidable skyhook matches your options (" + (settings.maxJumps > 0 ? "within " + settings.maxJumps + " jumps" : "any distance") + "). Widen them above." };
+		return { kind: "filtered", text: "No raidable skyhook matches your options (" + (settings.maxJumps > 0 ? "within " + settings.maxJumps + " jumps" : "any distance") + (!settings.lava || !settings.ice ? ", " + (!settings.lava && !settings.ice ? "no planet type" : settings.lava ? "lava only" : "ice only") + " (Planet filter)" : "") + "). Widen them above." };
 	}
 };
 
@@ -344,6 +344,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		const sp = skyhooksPanel;
 		let planets = null;       // public/skyhooks-data/planets.json once loaded
 		let planetsLoading = false;
+		let planetsFailed = false;
 		let data = null;          // last answer of skyhooks.php: {skyhooks, fetched, stale, error}
 		let loadError = null;     // text when the last request failed
 		let skew = 0;             // server time - browser time, seconds
@@ -395,7 +396,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (planets || planetsLoading) { return; }
 			planetsLoading = true;
 			$.ajax({ url: sp.PLANETS_URL, dataType: "json", cache: true }).done(function(d) {
-				if (d && d.planets && typeof d.planets === "object") { planets = d; }
+				if (d && d.planets && typeof d.planets === "object") { planets = d; planetsFailed = false; } else { planetsFailed = true; }
+			}).fail(function() {
+				planetsFailed = true;
 			}).always(function() {
 				planetsLoading = false;
 				render();
@@ -434,10 +437,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<label title='Gate jumps from this system'>Within " + selectHtml("sky-max", jumpChoices, s.maxJumps) + "</label>"
 				+ "<label><input type='checkbox' class='sky-low'" + (s.low ? " checked" : "") + " /> Low-sec</label>"
 				+ "<label><input type='checkbox' class='sky-null'" + (s.null ? " checked" : "") + " /> Null-sec</label>"
-				+ "<span class='sky-planets' title='Lava planets give Magmatic Gas, ice planets Superionic Ice; other planets give no reagents'>Planet:"
+				+ "<span class='sky-planets' title='Lava planets give Magmatic Gas, ice planets Superionic Ice'>Planet:"
 				+ " <label><input type='checkbox' class='sky-lava'" + (s.lava ? " checked" : "") + " /> Lava</label>"
 				+ " <label><input type='checkbox' class='sky-ice'" + (s.ice ? " checked" : "") + " /> Ice</label>"
-				+ " <label><input type='checkbox' class='sky-other'" + (s.other ? " checked" : "") + " /> Other</label></span>"
+				+ "</span>"
 				+ "<label>Window " + selectHtml("sky-window", windowChoices, s.window)
 				+ (s.window === "soon" ? " " + selectHtml("sky-hours", sp.SOON_HOURS_CHOICES.map(function(h) { return [h, h + " h"]; }), s.soonHours) : "") + "</label>"
 				+ "<label>Sort " + selectHtml("sky-sort", [["jumps", "Jumps"], ["start", "Window start"], ["value", "Value"]], s.sort) + "</label>"
@@ -463,17 +466,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const originName = (systemFor(origin) || {}).name || origin;
 			const secText = isFinite(Number(sys.security)) ? (Math.round(Number(sys.security) * 10) / 10 || 0).toFixed(1) : "";
 			const pl = r.planet || { kind: "unknown" };
-			const planetName = pl.name || (pl.kind === "other" ? "no reagents" : "");
+			const planetName = pl.number;	// the system's name is in the first column already; the full name is the tooltip
 			const badge = pl.kind === "lava" || pl.kind === "ice"
 				? "<span class='sky-planet sky-planet-" + pl.kind + "' title='" + esc((pl.kind === "lava" ? "Lava" : "Ice") + " planet: " + pl.reagent + ", " + pl.perHour.toLocaleString("en-US") + " units/hour. About half of it sits in the raidable surplus bay.") + "'>" + (pl.kind === "lava" ? "Lava" : "Ice") + "</span>"
-				: (pl.kind === "other" ? "<span class='sky-planet sky-planet-other' title='This planet gives power or workforce, no reagents to steal'>Other</span>" : "");
+				: "";
 			const value = pl.isk > 0
-				? "<span class='sky-value' title='" + esc(pl.reagent + ": " + pl.perHour.toLocaleString("en-US") + " units/hour at about " + sp.formatIsk(pl.isk / pl.perHour) + " ISK each (CCP average price). Half of it goes to the raidable surplus bay.") + "'>" + esc(sp.formatIsk(pl.isk)) + " ISK/h</span>"
+				? "<span class='sky-value' title='" + esc(pl.reagent + ": " + pl.perHour.toLocaleString("en-US") + " units/hour at about " + sp.formatIsk(pl.isk / pl.perHour) + " ISK each. The whole planet makes about " + sp.formatIsk(pl.isk) + " ISK/h; half of it goes to the raidable surplus bay. Estimate: CCP average price, SDE yield.") + "'>~" + esc(sp.formatIsk(pl.isk / 2)) + " ISK/h raidable</span>"
 				: "<span class='sky-value'></span>";
 			return "<li class='sky-row sky-" + st.state + "' data-systemid='" + esc(r.skyhook.systemID) + "' data-planet='" + esc(r.skyhook.planetID) + "'>"
 				+ "<span class='sky-system'><a class='" + esc(sys.systemTypeClass) + "' href='.?system=" + esc(encodeURIComponent(sys.name)) + "' title='View " + esc(sys.name) + "'>" + esc(sys.name || r.skyhook.systemID) + "</a>"
 				+ " <span class='sky-sec sky-sec-" + esc(sec) + "'>" + esc(secText) + "</span></span>"
-				+ "<span class='sky-planetcell'>" + badge + (planetName ? " <span class='sky-planetname'>" + esc(planetName) + "</span>" : "") + "</span>"
+				+ "<span class='sky-planetcell'" + (pl.name ? " title='" + esc("Planet " + pl.name) + "'" : "") + ">" + badge + (planetName ? " <span class='sky-planetname'>" + esc(planetName) + "</span>" : "") + "</span>"
 				+ value
 				+ "<span class='sky-region' title='" + esc(region) + "'>" + esc(region) + "</span>"
 				+ "<span class='sky-exit' title='Gate jumps from " + esc(originName) + "'>" + (r.nearest.jumps === 0 ? "this system" : r.nearest.jumps + (r.nearest.jumps === 1 ? " jump" : " jumps")) + "</span>"
@@ -513,6 +516,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (loadError) { notes.push(loadError + " Showing the last list."); }
 			else if (data.error && data.stale && !data.unavailable) { notes.push("ESI is not answering: this list is from " + sp.duration(t - data.fetched) + " ago."); }
 			else if (data.unavailable && data.error) { notes.push(data.error); }
+			if (planetsFailed && !planets) { notes.push("Planet details (lava / ice, value) could not be loaded."); }
 			if (!rows.length) { const empty = sp.emptyState(data.skyhooks.length, [{}], s, data.unavailable); notes.push(empty.text); }
 			$status.html(notes.map(sp.escape).join("<br/>")).toggleClass("sky-error", !!(loadError || data.unavailable || (data.error && data.stale)));
 			$list.html(rows.map(function(r) { return rowHtml(r, t); }).join(""));
@@ -677,7 +681,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("change", sel + " .sky-null", function() { save({ null: this.checked }); render(); });
 			$doc.on("change", sel + " .sky-lava", function() { save({ lava: this.checked }); render(); });
 			$doc.on("change", sel + " .sky-ice", function() { save({ ice: this.checked }); render(); });
-			$doc.on("change", sel + " .sky-other", function() { save({ other: this.checked }); render(); });
 			$doc.on("change", sel + " .sky-window", function() { save({ window: $(this).val() }); render(); });
 			$doc.on("change", sel + " .sky-hours", function() { save({ soonHours: Number($(this).val()) }); render(); });
 			$doc.on("change", sel + " .sky-sort", function() { save({ sort: $(this).val() }); render(); });
