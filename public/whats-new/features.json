@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 81,
+      "date": "2026-10-11",
+      "title": "Structure timer reminders",
+      "description": "Mask admins can turn on Structure timers in Mask Admin > Discord to get a Discord reminder 24 hours, 1 hour and 15 minutes before a structure timer ends, and when it ends. In Tripwire you also get a pop-up and a sound at 15 minutes and at the end; turn that off in Settings > Kills & Intel > Timer alerts.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-81-structure-reminders.png",
+          "caption": "The pop-up when a structure timer is close"
+        }
+      ]
+    },
+    {
       "pr": 83,
       "date": "2026-10-11",
       "title": "Structure timers on the map and in one list",
