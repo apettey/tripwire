@@ -70,6 +70,22 @@ fclose($holder);
 skyhooks_get($ok, $t + 5000, $file);
 check('lock free: fetch', $calls, 7);
 
+// The cache can't be written (the cache path is a directory): ESI is still asked only once per 60 s, and no temp file stays
+$dirFile = sys_get_temp_dir() . '/skyhooks-test-dir-' . getmypid() . '.json';
+mkdir($dirFile);
+$before = $calls;
+$r = skyhooks_get($ok, $t + 9000, $dirFile);
+check('unwritable: first request asks ESI', $calls, $before + 1);
+check('unwritable: this request still gets the list', count($r['skyhooks']), 1);
+skyhooks_get($ok, $t + 9030, $dirFile);
+check('unwritable: no second call within 60 s', $calls, $before + 1);
+skyhooks_get($ok, $t + 9060, $dirFile);
+check('unwritable: call again after 60 s', $calls, $before + 2);
+check('unwritable: no temp file left', glob($dirFile . '.*.tmp.json'), array());
+check('write failure is false', skyhooks_write_cache($dirFile, array()), false);
+@unlink(skyhooks_lock_file($dirFile));
+rmdir($dirFile);
+
 // A paused ESI (esi/esi.inc.php limits) is an error, and the copy survives
 esi_limit_state_file(tempnam(sys_get_temp_dir(), 'esi-test-'));
 esi_limit_state_update(function(array &$state) { $state['pauses']['route:skyhooks/raidable'] = microtime(true) + 300; });

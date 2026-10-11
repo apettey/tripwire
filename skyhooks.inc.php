@@ -70,11 +70,22 @@ function skyhooks_read_cache($file) {
 	return skyhooks_cache_normalise($raw ? json_decode($raw, true) : null);
 }
 
+/** Atomic write through a temp file (named *.tmp.json: cache/.gitignore ignores only *.json); false if it failed */
 function skyhooks_write_cache($file, array $cache) {
-	$tmp = $file . '.' . getmypid() . '.tmp';
-	if (@file_put_contents($tmp, json_encode($cache)) === false) return false;
+	$tmp = $file . '.' . getmypid() . '.tmp.json';
+	if (@file_put_contents($tmp, json_encode($cache)) === false) { @unlink($tmp); return false; }
 	@chmod($tmp, 0666);
-	return @rename($tmp, $file);
+	if (!@rename($tmp, $file)) { @unlink($tmp); return false; }
+	return true;
+}
+
+/**
+ * When the cache can't be written, nobody could see that ESI was asked, so every request would ask again. The time of
+ * the last ESI attempt is then kept in the lock file instead (it is only ever written under the lock).
+ */
+function skyhooks_backoff_read($lockFile) {
+	$raw = @file_get_contents($lockFile);
+	return $raw !== false && ctype_digit(trim($raw)) ? (int) $raw : 0;
 }
 
 /** One ESI call; @return [skyhooks list or null, error text or null] */
@@ -97,10 +108,11 @@ function skyhooks_get(?callable $fetch = null, $now = null, ?string $file = null
 	$fetch = $fetch ?: 'skyhooks_fetch_esi';
 	$now = $now ?? time();
 	$file = $file ?? skyhooks_cache_file();
+	$lockFile = skyhooks_lock_file($file);
 	$cache = skyhooks_read_cache($file);
+	$cache['attempted'] = max($cache['attempted'], skyhooks_backoff_read($lockFile));
 
 	if (skyhooks_needs_refresh($cache, $now)) {
-		$lockFile = skyhooks_lock_file($file);
 		$lock = @fopen($lockFile, 'c');
 		if ($lock) {
 			@chmod($lockFile, 0666);
@@ -115,6 +127,7 @@ function skyhooks_get(?callable $fetch = null, $now = null, ?string $file = null
 			if ($got) {
 				try {
 					$cache = skyhooks_read_cache($file);   // another request may have refreshed while we waited
+					$cache['attempted'] = max($cache['attempted'], skyhooks_backoff_read($lockFile));
 					if (skyhooks_needs_refresh($cache, $now)) {
 						[$list, $error] = $fetch();
 						$cache['attempted'] = $now;
@@ -126,7 +139,11 @@ function skyhooks_get(?callable $fetch = null, $now = null, ?string $file = null
 							$cache['error'] = $error;
 							esi_log('skyhooks refresh failed: ' . $error);
 						}
-						skyhooks_write_cache($file, $cache);
+						if (!skyhooks_write_cache($file, $cache)) {
+							// Remember the attempt where we can, and say so (once per backoff, not per request)
+							@file_put_contents($lockFile, (string) $now);
+							esi_log('cannot write ' . $file . ': skyhooks are asked from ESI at most every ' . SKYHOOKS_RETRY . ' s until it can');
+						}
 					}
 				} finally {
 					flock($lock, LOCK_UN);

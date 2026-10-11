@@ -118,25 +118,93 @@ const skyhooksPanel = {
 		});
 	},
 
-	/** Nearest chain exit: {exit, jumps} (fewest gate jumps; ties go to the earlier exit), or null if no exit reaches it.
-	@param jumpsFn (exitSystemID, systemID) => jumps or null */
-	nearestExit: function(exits, systemID, jumpsFn) {
-		let best = null;
-		(exits || []).forEach(function(exit) {
-			const j = jumpsFn(exit.systemID, systemID);
-			if (j !== null && j !== undefined && (!best || j < best.jumps)) { best = { exit: exit, jumps: j }; }
-		});
-		return best;
+	/** Extra cost of entering a system under the user's route preferences: the same rules as guidance's private
+	adjustCostForOptions (100 for an avoided system, Zarzakh, or the wrong security for the route security option).
+	@param system systemAnalysis.analyse() result (or null) @param chainOptions options.chain */
+	entryPenalty: function(system, chainOptions) {
+		if (!system) { return 0; }
+		const o = chainOptions || {};
+		let cost = 0;
+		const ignore = o.routeIgnore;
+		if (ignore && ignore.enabled && Array.isArray(ignore.systems) && ignore.systems.indexOf(system.name) >= 0) { cost += 100; }
+		if (system.name === "Zarzakh") { cost += 100; }
+		switch (o.routeSecurity) {
+			case "highsec": return cost + (system.security < 0.45 ? 100 : 0);
+			case "avoid-high": return cost + (system.security >= 0.45 ? 100 : 0);
+			case "avoid-null": return cost + (system.security <= 0.0 ? 100 : 0);
+			default: return cost;
+		}
 	},
 
-	/** The rows to show: [{skyhook, nearest}] within maxJumps (0 = any), sorted
-	@param jumpsFn (exitSystemID, systemID, limit) => jumps or null */
-	rows: function(skyhooks, exits, systemFor, jumpsFn, now, settings) {
+	/** One search from all chain exits at once (multi-source Dijkstra over the gate map, the same costs and cut-off as
+	guidance.findShortestPath with a limit): for every system reached, the gate jumps from the nearest exit.
+	@param map gate adjacency keyed by systemID - 30000000 (appData.map.shortest); values are the neighbours
+	@param exitIDs real system IDs
+	@param limit guidance's cost limit: systems are not expanded from a cost of `limit` on
+	@param costFn (fromKey, toKey) => cost of the hop (1 + penalties), <= 0 when closed (keys are offset IDs)
+	@return {<real systemID>: {jumps, exitID}} (exits themselves: 0 jumps) */
+	distances: function(map, exitIDs, limit, costFn) {
+		const OFFSET = 30000000;
+		const cost = {}, hops = {}, source = {};
+		const open = {};   // cost -> [keys]
+		let pending = 0;
+		const add = function(c, key) { (open[c] = open[c] || []).push(key); pending++; };
+		(exitIDs || []).forEach(function(id) {
+			const key = Number(id) - OFFSET;
+			if (!map || !map[key] || cost[key] !== undefined) { return; }
+			cost[key] = 0; hops[key] = 0; source[key] = Number(id);
+			add(0, key);
+		});
+		while (pending > 0) {
+			const c = Math.min.apply(null, Object.keys(open).map(Number));
+			const node = open[c].shift();
+			pending--;
+			if (!open[c].length) { delete open[c]; }
+			if (c > cost[node] || c >= limit) { continue; }   // outdated entry, or past the limit
+			const next = map[node] || {};
+			for (const k in next) {
+				if (next[k] === undefined) { continue; }
+				const to = Number(k);
+				const step = costFn(node, to);
+				if (!(step > 0)) { continue; }
+				const total = c + step;
+				if (cost[to] === undefined || total < cost[to]) {
+					cost[to] = total; hops[to] = hops[node] + 1; source[to] = source[node];
+					add(total, to);
+				}
+			}
+		}
+		const result = {};
+		for (const key in cost) { result[Number(key) + OFFSET] = { jumps: hops[key], exitID: source[key] }; }
+		return result;
+	},
+
+	/** The rows to show: [{skyhook, nearest: {exit: {systemID}, jumps}}] within maxJumps (0 = any), sorted
+	@param nearestFn (systemID) => {jumps, exitID} or null/undefined (see distances) */
+	rows: function(skyhooks, systemFor, nearestFn, now, settings) {
 		const limit = settings.maxJumps > 0 ? settings.maxJumps : skyhooksPanel.MAX_SEARCH_JUMPS;
 		const rows = skyhooksPanel.prefilter(skyhooks, systemFor, now, settings).map(function(s) {
-			return { skyhook: s, nearest: skyhooksPanel.nearestExit(exits, s.systemID, function(from, to) { return jumpsFn(from, to, limit); }) };
+			const n = nearestFn(s.systemID);
+			return { skyhook: s, nearest: n ? { exit: { systemID: n.exitID }, jumps: n.jumps } : null };
 		}).filter(function(r) { return r.nearest && r.nearest.jumps <= limit; });
 		return skyhooksPanel.sort(rows, settings.sort);
+	},
+
+	/** Where to put the widget when there's no saved position: right of the existing widgets, from row 1, if that fits
+	in the window; otherwise below them, at the left (as the Favourites panel does).
+	widgets: [{col, row, size_x, size_y}]; availableCols: grid columns that fit in the window (optional) */
+	defaultPlacement: function(widgets, availableCols) {
+		let maxCol = 0, maxRow = 0;
+		(widgets || []).forEach(function(w) {
+			if (!w) { return; }
+			maxCol = Math.max(maxCol, (Number(w.col) || 1) + (Number(w.size_x) || 1) - 1);
+			maxRow = Math.max(maxRow, (Number(w.row) || 1) + (Number(w.size_y) || 1) - 1);
+		});
+		const size = skyhooksPanel.DEFAULT_SIZE;
+		if (availableCols && maxCol && maxCol + size.x > availableCols) {
+			return { col: 1, row: maxRow + 1, size_x: size.x, size_y: size.y };
+		}
+		return { col: maxCol + 1, row: 1, size_x: size.x, size_y: size.y };
 	},
 
 	/** Sorted copy: "jumps" (then window start), or "start" (then jumps) */
@@ -172,9 +240,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function systemFor(id) { return (typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(id) : null) || appData.systems[id] || null; }
 		function exits() { return (typeof routeDestinations !== "undefined" && routeDestinations.lastExits) || []; }
 		function exitsKey() { return exits().map(function(e) { return e.systemID; }).join(","); }
-		function jumps(from, to, limit) {
-			const path = guidance.findShortestPath(routeDestinations.routeMap(), from - 30000000, to - 30000000, limit + 1);
-			return path && path.length ? path.length - 1 : null;
+		// One multi-source search per (exits, limit, route preferences, gate map), kept until one of them changes.
+		// The route itself is only worked out when "Set route in game" is clicked.
+		let nearCache = { key: null, map: null, value: null };
+		function prefsKey() {
+			const c = options.chain || {}, r = c.routeIgnore || {};
+			return (c.routeSecurity || "") + "|" + (r.enabled ? (r.systems || []).join(",") : "");
+		}
+		function nearest(limit) {
+			const map = routeDestinations.routeMap();
+			const key = exitsKey() + "|" + limit + "|" + prefsKey();
+			if (nearCache.key !== key || nearCache.map !== map) {
+				const mods = (typeof guidance !== "undefined" && guidance.jumpCostModifiers) || [];
+				const costFn = function(from, to) {
+					const base = 1 + sp.entryPenalty(typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(30000000 + to) : null, options.chain);
+					return mods.reduce(function(c, m) { return c > 0 ? m(from, to, c) : c; }, base) > 0 ? base : 0;
+				};
+				nearCache = { key: key, map: map, value: sp.distances(map, exits().map(function(e) { return e.systemID; }), limit, costFn) };
+			}
+			return nearCache.value;
 		}
 		function save(patch) {
 			options.skyhooksPanel = Object.assign({}, options.skyhooksPanel || {}, patch);
@@ -239,7 +323,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const exitName = (systemFor(exit.systemID) || {}).name || exit.systemID;
 			const secText = isFinite(Number(sys.security)) ? (Math.round(Number(sys.security) * 10) / 10 || 0).toFixed(1) : "";
 			return "<li class='sky-row sky-" + st.state + "' data-systemid='" + esc(r.skyhook.systemID) + "' data-exit='" + esc(exit.systemID) + "' data-planet='" + esc(r.skyhook.planetID) + "'>"
-				+ "<span class='sky-system'><a class='" + esc(sys.systemTypeClass) + "' href='.?system=" + esc(sys.name) + "' title='View " + esc(sys.name) + "'>" + esc(sys.name || r.skyhook.systemID) + "</a>"
+				+ "<span class='sky-system'><a class='" + esc(sys.systemTypeClass) + "' href='.?system=" + esc(encodeURIComponent(sys.name)) + "' title='View " + esc(sys.name) + "'>" + esc(sys.name || r.skyhook.systemID) + "</a>"
 				+ " <span class='sky-sec sky-sec-" + esc(sec) + "'>" + esc(secText) + "</span></span>"
 				+ "<span class='sky-region' title='" + esc(region) + "'>" + esc(region) + "</span>"
 				+ "<span class='sky-exit' title='Nearest k-space system on your chain: " + esc(exitName) + "'>" + (r.nearest.jumps === 0 ? "on the chain" : r.nearest.jumps + (r.nearest.jumps === 1 ? " jump" : " jumps") + " from " + esc(exitName)) + "</span>"
@@ -272,7 +356,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const t = now();
 			let rows = [];
 			try {
-				rows = sp.rows(data.skyhooks, e, systemFor, jumps, t, s);
+				const near = nearest(s.maxJumps > 0 ? s.maxJumps : sp.MAX_SEARCH_JUMPS);
+				rows = sp.rows(data.skyhooks, systemFor, function(id) { return near[id]; }, t, s);
 			} catch (err) { console.error("Skyhooks panel: routing failed", err); }
 			$w.find(".sky-count").text(rows.length ? "(" + rows.length + ")" : "");
 			const notes = [];
@@ -287,16 +372,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
 
-		/** Below the existing widgets at the left, unless a position was saved */
+		/** Grid columns that fit in the window (widget_base_dimensions + margins), as the Favourites panel does */
+		function availableCols(api) {
+			const o = api.options || {};
+			const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
+			const zoom = parseFloat($("body").css("zoom")) || 1;	// Settings > UI Scale
+			return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
+		}
+
+		/** The saved position, else right of the existing widgets (below them when that doesn't fit) */
 		function placement(api) {
 			const fp = typeof favouritesPanel !== "undefined" ? favouritesPanel : null;
 			const saved = (fp && fp.gridEntry(options.grid, sp.WIDGET_ID)) || (options.skyhooksPanel && options.skyhooksPanel.position) || null;
 			if (saved && Number(saved.col) >= 1 && Number(saved.row) >= 1) {
 				return { col: Number(saved.col), row: Number(saved.row), size_x: Math.max(sp.MIN_SIZE.x, Number(saved.size_x) || 0), size_y: Math.max(sp.MIN_SIZE.y, Number(saved.size_y) || 0) };
 			}
-			let maxRow = 0;
-			api.serialize().forEach(function(w) { maxRow = Math.max(maxRow, (Number(w.row) || 1) + (Number(w.size_y) || 1) - 1); });
-			return { col: 1, row: maxRow + 1, size_x: sp.DEFAULT_SIZE.x, size_y: sp.DEFAULT_SIZE.y };
+			return sp.defaultPlacement(api.serialize(), availableCols(api));
 		}
 
 		function addWidget() {

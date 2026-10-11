@@ -26,7 +26,7 @@ opens within 1/2/4/8/24 h, all) and sort (jumps or window start). Settings > Res
 ## Change
 
 - **Server** (fork-owned): `skyhooks.inc.php` and `public/skyhooks.php` (session required, GET only). One cached copy for
-  the whole server in `cache/skyhooks.json`, refreshed from ESI at most every 5 minutes under an exclusive `flock` (others
+  the whole server in `cache/skyhooks.json`, refreshed from ESI at most every 5 minutes under an exclusive `flock` (if the cache can't be written the time of the attempt is kept in the lock file, so ESI is still asked at most once a minute; others
   get the old copy; a request with no copy at all waits up to 10 s for it). On an ESI error, a 404 or one of our rate-limit
   pauses (`esi/esi.inc.php`), the old copy is served (`stale` once it is over 10 minutes old, `error` says why) and ESI is
   not asked again for 60 s. ESI's route is in a rate-limit group of only 30 requests per 15 minutes per IP, so browsers
@@ -35,11 +35,9 @@ opens within 1/2/4/8/24 h, all) and sort (jumps or window start). Settings > Res
   The route's `theft_vulnerability.start/end` are turned into unix seconds. Verified once against live ESI from the dev stack
   (200, 170-odd skyhooks).
 - **Client** (fork-owned): `app/js/fork/skyhooks-panel.js` + `app/css/fork/skyhooks-panel.css`. Built like the Favourites
-  panel (a gridster widget, placed below the other panels until moved, position remembered when switched off). Region,
+  panel (a gridster widget, placed right of the other panels when that fits, else below them, until moved; position remembered when switched off). Region,
   security and system name come from the static system data already in the page (`appData.systems`/`regions`), so the server
-  sends only IDs and times. Jumps use `guidance.findShortestPath` (the same gate routing as the Destinations window, so
-  the route-security preference and avoid list count) from `routeDestinations.lastExits`, the chain's k-space exits, with the
-  maximum as the search limit; the nearest exit is shown per row. The panel asks our server every 5 minutes and redraws the
+  sends only IDs and times. Jumps come from one multi-source search from all of `routeDestinations.lastExits` (the chain's k-space exits) over the gate map, with guidance's own costs (route-security preference, avoid list, Zarzakh, closed gates) and cut-off, so it gives the same jump counts as `guidance.findShortestPath` (a test compares them); it is cached until the exits, limit, preferences or gate map change, and a route is only worked out when "Set route in game" is clicked. The panel asks our server every 5 minutes and redraws the
   countdowns every 30 s (sooner when the chain's exits change). The button calls the existing `autopilotRoute.push` with the
   gate path from the nearest exit (character picker as elsewhere). Empty states: nothing from the server, no k-space exit
   on the chain, or nothing matching the options; an error line when the server can't be reached or ESI is stale. High-sec
