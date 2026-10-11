@@ -79,10 +79,11 @@ tripwire.addSig = function(add, option, disabled) {
     $("#sigTable").append(tr);
 
     // Add counter
-    if (wormhole.life == "critical") {
+    // Non-wormhole signatures count down to their expiry too (astriania/tripwire 655edf6, MIT)
+    if (wormhole.life == "critical" || (add.type != "wormhole" && parseInt(add.lifeLength) !== 0)) {
         $(tr).find('span[data-age]').countdown({until: moment.utc(add.lifeLeft).toDate(), onExpiry: this.pastEOL, alwaysExpire: true, compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime})
             // .countdown('pause')
-            .addClass('critical')
+            .toggleClass('critical', wormhole.life == "critical")
             // .countdown('resume');
     } else {
         $(tr).find('span[data-age]').countdown({since: moment.utc(add.lifeTime).toDate(), compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime});
