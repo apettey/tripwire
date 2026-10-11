@@ -139,9 +139,26 @@ check('comp with a new role within 30 s: posted with the pings, not edited', [$p
     ['post', ['parse' => ['everyone'], 'roles' => ['123456789012345678']], '124']);
 check('... the old message: struck, "Changed to" (same system)', $plan['strike']['payload'],
     ['content' => "~~Fight here: **AB · J152820** (C5) — set by *Chribba*~~\nChanged to **AB · J152820** (Armor HACs) by *Chribba* at <t:1010:t>", 'allowed_mentions' => ['parse' => []]]);
-check('new mentions: only what the live text lacks', [discord_rally_new_mentions(['parse' => ['everyone'], 'roles' => ['123456789012345678']], $noComp['content']),
-    discord_rally_new_mentions(['parse' => ['everyone'], 'roles' => ['123456789012345678']], $live['content']), discord_rally_new_mentions(['parse' => []], ''),
-    discord_rally_new_mentions(['parse' => ['everyone'], 'users' => ['223456789012345678']], 'x')], [[ROLE], [], [], ['@everyone/@here', '<@223456789012345678>']]);
+$withRole = ROLE . ' @here Fight here: x';
+$allowedRole = ['parse' => ['everyone'], 'roles' => ['123456789012345678']];
+check('new mentions: only what is allowed, in the new text and not in the live text', [discord_rally_new_mentions($allowedRole, $withRole, $noComp['content']),
+    discord_rally_new_mentions($allowedRole, $withRole, $live['content']), discord_rally_new_mentions(['parse' => []], '', ''),
+    discord_rally_new_mentions(['parse' => ['everyone'], 'users' => ['223456789012345678']], '@here <@223456789012345678> x', 'x'),
+    discord_rally_new_mentions($allowedRole, 'Fight here: x', 'Fight here: y'), discord_rally_new_mentions(['parse' => []], ROLE . ' @here x', 'y')],
+    [[ROLE], [], [], ['@everyone/@here', '<@223456789012345678>'], [], []]);
+// A template without {pings}: the ping field and the comp mention are allowed but never in the text, so they ping
+// nobody and are not "new": a move within the window is still an edit
+$noPings = ['template' => 'Fight at {labelSystem} by {who}'] + $base;
+$quiet = discord_payload(discord_rally_context(['action' => 'set', 'time' => 1000] + $noPings, ['systemID' => 31001880, 'setBy' => 'A', 'comp' => null], $label));
+$quietLive = ['webhookID' => 5, 'messageID' => '125', 'content' => $quiet['content'], 'postedAt' => 1000, 'systemID' => 31001880];
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $noPings, ['systemID' => 31002012, 'setBy' => 'A', 'comp' => null], $label), $quietLive, 1010);
+check('template without {pings}, ping set: a move within 30 s is edited', [$plan['op'], isset($plan['strike'])], ['edit', false]);
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $noPings, ['systemID' => 31001880, 'setBy' => 'A', 'comp' => $armor], $label), $quietLive, 1010);
+check('template without {pings} or {comp}, a comp with a role within 30 s: not posted (its role is not in the text; the text is unchanged)', $plan['op'], 'skip');
+// A template with {pings} and a comp with a role picked within the window: posted (checked above with the default text too)
+$plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + ['template' => '{pings} Fight at {labelSystem}'] + $base, ['systemID' => 31001880, 'setBy' => 'A', 'comp' => $armor], $label),
+    ['content' => '@here Fight at AB · J152820'] + $quietLive, 1010);
+check('template with {pings}, a comp with a role within 30 s: posted with the role', [$plan['op'], $plan['payload']['allowed_mentions']['roles'] ?? null], ['post', ['123456789012345678']]);
 // Same mentions within the window (same comp, another system): still an edit
 $plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1010] + $base, ['systemID' => 31000003, 'setBy' => 'B', 'comp' => $armor], $label), $live + ['systemID' => 31001880], 1010);
 check('same mentions within 30 s: edited', [$plan['op'], $plan['payload']['allowed_mentions']], ['edit', ['parse' => []]]);

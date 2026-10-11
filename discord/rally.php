@@ -176,13 +176,16 @@ function discord_rally_with_system_column(PDO $db, $table, callable $write) {
  * after the post. An edit never notifies anyone, so such a change has to be a new message. $allowed: the new payload's
  * allowed_mentions (built from admin configuration only), $liveContent: the live message as posted.
  */
-function discord_rally_new_mentions(array $allowed, $liveContent) {
+function discord_rally_new_mentions(array $allowed, $newContent, $liveContent) {
+    // Only mentions that are allowed AND in the new text ping anyone (a ping field or comp mention the admin's template
+    // doesn't show via {pings} pings nobody), minus what the live text already had
+    $in = discord_mentions_in($newContent);
     $had = discord_mentions_in($liveContent);
     $new = [];
-    if (in_array('everyone', $allowed['parse'] ?? [], true) && !$had['everyone']) $new[] = '@everyone/@here';
-    foreach (array_diff($allowed['roles'] ?? [], $had['roles']) as $role) $new[] = '<@&' . $role . '>';
-    foreach (array_diff($allowed['users'] ?? [], $had['users']) as $user) $new[] = '<@' . $user . '>';
-    return $new;
+    if (in_array('everyone', $allowed['parse'] ?? [], true) && $in['everyone'] && !$had['everyone']) $new[] = '@everyone/@here';
+    foreach (array_diff(array_intersect($allowed['roles'] ?? [], $in['roles']), $had['roles']) as $role) $new[] = '<@&' . $role . '>';
+    foreach (array_diff(array_intersect($allowed['users'] ?? [], $in['users']), $had['users']) as $user) $new[] = '<@' . $user . '>';
+    return array_values($new);
 }
 
 /**
@@ -216,7 +219,7 @@ function discord_rally_plan(array $ctx, $live, $now = null, $window = DISCORD_RA
     $age = $live ? $now - (int) $live['postedAt'] : null;
     // Within the window an edit, unless the change pings someone the live message didn't (e.g. a comp with a role picked
     // seconds after "no comp"): edits never notify, so that is a new message with the pings, the old one struck through
-    if ($live && $age >= 0 && $age < $window && !discord_rally_new_mentions($payload['allowed_mentions'] ?? [], $live['content'])) {
+    if ($live && $age >= 0 && $age < $window && !discord_rally_new_mentions($payload['allowed_mentions'] ?? [], $payload['content'], $live['content'])) {
         if ($payload['content'] === $live['content']) return ['op' => 'skip', 'why' => 'the message already shows this rally'];
         unset($payload['username']);
         $payload['allowed_mentions'] = ['parse' => []];
