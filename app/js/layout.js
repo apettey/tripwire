@@ -60,7 +60,7 @@ $("#layout").click(function() {
 
 		$(this).removeClass("active");
 
-		options.grid = grid.serialize();
+		options.grid = typeof layoutGrid !== "undefined" ? layoutGrid.merge(grid.serialize(), options.grid) : grid.serialize(); // fork: keep the places of panels turned off
 
 		options.save();
 	}

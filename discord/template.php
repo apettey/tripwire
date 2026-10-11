@@ -226,6 +226,7 @@ function discord_field($name, $value, $inline = true) {
 function discord_payload(array $ctx) {
     $kind = $ctx['kind'];
     if ($kind === 'preserveMass') return discord_preserve_payload($ctx);   // discord/preserve_mass.php
+    if ($kind === 'chainPaused' || $kind === 'chainResumed') return discord_chain_notice_payload($ctx);   // discord/chain_notice.php
     $values = [
         'pings' => $ctx['ping'] ?? '', 'mask' => $ctx['mask'] ?? '', 'system' => $ctx['system'] ?? '',
         'security' => isset($ctx['security']) ? discord_security_text($ctx['security']) : '', 'class' => $ctx['class'] ?? '',

@@ -20,11 +20,15 @@ const discordNotifications = {
 		corpKill: "One of the corporations/alliances below is on the attackers' side.",
 		corpLoss: "The victim is in one of the corporations/alliances below.",
 		rally: "Someone sets, moves or clears the chain map's fight point (right-click a system > Fight here, with or without a fleet comp; comps and their mentions: Mask Admin > Fight here). The comp's mention is pinged with the ping below. A move or comp change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping. Members can keep their own changes out of Discord (\"Also post to Discord\" in the chain map's right-click menu, or Settings > Chain Map Settings).",
-		watchlist: "A system on the chain map matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. What is already on the chain when you turn this on (or save or turn on a filter) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
+		watchlist: "A system connected to your home system (above) through live wormholes matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. Old chain fragments no longer connected to home are not posted; a system there is posted if it gets connected again while it still matches. What is already on the chain when you turn this on (or save or turn on a filter, or change the home system) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
 		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing."
 	},
-	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" (and \"Preserve mass\", unless you untick its chain option) only counts systems connected to it through live wormholes (not expired, not deleted).",
+	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" (and \"Preserve mass\", unless you untick its chain option) only count systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass marks, while they are limited to the chain).",
+	NO_HOME_WATCHLIST: "Set a home system so Tripwire knows which chain is yours. Until then no watchlist matches are posted.",
+	NO_HOME_BOTH: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills or watchlist matches are posted (nor preserve mass marks, while they are limited to the chain).",
+	// The one notice the worker posts to the chain kill channel while there is no home (discord/chain_notice.php)
+	NOTICE_LABELS: { chainPaused: "Chain kills paused notice", chainResumed: "Chain kills resumed notice" },
 	LEGACY_RALLY: "While this is off, fight point changes still go to the webhook this server's operator configured for the mask (DISCORD_WEB_HOOK). Turn it on to choose the channel here instead.",
 	SAFE_RULE: "Safe route: every system between the ping system and the new system is high-sec (0.5 and up, not Pochven), never through Zarzakh. The two ends may be any security.",
 	WEBHOOK_PATTERN: /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d{1,2})?\/webhooks\/\d{17,21}\/[A-Za-z0-9_-]{30,120}\/?(?:\?thread_id=\d{17,21})?$/,
@@ -95,12 +99,25 @@ const discordNotifications = {
 		return { id: Number(id), error: null };
 	},
 
-	/** Warning for settings with chain kills on and no home system ("" when fine) */
+	/** Warning for settings with chain kills or watchlist matches on and no home system ("" when fine) */
 	homeWarning: function(settings) {
-		const chain = settings && settings.types && settings.types.chainKill;
-		const preserve = settings && settings.types && settings.types.preserveMass;
-		const needsHome = (chain && chain.enabled) || (preserve && preserve.enabled && preserve.chainOnly !== false);
-		return needsHome && !(Number(settings.homeSystemID) > 0) ? discordNotifications.NO_HOME : "";
+		const types = (settings && settings.types) || {};
+		const preserve = types.preserveMass;
+		const chain = !!(types.chainKill && types.chainKill.enabled) || !!(preserve && preserve.enabled && preserve.chainOnly !== false);
+		const watchlist = !!(types.watchlist && types.watchlist.enabled);
+		if (Number(settings && settings.homeSystemID) > 0 || !(chain || watchlist)) { return ""; }
+		const dn = discordNotifications;
+		return chain && watchlist ? dn.NO_HOME_BOTH : chain ? dn.NO_HOME : dn.NO_HOME_WATCHLIST;
+	},
+
+	/** What happened to the "chain kills are paused" notice of this episode ({status, at} from discord.php, or null): "" when none */
+	homeNoticeText: function(notice) {
+		if (!notice || !notice.at) { return ""; }
+		const when = String(notice.at).replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, "") + " EVE time";
+		if (notice.status === "queued") { return "A notice to the chain kills channel is waiting to be sent."; }
+		if (notice.status === "failed") { return "The notice to the chain kills channel could not be sent (see Delivery below)."; }
+		if (notice.status === "old") { return "Chain kills paused since " + when + "."; }	// its outbox row is pruned: unknown whether it arrived
+		return "A notice was posted to the chain kills channel on " + when + ".";
 	},
 
 	removePingSystem: function(list, id) {
@@ -388,14 +405,15 @@ const discordNotifications = {
 		};
 		const outbox = state.outbox || {};
 		const failures = (outbox.failures || []).map(function(f) {
-			return "<li>" + esc(dn.LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind === "preserveMassEdit" ? dn.LABELS.preserveMass + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
+			return "<li>" + esc(dn.LABELS[f.kind] || dn.NOTICE_LABELS[f.kind] || (f.kind === "rallyEdit" ? dn.LABELS.rally + " (old message)" : f.kind === "preserveMassEdit" ? dn.LABELS.preserveMass + " (old message)" : f.kind)) + (f.webhook ? " to " + esc(f.webhook) : "") + ", " + esc(dn.ago(f.createdAt, now)) + ": " + esc(f.error) + "</li>";
 		}).join("");
 
 		return "<div class='dn-page'>"
 			+ "<h2>Discord notifications for the " + esc(state.mask ? state.mask.name : "") + " mask</h2>"
 			+ "<p class='dn-small'>Only your corporation's Tripwire admins see this page. Nothing is posted until you add a webhook, pick it for a notification and turn the notification on.</p>"
 			+ dn.pausedText(outbox.paused, webhooks, now).map(function(t) { return "<p class='dn-bad'>" + esc(t) + "</p>"; }).join("")
-			+ (dn.homeWarning(settings) ? "<p class='dn-bad dn-home-warning'>" + esc(dn.homeWarning(settings)) + "</p>" : "")
+			+ (dn.homeWarning(settings) ? "<p class='dn-bad dn-home-warning'>" + esc(dn.homeWarning(settings))
+				+ (dn.homeNoticeText(state.homeNotice) ? " <span class='dn-home-notice'>" + esc(dn.homeNoticeText(state.homeNotice)) + "</span>" : "") + "</p>" : "")
 			+ (state.encrypted ? "" : "<p class='dn-small dn-bad'>Webhook URLs are stored unencrypted on this server (DISCORD_SECRET_KEY is not set). They are still never shown again.</p>")
 			+ "<h3>Webhooks (one per channel)</h3>"
 			+ "<table class='dn-webhooks'><thead><tr><th>Name</th><th>URL</th><th>Status</th><th></th></tr></thead><tbody>" + webhookRows + "</tbody></table>"

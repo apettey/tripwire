@@ -145,7 +145,8 @@ function discord_outbox_prune(PDO $db) {
         . (DISCORD_OUTBOX_EXPIRE / 3600) . " h' WHERE status = 'queued' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_EXPIRE . ' SECOND');
     $deleted = $db->exec("DELETE FROM discord_outbox WHERE (status = 'sent' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_KEEP_SENT . " DAY)
         OR (status = 'failed' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_KEEP_FAILED . ' DAY)');
-    $db->exec('DELETE FROM discord_sent WHERE createdAt < UTC_TIMESTAMP() - INTERVAL ' . DISCORD_DEDUPE_KEEP . ' DAY');
+    // A "no home" episode (discord/chain_notice.php) lasts until it ends, however long: its row is kept
+    $db->exec('DELETE FROM discord_sent WHERE createdAt < UTC_TIMESTAMP() - INTERVAL ' . DISCORD_DEDUPE_KEEP . " DAY AND kind <> '" . DISCORD_NOTICE_KIND . "'");
     return [(int) $expired, (int) $deleted];
 }
 

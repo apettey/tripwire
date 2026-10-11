@@ -11,7 +11,7 @@
 //     preserveMass: {enabled, webhookID, template (marked / changed), templateClear (cleared), ping, chainOnly}   (discord/preserve_mass.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
-//   homeSystemID: systemID or 0   (where the chain starts: chainKill counts only systems connected to it, discord/chain.php)
+//   homeSystemID: systemID or 0   (where the chain starts: chainKill and watchlist count only systems connected to it, discord/chain.php)
 // }
 // Everything is off until an admin enables a type and picks a webhook.
 

@@ -36,7 +36,8 @@ describe('jumpPlanner', () => {
 		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
-				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, open: false });
+				dock: 'right', clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, open: false, mode: 'exit', origin: null });
+			assert.strictEqual(jumpPlanner.settings({ jumpRange: { search: false } }).search, false);
 			assert.strictEqual(jumpPlanner.enabled({}), true);
 			assert.strictEqual(jumpPlanner.enabled({ jumpRange: { enabled: false } }), false);
 		});
@@ -224,6 +225,13 @@ describe('jumpPlanner', () => {
 		it('settings section', () => {
 			noRawHtml(jumpPlanner.settingsHtml([{ key: 'group-1', label: EVIL, ships: [EVIL], baseLy: 3 }]));
 		});
+		it('settings: the System search row in the section, the on/off row for General Preferences', () => {
+			const html = jumpPlanner.settingsHtml(PRESETS);
+			assert.ok(/System search:/.test(html) && /name='jumpPlanner-search' value='1'/.test(html) && /name='jumpPlanner-search' value='0'/.test(html));
+			assert.ok(/name='jumpPlanner-enabled' value='1'/.test(html));
+			const general = jumpPlanner.generalRowHtml();
+			assert.ok(/^<tr><th>Jump planner:<\/th>/.test(general) && /type='checkbox' id='jumpPlanner-enabled-general'/.test(general));
+		});
 	});
 
 	describe('trade-hub reach for real', () => {
@@ -267,6 +275,289 @@ describe('jumpPlanner', () => {
 		});
 		it('age text', () => {
 			assert.deepStrictEqual([30, 600, 7200, 200000].map(jumpPlanner.ageText), ['now', '10 min', '2 h', '2 d']);
+		});
+	});
+
+	describe('system search', () => {
+		const sort = { key: 'ly', dir: 1 };
+		const status = (name, settings, extra) => {
+			const c = ctx(settings, extra);
+			const m = jumpPlanner.model(c);
+			return jumpPlanner.searchStatus(sid(name), c, m, jumpPlanner.sortRows(m.rows, sort.key, sort.dir));
+		};
+		it('prefix before substring, case-insensitive, ignoring dashes and spaces, limited', () => {
+			const names = (q, limit) => jumpPlanner.searchSystems(q, S, limit).map(id => S[id].name);
+			const bos = names('BOS');
+			assert.ok(bos.length > 0 && bos.every(n => n.toLowerCase().indexOf('bos') >= 0));
+			const firstSub = bos.findIndex(n => n.toLowerCase().indexOf('bos') > 0);
+			assert.ok(firstSub < 0 || bos.slice(firstSub).every(n => n.toLowerCase().indexOf('bos') > 0), bos.join());
+			assert.ok(bos.indexOf('Bosboger') >= 0 && bos.indexOf('Bosboger') < (firstSub < 0 ? Infinity : firstSub));
+			assert.strictEqual(names('0sht-a')[0], '0SHT-A');
+			assert.strictEqual(names('0 sht a')[0], '0SHT-A');
+			assert.strictEqual(names('1pwgb')[0], '1P-WGB');
+			assert.strictEqual(names('jita')[0], 'Jita');
+			assert.strictEqual(names('a').length, jumpPlanner.SEARCH_LIMIT);
+			assert.strictEqual(names('a', 3).length, 3);
+			assert.deepStrictEqual([names(''), names('  '), names('-'), jumpPlanner.searchSystems('x', null)], [[], [], [], []]);
+		});
+		it('exact name first, then shorter names', () => {
+			const sys = { 1: { name: 'Amamake' }, 2: { name: 'Ama' }, 3: { name: 'Xama' }, 4: { name: 'Amarr' } };
+			assert.deepStrictEqual(jumpPlanner.searchSystems('ama', sys), [2, 4, 1, 3]);
+		});
+		it('in the list: rank in the current sort', () => {
+			const r = status('Auga');
+			assert.deepStrictEqual([r.status, r.rank, r.total], ['listed', 1, 81]);
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const byName = jumpPlanner.sortRows(m.rows, 'name', -1);
+			const r2 = jumpPlanner.searchStatus(sid('Auga'), c, m, byName);
+			assert.strictEqual(r2.rank, byName.findIndex(x => x.name === 'Auga') + 1);
+			assert.ok(/#\d+ of 81 listed, by System \(reversed\)/.test(jumpPlanner.searchResultHtml(r2, { key: 'name', dir: -1 })));
+			assert.ok(/Auga<\/span> — <span class='jp-search-ok'>#1 of 81 listed, by LY/.test(jumpPlanner.searchResultHtml(r, sort)));
+			assert.strictEqual(status('Amamake').status, 'exit');
+		});
+		it('why not listed: high-sec, W-space, Pochven, Zarzakh', () => {
+			const hs = status('Jita');
+			assert.strictEqual(hs.status, 'hs');
+			assert.ok(/high-sec, can&#39;t light a cyno/.test(jumpPlanner.searchResultHtml(hs, sort)) && /\(\d+\.\d LY\)/.test(jumpPlanner.searchResultHtml(hs, sort)));
+			assert.strictEqual(status('J152820').status, 'wh');
+			assert.ok(/wormhole space/.test(jumpPlanner.searchResultHtml(status('J152820'), sort)));
+			assert.strictEqual(status('Kino').status, 'pochven');
+			assert.ok(/Pochven/.test(jumpPlanner.searchResultHtml(status('Kino'), sort)));
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const z = jumpPlanner.searchStatus(jumpRange.ZARZAKH, c, m, m.rows);
+			assert.strictEqual(z.status, 'zarzakh');
+			assert.ok(/Zarzakh/.test(jumpPlanner.searchResultHtml(z, sort)));
+			assert.strictEqual(jumpPlanner.searchStatus(123, c, m, m.rows).status, 'unknown');
+		});
+		it('why not listed: out of range, with the distance and the range', () => {
+			const c = ctx(); const m = jumpPlanner.model(c);
+			const far = jumpRange.within(INDEX, INDEX.pos[AMAMAKE], 12).filter(h => h.ly > 8 && jumpRange.isValidCynoTarget(h.id, S[h.id], {}))[0];
+			const r = jumpPlanner.searchStatus(far.id, c, m, m.rows);
+			assert.strictEqual(r.status, 'range');
+			assert.ok(new RegExp('out of range: ' + far.ly.toFixed(1) + ' LY <span class=\'jp-dim\'>\\(range 7.0\\)').test(jumpPlanner.searchResultHtml(r, sort)));
+		});
+		it('why not listed: jammed and hidden; low-sec or null-sec targets off', () => {
+			const jammed = {}; jammed[sid('Auga')] = { setBy: 'X', age: 60 };
+			const hidden = status('Auga', { jammed: 'hide' }, { jammed });
+			assert.strictEqual(hidden.status, 'jammed');
+			assert.ok(/cyno-jammed \(hidden by your setting\)/.test(jumpPlanner.searchResultHtml(hidden, sort)));
+			const marked = status('Auga', {}, { jammed });
+			assert.deepStrictEqual([marked.status, marked.row.blocked], ['listed', true]);
+			assert.ok(/cyno-jammed, no normal cyno/.test(jumpPlanner.searchResultHtml(marked, sort)));
+			// The total is the rows listed (jammed ones too), worded so it doesn't read as the footer's "in range"
+			const c = ctx({}, { jammed }); const m = jumpPlanner.model(c);
+			assert.deepStrictEqual([m.counts.inRange, marked.total], [80, 81]);
+			assert.ok(/#1 of 81 listed, by LY · cyno-jammed/.test(jumpPlanner.searchResultHtml(marked, sort)));
+			const ls = status('Auga', { lowsec: false });
+			assert.strictEqual(ls.status, 'lowsec');
+			assert.ok(/low-sec, but Low-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(ls, sort)));
+			const ecCtx = s => ctx(s, { exitID: EC, gates: jumpRange.gateJumps(appData.map.shortest, EC) });
+			const nsIn = jumpPlanner.model(ecCtx({})).rows.filter(r => r.sec <= 0)[0];
+			const offCtx = ecCtx({ nullsec: false }); const offModel = jumpPlanner.model(offCtx);
+			const nsOff = jumpPlanner.searchStatus(nsIn.id, offCtx, offModel, offModel.rows);
+			assert.strictEqual(nsOff.status, 'nullsec');
+			assert.ok(/null-sec, but Null-sec targets are off in Settings/.test(jumpPlanner.searchResultHtml(nsOff, sort)));
+		});
+		it('just beyond the range: two decimals, so it does not read "8.0 LY (range 8.0)"', () => {
+			assert.strictEqual(jumpPlanner.beyondText(8.03, 8), '8.03 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.049, 8), '8.05 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.06, 8), '8.1 LY');
+			assert.strictEqual(jumpPlanner.beyondText(9.34, 8), '9.3 LY');
+			assert.strictEqual(jumpPlanner.beyondText(8.004, 8), '8.004 LY');
+			const html = jumpPlanner.searchResultHtml({ id: 1, name: 'X', status: 'range', ly: 8.03, range: 8, total: 0 }, sort);
+			assert.ok(/out of range: 8.03 LY <span class='jp-dim'>\(range 8.0\)/.test(html), html);
+		});
+		it('scrolls the picked row to the middle of the list, below the sticky header (layout px)', () => {
+			// row 40 px into the table, 18 high; header 20; box 160 -> visible 140, centred: 40 - 20 - (140 - 18) / 2 = -41 -> 0
+			assert.strictEqual(jumpPlanner.centerScrollTop(40, 18, 20, 160), 0);
+			assert.strictEqual(jumpPlanner.centerScrollTop(2000, 18, 20, 160), 2000 - 20 - 61);
+			assert.strictEqual(jumpPlanner.centerScrollTop(500, 18, 20, 10), 480);
+		});
+		it('escapes the system name in the result and the suggestions', () => {
+			const sys = {}; sys[30000001] = { name: EVIL, security: 0.3, regionID: 1 };
+			noRawHtml(jumpPlanner.searchResultHtml({ id: 30000001, name: EVIL, status: 'range', ly: 9.4, range: 8, total: 0 }, sort));
+			noRawHtml(jumpPlanner.searchResultHtml({ id: 30000001, name: EVIL, status: 'listed', rank: 1, total: 1, ly: 1, range: 8, row: {} }, sort));
+			const menu = jumpPlanner.searchMenuHtml([30000001], 0, sys, { 1: { name: EVIL } });
+			noRawHtml(menu);
+			assert.ok(/class='active'/.test(menu) && /data-jp-find='30000001'/.test(menu));
+			// The query itself never goes into HTML: matching on it is safe
+			assert.deepStrictEqual(jumpPlanner.searchSystems(EVIL, S), []);
+		});
+		it('found ring on the mini-map only when the system is drawn; its label is forced on', () => {
+			const c = ctx(); const m = jumpPlanner.model(c); const mm = jumpPlanner.mapModel(c, m);
+			const auga = sid('Auga');
+			assert.ok(/jp-found-ring/.test(jumpPlanner.mapSvg(mm, [], [auga], auga)));
+			assert.ok(!/jp-found-ring/.test(jumpPlanner.mapSvg(mm, [], [], sid('Jita'))));
+			assert.ok(jumpPlanner.placeLabels(mm, [auga]).some(l => l.id === auga && l.cls === 'jp-l-focus'));
+		});
+	});
+
+	describe('Get home', () => {
+		const KBP = sid('KBP7-G'), EY = sid('E-YCML'), C3 = sid('J160650'), EGG = sid('Egghelende');
+		const row = (systemID, v, parent, pathHome) => ({ c: [{ v: v, systemID: systemID, f: '<div></div>' }, { v: parent }], pathHome: pathHome });
+		const hop = (systemID, name, sig, type) => ({ systemID: systemID, name: name, signatureID: sig, type: type });
+		const chainResult = () => ({
+			map: { rows: [
+				row(J152820, '1', null),
+				row(C3, '2', '1', [hop(C3, '', 'ccc333', 'K162')]),
+				row(EY, '3', '2', [hop(C3, '', 'ccc333', 'K162'), hop(EY, 'N2', 'ddd444', 'K162')]),
+				row(KBP, '4', '1', [hop(KBP, 'N1', 'aaa111', 'K162')]),
+				row(KBP, '6', '2', [hop(C3, '', 'ccc333', 'K162'), hop(KBP, 'X', 'xxx999', 'K162')]),
+				row(EGG, '5', '1', [hop(EGG, 'L1', 'bbb222', 'K162')]),
+				row(AMAMAKE, '7', '5', [hop(EGG, 'L1', 'bbb222', 'K162'), { systemID: AMAMAKE, path: [1, 2] }]),
+				Object.assign(row(HEK, 'dest-1', '5', []), { destination: true })
+			] },
+			lines: [['2', '1', ['eol'], 11], ['3', '2', ['critical', 'eol-chain'], 12], ['4', '1', [], 13], ['6', '2', ['destab'], 14], ['5', '1', [], 15]]
+		});
+
+		it('homePaths: the root is home; holes counted back to it, fewest when a system is on the chain twice; calculated rows left out', () => {
+			const hp = jumpPlanner.homePaths(chainResult());
+			assert.deepStrictEqual(hp.homes, [J152820]);
+			assert.strictEqual(hp.paths[J152820].holes.length, 0);
+			assert.strictEqual(hp.paths[EY].holes.length, 2);
+			assert.strictEqual(hp.paths[KBP].holes.length, 1);
+			assert.strictEqual(hp.paths[KBP].holes[0].name, 'N1');
+			assert.ok(!hp.paths[AMAMAKE] && !hp.paths[HEK]);
+			const ey = hp.paths[EY].holes;
+			assert.deepStrictEqual(ey.map(h => [h.wormholeID, h.from, h.to, h.eol, h.mass]), [[12, C3, EY, false, 'critical'], [11, J152820, C3, true, null]]);
+			assert.strictEqual(hp.paths[EY].home, J152820);
+		});
+		it('homePaths: several roots, each its own home; nothing for no chain', () => {
+			const r = chainResult();
+			r.map.rows.push(row(HEK, '9', ''), row(EC, '10', '9', [hop(EC, 'Z', 'zzz000', 'K162')]));
+			const hp = jumpPlanner.homePaths(r);
+			assert.deepStrictEqual(hp.homes, [J152820, HEK]);
+			assert.strictEqual(hp.paths[EC].home, HEK);
+			assert.deepStrictEqual(jumpPlanner.homePaths(null), { homes: [], paths: {} });
+			assert.deepStrictEqual(jumpPlanner.homePaths({ map: { rows: [row(EY, '3', '2', [])] } }).paths, {});	// parent missing
+		});
+		it('hole labels: name, else signature, plus the real type', () => {
+			assert.strictEqual(jumpPlanner.holeLabel({ name: 'N2', realType: 'K346' }), 'N2 K346');
+			assert.strictEqual(jumpPlanner.holeLabel({ name: '', signatureID: 'abc123', realType: 'K162' }), 'ABC');
+			assert.strictEqual(jumpPlanner.holeLabel({}), '?');
+		});
+		it('warnings: too small (known / likely), unknown size, EOL, mass, preserve; supers once', () => {
+			const holes = [
+				{ name: 'A', size: 'L', certain: true, eol: true }, { name: 'B', size: 'XL', certain: true, mass: 'critical' },
+				{ name: 'C', size: 'M', certain: false, mass: 'destab' }, { name: 'D', size: null, preserve: true }
+			];
+			const w = jumpPlanner.holeWarnings(holes, 'XL', 'Dreadnought').map(x => x.level + ':' + x.text);
+			assert.deepStrictEqual(w, ['warn:hole too small for Dreadnought: A (L)', 'warn:EOL: A', 'warn:mass critical: B',
+				'warn:hole likely too small for Dreadnought: C (M?)', 'note:destab: C', 'note:preserve mass: D', 'note:size unknown: D']);
+			assert.deepStrictEqual(jumpPlanner.holeWarnings([{ name: 'A', size: 'L', certain: true }], 'L', 'Black Ops'), []);
+			const sup = jumpPlanner.holeWarnings([{ name: 'A', size: 'XL', certain: true }, { name: 'B' }], 'none', 'Titan');
+			assert.deepStrictEqual(sup.map(x => x.text), ['Titan can\'t go through wormholes']);
+		});
+		it('homeModel: routes from the start, ranked, with holes and warnings; Dest is the first cyno', () => {
+			const hp = jumpPlanner.homePaths(chainResult());
+			hp.paths[EGG].holes[0].size = 'L'; hp.paths[EGG].holes[0].certain = true;
+			const m = jumpPlanner.homeModel({ startID: AMAMAKE, exits: [KBP, EY, EGG, sid('Tama')], paths: hp.paths, index: INDEX, systems: S,
+				settings: jumpPlanner.settings({}), presets: PRESETS, jammed: {} });
+			assert.strictEqual(m.problem, null);
+			assert.strictEqual(m.need, 'XL');	// Carrier
+			assert.deepStrictEqual(m.rows.map(r => r.id), [EGG, KBP, EY]);	// Tama has no path home here
+			assert.deepStrictEqual(m.rows.map(r => r.jumps), [1, 2, 2]);
+			assert.strictEqual(m.rows[0].cyno, EGG);
+			assert.strictEqual(m.rows[1].cyno, m.rows[1].via);
+			assert.ok(m.rows[0].warnings.some(w => w.text === 'hole too small for Carrier: L1 (L)'));
+			assert.deepStrictEqual(m.counts, { reachable: 3, total: 3 });
+			const bo = jumpPlanner.homeModel({ startID: AMAMAKE, exits: [EGG], paths: hp.paths, index: INDEX, systems: S,
+				settings: jumpPlanner.settings({ jumpRange: { ship: 'group-898' } }), presets: PRESETS, jammed: {} });
+			assert.deepStrictEqual(bo.rows[0].warnings, []);
+		});
+		it('homeModel: jammed exit unreachable for a normal cyno, reachable for Black Ops; W-space start rejected, high-sec allowed', () => {
+			const hp = jumpPlanner.homePaths(chainResult());
+			const jammed = {}; jammed[EGG] = { setBy: 'x', age: 1 };
+			const base = { startID: AMAMAKE, exits: [EGG], paths: hp.paths, index: INDEX, systems: S, presets: PRESETS, jammed: jammed };
+			const normal = jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({}) }, base));
+			assert.deepStrictEqual([normal.rows[0].jumps, normal.rows[0].reason, normal.rows[0].cyno], [null, 'jammed', null]);
+			const covert = jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({ jumpRange: { ship: 'group-898' } }) }, base));
+			assert.strictEqual(covert.rows[0].jumps, 1);
+			const ignore = jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({ jumpRange: { jammed: 'ignore' } }) }, base));
+			assert.strictEqual(ignore.rows[0].jumps, 1);
+			const wh = jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({}) }, base, { startID: J152820 }));
+			assert.deepStrictEqual([wh.problem, wh.rows.length], ['wh', 0]);
+			assert.ok(/wormhole space/.test(jumpPlanner.startProblemText('wh', 'J152820')));
+			const hs = jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({}) }, base, { startID: sid('Jita'), jammed: {} }));
+			assert.strictEqual(hs.problem, null);
+			assert.strictEqual(jumpPlanner.homeModel(Object.assign({ settings: jumpPlanner.settings({}) }, base, { startID: null })).problem, 'none');
+		});
+		it('homeModel: Supercarrier / Titan: nothing listed or counted, one clear message', () => {
+			const hp = jumpPlanner.homePaths(chainResult());
+			['group-659', 'group-30'].forEach(ship => {
+				const m = jumpPlanner.homeModel({ startID: AMAMAKE, exits: [KBP, EY, EGG], paths: hp.paths, index: INDEX, systems: S,
+					settings: jumpPlanner.settings({ jumpRange: { ship: ship } }), presets: PRESETS, jammed: {} });
+				assert.deepStrictEqual([m.problem, m.rows.length, m.counts.reachable], ['supercap', 0, 0], ship);
+			});
+			assert.ok(/can't go through wormholes/.test(jumpPlanner.startProblemText('supercap', '')));
+		});
+		it('homeExits: every LS/NS exit, whatever "Exits that get a range" is set to', () => {
+			const r = chainResult();
+			const all = jumpPlanner.homeExits(r, S);
+			assert.deepStrictEqual(all, [EY, KBP, EGG]);
+			assert.deepStrictEqual(jumpPlanner.chainExits(r, S, 'viewing', J152820), []);	// what the From exit tabs would get
+			const m = jumpPlanner.homeModel({ startID: AMAMAKE, exits: all, paths: jumpPlanner.homePaths(r).paths, index: INDEX, systems: S,
+				settings: jumpPlanner.settings({ jumpRange: { exits: 'viewing' } }), presets: PRESETS, jammed: {} });
+			assert.strictEqual(m.rows.length, 3);
+		});
+		it('homeKey changes with the preserve-mass flags of holes on a way home only', () => {
+			const r = chainResult();
+			const none = jumpPlanner.homeKey(r, S, {});
+			assert.strictEqual(jumpPlanner.homeKey(r, S, { 999: { wormholeID: 999 } }), none);	// not on a way home
+			assert.notStrictEqual(jumpPlanner.homeKey(r, S, { 12: { wormholeID: 12 } }), none);
+			const more = chainResult(); more.lines[0][2] = [];	// the EOL on hole 11 gone
+			assert.notStrictEqual(jumpPlanner.homeKey(more, S, {}), none);
+		});
+		it('route text', () => {
+			const n = id => S[id].name;
+			assert.strictEqual(jumpPlanner.routeText({ jumps: 1, legs: [6.24] }, n), '1 jump 6.2 LY');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: 2, legs: [5.81, 5.6], via: AMAMAKE }, n), '2 jumps via Amamake (5.8 + 5.6 LY)');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'range', reach: { direct: 13.94 } }, n), 'out of range within 2 jumps (13.9 LY)');
+			assert.strictEqual(jumpPlanner.routeText({ jumps: null, reason: 'jammed', reach: {} }, n), 'cyno-jammed (normal cyno)');
+			assert.strictEqual(jumpPlanner.routeText({ id: EC, sec: -0.4, jumps: null, reason: 'target', reach: {} }, n), 'null-sec targets are off in Settings');
+		});
+		it('settings: mode and start remembered, checked', () => {
+			const s = jumpPlanner.settings({ jumpRange: { mode: 'home', origin: 30002537 } });
+			assert.deepStrictEqual([s.mode, s.origin], ['home', 30002537]);
+			const bad = jumpPlanner.settings({ jumpRange: { mode: '<x>', origin: 'abc' } });
+			assert.deepStrictEqual([bad.mode, bad.origin], ['exit', null]);
+			assert.deepStrictEqual(jumpPlanner.quickPicks(AMAMAKE), [AMAMAKE, 30000142, 30002187]);
+			assert.deepStrictEqual(jumpPlanner.quickPicks(30000142), [30000142, 30002187]);
+			assert.deepStrictEqual(jumpPlanner.quickPicks(null), [30000142, 30002187]);
+		});
+		it('HTML builders escape system and hole names', () => {
+			const nameOf = () => EVIL;
+			const holes = [{ name: EVIL, signatureID: EVIL, realType: EVIL, size: 'L', certain: true, eol: true }];
+			const rows = [{ id: EGG, name: EVIL, sec: 0.4, secText: '0.4', jumps: 2, legs: [1, 2], via: AMAMAKE, cyno: AMAMAKE, total: 3, home: J152820, holes: holes,
+				warnings: jumpPlanner.holeWarnings(holes, 'XL', EVIL), reach: { direct: 3 } },
+				{ id: KBP, name: EVIL, sec: -0.3, secText: '-0.3', jumps: null, reason: 'range', legs: [], home: J152820, holes: holes, warnings: [], reach: { direct: 20 } }];
+			const model = { rows: rows, counts: { reachable: 1, total: 2 }, preset: { label: EVIL }, range: 7 };
+			const html = jumpPlanner.homeListHtml(model, nameOf, jumpPlanner.settings({}), [J152820, KBP]);
+			noRawHtml(html);
+			assert.ok(/jp-row-out/.test(html) && /data-jp-cyno='/.test(html) && /⚠/.test(html));
+			noRawHtml(jumpPlanner.quickPicksHtml([AMAMAKE], AMAMAKE, AMAMAKE, nameOf));
+			const c = ctx({}, { exitID: AMAMAKE }); const mm = jumpPlanner.mapModel(c, jumpPlanner.model(c));
+			const pos = {}; pos[EGG] = INDEX.pos[EGG]; pos[AMAMAKE] = INDEX.pos[sid('Auga')]; pos[KBP] = INDEX.pos[sid('Siseide')];
+			const svg = jumpPlanner.homeOverlaySvg(mm, rows, pos, EGG, nameOf);
+			noRawHtml(svg);
+			assert.ok(/jp-route/.test(svg) && /jp-hx-ok/.test(svg) && /jp-hx-no/.test(svg) && /jp-hx-sel/.test(svg));
+			noRawHtml(jumpPlanner.tooltipHtml({ id: EGG, name: EVIL, sec: 0.4, region: EVIL, ly: 3, kind: 'out', route: EVIL, cyno: EGG }));
+			assert.ok(/jp-home-dest/.test(jumpPlanner.tooltipHtml({ id: EGG, name: 'x', sec: 0.4, ly: 3, kind: 'out', route: 'r', cyno: EGG })));
+			assert.ok(jumpPlanner.homeCopyText(model, EVIL, nameOf, 5).indexOf('Get home from') === 0);
+		});
+		it('mode switch, home line and footer', () => {
+			assert.ok(/data-jp-mode='home' class='active'/.test(jumpPlanner.modeHtml('home')));
+			assert.ok(/data-jp-mode='exit' class='active'/.test(jumpPlanner.modeHtml('exit')));
+			assert.strictEqual(jumpPlanner.homeFooterText({ counts: { reachable: 2, total: 3 } }), '2 of 3 exits reachable within 2 jumps');
+			assert.strictEqual(jumpPlanner.homeText([], String), 'no home on this chain');
+			assert.strictEqual(jumpPlanner.homeText([J152820], id => S[id].name), 'Home: J152820');
+		});
+		it('the mini-map can be widened to fit the farthest exit (fitLy)', () => {
+			const c = ctx({}, { exitID: AMAMAKE });
+			const m = jumpPlanner.model(c);
+			const narrow = jumpPlanner.mapModel(c, m), wide = jumpPlanner.mapModel(Object.assign({}, c, { fitLy: 14 }), m);
+			assert.ok(wide.scale < narrow.scale);
+			assert.deepStrictEqual(jumpPlanner.projectPoint(wide, INDEX.pos[AMAMAKE]), { x: wide.cx, y: wide.cy });
 		});
 	});
 });
