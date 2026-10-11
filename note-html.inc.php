@@ -142,7 +142,8 @@ function sanitizeNoteHtml($html) {
                 $node->removeAttributeNode($attribute);
                 continue;
             }
-            if ($name === 'href' && preg_match('/\.php/i', preg_split('/[?#]/', trim($value))[0])) {
+            $decodedPath = rawurldecode(preg_split('/[?#]/', trim($value))[0]);
+            if (($name === 'href' && preg_match('/\.php/i', $decodedPath)) || ($name === 'src' && preg_match('/\.php$/i', $decodedPath))) {
                 $node->removeAttributeNode($attribute);
                 continue;
             }

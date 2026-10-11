@@ -27,5 +27,8 @@
 	{"name": "relative img src dropped", "input": "<img src=\"/comments.php?mode=delete&commentID=1\"><img src=\"../x.png\">", "notContains": ["comments.php", "src="]},
 	{"name": "absolute https img src kept", "input": "<img src=\"https://images.evetech.net/a.png\">", "contains": ["src=\"https://images.evetech.net/a.png\""]},
 	{"name": "href to a .php path dropped", "input": "<a href=\"/comments.php?mode=delete\">x</a><a href=\"/tripwire/refresh.php#a\">y</a>", "notContains": [".php", "href"], "contains": ["x", "y"]},
-	{"name": "relative href without .php kept", "input": "<a href=\"/?system=Jita\">x</a>", "contains": ["href=\"/?system=Jita\""]}
+	{"name": "relative href without .php kept", "input": "<a href=\"/?system=Jita\">x</a>", "contains": ["href=\"/?system=Jita\""]},
+	{"name": "percent-encoded .php href dropped", "input": "<a href=\"/comments%2ephp?mode=delete\">x</a><a href=\"/comments.%70hp\">y</a>", "notContains": ["href"], "contains": ["x", "y"]},
+	{"name": "img src to a .php path dropped (own host)", "input": "<img src=\"https://tripwire.example/comments.php?mode=delete&commentID=1\"><img src=\"https://tripwire.example/a%2Ephp\">", "notContains": ["src=", ".php", "%2e"]},
+	{"name": "img src with .php only in the query is kept", "input": "<img src=\"https://images.example/a.png?x=.php\">", "contains": ["src=\"https://images.example/a.png"]}
 ]

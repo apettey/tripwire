@@ -90,6 +90,12 @@ var sanitiseHtml = (function() {
 		return declarations.length ? declarations.join('; ') : null;
 	}
 
+	// The path of a URL, percent-decoded, so %2e%70hp cannot hide a .php endpoint.
+	function decodedPath(url) {
+		var path = url.split(/[?#]/)[0];
+		try { return decodeURIComponent(path); } catch (e) { return path; }
+	}
+
 	function cleanNode(node) {
 		// Comments can hide conditional markup; drop them.
 		if (node.nodeType === 8) { node.remove(); return; }
@@ -131,7 +137,7 @@ var sanitiseHtml = (function() {
 
 			if (name === 'href' || name === 'src') {
 				var v = value.trim();
-				if (!(name === 'src' ? SAFE_IMG_URL : SAFE_URL).test(v) || (name === 'href' && /\.php/i.test(v.split(/[?#]/)[0]))) { node.removeAttribute(attr.name); return; }
+				if (!(name === 'src' ? SAFE_IMG_URL : SAFE_URL).test(v) || (name === 'href' ? /\.php/i : /\.php$/i).test(decodedPath(v))) { node.removeAttribute(attr.name); return; }
 			}
 			if (name === 'style') {
 				var safe = cleanStyle(value);
