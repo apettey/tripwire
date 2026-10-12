@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 91,
+      "date": "2026-10-11",
+      "title": "Audit log: who changed what",
+      "description": "Mask admins can now see who added, changed or deleted which signature and wormhole on their mask, with the before and after (name, type, life, mass, where a hole leads). Open Mask Admin > Audit to filter by system, character, kind and date; the mask-admin actions are listed there too. Entries are kept for 60 days (the server admin can change this with AUDIT_LOG_DAYS). There is no per-user setting, since it is an admin tool.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-91-audit-log.png",
+          "caption": "Mask Admin > Audit"
+        }
+      ]
+    },
+    {
       "pr": 90,
       "date": "2026-10-11",
       "title": "Command palette (Ctrl+K)",
