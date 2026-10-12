@@ -1,5 +1,7 @@
 <?php
 
+require_once(__DIR__ . '/audit/audit.inc.php');   // fork: audit log of who changed what
+
 class signature {
     protected $id = null;
     protected $signatureID = null;
@@ -230,6 +232,7 @@ function addSignature($signature, $mysql) {
         // resets lastInsertId(), so dialog-added signatures came back with id 0 and undo failed
         // (adapted from mogglemoss/tripwire 09bcb40, MIT)
         $signature->id = $mysql->lastInsertId();
+        audit_signature_added($mysql, $signature);
 
         // Log the user stats
         if ($signature->type != 'wormhole') {
@@ -264,6 +267,7 @@ function addWormhole($wormhole, $mysql) {
     $wormhole->id = $mysql->lastInsertId();
 
     if ($success) {
+        audit_wormhole_added($mysql, $wormhole);
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_added) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_added = wormholes_added + 1';
@@ -280,6 +284,7 @@ function addWormhole($wormhole, $mysql) {
 }
 
 function updateSignature(signature $signature, $mysql) {
+    $auditBefore = audit_signature_row($mysql, $signature->id);
     $query = 'UPDATE signatures SET
                 signatureID = :signatureID,
                 systemID = :systemID,
@@ -311,6 +316,7 @@ function updateSignature(signature $signature, $mysql) {
     $success = $stmt->execute();
 
     if ($success) {
+        audit_signature_updated($mysql, $auditBefore, $signature);
         // Log the user stats
         if ($signature->type != 'wormhole') {
             $query = 'INSERT INTO statistics (userID, characterID, maskID, signatures_updated) VALUES (:userID, :characterID, :maskID, 1)
@@ -329,6 +335,7 @@ function updateSignature(signature $signature, $mysql) {
 }
 
 function updateWormhole(wormhole $wormhole, $mysql) {
+    $auditBefore = audit_wormhole_row($mysql, $wormhole->id);
     $query = 'UPDATE wormholes SET type = :type, parent = :parent, life = :life, mass = :mass WHERE id = :id AND maskID = :maskID';
     $stmt = $mysql->prepare($query);
     $stmt->bindValue(':id', $wormhole->id);
@@ -340,6 +347,7 @@ function updateWormhole(wormhole $wormhole, $mysql) {
     $success = $stmt->execute();
 
     if ($success) {
+        audit_wormhole_updated($mysql, $auditBefore, $wormhole);
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_updated) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_updated = wormholes_updated + 1';
@@ -356,6 +364,7 @@ function updateWormhole(wormhole $wormhole, $mysql) {
 }
 
 function removeSignature(signature $signature, $mysql) {
+    $auditHole = audit_hole_before($mysql, $signature);
     $query = 'SET @disable_trigger = 1';
     $stmt = $mysql->prepare($query);
     $stmt->execute();
@@ -380,6 +389,7 @@ function removeSignature(signature $signature, $mysql) {
     $success = @$stmt->execute();
 
     if ($success) {
+        audit_signature_removed($mysql, $signature, $stmt->rowCount(), $auditHole);
         // Log the user stats
         if ($signature->type != 'wormhole') {
             $query = 'INSERT INTO statistics (userID, characterID, maskID, signatures_deleted) VALUES (:userID, :characterID, :maskID, 1)
@@ -399,6 +409,7 @@ function removeSignature(signature $signature, $mysql) {
 
 function removeWormhole($wormhole, $mysql) {
     $wormhole = new wormhole($wormhole);
+    $auditBefore = audit_wormhole_row($mysql, $wormhole->id);
 
     $query = 'DELETE FROM wormholes WHERE id = :id AND maskID = :maskID';
     $stmt = $mysql->prepare($query);
@@ -407,6 +418,7 @@ function removeWormhole($wormhole, $mysql) {
     $success = @$stmt->execute();
 
     if ($success) {
+        audit_wormhole_removed($mysql, $auditBefore, $stmt->rowCount());
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_deleted) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_deleted = wormholes_deleted + 1';
