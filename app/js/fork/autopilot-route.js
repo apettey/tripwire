@@ -1,9 +1,9 @@
 const autopilotRoute = {
-	// "Set route in game": sends the gate leg of a route Tripwire worked out (Favourites panel, Destinations window)
-	// to the in-game autopilot as ESI waypoints, so EVE follows that route (e.g. the high-sec only one) rather
-	// than its own choice (fork-owned file). Pure logic here; the UI is at the bottom.
+	// "Set destination in game": sets the end of the gate leg of a route Tripwire worked out (Favourites panel,
+	// Destinations window, Thera/Turnur legs, skyhooks, loot buyers, region map, jump planner) as each picked
+	// character's in-game destination: one ESI call per character. EVE's autopilot picks the way there with the
+	// player's own route settings (fork-owned file). Pure logic here; the UI is at the bottom.
 	// Keep `const autopilotRoute` on the first line: the test helper strips it to define a global.
-	MAX_WAYPOINTS: 50,      // cap on ESI calls per route; 50 is the commonly quoted in-game waypoint limit (not confirmed by CCP)
 
 	escape: function(text) {
 		return String(text === undefined || text === null ? "" : text)
@@ -85,84 +85,21 @@ const autopilotRoute = {
 		return ids.slice(start);
 	},
 
-	/** Breadth-first from one system over the whole gate map (no avoid list: EVE's own view), up to maxDepth jumps.
-	@return {dist: {id: jumps}, count: {id: number of shortest paths, capped at 2}} */
-	reach: function(map, fromID, maxDepth) {
-		const dist = {}, count = {};
-		dist[fromID] = 0;
-		count[fromID] = 1;
-		const queue = [fromID];
-		for (let i = 0; i < queue.length; i++) {
-			const current = queue[i];
-			if (dist[current] >= maxDepth) { continue; }
-			const next = map[current - 30000000] || {};
-			for (const key in next) {
-				const id = 30000000 + Number(key);
-				if (dist[id] === undefined) {
-					dist[id] = dist[current] + 1;
-					count[id] = count[current];
-					queue.push(id);
-				} else if (dist[id] === dist[current] + 1) {
-					count[id] = Math.min(2, count[id] + count[current]);
-				}
-			}
-		}
-		return { dist: dist, count: count };
+	/** Where "Set destination in game" sends a route: the last system of its k-space leg, or null when there are no
+	gate jumps to fly (the leg has fewer than two systems). @return {destID, from, jumps} or null */
+	destination: function(path, systems) {
+		const leg = autopilotRoute.kspaceLeg(path, systems);
+		return leg.length < 2 ? null : { destID: leg[leg.length - 1], from: leg[0], jumps: leg.length - 1 };
 	},
 
-	/** Waypoints that make the autopilot fly exactly this gate path. path: real IDs, path[0] = where the route
-	starts (not sent). Low-sec, null-sec and Pochven systems are each a waypoint: EVE's "safer" preference would
-	otherwise leave such a stretch for a longer high-sec way round, even when it is the only shortest route.
-	High-sec stretches are skipped over greedily while the path so far is the only shortest gate route (so
-	"shortest" can't pick another) and stays in high-sec (so "safer" has nothing better). Always ends with the
-	destination. Not capped: see limit. */
-	waypoints: function(path, map, systems) {
-		const ids = autopilotRoute.normalise(path);
-		if (!ids || ids.length < 2) { return []; }
-		const result = [];
-		let from = 0;
-		while (from < ids.length - 1) {
-			let end = from + 1;		// always at least the next system
-			if (autopilotRoute.isHighSec(systems[ids[end]])) {
-				const info = autopilotRoute.reach(map || {}, ids[from], ids.length - 1 - from);
-				while (end + 1 < ids.length) {
-					const id = ids[end + 1];
-					if (!autopilotRoute.isHighSec(systems[id])) { break; }
-					if (info.dist[id] !== end + 1 - from || info.count[id] !== 1) { break; }
-					end++;
-				}
-			}
-			result.push(ids[end]);
-			from = end;
-		}
-		return result;
-	},
-
-	/** Waypoints within the cap (default MAX_WAYPOINTS). Over it: the first max-1, then the destination, so the
-	autopilot still gets there but picks its own route after the last pinned one.
-	@return {waypoints, capped, total (before capping), pinnedUntil (last waypoint on our route, when capped)} */
-	limit: function(waypoints, max) {
-		const list = (waypoints || []).slice();
-		const cap = Math.max(2, max || autopilotRoute.MAX_WAYPOINTS);
-		if (list.length <= cap) { return { waypoints: list, capped: false, total: list.length }; }
-		const kept = list.slice(0, cap - 1);
-		return { waypoints: kept.concat([list[list.length - 1]]), capped: true, total: list.length, pinnedUntil: kept[kept.length - 1] };
-	},
-
-	/** Toast text once the route is set. name: function(systemID) -> system name (plain text, escape it for HTML) */
-	doneText: function(label, who, jumps, limited, name) {
-		const n = limited.waypoints.length;
-		let text = "Route set in game: " + label + " for " + who + " (" + jumps + " jump" + (jumps === 1 ? "" : "s") + ", "
-			+ n + " waypoint" + (n === 1 ? "" : "s") + ")";
-		if (limited.capped) {
-			text += ". The route needs " + limited.total + " waypoints, more than the " + n + " Tripwire sets: it is followed as far as "
-				+ name(limited.pinnedUntil) + ", from there EVE picks its own route to " + name(limited.waypoints[n - 1]) + ".";
-		}
-		return text;
+	/** Toast text once the destination is set: "Destination set in game: Jita for Alice and Bob (19 jumps from Hek)" */
+	doneText: function(dest, who, jumps, from) {
+		return "Destination set in game: " + dest + " for " + who + " (" + jumps + " jump" + (jumps === 1 ? "" : "s")
+			+ (from ? " from " + from : "") + ")";
 	},
 
 	/** The gate leg of a Favourites panel plan. Direct: from where you are. Through the chain: from the system you
-	leave it at (wormholes can't be waypointed).
+	leave it at (the autopilot can't route through wormholes).
 	@param pathFn function(fromID, toID, safe) -> gate path
 	@return {path, from} or {error} */
 	favouriteLeg: function(plan, startID, favID, pathFn) {
@@ -192,25 +129,6 @@ const autopilotRoute = {
 		if (!best || !best.jumps) { return { error: best ? "On the chain already" : "No gate route" }; }
 		const path = autopilotRoute.normalise(best.path);
 		return path && path.length > 1 ? { path: path, from: path[0] } : { error: "No gate route" };
-	},
-
-	/** Send waypoints one after another (order matters): the first clears the other waypoints, the rest are
-	appended at the end. sendOne(systemID, clear) returns a thenable. onProgress(done, total) is optional.
-	@return Promise resolving to the number sent, or rejecting with {index, systemID, error} */
-	sendAll: function(waypoints, sendOne, onProgress) {
-		const list = (waypoints || []).slice();
-		let chain = Promise.resolve();
-		list.forEach(function(systemID, index) {
-			chain = chain.then(function() {
-				// new Promise: a sendOne that throws (rather than rejecting) is reported like a failed call
-				return new Promise(function(resolve) { resolve(sendOne(systemID, index === 0)); }).then(function() {
-					if (onProgress) { onProgress(index + 1, list.length); }
-				}, function(error) {
-					throw { index: index, systemID: systemID, error: error };
-				});
-			});
-		});
-		return chain.then(function() { return list.length; });
 	},
 
 	/** Words for a failed ESI call (jqXHR-like {status}) */
@@ -266,29 +184,20 @@ const autopilotRoute = {
 		return n && n === usable.length ? "all" : n ? "some" : "none";
 	},
 
-	/** Send the same waypoints to several characters, one character after another (each in order, see sendAll), so
-	ESI sees one call at a time. A failure for one character doesn't stop the others.
-	sendOne(characterID, systemID, clear) returns a thenable. onProgress({character, characterIndex, characterCount,
-	done, total}) is optional, called before each character starts (done 0) and after each waypoint.
-	@return Promise (never rejects) of [{characterID, name, ok, sent, systemID (failed one), error}] in send order */
-	sendToCharacters: function(targets, waypoints, sendOne, onProgress) {
-		const list = (targets || []).slice(), wps = (waypoints || []).slice(), results = [];
+	/** Set the same destination for several characters, one ESI call per character, one character after another (so
+	ESI sees one call at a time). Each call clears the character's other waypoints. A failure for one character
+	doesn't stop the others. sendOne(characterID, systemID, clear) returns a thenable (it may also throw).
+	@return Promise (never rejects) of [{characterID, name, ok, error}] in send order */
+	sendToCharacters: function(targets, destID, sendOne) {
+		const list = (targets || []).slice(), results = [];
 		let chain = Promise.resolve();
-		list.forEach(function(c, ci) {
-			const progress = function(done) {
-				if (onProgress) {
-					onProgress({ character: c, characterIndex: ci, characterCount: list.length, done: done, total: wps.length });
-				}
-			};
+		list.forEach(function(c) {
 			chain = chain.then(function() {
-				progress(0);
-				return autopilotRoute.sendAll(wps, function(systemID, clear) {
-					return sendOne(c.characterID, systemID, clear);
-				}, progress).then(function(sent) {
-					results.push({ characterID: c.characterID, name: c.name, ok: true, sent: sent });
-				}, function(failure) {
-					const f = failure && typeof failure.index === "number" ? failure : { index: 0, error: failure };
-					results.push({ characterID: c.characterID, name: c.name, ok: false, sent: f.index, systemID: f.systemID, error: f.error });
+				// new Promise: a sendOne that throws (rather than rejecting) is reported like a failed call
+				return new Promise(function(resolve) { resolve(sendOne(c.characterID, destID, true)); }).then(function() {
+					results.push({ characterID: c.characterID, name: c.name, ok: true });
+				}, function(error) {
+					results.push({ characterID: c.characterID, name: c.name, ok: false, error: error });
 				});
 			});
 		});
@@ -301,38 +210,22 @@ const autopilotRoute = {
 		return list.length < 2 ? (list[0] || "") : list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
 	},
 
-	/** How much of a failed route was set: sent = waypoints set before the failing call */
-	partialText: function(sent) {
-		return sent === 1 ? " Only the first waypoint was set." : sent > 1 ? " Only the first " + sent + " waypoints were set." : "";
-	},
-
-	/** Progress toast text for a multi-character run */
-	characterProgressText: function(label, info) {
-		return "Setting route in game: " + label + ". " + info.character.name + ": waypoint " + Math.min(info.done + 1, info.total)
-			+ " of " + info.total + (info.characterCount > 1 ? " (" + (info.characterIndex + 1) + " of " + info.characterCount + " characters)" : "")
-			+ "...";
-	},
-
-	/** Result toast for sendToCharacters' results. dest: destination name; the rest as doneText.
+	/** Result toast for sendToCharacters' results. dest: destination name, jumps: gate jumps on the route, from: where
+	the route starts (name).
 	@return {color: green (all set) / yellow (some failed) / red (all failed), lines: [plain text, escape each]} */
-	summary: function(results, label, dest, jumps, limited, name) {
+	summary: function(results, dest, jumps, from) {
 		const ok = (results || []).filter(function(r) { return r.ok; });
 		const failed = (results || []).filter(function(r) { return !r.ok; });
-		const failure = function(r) {
-			return (results.length > 1 ? r.name + ": " : "") + autopilotRoute.errorText(r.error) + autopilotRoute.partialText(r.sent);
+		const failure = function(r) { return (results.length > 1 ? r.name + ": " : "") + autopilotRoute.errorText(r.error); };
+		const done = function() {
+			return autopilotRoute.doneText(dest, autopilotRoute.joinNames(ok.map(function(r) { return r.name; })), jumps, from);
 		};
-		if (!failed.length) {
-			return { color: "green", lines: [autopilotRoute.doneText(label, autopilotRoute.joinNames(ok.map(function(r) { return r.name; })), jumps, limited, name)] };
-		}
+		if (!failed.length) { return { color: "green", lines: [done()] }; }
 		if (!ok.length) {
-			return { color: "red", lines: ["Could not set the route to " + dest + " in game" + (failed.length > 1 ? " for any character." : ".")]
+			return { color: "red", lines: ["Could not set " + dest + " as the destination in game" + (failed.length > 1 ? " for any character." : ".")]
 				.concat(failed.map(failure)) };
 		}
-		return {
-			color: "yellow",
-			lines: [autopilotRoute.doneText(label, autopilotRoute.joinNames(ok.map(function(r) { return r.name; })), jumps, limited, name)]
-				.concat(failed.map(function(r) { return "Failed for " + failure(r); }))
-		};
+		return { color: "yellow", lines: [done()].concat(failed.map(function(r) { return "Failed for " + failure(r); })) };
 	}
 };
 
@@ -355,7 +248,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return list;
 		}
 
-		// ---- Character picker: which tracked characters get the route ----
+		// ---- Character picker: which tracked characters get the destination ----
 
 		const DIALOG_ID = "dialog-autopilotCharacters";
 		let pending = null;		// {list, onSend} while the picker is open; Send takes it, anything else drops it
@@ -377,7 +270,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($dialog.hasClass("ui-dialog-content")) { return $dialog; }
 			$dialog.dialog({
 				autoOpen: false,
-				title: "Set route in game",
+				title: "Set destination in game",
 				resizable: false,
 				modal: true,
 				width: 340,
@@ -406,19 +299,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				options.autopilotRoute = Object.assign({}, options.autopilotRoute || {}, { characters: ids.slice() });
 				options.save();
 			} catch (err) {
-				console.error("Set route in game: could not save the character selection", err);
+				console.error("Set destination in game: could not save the character selection", err);
 			}
 		}
 
-		/** Ask which characters get the route. onSend([character]) runs only on Send, with at least one character. */
-		function pickCharacters(label, waypointCount, onSend) {
+		/** Ask which characters get the destination. onSend([character]) runs only on Send, with at least one character. */
+		function pickCharacters(label, jumps, onSend) {
 			const list = ap.characters(options, tripwire.esi && tripwire.esi.characters);
 			const error = ap.noCharacterError(list);
 			if (error) { notify(ap.escape(error), "red", 8000); return; }
 			const $dialog = ensureDialog();
 			pending = { list: list, onSend: onSend };
-			$dialog.find(".autopilot-chars-route").html(ap.escape(label) + ", " + waypointCount + " waypoint"
-				+ (waypointCount === 1 ? "" : "s") + ". Send to:");
+			$dialog.find(".autopilot-chars-route").html(ap.escape(label) + ", " + jumps + " jump"
+				+ (jumps === 1 ? "" : "s") + ". Set destination for:");
 			$dialog.find(".autopilot-chars-list").html(list.map(function(c) {
 				return "<li class='autopilot-chars-row" + (c.usable ? "" : " disabled") + "'><label>"
 					+ "<input type='checkbox' value='" + ap.escape(c.characterID) + "'" + (c.preselected ? " checked" : "")
@@ -432,44 +325,30 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			updatePicker();
 		}
 
-		/** Send a gate path to the in-game autopilot, for the characters picked in the dialog */
+		/** Set the end of a route's gate leg as the in-game destination of the characters picked in the dialog */
 		function push(path, label) {
-			if (busy) { notify("Still setting the previous route, one moment.", "yellow", 4000); return; }
-			const leg = ap.kspaceLeg(path, appData.systems);	// never send wormhole space (it can't be waypointed)
-			const limited = ap.limit(ap.waypoints(leg, appData.map.shortest, appData.systems));
-			const waypoints = limited.waypoints;
-			if (!waypoints.length) { notify("Nothing to set: no gate jumps on this route.", "yellow", 5000); return; }
-			pickCharacters(label, waypoints.length, function(targets) {
-				if (busy) { notify("Still setting the previous route, one moment.", "yellow", 4000); return; }
-				send(targets, waypoints, leg.length - 1, limited, label);
+			if (busy) { notify("Still setting the previous destination, one moment.", "yellow", 4000); return; }
+			const target = ap.destination(path, appData.systems);	// never wormhole space (the autopilot can't route there)
+			if (!target) { notify("Nothing to set: no gate jumps on this route.", "yellow", 5000); return; }
+			pickCharacters(label, target.jumps, function(targets) {
+				if (busy) { notify("Still setting the previous destination, one moment.", "yellow", 4000); return; }
+				send(targets, target);
 			});
 		}
 
-		function send(targets, waypoints, jumps, limited, label) {
-			const dest = systemName(waypoints[waypoints.length - 1]);
+		function send(targets, target) {
+			const dest = systemName(target.destID);
 			busy = true;		// covers the whole run, every character
-			// One toast for the whole run, updated per waypoint (jBox is what Notify uses)
-			let progress = null;
-			const showProgress = function(info) {
-				const html = ap.escape(ap.characterProgressText(label, info));
-				if (progress) { progress.setContent(html); return; }
-				if (typeof jBox === "undefined") { notify(html, "blue", 3000); return; }
-				progress = new jBox("Notice", { content: html, offset: { y: 35 }, animation: "flip", color: "blue", autoClose: false });
-			};
-			const closeProgress = function() { if (progress) { progress.close(); progress = null; } };
-			ap.sendToCharacters(targets, waypoints, function(characterID, systemID, clear) {
+			ap.sendToCharacters(targets, target.destID, function(characterID, systemID, clear) {
 				return tripwire.esi.setDestination(systemID, characterID, clear, false);
-			}, showProgress).then(function(results) {
+			}).then(function(results) {
 				busy = false;
-				closeProgress();
-				const result = ap.summary(results, label, dest, jumps, limited, systemName);
-				const ms = result.color === "green" ? (limited.capped ? 15000 : 6000) : 15000;
-				notify(result.lines.map(ap.escape).join("<br/>"), result.color, ms);
+				const result = ap.summary(results, dest, target.jumps, systemName(target.from));
+				notify(result.lines.map(ap.escape).join("<br/>"), result.color, result.color === "green" ? 6000 : 15000);
 			}).catch(function(err) {	// only a bug in the code above gets here
 				busy = false;
-				closeProgress();
-				console.error("Set route in game", err);
-				notify("Could not set the route to " + ap.escape(dest) + " in game.", "red", 8000);
+				console.error("Set destination in game", err);
+				notify("Could not set " + ap.escape(dest) + " as the destination in game.", "red", 8000);
 			});
 		}
 		ap.push = push;
@@ -480,7 +359,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function scoutButtons(plan) {
 			const legs = theraRoute.gateLegs(plan);
 			if (!legs.length) {
-				return "<i class='autopilot-route-btn disabled' data-icon='auto' title='" + ap.escape("Set route in game: nothing to fly by gates on this route") + "'></i>";
+				return "<i class='autopilot-route-btn disabled' data-icon='auto' title='" + ap.escape("Set destination in game: nothing to fly by gates on this route") + "'></i>";
 			}
 			return legs.map(function(leg) {
 				return "<i class='autopilot-route-btn autopilot-route-leg' data-icon='auto' data-leg='" + leg.index + "' title='"
@@ -508,11 +387,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const name = systemName(id);
 			let title;
 			if (leg.error) {
-				title = "Set route in game: " + leg.error;
+				title = "Set destination in game: " + leg.error;
 			} else {
 				const from = plan.kind === "direct" ? "where you are" : systemName(plan.exitSystemID);
-				title = "Set route in game: the " + (flags.route === "safe" ? "safe (high-sec only)" : "shortest") + " gate route from "
-					+ from + " to " + name + " as autopilot waypoints" + (plan.kind === "chain" ? " (take the wormholes to " + from + " yourself)" : "");
+				title = "Set destination in game: " + name + " as your in-game destination"
+					+ (plan.kind === "chain" ? " (take the wormholes to " + from + " yourself)" : "") + ". "
+					+ (flags.route === "safe"
+						? "The in-game autopilot picks its own route: set it to Prefer safer in game for a high-sec only route."
+						: "The in-game autopilot picks the route with your in-game route settings.");
 			}
 			return "<i class='autopilot-route-btn" + (leg.error ? " disabled" : "") + "' data-icon='auto' title='" + ap.escape(title) + "'></i>";
 		}
@@ -571,9 +453,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (ev.scout && typeof theraRoute !== "undefined") { return "<td class='route-dest-autopilot'>" + scoutButtons(ev.scout) + "</td>"; }
 			const best = ev.best;
 			const leg = ap.destinationLeg(best);
-			const title = leg.error ? "Set route in game: " + leg.error
-				: "Set route in game: the gate route from " + systemName(best.exit.systemID) + " to " + systemName(id)
-					+ " as autopilot waypoints (take the wormholes to " + systemName(best.exit.systemID) + " yourself)";
+			const title = leg.error ? "Set destination in game: " + leg.error
+				: "Set destination in game: " + systemName(id) + " as your in-game destination"
+					+ " (take the wormholes to " + systemName(best.exit.systemID) + " yourself)";
 			return "<td class='route-dest-autopilot'><i class='autopilot-route-btn" + (leg.error ? " disabled" : "")
 				+ "' data-icon='auto' title='" + ap.escape(title) + "'></i></td>";
 		}
@@ -596,7 +478,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					});
 					return $body.html();
 				} catch (err) {
-					console.error("Set route in game: destinations", err);
+					console.error("Set destination in game: destinations", err);
 					return html;
 				}
 			};
@@ -627,7 +509,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<p class='autopilot-chars-route'></p>"
 				+ "<div class='autopilot-chars-tools'><label><input type='checkbox' class='autopilot-chars-all' /> Select all</label></div>"
 				+ "<ul class='autopilot-chars-list'></ul>"
-				+ "<p class='autopilot-chars-hint'>Each character gets the same waypoints, replacing its current route.</p>"
+				+ "<p class='autopilot-chars-hint'>Sets each character's in-game destination, replacing its current route. EVE's autopilot picks the way there, using your in-game route settings.</p>"
 				+ "</div>");
 			$("#" + DIALOG_ID).on("change", ".autopilot-chars-all", function() {
 				$("#" + DIALOG_ID + " .autopilot-chars-list input:enabled").prop("checked", this.checked);

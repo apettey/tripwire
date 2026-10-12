@@ -93,7 +93,7 @@ const lootBuyers = {
 			+ "<span class='loot-station' title='" + esc(row.name + (corpName ? " (" + corpName + ")" : "")) + "'>" + esc(row.name) + (row.more > 0 ? " <span class='loot-more'>+" + row.more + " more here</span>" : "") + "</span>"
 			+ "<span class='loot-kinds'>" + kinds + "</span>"
 			+ "<span class='loot-jumps' title='Gate jumps from " + esc(exitName) + "'>" + lootBuyers.jumpsText(row.jumps) + "</span>"
-			+ (routable ? "<i class='loot-route' data-icon='auto' title='Set route in game: gate route from " + esc(exitName) + " to " + esc(row.name) + " as autopilot waypoints'></i>" : "<i class='loot-route-none'></i>")
+			+ (routable ? "<i class='loot-route' data-icon='auto' title='Set destination in game: " + esc(row.name) + " as your in-game destination (gate route from " + esc(exitName) + ")'></i>" : "<i class='loot-route-none'></i>")
 			+ "</li>";
 	}
 };

@@ -184,10 +184,10 @@ describe('Thera route', () => {
 			assert.equal(legs[1].before, null);
 		});
 		it('Leg 1 title', () => assert.equal(tr.legTitle(legs[0], name),
-			'Set route in game, leg 1 of 2: the gates from A to X (1 jump) as autopilot waypoints. Take the wormholes to A yourself. '
+			'Set destination in game, leg 1 of 2: X as your in-game destination (1 jump by gates from A). Take the wormholes to A yourself. '
 			+ 'Then take the Thera hole in X yourself and send leg 2 after it.'));
 		it('Leg 2 title', () => assert.equal(tr.legTitle(legs[1], name),
-			'Set route in game, leg 2 of 2: the gates from Y to H (1 jump) as autopilot waypoints. Send it once you are out of Thera in Y: '
+			'Set destination in game, leg 2 of 2: H as your in-game destination (1 jump by gates from Y). Send it once you are out of Thera in Y: '
 			+ 'the autopilot can\'t route through wormholes.'));
 		it('Turnur leg starts in Turnur', () => assert.ok(tr.legTitle(tr.gateLegs(route({ sources: [LOW], links: [LT] }))[0], name)
 			.indexOf('Send it once you are in Turnur') >= 0));
