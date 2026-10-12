@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 95,
+      "date": "2026-10-12",
+      "title": "Region map",
+      "description": "A Dotlan-style map of a k-space region. Right-click a system on the chain map and choose Region map, use the Region map link in the system panel, or press Ctrl+K and type \"region map\" with a system or region name. It shows your chain's exits with their hole names, you and your pilots, the Fight here system, the route to a system you click, and last-hour NPC kills, ship kills or jumps as heat. Click a system for the jumps from your chain and to set a destination or route in game, double-click to open it in Tripwire, and click a gate label to cross into the neighbouring region. Turn it off in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-95-region-map.png",
+          "caption": "Delve with chain exits, you, Fight here, NPC-kill heat and a route"
+        }
+      ]
+    },
+    {
       "pr": 94,
       "date": "2026-10-12",
       "title": "Palette actions and arrow keys in the signature list",
