@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 96,
+      "date": "2026-10-12",
+      "title": "API tokens for scripts and bots",
+      "description": "You can now create personal API tokens so your own scripts and bots can read your mask's chain, signatures, structures, timers and notes without your password. Open Settings > General > API tokens, name a token and copy it, because it is shown only once. Tokens are read-only, tied to the mask you are on, optionally expire, and stop working at once if you revoke them or lose access to the mask. Mask admins can see and revoke the tokens of their mask in Mask Admin > API tokens.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-96-api-tokens.png",
+          "caption": "Settings > General > API tokens"
+        }
+      ]
+    },
+    {
       "pr": 95,
       "date": "2026-10-12",
       "title": "Region map",
