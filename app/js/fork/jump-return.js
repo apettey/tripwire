@@ -21,13 +21,15 @@ const jumpReturn = {
 
 	/** Return bookmark string for a hole jumped from the side named fromSigName to the side named toSigName.
 		Only outbound jumps through a named hole count: the from side has a name token and the to side is
-		unnamed or already a return bookmark ("!AB", or the older "<AB"). Returns e.g. "!AB", or null. */
-	returnString: function(fromSigName, toSigName) {
+		unnamed or already a return bookmark ("!AB", or the older "<AB"). Returns e.g. "!AB", or null.
+		The text comes from the mask's return template (Mask Admin > Bookmark names, default "!{name}"); extra is
+		{type, size, classText, system, sigID} for its other tokens. */
+	returnString: function(fromSigName, toSigName, extra) {
 		const token = holeNaming.leadingToken(fromSigName);
 		if (!token) { return null; }
 		const toName = String(toSigName === undefined || toSigName === null ? "" : toSigName).trim();
 		if (toName !== "" && !holeNaming.isReturnBookmark(toName) && holeNaming.leadingToken(toName)) { return null; }
-		return holeNaming.RETURN_PREFIX + token;
+		return bookmarkTemplate.render(bookmarkTemplate.active("back"), bookmarkTemplate.values(Object.assign({}, extra, { name: token, dir: "in" })));
 	},
 
 	/** Wormhole connecting system from -> to (either sig orientation).
@@ -57,12 +59,26 @@ const jumpReturn = {
 		return best;
 	},
 
+	/** What the return template's other tokens ({type}, {size}, {class}, {system}, {sig}) are for a jump from -> to through
+		hole (from findJumpHole): the hole's type and size, the class of the system it leads back to, the system the
+		bookmark is saved in, and the signature ID of its sig there. Anything unknown is left out. */
+	templateValues: function(hole, from, to, wormholes) {
+		const wormhole = wormholes && wormholes[hole.wormholeId];
+		const out = { sigID: hole.toSig && hole.toSig.signatureID, type: wormhole && wormhole.type };
+		try {
+			out.size = holeNaming.sizeLetter(out.type);
+			out.system = holeNaming.systemName(to);
+			if (typeof systemAnalysis !== "undefined") { out.classText = holeNaming.classText(systemAnalysis.analyse(from).systemTypeName); }
+		} catch (e) { /* the other tokens stay empty */ }
+		return out;
+	},
+
 	/** Return string and hole token for a jump, or null if no named outbound hole connects the systems.
 		toSig / fromSig are the far-side (return) and near-side signatures, used by alreadyHandled. */
 	forJump: function(from, to, wormholes, signatures) {
 		const hole = jumpReturn.findJumpHole(from, to, wormholes, signatures);
 		if (!hole) { return null; }
-		const text = jumpReturn.returnString(hole.fromSig.name, hole.toSig.name);
+		const text = jumpReturn.returnString(hole.fromSig.name, hole.toSig.name, jumpReturn.templateValues(hole, from, to, wormholes));
 		if (!text) { return null; }
 		return { text: text, token: holeNaming.leadingToken(hole.fromSig.name), wormholeId: hole.wormholeId, toSig: hole.toSig, fromSig: hole.fromSig };
 	},

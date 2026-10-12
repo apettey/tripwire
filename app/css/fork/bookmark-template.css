@@ -1,0 +1,22 @@
+/* Mask Admin > Bookmark names (app/js/fork/bookmark-template.js) */
+.ui-dialog.bt-admin-active .ui-dialog-traypane { display: none; }
+
+#dialog-admin [data-window='bookmarks'] { padding: 0 8px 12px 10px; font-size: 12px; line-height: 1.4; text-align: left; overflow-y: auto; }
+#dialog-admin [data-window='bookmarks'] h3 { font-size: 13px; margin: 12px 0 4px; color: #ccc; border-bottom: 1px solid #444; }
+#dialog-admin [data-window='bookmarks'] p { margin: 2px 0; }
+#dialog-admin [data-window='bookmarks'] .bt-dim { font-size: 11px; color: #999; }
+#dialog-admin [data-window='bookmarks'] .bt-good { color: #6c6; }
+#dialog-admin [data-window='bookmarks'] .bt-bad, #dialog-admin [data-window='bookmarks'] .bt-error { color: #e66; }
+#dialog-admin [data-window='bookmarks'] .bt-message { min-height: 16px; margin-top: 2px; }
+#dialog-admin [data-window='bookmarks'] .bt-row { margin: 8px 0; }
+#dialog-admin [data-window='bookmarks'] .bt-row label { display: block; color: #bbb; margin-bottom: 2px; }
+#dialog-admin [data-window='bookmarks'] .bt-input { width: 100%; max-width: 420px; box-sizing: border-box; font-family: monospace; }
+#dialog-admin [data-window='bookmarks'] .bt-preview { margin-top: 2px; }
+#dialog-admin [data-window='bookmarks'] .bt-out { font-size: 13px; color: #9d9; }
+#dialog-admin [data-window='bookmarks'] .bt-error { min-height: 14px; font-size: 11px; }
+#dialog-admin [data-window='bookmarks'] .bt-buttons { margin: 6px 0; }
+#dialog-admin [data-window='bookmarks'] button { font-size: 11px; margin-right: 6px; }
+#dialog-admin [data-window='bookmarks'] .bt-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+#dialog-admin [data-window='bookmarks'] .bt-table th { text-align: left; color: #aaa; font-weight: normal; border-bottom: 1px solid #333; padding: 2px 6px 2px 0; }
+#dialog-admin [data-window='bookmarks'] .bt-table td { padding: 2px 6px 2px 0; vertical-align: top; border-bottom: 1px solid #2b2b2b; }
+div.ui-dialog[aria-describedby='dialog-admin'] .window [data-window='bookmarks'] table tbody tr:nth-child(even) td { border-bottom: 1px solid #2b2b2b; }

@@ -155,16 +155,14 @@ const holeNaming = {
 		return name;
 	},
 
-	/** In-game bookmark string: "=<name> <class> <SIG>[ EOL]". Returns null without a name. */
+	/** In-game bookmark string for a named hole, built from the mask's hole template (Mask Admin > Bookmark names; the
+		default "={name} {class} {sig} {life}" gives "=<name> <class> <SIG>[ EOL]", e.g. "=A C5 ABC EOL"). Returns null
+		without a name. args: {name, classText, sigAlpha | sigID, type, size, system, eol, template?} */
 	bookmarkString: function(args) {
 		const token = holeNaming.leadingToken(args && args.name);
 		if (!token) { return null; }
-		const parts = ["=" + token];
-		if (args.classText) { parts.push(String(args.classText)); }
-		const sig = String(args.sigAlpha || "").replace(/[^A-Za-z]/g, "").substring(0, 3).toUpperCase();
-		if (sig) { parts.push(sig); }
-		if (args.eol) { parts.push("EOL"); }
-		return parts.join(" ");
+		const values = bookmarkTemplate.values(Object.assign({}, args, { name: token, dir: "out" }));
+		return bookmarkTemplate.render(args.template || bookmarkTemplate.active("hole"), values) || null;
 	},
 
 	/** Settings > Signatures "Suggest hole names" (a missing key means on) */
@@ -177,6 +175,20 @@ const holeNaming = {
 	suggestOnEdit: function(name, otherSideName) {
 		const own = String(name === undefined || name === null ? "" : name).trim();
 		return own === "" && !holeNaming.leadingToken(otherSideName);
+	},
+
+	/** Size letter (S, M, L, VL, XL) of a wormhole type for the {size} bookmark token, "" when unknown */
+	sizeLetter: function(type, wormholes) {
+		const table = wormholes || (typeof appData !== "undefined" && appData.wormholes) || {};
+		const wormhole = type ? table[String(type).toUpperCase()] : undefined;
+		return wormhole && wormhole.jump && typeof sizeTags !== "undefined" ? sizeTags.sizeOf(wormhole.jump) || "" : "";
+	},
+
+	/** Name of a system for the {system} bookmark token ("" when unknown) */
+	systemName: function(systemID) {
+		const system = (typeof appData !== "undefined" && appData.systems && appData.systems[systemID]) ||
+			(typeof tripwire !== "undefined" && tripwire.systems && tripwire.systems[systemID]);
+		return system && system.name ? String(system.name) : "";
 	}
 };
 
@@ -308,7 +320,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return holeNaming.bookmarkString({
 				name: thisSide.name,
 				classText: classText,
-				sigAlpha: String(thisSide.signatureID || "").substring(0, 3),
+				sigID: String(thisSide.signatureID || ""),
+				type: entry.wormhole.type,
+				size: holeNaming.sizeLetter(entry.wormhole.type),
+				system: holeNaming.systemName(thisSide.systemID),
 				eol: entry.wormhole.life === "critical"
 			});
 		}
