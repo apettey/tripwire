@@ -135,6 +135,32 @@ describe('regionMap view maths', function() {
 	});
 });
 
+describe('regionMap wheel and pan', function() {
+	it('honours deltaMode and caps one event', function() {
+		const px = regionMap.wheelFactor(-100, 0), lines = regionMap.wheelFactor(-3, 1), pages = regionMap.wheelFactor(-1, 2);
+		assert.ok(px > 1 && Math.abs(px - Math.exp(0.16)) < 1e-9);
+		assert.ok(Math.abs(lines - Math.exp(3 * 16 * 0.0016)) < 1e-9, 'Firefox line wheel zooms like pixels');
+		assert.ok(pages <= Math.exp(300 * 0.0016) + 1e-9 && pages > 1, 'a page is capped');
+		assert.ok(regionMap.wheelFactor(5000, 0) >= Math.exp(-0.48) - 1e-9);
+		assert.ok(regionMap.wheelFactor(100, 0) < 1);
+		assert.strictEqual(regionMap.wheelFactor(0, 0), 1);
+		assert.strictEqual(regionMap.wheelFactor('x', 1), 1);
+	});
+	it('keeps part of the map in view', function() {
+		const layout = { w: 1000, h: 800 };
+		const far = regionMap.clampPan({ k: 1, x: 5000, y: -5000 }, layout, 900, 600);
+		assert.deepStrictEqual([far.x, far.y], [820, -720]);
+		const other = regionMap.clampPan({ k: 0.5, x: -5000, y: 5000 }, layout, 900, 600);
+		assert.deepStrictEqual([other.x, other.y], [80 - 500, 520]);
+		assert.deepStrictEqual(regionMap.clampPan({ k: 1, x: 10, y: 20 }, layout, 900, 600), { k: 1, x: 10, y: 20 });
+	});
+	it('shortens long hole names in the pill', function() {
+		assert.strictEqual(regionMap.pillText('B2'), 'B2');
+		assert.strictEqual(regionMap.pillText('DRIFTERX'), 'DRIFTE');
+		assert.strictEqual(regionMap.pillText(null), '');
+	});
+});
+
 describe('regionMap overlays', function() {
 	const layout = regionMap.normaliseRegion(raw);
 

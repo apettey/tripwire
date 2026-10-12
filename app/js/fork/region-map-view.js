@@ -37,7 +37,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		/** Activity of the universe (jumps, kills in the last hour): the chain map's copy if it has one, else the same two
 		public ESI calls the chain map makes, at most once an hour (ESI's own cache time) */
 		function ensureActivity() {
-			if (activityNow() && (!state.activity || Date.now() - state.activityAt < HOUR_MS)) { return; }
+			const own = chain.data && chain.data.activity;
+			if (own && Object.keys(own).length > 1) { return; }	// the chain map already has it
+			if (state.activity && Date.now() - state.activityAt < HOUR_MS) { return; }
 			if (state.activityBusy || Date.now() - state.activityFailedAt < 60000 || !tripwire.esi || !tripwire.esi.universeJumps) { return; }
 			state.activityBusy = true;
 			const data = {};
@@ -78,6 +80,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 		function $svg() { return $("#" + DIALOG_ID + " .rm-svg"); }
 		function applyTransform() {
+			if (state.layout && state.view.w > 1) { state.t = rm.clampPan(state.t, state.layout, state.view.w, state.view.h); }
 			const t = state.t;
 			if (state.layers.world) { state.layers.world.setAttribute("transform", "translate(" + t.x.toFixed(1) + " " + t.y.toFixed(1) + ") scale(" + t.k.toFixed(4) + ")"); }
 		}
@@ -221,7 +224,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			ctx.exits.forEach(function(x) {
 				const s = layout.byId[x.systemID];
 				outline(L.tags, s, "rm-exit", 3);
-				const pill = x.hole || "exit", w = Math.max(24, pill.length * 8 + 12);
+				const pill = rm.pillText(x.hole) || "exit", w = Math.max(24, pill.length * 8 + 12);
 				const g = el("g", { "class": "rm-pill", transform: "translate(" + (s.x + rm.BOX_W / 2 - w).toFixed(1) + " " + (s.y - rm.BOX_H / 2 - 17).toFixed(1) + ")" }, L.tags);
 				el("rect", { width: w, height: 15, rx: 7 }, g);
 				el("text", { x: w / 2, y: 11, "text-anchor": "middle" }, g, pill);
@@ -294,7 +297,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 			$card.removeClass("hidden").html(
 				"<div class='rm-card-head'><b>" + e(sys.name) + "</b> <span class='rm-sec' style='color:" + rm.secColour(sys.security) + "'>" + rm.secText(sys.security) + "</span>"
-				+ "<i class='rm-card-close' title='Close'>&times;</i></div>" + lines.join("")
+				+ "<button class='rm-card-close' title='Close' aria-label='Close'>&times;</button></div>" + lines.join("")
 				+ "<div class='rm-card-buttons'><button class='rm-dest' title='Set as the in-game destination (clears other waypoints)'>Set destination</button> "
 				+ "<button class='rm-route-btn' title='Send the gate route to the in-game autopilot'>Set route in game</button> "
 				+ "<button class='rm-view' title='Open this system in Tripwire'>View in Tripwire</button></div>"
@@ -400,6 +403,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				measure();
 				if (systemID && layout.byId[systemID]) { centreOnSystem(systemID, Math.max(1, rm.fit(layout, state.view.w, state.view.h).k)); } else { fitView(); }
 			}).fail(function() {
+				if (state.loading !== token) { return; }
+				$("#" + DIALOG_ID + " .rm-region").val(String(state.regionID));
 				notify("Region map: could not load the map of " + rm.escape(regionName(regionID)) + ".", "red", 6000);
 			});
 		}
@@ -496,7 +501,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$d.on("wheel", ".rm-svg", function(e) {
 				e.preventDefault();
 				const rect = this.getBoundingClientRect(), oe = e.originalEvent;
-				state.t = rm.zoomAt(state.t, oe.clientX - rect.left, oe.clientY - rect.top, Math.exp(-oe.deltaY * 0.0016));
+				state.t = rm.zoomAt(state.t, oe.clientX - rect.left, oe.clientY - rect.top, rm.wheelFactor(oe.deltaY, oe.deltaMode));
 				applyTransform();
 			});
 		}
@@ -520,7 +525,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<select class='rm-heat' title='Last hour, from the data Tripwire already loads'>" + Object.keys(rm.HEAT).map(function(k) {
 					return "<option value='" + k + "'>" + (k === "none" ? "Heat: off" : "Heat: " + rm.HEAT[k].label) + "</option>";
 				}).join("") + "</select> "
-				+ "<span class='rm-view-buttons'><button class='rm-zoom-out' title='Zoom out'>&minus;</button><button class='rm-zoom-in' title='Zoom in'>+</button><button class='rm-fit' title='Fit the whole region'>Fit</button></span>"
+				+ "<span class='rm-view-buttons'><button class='rm-zoom-out' title='Zoom out' aria-label='Zoom out'>&minus;</button><button class='rm-zoom-in' title='Zoom in' aria-label='Zoom in'>+</button><button class='rm-fit' title='Fit the whole region' aria-label='Fit the whole region'>Fit</button></span>"
 				+ "</div>"
 				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-card hidden'></div>"
 				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"

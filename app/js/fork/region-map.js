@@ -162,6 +162,21 @@ const regionMap = {
 		return { k: z, x: viewW / 2 - px * z, y: viewH / 2 - py * z };
 	},
 
+	/** Zoom factor of one wheel event: deltaMode 0 = pixels, 1 = lines (Firefox mice, x16), 2 = pages (x400); one event never
+	zooms by more than about 1.6x either way */
+	wheelFactor: function(deltaY, deltaMode) {
+		const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? 400 : 1;
+		const d = Math.max(-300, Math.min(300, (Number(deltaY) || 0) * unit));
+		return Math.exp(-d * 0.0016);
+	},
+
+	/** Keep at least `margin` px of the map in view when panning: t = {k, x, y}, layout {w, h} */
+	clampPan: function(t, layout, viewW, viewH, margin) {
+		const m = margin === undefined ? 80 : margin;
+		const clamp = function(v, size, view) { return Math.min(view - m, Math.max(m - size, v)); };
+		return { k: t.k, x: clamp(t.x, layout.w * t.k, viewW), y: clamp(t.y, layout.h * t.k, viewH) };
+	},
+
 	/** Zoom by a factor keeping the map point under screen point (sx, sy) where it is */
 	zoomAt: function(t, sx, sy, factor) {
 		const k = regionMap.clampZoom(t.k * factor), r = k / t.k;
@@ -198,6 +213,9 @@ const regionMap = {
 		const m = /^[A-Za-z0-9]+/.exec(String(name === undefined || name === null ? "" : name).trim());
 		return m ? m[0].toUpperCase() : "";
 	},
+
+	/** The hole name as shown in the pill on the map: at most 6 characters (the full name goes in the tooltip) */
+	pillText: function(hole) { return String(hole || "").substring(0, 6); },
 
 	/** Chain exits that lie in this region. exitIDs: chain.data.exits (strings or numbers); chainSystems:
 	chain.data.systemsInChainMap (row.pathHome ends with the exit's own node, whose name is the hole's name).

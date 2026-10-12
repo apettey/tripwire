@@ -41,7 +41,9 @@ mask-defaults allow-list (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.i
 - Overlays are drawn from data Tripwire already has: `chain.data.exits` / `systemsInChainMap` (exits and hole names),
   `chain.data.occupied` (pilots; the active character as "you"), `rally.state` (Fight here), the chain map's own
   `chain.data.activity` (last-hour jumps/kills from the public ESI calls the chain map already makes; if it has none,
-  the same two calls `tripwire.esi.universeJumps/universeKills`, at most once an hour). No new third-party host.
+  the same two calls `tripwire.esi.universeJumps/universeKills`, at most once an hour, and only while a heat overlay is
+  on or a system is selected so the card shows its "Last hour" line; never when the chain map already has the data).
+  No new third-party host.
   Routes use `guidance.findShortestPath` on `tripwire.map.shortest`, so the route preference and avoid list from
   Settings apply: from where you are (k-space), else from the nearest chain exit; the card also shows the jumps from
   the nearest exit.

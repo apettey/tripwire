@@ -55,8 +55,8 @@
 .dialog-regionMap .rm-card.hidden { display: none; }
 .dialog-regionMap .rm-card-head { font-size: 15px; color: #fff; margin-bottom: 2px; }
 .dialog-regionMap .rm-card-head .rm-sec { font-weight: bold; margin-left: 4px; }
-.dialog-regionMap .rm-card-close { float: right; cursor: pointer; color: #999; font-style: normal; font-size: 18px; line-height: 14px; }
-.dialog-regionMap .rm-card-close:hover { color: #fff; }
+.dialog-regionMap .rm-card .rm-card-close { float: right; cursor: pointer; color: #999; background: none; border: 0; padding: 0 2px; font-size: 18px; line-height: 14px; }
+.dialog-regionMap .rm-card .rm-card-close:hover { color: #fff; background: none; }
 .dialog-regionMap .rm-card-sub { color: #8aa; margin-bottom: 4px; }
 .dialog-regionMap .rm-card-row { margin: 2px 0; }
 .dialog-regionMap .rm-muted { color: #888; }
