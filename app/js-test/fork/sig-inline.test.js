@@ -207,3 +207,80 @@ describe('Inline life / mass edits', () => {
 		});
 	});
 });
+
+describe('Signature table keyboard navigation', () => {
+	const base = { key: '', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, targetEditable: false, focusOk: true, dialogOpen: false, selectedCount: 1, popoverField: null };
+	const act = (extra) => sigInline.keyAction(Object.assign({}, base, extra));
+	it('up and down move the selection when exactly one row is selected', () => {
+		assert.deepEqual(act({ key: 'ArrowUp' }), { type: 'nav', delta: -1 });
+		assert.deepEqual(act({ key: 'ArrowDown' }), { type: 'nav', delta: 1 });
+	});
+	it('Enter edits the selected row', () => {
+		assert.deepEqual(act({ key: 'Enter' }), { type: 'edit' });
+	});
+	it('nothing when no row or several rows are selected (the page scrolls as usual)', () => {
+		['ArrowUp', 'ArrowDown', 'Enter'].forEach(key => {
+			assert.equal(act({ key: key, selectedCount: 0 }), null);
+			assert.equal(act({ key: key, selectedCount: 2 }), null);
+		});
+	});
+	it('nothing in a text box, over a dialog, or with a modifier', () => {
+		['ArrowUp', 'ArrowDown', 'Enter'].forEach(key => {
+			assert.equal(act({ key: key, targetEditable: true }), null);
+			assert.equal(act({ key: key, dialogOpen: true }), null);
+			assert.equal(act({ key: key, ctrlKey: true }), null);
+			assert.equal(act({ key: key, metaKey: true }), null);
+			assert.equal(act({ key: key, altKey: true }), null);
+			assert.equal(act({ key: key, shiftKey: true }), null);
+		});
+	});
+	it('a held arrow keeps moving the selection; a held Enter does not edit again', () => {
+		assert.deepEqual(act({ key: 'ArrowDown', repeat: true }), { type: 'nav', delta: 1 });
+		assert.deepEqual(act({ key: 'ArrowUp', repeat: true }), { type: 'nav', delta: -1 });
+		assert.equal(act({ key: 'Enter', repeat: true }), null);
+		assert.equal(act({ key: 'l', repeat: true }), null);
+		assert.equal(act({ key: 'ArrowDown', repeat: true, popoverField: 'life' }), null);
+	});
+	it('nothing unless the focus is on the page or plainly in the signature widget', () => {
+		['ArrowUp', 'ArrowDown', 'Enter'].forEach(key => assert.equal(act({ key: key, focusOk: false }), null));
+		assert.deepEqual(act({ key: 'l', focusOk: false }), { type: 'open', field: 'life' });	// L / M keep their own rules
+	});
+	describe('focusOk', () => {
+		const doc = { body: {}, documentElement: {} };
+		const el = (o) => Object.assign({ ownerDocument: Object.assign({ defaultView: { getComputedStyle: () => ({ overflowY: 'visible' }) } }, doc), closest: (s) => (o.inWidget && s === '#signaturesWidget' ? {} : (o.closest && o.closest[s]) || null), matches: () => !!o.interactive, scrollHeight: 10, clientHeight: 10 }, o.props || {});
+		it('the body and nothing focused are fine', () => {
+			assert.equal(sigInline.focusOk(null), true);
+			const body = { ownerDocument: doc };
+			doc.body = body;
+			assert.equal(sigInline.focusOk(body), true);
+		});
+		it('a plain element inside the widget is fine, outside it is not', () => {
+			assert.equal(sigInline.focusOk(el({ inWidget: true })), true);
+			assert.equal(sigInline.focusOk(el({ inWidget: false })), false);
+		});
+		it('a button, tab, [tabindex] or [role] widget inside the widget is not', () => {
+			assert.equal(sigInline.focusOk(el({ inWidget: true, interactive: true })), false);
+		});
+		it('inside details or a tab is not', () => {
+			assert.equal(sigInline.focusOk(el({ inWidget: true, closest: { 'details, [role=\'tab\'], [role=\'tablist\'], [role=\'dialog\']': {} } })), false);
+		});
+		it('a scrollable panel is not', () => {
+			const e = el({ inWidget: true, props: { scrollHeight: 100, clientHeight: 20 } });
+			e.ownerDocument.defaultView.getComputedStyle = () => ({ overflowY: 'auto' });
+			assert.equal(sigInline.focusOk(e), false);
+		});
+	});
+	it('L and M still open the popover; inside it the arrows move the chips and Enter is not taken', () => {
+		assert.deepEqual(act({ key: 'l' }), { type: 'open', field: 'life' });
+		assert.deepEqual(act({ key: 'ArrowDown', popoverField: 'life' }), { type: 'move', delta: 1 });
+		assert.equal(act({ key: 'Enter', popoverField: 'life' }), null);
+	});
+	it('neighbour: stops at the first and last row', () => {
+		assert.equal(sigInline.neighbour(2, 1, 5), 3);
+		assert.equal(sigInline.neighbour(2, -1, 5), 1);
+		assert.equal(sigInline.neighbour(0, -1, 5), 0);
+		assert.equal(sigInline.neighbour(4, 1, 5), 4);
+		assert.equal(sigInline.neighbour(-1, 1, 5), -1);	// nothing selected
+		assert.equal(sigInline.neighbour(0, 1, 0), -1);
+	});
+});

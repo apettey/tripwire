@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 94,
+      "date": "2026-10-12",
+      "title": "Palette actions and arrow keys in the signature list",
+      "description": "In the Ctrl+K palette, press the right arrow on a system or signature to see what you can do with it: go there, fight there, mark the hole into it as rolling, set its life or mass. In the signature list, select a row and use the up and down arrows to move between rows and Enter to edit one. The palette also reads better with a screen reader, and 'Clear palette history' forgets your recent picks. The arrow keys follow Settings > Signatures > Edit life and mass in place; the palette follows Settings > General > Command palette.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-94-palette-actions.png",
+          "caption": "Press → on a result to see its actions"
+        }
+      ]
+    },
+    {
       "pr": 93,
       "date": "2026-10-12",
       "title": "Palette commands with arguments",

@@ -84,9 +84,12 @@ const sigInline = {
 	selectedCount, popoverField (null = closed)}. Returns {type: "open", field} | {type: "pick", value} |
 	{type: "move", delta} | {type: "close"} | null (leave the key alone). */
 	keyAction: function(s) {
-		if (s.ctrlKey || s.metaKey || s.altKey || s.repeat) { return null; }
+		if (s.ctrlKey || s.metaKey || s.altKey) { return null; }
 		const key = String(s.key || "").toLowerCase();
+		// Held arrow keys keep moving the selection (and keep the page from scrolling); every other key acts once per press
+		if (s.repeat && !(key === "arrowup" || key === "arrowdown") ) { return null; }
 		if (s.popoverField) {
+			if (s.repeat) { return null; }
 			if (s.targetEditable) { return null; }
 			if (key === "tab") { return { type: "close" }; }
 			if (key === "escape") { return { type: "close" }; }
@@ -99,7 +102,31 @@ const sigInline = {
 		}
 		if (s.shiftKey || s.targetEditable || s.dialogOpen || s.selectedCount !== 1) { return null; }
 		const field = sigInline.KEY_FIELD[key];
-		return field ? { type: "open", field: field } : null;
+		if (field) { return { type: "open", field: field }; }
+		// Keyboard walk through the signature table: with one row selected, up/down move it and Enter edits it
+		// (only when the focus is on the page itself or plainly inside the signature widget, see focusOk)
+		if (!s.focusOk) { return null; }
+		if (key === "arrowup") { return { type: "nav", delta: -1 }; }
+		if (key === "arrowdown") { return { type: "nav", delta: 1 }; }
+		if (key === "enter") { return { type: "edit" }; }
+		return null;
+	},
+
+	/** Whether the focused element lets the table keys act: the page body, or a plain element inside the signature widget.
+	Never a button, link, tab, summary, form control, [tabindex] / [role] widget, details or scrollable panel (they use those keys). */
+	focusOk: function(el) {
+		const doc = el && el.ownerDocument;
+		if (!el || (doc && (el === doc.body || el === doc.documentElement))) { return true; }
+		if (!el.closest || !el.closest("#signaturesWidget")) { return false; }
+		if (el.matches && el.matches("button, a, summary, select, input, textarea, [tabindex], [role], [contenteditable]")) { return false; }
+		if (el.closest("details, [role='tab'], [role='tablist'], [role='dialog']")) { return false; }
+		return !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test((el.ownerDocument.defaultView.getComputedStyle(el) || {}).overflowY || ""));
+	},
+
+	/** Index of the row to select after moving from `index` by `delta` in a table of `count` rows (stops at the ends), or -1 */
+	neighbour: function(index, delta, count) {
+		if (!(count > 0) || index < 0 || index >= count) { return -1; }
+		return Math.max(0, Math.min(count - 1, index + delta));
 	},
 
 	/** Ids to re-select after a refresh: those of `keep.ids` that were newly inserted as rows (addedIds), while the
@@ -344,10 +371,18 @@ const sigInline = {
 			targetEditable: sigInline.targetEditable(e.target),
 			dialogOpen: $(".ui-dialog:visible").length > 0,
 			selectedCount: document.querySelectorAll("#sigTable tbody tr.selected").length,
-			popoverField: p ? p.field : null
+			popoverField: p ? p.field : null,
+			focusOk: sigInline.focusOk(document.activeElement)
 		});
 		if (!action) { return; }
-		if (action.type === "open") {
+		if (action.type === "nav") {
+			sigInline.moveSelection(action.delta);
+		} else if (action.type === "edit") {
+			const $edit = $("#edit-signature");
+			const selected = document.querySelector("#sigTable tbody tr.selected");
+			if ($edit.hasClass("disabled") || !selected || selected.querySelector(".sig-inline-saving")) { return; }	// disabled, or a life / mass save is still in flight
+			$edit.trigger("click");
+		} else if (action.type === "open") {
 			const row = document.querySelector("#sigTable tbody tr.selected");
 			const cell = row && row.children[sigInline.FIELDS[action.field].column - 1];
 			if (!cell || !sigInline.open(cell)) { return; }
@@ -360,6 +395,17 @@ const sigInline = {
 		}
 		e.preventDefault();
 		e.stopPropagation();
+	},
+
+	/** Select the row above / below the selected one (the page does not scroll); stays on the first / last row */
+	moveSelection: function(delta) {
+		const rows = Array.prototype.slice.call(document.querySelectorAll("#sigTable tbody tr"));
+		const current = document.querySelector("#sigTable tbody tr.selected");
+		const to = sigInline.neighbour(rows.indexOf(current), delta, rows.length);
+		if (to < 0 || rows[to] === current) { return; }
+		$(current).removeClass("selected");
+		$(rows[to]).addClass("selected");
+		if (rows[to].scrollIntoView) { rows[to].scrollIntoView({ block: "nearest" }); }
 	},
 
 	onCellClick: function(e) {
@@ -377,7 +423,7 @@ const sigInline = {
 		// Settings > Signatures row; takes effect on Save (Reset = on)
 		forkSettings.register({
 			section: "signatures", order: 45, id: "sigInline-enabled", type: "checkbox", key: "sigInline",
-			label: "Edit life and mass in place:", text: "Click the Life or Mass cell, or press L / M on a selected row",
+			label: "Edit life and mass in place:", text: "Click the Life or Mass cell, or press L / M on a selected row; up / down move the selection, Enter edits the row",
 			get: function(o) { return sigInline.enabled(o); },
 			set: function(o, on) { o.sigInline = { enabled: on }; }
 		});
