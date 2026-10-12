@@ -36,8 +36,8 @@ fix/simplification of an existing action.
   second button is now "Set destination for..." (picks characters).
 - Removed the waypoint machinery: `MAX_WAYPOINTS`, `reach`, `waypoints`, `limit`, `sendAll`, `partialText`,
   `characterProgressText` and the per-waypoint progress toast. New pure helper `destination(path, systems)`.
-- Tooltips reworded in `thera-route.js` (`legTitle`), `skyhooks-panel.js`, `loot-buyers.js` and `region-map-view.js`; ESI 401/403 text no longer mentions waypoints
-  ("as your in-game destination").
+- Tooltips reworded in `thera-route.js` (`legTitle`), `skyhooks-panel.js`, `loot-buyers.js` and `region-map-view.js`
+  ("as your in-game destination"); the ESI 401/403 text no longer mentions waypoints.
 - `app/js/fork/jump-planner.js`: passes `{noJumps: true}` to `autopilotRoute.push`.
 - Tests: `app/js-test/fork/autopilot-route.test.js` (waypoint tests replaced by destination / one-call-per-character
   / summary tests), `app/js-test/fork/thera-route.test.js` (leg titles).
