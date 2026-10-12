@@ -1,0 +1,86 @@
+/* "Which signature did you jump through?" panel (fork-owned, see app/js/fork/jump-sig-prompt.js).
+   Small, non-modal, top right under the top bar (below the return bookmark panel when both are open). */
+#jump-sig-panel {
+	position: fixed;
+	top: calc(50px + var(--jump-return-height, 0px));
+	right: 12px;
+	z-index: 8990;
+	box-sizing: border-box;
+	width: 300px;
+	max-width: calc(100vw - 24px);
+	padding: 4px 6px 6px;
+	background: rgba(22, 24, 30, 0.95);
+	border: 1px solid #5B9BD5;
+	border-radius: 4px;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+	color: #E6EEF7;
+	font-size: 11px;
+	line-height: 16px;
+	animation: jump-sig-in 0.25s ease-out;
+}
+
+body.jump-return-open #jump-sig-panel { top: calc(50px + var(--jump-return-height, 26px) + 6px); }
+
+@keyframes jump-sig-in {
+	from { opacity: 0; transform: translateY(-6px); }
+	to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#jump-sig-panel { animation: none; }
+}
+
+#jump-sig-panel:focus { outline: none; }
+
+#jump-sig-panel .jump-sig-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+#jump-sig-panel .jump-sig-title { flex: 1; font-weight: bold; color: #FFFFFF; }
+#jump-sig-panel .jump-sig-route { order: 3; flex-basis: 100%; color: #9FB4CC; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#jump-sig-panel .jump-sig-close {
+	padding: 0 3px;
+	background: transparent;
+	border: none;
+	color: #9FB4CC;
+	font-size: 12px;
+	line-height: 16px;
+	cursor: pointer;
+}
+#jump-sig-panel .jump-sig-close:hover,
+#jump-sig-panel .jump-sig-close:focus { color: #FFFFFF; }
+
+#jump-sig-panel .jump-sig-list { margin: 4px 0; max-height: 150px; overflow-y: auto; }
+#jump-sig-panel .jump-sig-none { color: #9FB4CC; padding: 2px 0; }
+
+#jump-sig-panel .jump-sig-row {
+	display: block;
+	width: 100%;
+	margin: 0 0 2px;
+	padding: 2px 8px;
+	text-align: left;
+	background: #1D3550;
+	border: 1px solid #3D6A9B;
+	border-radius: 3px;
+	color: #FFFFFF;
+	font-size: 11px;
+	cursor: pointer;
+}
+#jump-sig-panel .jump-sig-row:hover,
+#jump-sig-panel .jump-sig-row:focus { background: #2A4C74; outline: 1px solid #7FB5EA; outline-offset: 1px; }
+
+#jump-sig-panel .jump-sig-foot { display: flex; justify-content: flex-end; gap: 6px; }
+#jump-sig-panel .jump-sig-foot button {
+	padding: 1px 10px;
+	background: #2a2a2a;
+	border: 1px solid #555;
+	border-radius: 3px;
+	color: #E6EEF7;
+	font-size: 11px;
+	cursor: pointer;
+}
+#jump-sig-panel .jump-sig-foot button:hover,
+#jump-sig-panel .jump-sig-foot button:focus { background: #3a3a3a; outline: 1px solid #7FB5EA; }
+
+/* jBox notices (e.g. the jump mass prompt) share the top-right corner: move them below the panel while it is open
+   (same approach as the return bookmark panel; with both open they sit below both). */
+body.jump-sig-open .jBox-wrapper.jBox-Notice { translate: 0 calc(var(--jump-sig-height, 100px) + 8px); }
+body.jump-sig-open.jump-return-open .jBox-wrapper.jBox-Notice { translate: 0 calc(var(--jump-return-height, 26px) + var(--jump-sig-height, 100px) + 14px); }

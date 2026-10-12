@@ -7,8 +7,8 @@
 //				the session's mask reads them; only the mask's owner and the owning corporation's Tripwire admins
 //				change them (Mask Admin > Bookmark names). The mask is always the session's: no request value names a mask.
 //
-//				GET  ?mode=get   -> {templates:{hole,back}, defaults, canEdit, updatedBy, updatedAt, mask, csrf (editors only)}
-//				POST JSON {mode, ...} -> save {hole, back}, reset
+//				GET  ?mode=get   -> {templates:{hole,back}, jumpPrompt, defaults, canEdit, updatedBy, updatedAt, mask, csrf (editors only)}
+//				POST JSON {mode, ...} -> save {hole, back, jumpPrompt? (off | nomatch | always)}, reset
 //				POSTs need the X-CSRF-Token header (token from mode=get, per session), X-Requested-With: XMLHttpRequest,
 //				Content-Type: application/json and, if the browser sends Origin, this host.
 //***********************************************************
@@ -71,9 +71,9 @@ try {
 			list($clean, $errors) = bookmark_validate_input($input);
 			if ($errors) bookmark_fail(400, implode('; ', $errors), $errors);
 			bookmark_save($mysql, $mask, $clean, $actor['name']);
-			$detail = 'hole ' . $clean['hole'] . ' / return ' . $clean['back'];
+			$detail = 'hole ' . $clean['hole'] . ' / return ' . $clean['back'] . (isset($clean['jumpPrompt']) ? ' / jump prompt ' . $clean['jumpPrompt'] : '');
 		} else {
-			bookmark_reset($mysql, $mask);
+			bookmark_reset($mysql, $mask, $actor['name']);   // the jump prompt mode is kept
 			$detail = 'built-in names';
 		}
 		try {   // shows in Mask Admin > Admins & members > Recent changes; the change itself already succeeded
@@ -87,14 +87,14 @@ try {
 	}
 
 	try {
-		list($templates, $by, $at) = bookmark_load($mysql, $mask);
+		list($templates, $by, $at, $jumpPrompt) = bookmark_load($mysql, $mask);
 	} catch (PDOException $e) {
 		if ($e->getCode() !== '42S02') throw $e;
 		bookmark_ensure_schema($mysql);   // tables are created on first use
-		list($templates, $by, $at) = bookmark_load($mysql, $mask);
+		list($templates, $by, $at, $jumpPrompt) = bookmark_load($mysql, $mask);
 	}
 	$output = array(
-		'templates' => $templates, 'defaults' => bookmark_defaults(), 'canEdit' => $canEdit,
+		'templates' => $templates, 'jumpPrompt' => $jumpPrompt, 'defaults' => bookmark_defaults(), 'canEdit' => $canEdit,
 		'updatedBy' => $by, 'updatedAt' => $at, 'mask' => $mask,
 	);
 	if ($method === 'POST') $output['result'] = true;

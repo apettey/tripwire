@@ -55,6 +55,17 @@ check('input trimmed', $clean, ['hole' => '={name}', 'back' => '!{name}']);
 list($clean, $errors) = bookmark_validate_input(['hole' => '={name}', 'back' => '{name}']);
 check('input error per template', [$clean, array_keys($errors)], [null, ['back']]);
 
+foreach (['off', 'nomatch', 'always'] as $m) {
+    list($clean, $errors) = bookmark_validate_input(['hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => $m]);
+    check("jump prompt $m", $clean['jumpPrompt'] ?? null, $m);
+}
+foreach (['sometimes', '', null, 1, ['always']] as $bad) {
+    list($clean, $errors) = bookmark_validate_input(['hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => $bad]);
+    check('bad jump prompt ' . json_encode($bad), [$clean, array_keys($errors)], [null, ['jumpPrompt']]);
+}
+list($clean, $errors) = bookmark_validate_input(['hole' => '={name}', 'back' => '!{name}']);
+check('jump prompt left out stays out', array_key_exists('jumpPrompt', $clean), false);
+
 // ---- 2. endpoint ----
 function http($method, $path, $jar, $body = null, array $headers = []) {
     global $base;
@@ -102,6 +113,7 @@ $db->prepare('UPDATE characters SET admin = 0 WHERE characterID = ?')->execute([
 [$status, $out] = http('GET', 'bookmark_template.php?mode=get', $jar);
 check('member GET status', $status, 200);
 check('member reads the defaults', $out['templates'], bookmark_defaults());
+check('member reads the default jump prompt mode', $out['jumpPrompt'], 'nomatch');
 check('member cannot edit', [$out['canEdit'], isset($out['csrf'])], [false, false]);
 [$status, $out] = post($jar, 'x', ['mode' => 'save', 'hole' => '={name}', 'back' => '!{name}']);
 check('member POST refused', $status, 403);
@@ -162,8 +174,28 @@ try {
     check('audit trail table', $e->getMessage(), '');
 }
 
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => 'always']);
+check('save with the jump prompt mode', [$status, $out['jumpPrompt'] ?? null], [200, 'always']);
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name} {sig}', 'back' => '!{name}']);
+check('saving without the mode keeps it', [$status, $out['jumpPrompt'] ?? null], [200, 'always']);
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => 'sometimes']);
+check('bad jump prompt mode', [$status, array_keys($out['errors'] ?? [])], [400, ['jumpPrompt']]);
+[$status, $out] = http('GET', 'bookmark_template.php?mode=get', $jar);
+check('a refused save changed nothing', [$out['jumpPrompt'], $out['templates']['hole']], ['always', '={name} {sig}']);
+$db->prepare('UPDATE fork_bookmark_templates SET `data` = ? WHERE maskID = ?')->execute([json_encode(['hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => 'bogus']), $mask]);
+[$status, $out] = http('GET', 'bookmark_template.php?mode=get', $jar);
+check('a bad stored mode is the default', $out['jumpPrompt'], 'nomatch');
+$db->prepare('UPDATE characters SET admin = 0 WHERE characterID = ?')->execute([$me['characterID']]);
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => 'off']);
+check('a member cannot change the jump prompt mode', $status, 403);
+$db->prepare('UPDATE characters SET admin = 1 WHERE characterID = ?')->execute([$me['characterID']]);
+
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name} {type}', 'back' => '!{name}', 'jumpPrompt' => 'always']);
 [$status, $out] = post($jar, $csrf, ['mode' => 'reset']);
-check('reset', [$status, $out['templates'] ?? null, $out['updatedBy'] ?? null], [200, bookmark_defaults(), '']);
+check('reset keeps the jump prompt mode', [$status, $out['templates'] ?? null, $out['jumpPrompt'] ?? null], [200, bookmark_defaults(), 'always']);
+[$status, $out] = post($jar, $csrf, ['mode' => 'save', 'hole' => '={name}', 'back' => '!{name}', 'jumpPrompt' => 'nomatch']);
+[$status, $out] = post($jar, $csrf, ['mode' => 'reset']);
+check('reset with the default mode removes the row', [$status, $out['templates'] ?? null, $out['jumpPrompt'] ?? null, $out['updatedBy'] ?? null], [200, bookmark_defaults(), 'nomatch', '']);
 
 echo ($failures ? "FAILED $failures of $count\n" : "OK: $count checks\n");
 exit($failures ? 1 : 0);
