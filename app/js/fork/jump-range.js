@@ -27,6 +27,20 @@ const jumpRange = {
 	//   level) and stored in ships.json by jumprange/tools/generate-coords.js. Formula:
 	//   https://wiki.eveuniversity.org/Jump_drives (section on fuel). The source gives no rounding rule: the
 	//   total of each jump is rounded up to whole units (assumed, so the estimate is never short).
+	// - Incursions (checked 2026-10-12): a Sansha incursion puts a system-wide cynosural field jammer on the affected
+	//   constellation's systems ("System-wide cynosural field jammers are in effect"); it stops normal cynos, not
+	//   covert ones ("does not stop you from lighting a covert cynosural field"), and has no effect in high-sec.
+	//   https://wiki.eveuniversity.org/Incursions . ESI /incursions/ lists the systems as infested_solar_systems.
+	// - Jump fatigue (checked 2026-10-12, https://wiki.eveuniversity.org/Jump_fatigue): with D = the light-years just
+	//   jumped after the ship's reduction, and F the fatigue before the jump (minutes):
+	//     new fatigue          = min(300, max(10 x (1 + D), F x (1 + D)))       cap 5 hours
+	//     jump activation wait = min(30, max(1 + D, F / 10))                    cap 30 minutes, uses F BEFORE this jump
+	//   Fatigue also "decays in real time, whether logged in or not" (1 minute per minute), so a route that waits out each
+	//   cooldown has F - wait left before its next jump.
+	//   (the wiki: the cooldown is "one tenth of the pilot's Jump Fatigue value (before the jump fatigue is recalculated
+	//   for this jump)"). Reductions of the distance: 90% for Jump Freighters and Capital Industrial Ships (Rorqual) and
+	//   75% for Black Ops battleships; none for carriers, dreadnoughts, FAX, supers, titans and Lancers. CCP's
+	//   change that introduced it: https://www.eveonline.com/news/view/phoebe-travel-change-update
 	LY_M: 9.4607e15,
 	SCALE: 1000,				// systems.json stores positions in 0.001 LY
 	JDC_STEP: 0.2,
@@ -110,7 +124,8 @@ const jumpRange = {
 	 * @param systemID the system's id
 	 * @param sys appData.systems entry ({security, regionID, factionID, class})
 	 * @param opts {lowsec (default true), nullsec (default true), jammed: {systemID: truthy} (cyno-jammed),
-	 *        covert: the ship can use covert cynos, which work in jammed systems}
+	 *        covert: the ship can use covert cynos, which work in jammed systems,
+	 *        avoidIncursions + incursion: {systemID: truthy}: systems in a Sansha incursion are jammed too (see "Game rules")}
 	 */
 	isValidCynoTarget: function(systemID, sys, opts) {
 		const o = opts || {};
@@ -118,7 +133,9 @@ const jumpRange = {
 		if (kind === "ls") { if (o.lowsec === false) { return false; } }
 		else if (kind === "ns") { if (o.nullsec === false) { return false; } }
 		else { return false; }
-		return !(o.jammed && o.jammed[systemID] && !o.covert);
+		if (o.jammed && o.jammed[systemID] && !o.covert) { return false; }
+		// An incursion's cyno jammer: not for normal cynos (covert still works), only when asked to avoid them
+		return !(o.avoidIncursions && o.incursion && o.incursion[systemID] && !o.covert);
 	},
 
 	/** Whether a jump drive can be used in a system: any k-space incl. high-sec and Pochven; not Zarzakh or W-space */
@@ -210,8 +227,10 @@ const jumpRange = {
 
 	/**
 	 * How a jump ship gets from origin to dest with at most maxJumps (1 or 2) jumps.
+	 * @param opts see isValidCynoTarget; with scoring data (see isScoring) the midpoints are ranked like routePlan does
 	 * @return {jumps: 0 | 1 | 2 | null (not within maxJumps or not possible), direct: LY, via: [{id, ly1, ly2}]
-	 *   (2 jumps: every midpoint, best first: shortest longer leg, then shortest total), reason (when null)}
+	 *   (2 jumps: every midpoint, best first: shortest longer leg, then shortest total; with scoring data also
+	 *   {station, kills, avoided, cost}, best cost first), reason (when null), cause (reason "target": "jammed" | "incursion" | "target")}
 	 */
 	reach: function(originID, destID, rangeLy, index, systems, opts, maxJumps) {
 		const max = maxJumps === undefined ? 2 : maxJumps;
@@ -222,7 +241,7 @@ const jumpRange = {
 		if (!origin || !dest) { result.reason = "unknown"; return result; }
 		if (Number(originID) === Number(destID)) { result.jumps = 0; return result; }
 		if (!jumpRange.canJumpFrom(originID, systems[originID])) { result.reason = "origin"; return result; }
-		if (!jumpRange.isValidCynoTarget(destID, systems[destID], o)) { result.reason = "target"; return result; }
+		if (!jumpRange.isValidCynoTarget(destID, systems[destID], o)) { result.reason = "target"; result.cause = jumpRange.invalidCause(destID, systems[destID], o); return result; }
 		if (result.direct <= rangeLy) { result.jumps = 1; return result; }
 		if (max < 2 || result.direct > 2 * rangeLy) { result.reason = "range"; return result; }
 		jumpRange.within(index, origin, rangeLy).forEach(function(hit) {
@@ -231,9 +250,17 @@ const jumpRange = {
 			const ly2 = jumpRange.distanceLy(index.pos[hit.id], dest);
 			if (ly2 <= rangeLy) { result.via.push({ id: hit.id, ly1: hit.ly, ly2: ly2 }); }
 		});
-		result.via.sort(function(a, b) {
-			return Math.max(a.ly1, a.ly2) - Math.max(b.ly1, b.ly2) || (a.ly1 + a.ly2) - (b.ly1 + b.ly2) || a.id - b.id;
-		});
+		if (jumpRange.isScoring(o)) {
+			// Scored like routePlan: legs plus the midpoint penalties (stations, kills, avoided systems), then the shorter longer leg
+			result.via.forEach(function(v) { Object.assign(v, jumpRange.midpointFacts(v.id, o)); v.cost = v.ly1 + v.ly2 + jumpRange.midpointPenalty(v.id, o); });
+			result.via.sort(function(a, b) {
+				return a.cost - b.cost || Math.max(a.ly1, a.ly2) - Math.max(b.ly1, b.ly2) || a.id - b.id;
+			});
+		} else {
+			result.via.sort(function(a, b) {
+				return Math.max(a.ly1, a.ly2) - Math.max(b.ly1, b.ly2) || (a.ly1 + a.ly2) - (b.ly1 + b.ly2) || a.id - b.id;
+			});
+		}
 		if (result.via.length) { result.jumps = 2; } else { result.reason = "range"; }
 		return result;
 	},
@@ -509,6 +536,283 @@ const jumpRange = {
 			if (ra) { return a.id - b.id; }
 			return a.jumps - b.jumps || a.total - b.total || a.id - b.id;
 		});
+		return out;
+	},
+
+	// ---- Midpoint scoring (which system to jump to) ----
+	//
+	// Like Dotlan's jump planner (https://evemaps.dotlan.net/jump: "Prefer Station Systems", "Avoid Incursions", avoided
+	// systems, "Select Alternative Jump System"; its blog, post 1490, says routes are weighted by jumps, distance
+	// travelled and distance to the destination, with some midpoints made more or less expensive: preferred ones cheaper,
+	// avoided ones penalised rather than forbidden) and EVE Eye (https://eveeye.readthedocs.io/en/latest/navigation/jump-planning/:
+	// "prefer less midpoints or fuel", "prefer station systems", "alternate midpoint"). Our model:
+	//   cost of a route = sum of its legs in LY + the penalty of each midpoint (the start and the destination are
+	//   fixed and never penalised); the penalty is in LY, so it trades off against distance.
+	// Defaults (LY): a midpoint without an NPC station +3 (so a station or a quiet system wins over a slightly shorter
+	// leg, but not over a clearly shorter one); each kill in the last hour +0.5, at most +5 (ten kills = camped); a
+	// system the user avoids +50 (more than any detour a ship can make, so it is used only when nothing else gets
+	// there, like Dotlan penalising rather than forbidding). In "jumps" mode the penalties never add a jump: fewest
+	// jumps is the first key, the cost only picks among routes with that many.
+	MIDPOINT_WEIGHTS: { noStation: 3, killEach: 0.5, killCap: 5, avoid: 50 },
+	FATIGUE_CAP_MIN: 300,		// jump fatigue: 5 hours
+	COOLDOWN_CAP_MIN: 30,		// jump activation wait: 30 minutes
+	// Distance reduction of jump fatigue by ship group (Jump_fatigue wiki): Black Ops 75%, Jump Freighter and Capital
+	// Industrial Ship (Rorqual) 90%; everything else (carriers, dreadnoughts, FAX, supers, titans, Lancers) 0.
+	FATIGUE_REDUCTION: { 898: 0.75, 902: 0.9, 883: 0.9 },
+
+	/** Fatigue distance reduction (0-0.9) for a ship group id */
+	fatigueReduction: function(groupID) {
+		return jumpRange.FATIGUE_REDUCTION[Number(groupID)] || 0;
+	},
+
+	/**
+	 * Jump fatigue along a route (formulas in "Game rules relied on").
+	 * @param legs LY per jump; reduction 0-1 (fatigueReduction); startFatigue minutes already on the pilot (default 0)
+	 * @return {cooldowns: [minutes to wait after each jump but the last, before the next], waitTotal (their sum),
+	 *   fatigueEnd (minutes of fatigue right after the last jump, i.e. on arrival), cooldownEnd (the wait after the last jump)}
+	 *   The pilot waits out each cooldown before the next jump and fatigue decays 1 minute per minute meanwhile (the wiki's
+	 *   example, 5 LY carrier jumps: 60 -> 54 after a 6 min wait -> 300 (cap) -> 294 after 6 min; third wait 29.4 min).
+	 */
+	fatigue: function(legs, reduction, startFatigue) {
+		const red = Math.max(0, Math.min(1, Number(reduction) || 0));
+		let f = Math.max(0, Number(startFatigue) || 0);
+		const cooldowns = [];
+		let cooldownEnd = 0;
+		(Array.isArray(legs) ? legs : []).forEach(function(ly, i, all) {
+			const d = Math.max(0, Number(ly) || 0) * (1 - red);
+			const wait = Math.min(jumpRange.COOLDOWN_CAP_MIN, Math.max(1 + d, f / 10));		// uses the fatigue before this jump
+			f = Math.min(jumpRange.FATIGUE_CAP_MIN, Math.max(10 * (1 + d), f * (1 + d)));
+			if (i < all.length - 1) {
+				cooldowns.push(wait);
+				f = Math.max(0, f - wait);		// fatigue decays in real time (1 minute per minute), also while waiting out the cooldown
+			} else { cooldownEnd = wait; }
+		});
+		return { cooldowns: cooldowns, waitTotal: cooldowns.reduce(function(a, b) { return a + b; }, 0), fatigueEnd: f, cooldownEnd: cooldownEnd };
+	},
+
+	/** "7 min", "1 h 12 min", "5 h" (minutes rounded up) */
+	formatMinutes: function(minutes) {
+		const m = Math.max(0, Math.ceil(Number(minutes) - 1e-9)) || 0;
+		if (m < 60) { return m + " min"; }
+		return Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+	},
+
+	/** Whether options carry scoring data (stations, kills, avoided systems, incursions, a "prefer" mode) */
+	isScoring: function(o) {
+		return !!o && (o.prefer !== undefined || !!o.stations || !!o.kills || !!o.avoid || !!o.incursion);
+	},
+
+	/** Why a system is not a valid cyno target: "target" (security / switches / not k-space), "jammed" or "incursion" */
+	invalidCause: function(systemID, sys, o) {
+		const opts = o || {};
+		if (!jumpRange.isValidCynoTarget(systemID, sys, Object.assign({}, opts, { jammed: null, avoidIncursions: false }))) { return "target"; }
+		if (opts.jammed && opts.jammed[systemID] && !opts.covert) { return "jammed"; }
+		return "incursion";
+	},
+
+	/**
+	 * What the panel shows about a midpoint: {station (true / false, null when the station data is not there), kills
+	 * (last hour, null when not loaded), avoided}
+	 * @param o {stations: {systemID: count}, kills: {systemID: n}, avoid: {systemID: truthy}}
+	 */
+	midpointFacts: function(id, o) {
+		const opts = o || {};
+		return {
+			station: opts.stations ? Number(opts.stations[id]) > 0 : null,
+			kills: opts.kills ? Number(opts.kills[id]) || 0 : null,
+			avoided: !!(opts.avoid && opts.avoid[id])
+		};
+	},
+
+	/**
+	 * Extra cost of using a system as a midpoint, in LY (see MIDPOINT_WEIGHTS).
+	 * @param o {preferStations + stations, avoidKills + kills, avoid, weights (overrides MIDPOINT_WEIGHTS)}; data that
+	 *   is not there (not loaded, fetch failed) adds nothing
+	 */
+	midpointPenalty: function(id, o) {
+		const opts = o || {};
+		const w = opts.weights ? Object.assign({}, jumpRange.MIDPOINT_WEIGHTS, opts.weights) : jumpRange.MIDPOINT_WEIGHTS;
+		let p = 0;
+		if (opts.preferStations && opts.stations && !(Number(opts.stations[id]) > 0)) { p += w.noStation; }
+		if (opts.avoidKills && opts.kills) { p += Math.min(w.killCap, w.killEach * (Number(opts.kills[id]) || 0)); }
+		if (opts.avoid && opts.avoid[id]) { p += w.avoid; }
+		return p;
+	},
+
+	/**
+	 * A route row from a chain of system ids [start, midpoints..., destination].
+	 * @return {id, jumps, legs, path (midpoints), via (first midpoint or null), total (LY), cost (LY + midpoint penalties),
+	 *   direct, mids: [{id, station, kills, avoided, penalty}], fuel (opts.ship + opts.levels: whole route, null without),
+	 *   legFuel ([per jump]), fatigue (opts.reduction: jumpRange.fatigue of the legs), reason: null}
+	 */
+	describeRoute: function(chain, index, opts) {
+		const o = opts || {};
+		const pos = index.pos;
+		const id = chain[chain.length - 1];
+		const legs = [];
+		for (let i = 1; i < chain.length; i++) { legs.push(jumpRange.distanceLy(pos[chain[i - 1]], pos[chain[i]])); }
+		const path = chain.slice(1, -1);
+		const mids = path.map(function(m) {
+			return Object.assign({ id: m }, jumpRange.midpointFacts(m, o), { penalty: jumpRange.midpointPenalty(m, o) });
+		});
+		const total = legs.reduce(function(sum, ly) { return sum + ly; }, 0);
+		return {
+			id: id, jumps: legs.length, legs: legs, path: path, via: path.length ? path[0] : null, total: total,
+			cost: total + mids.reduce(function(sum, m) { return sum + m.penalty; }, 0),
+			direct: jumpRange.distanceLy(pos[chain[0]], pos[id]), mids: mids,
+			fuel: o.ship && legs.length ? jumpRange.routeFuel(legs, o.ship, o.levels) : null,
+			legFuel: o.ship ? legs.map(function(ly) { return jumpRange.fuelPerJump(ly, o.ship, o.levels); }) : [],
+			fatigue: jumpRange.fatigue(legs, o.reduction), reason: null
+		};
+	},
+
+	/**
+	 * Routes from one start to each of several destinations with at most maxJumps jumps, choosing the midpoints by
+	 * weighted cost (see "Midpoint scoring"). One hop-limited layered search per start: best[k][v] = the least cost of
+	 * reaching v in exactly k jumps, relaxed from every system of layer k-1 (a system can be in several layers; the
+	 * penalty of a midpoint is added when it is left, so the destination and the start are not penalised). A state that
+	 * costs no less than the same system reached in fewer jumps is dropped (every continuation from it is available
+	 * from the earlier one, cheaper), which keeps the layers small. Then per destination:
+	 *   opts.prefer "jumps" (default): fewest jumps, then least cost at that jump count (never adds a jump for a penalty);
+	 *   opts.prefer "fuel": least cost over all jump counts up to maxJumps (an extra midpoint when it saves distance;
+	 *   ties: fewer jumps). Fuel is linear in LY, so the cost stands for it.
+	 * Midpoints and destinations must be valid cyno targets (isValidCynoTarget: low/null-sec switches, jammed,
+	 * incursions), the start must pass canJumpFrom.
+	 * @param opts isValidCynoTarget options, plus prefer, preferStations + stations, avoidKills + kills, avoid, weights,
+	 *   and for the rows: ship + levels (fuel), reduction (fatigue)
+	 * @param maxJumps default 5
+	 * @return rows like routesFrom's, plus describeRoute's fields, reason also "incursion"; reachable first (jumps
+	 *   mode: fewer jumps, then shorter total LY; fuel mode: shorter total LY, then fewer jumps; then id), then the rest by id
+	 */
+	routePlan: function(startID, destIDs, rangeLy, index, systems, opts, maxJumps) {
+		const o = opts || {};
+		const fuelMode = o.prefer === "fuel";
+		const max = maxJumps === undefined ? 5 : Math.max(0, Math.floor(Number(maxJumps)) || 0);
+		const start = Number(startID);
+		const pos = index ? index.pos : {};
+		const sys = systems || {};
+		const valid = {};
+		const isValid = function(id) {
+			if (valid[id] === undefined) { valid[id] = jumpRange.isValidCynoTarget(id, sys[id], o); }
+			return valid[id];
+		};
+		const penalties = {};
+		const penalty = function(id) {
+			if (penalties[id] === undefined) { penalties[id] = jumpRange.midpointPenalty(id, o); }
+			return penalties[id];
+		};
+		const neighbours = {};		// id -> [{id, ly}]: valid targets within range, computed once per system
+		const near = function(u) {
+			if (!neighbours[u]) {
+				neighbours[u] = jumpRange.within(index, pos[u], rangeLy).filter(function(hit) { return hit.id !== u && isValid(hit.id); });
+			}
+			return neighbours[u];
+		};
+		const ids = (destIDs || []).map(Number);
+		const startOk = !!pos[start] && jumpRange.canJumpFrom(start, sys[start]);
+		const want = {};
+		let left = 0;
+		ids.forEach(function(id) {
+			if (id !== start && pos[id] && isValid(id) && !want[id]) { want[id] = true; left++; }
+		});
+		const layers = [{}];		// layers[k][v] = {cost, from}: cost excludes v's own penalty
+		if (startOk && left && max > 0) {
+			layers[0][start] = { cost: 0, from: null };
+			const best = {};		// the least cost any earlier layer reached a system with
+			best[start] = 0;
+			const reached = {};
+			for (let k = 1; k <= max; k++) {
+				const prev = layers[k - 1];
+				const frontier = Object.keys(prev).map(Number).sort(function(a, b) { return a - b; });		// id order: the lowest id wins a tie
+				if (!frontier.length) { break; }
+				const layer = {};
+				frontier.forEach(function(u) {
+					const base = prev[u].cost + (k > 1 ? penalty(u) : 0);
+					near(u).forEach(function(hit) {
+						const v = hit.id;
+						const total = base + hit.ly;
+						if (best[v] !== undefined && total >= best[v] - 1e-9) { return; }		// dominated by an earlier layer
+						const cur = layer[v];
+						if (!cur || total < cur.cost - 1e-9) { layer[v] = { cost: total, from: u }; }
+					});
+				});
+				Object.keys(layer).forEach(function(key) {
+					const v = Number(key);
+					best[v] = layer[v].cost;
+					if (want[v] && !reached[v]) { reached[v] = true; left--; }
+				});
+				layers.push(layer);
+				if (!fuelMode && left <= 0) { break; }		// jumps mode: every wanted system has its fewest-jump route
+			}
+		}
+		const out = ids.map(function(id) {
+			const blank = { id: id, jumps: null, legs: [], path: [], via: null, total: Infinity, cost: Infinity, mids: [], fuel: null, legFuel: [], fatigue: null,
+				direct: jumpRange.distanceLy(pos[start], pos[id]), reason: null };
+			if (!pos[start] || !pos[id]) { blank.reason = "nopos"; return blank; }
+			if (id === start) { return Object.assign(jumpRange.describeRoute([start], index, o), { id: id, jumps: 0, direct: 0 }); }
+			if (!jumpRange.canJumpFrom(start, sys[start])) { blank.reason = "origin"; return blank; }
+			if (!isValid(id)) { blank.reason = jumpRange.invalidCause(id, sys[id], o); return blank; }
+			let kBest = 0;
+			for (let k = 1; k < layers.length; k++) {
+				if (!layers[k][id]) { continue; }
+				if (!kBest) { kBest = k; if (!fuelMode) { break; } }
+				else if (layers[k][id].cost < layers[kBest][id].cost - 1e-9) { kBest = k; }		// a later layer only holds a strictly cheaper state
+			}
+			if (!kBest) { blank.reason = "range"; return blank; }
+			const chain = [id];
+			for (let k = kBest, cur = id; k >= 1; k--) { cur = layers[k][cur].from; chain.unshift(cur); }
+			return jumpRange.describeRoute(chain, index, o);
+		});
+		out.sort(function(a, b) {
+			const ra = a.jumps === null ? 1 : 0, rb = b.jumps === null ? 1 : 0;
+			if (ra !== rb) { return ra - rb; }
+			if (ra) { return a.id - b.id; }
+			return fuelMode ? a.total - b.total || a.jumps - b.jumps || a.id - b.id : a.jumps - b.jumps || a.total - b.total || a.id - b.id;
+		});
+		return out;
+	},
+
+	/**
+	 * A route that starts with chosen jumps (a pinned midpoint): prefix = [start, m1, ..., mk], then the best way on to
+	 * the destination within maxJumps minus the jumps already made. A pin whose systems are not valid cyno targets any more
+	 * (a new incursion, a jam, a switched-off security) is dropped: the planned route comes back with pinDropped: true.
+	 * @return a routePlan row for the destination; jumps null (reason "range" etc.) when the rest cannot get there
+	 */
+	routeVia: function(prefix, destID, rangeLy, index, systems, opts, maxJumps) {
+		const max = maxJumps === undefined ? 5 : Math.max(0, Math.floor(Number(maxJumps)) || 0);
+		const chain = prefix.map(Number);
+		const made = chain.length - 1;
+		const last = chain[chain.length - 1];
+		const sys = systems || {};
+		if (chain.slice(1).some(function(id) { return !jumpRange.isValidCynoTarget(id, sys[id], opts); })) {
+			return Object.assign(jumpRange.routePlan(chain[0], [destID], rangeLy, index, systems, opts, max)[0], { pinDropped: true });
+		}
+		if (made > max) { return jumpRange.routePlan(chain[0], [destID], rangeLy, index, systems, opts, 0)[0]; }
+		if (last === Number(destID)) { return jumpRange.describeRoute(chain, index, opts); }
+		const rest = jumpRange.routePlan(last, [destID], rangeLy, index, systems, opts, max - made)[0];
+		if (rest.jumps === null) { return rest; }
+		return jumpRange.describeRoute(chain.concat(rest.path, [Number(destID)]), index, opts);
+	},
+
+	/**
+	 * "Select alternative jump system": every valid system within range of both ends of one jump pair (so the number of
+	 * jumps stays the same), best first.
+	 * @param opts isValidCynoTarget + scoring options
+	 * @return [{id, ly1 (prev -> id), ly2 (id -> next), station, kills, avoided, penalty, cost (ly1 + ly2 + penalty)}], by cost, then id
+	 */
+	alternatives: function(prevID, nextID, rangeLy, index, systems, opts) {
+		const o = opts || {};
+		const prev = index && index.pos[prevID], next = index && index.pos[nextID];
+		const out = [];
+		if (!prev || !next) { return out; }
+		jumpRange.within(index, prev, rangeLy).forEach(function(hit) {
+			if (hit.id === Number(prevID) || hit.id === Number(nextID) || !jumpRange.isValidCynoTarget(hit.id, systems[hit.id], o)) { return; }
+			const ly2 = jumpRange.distanceLy(index.pos[hit.id], next);
+			if (!(ly2 <= rangeLy)) { return; }
+			const penalty = jumpRange.midpointPenalty(hit.id, o);
+			out.push(Object.assign({ id: hit.id, ly1: hit.ly, ly2: ly2 }, jumpRange.midpointFacts(hit.id, o), { penalty: penalty, cost: hit.ly + ly2 + penalty }));
+		});
+		out.sort(function(a, b) { return a.cost - b.cost || a.id - b.id; });
 		return out;
 	},
 
