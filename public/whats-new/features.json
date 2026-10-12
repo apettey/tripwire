@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 97,
+      "date": "2026-10-12",
+      "title": "Bookmark names set by your mask",
+      "description": "Mask admins can now choose how bookmark names look in Mask Admin > Bookmarks, for example =A C5 ABC EOL or A-ABC-123 C5 L. Everyone on the mask gets the same bookmark text when they add a hole or jump through one. Until an admin changes it, nothing is different.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-97-bookmark-templates.png",
+          "caption": "Mask Admin > Bookmarks"
+        }
+      ]
+    },
+    {
       "pr": 96,
       "date": "2026-10-12",
       "title": "API tokens for scripts and bots",

@@ -24,7 +24,8 @@ const maskAdminTab = {
 
 	ACTIONS: {
 		grant: "made {target} a mask admin", revoke: "revoked mask admin from {target}", block: "blocked {target}",
-		unblock: "unblocked {target}", remove: "removed {target}'s access", defaults: "changed the mask defaults"
+		unblock: "unblocked {target}", remove: "removed {target}'s access", defaults: "changed the mask defaults",
+		bookmarks: "changed the bookmark names"
 	},
 
 	/** One audit line as text: "Alice blocked Bob (reason)" */

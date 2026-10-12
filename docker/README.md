@@ -629,6 +629,25 @@ Mask Admin > Admins & members (`public/mask_admins.php`, `maskadmin/maskadmin.in
   `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`, like `fight.php`. Every change is in the audit list.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/mask_admins_test.php`.
 
+### Bookmark names
+
+Mask Admin > Bookmarks (`public/bookmark_template.php`, `bookmark/bookmark.inc.php`, `app/js/fork/bookmark-template.js`): the
+strings Tripwire copies for in-game bookmarks are built from two templates per mask, set by the mask's owner and the owning
+corporation's Tripwire admins (`maskadmin_base_level`: owner, corp admin; the corp mask: its admins) and used by everyone on
+the mask. Table `fork_bookmark_templates` (JSON `data` column, one row per mask) is created on first use.
+
+- **Templates.** *Hole bookmark*, copied when a named hole is added or saved (default `={name} {class} {sig} {life}`, e.g.
+  `=A C5 ABC EOL`) and *Return bookmark*, offered after a jump (default `!{name}`, must start with `!` or `<` because that is
+  how a name is told from a return bookmark). The defaults are exactly what Tripwire made before templates, so nothing changes
+  until an admin saves. Tokens: `{name}` (required), `{sig}` (ABC), `{sigid}` (ABC-123), `{type}`, `{class}` (class of the system it
+  leads to), `{size}` (S/M/L/VL/XL), `{life}` (EOL), `{system}`, `{dir}` (out / in). An empty token leaves no gap.
+- **Rules** (browser and server check the same): at most 80 characters, letters, digits, spaces and `= ! < > _ . , : ; / | + * ( ) [ ] # @ ~ -`,
+  only known tokens, and with the longest values the result is at most 50 characters. Values are stripped to `A-Za-z0-9._ -`.
+- **Where used.** `holeNaming.bookmarkString` (Add/Save copy) and `jumpReturn.returnString` (return pop-up): the only two places
+  the fork builds a bookmark string. Members read the templates on page load (and again when the tab comes back after 5 minutes).
+- **Security.** The mask is the session's; POSTs need `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`; a change is
+  in Mask Admin's audit list. Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/bookmark_template_test.php`.
+
 ### Audit log
 
 Mask Admin > Audit (`public/audit_log.php`, `audit/audit.inc.php`, `app/js/fork/audit-log-tab.js`): who added, changed
