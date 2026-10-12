@@ -65,3 +65,15 @@
 .dialog-regionMap .rm-hint { position: absolute; left: 6px; bottom: 4px; color: #8c98a8; font-size: 11px; pointer-events: none; background: rgba(7, 9, 13, 0.8); padding: 1px 5px; border-radius: 3px; }
 
 #infoLinks .rm-info-sep, #infoLinks .rm-info-link { display: none; }
+
+/* Jump range overlay (region-map-jumps.js): in range ringed green, the rest dimmed, the origin marked */
+.dialog-regionMap .rm-jbar { flex: 0 0 auto; padding: 4px 8px; background: #101820; border-bottom: 1px solid #2c3a48; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: #bcd; }
+.dialog-regionMap .rm-jbar select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; max-width: 190px; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jout { opacity: 0.38; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jbad { opacity: 0.2; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jin rect { stroke: #5dff7a; stroke-width: 3.5; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jorigin rect { stroke: #fff; stroke-width: 3; }
+.dialog-regionMap .rm-jorigin-ring { stroke: #ffffff; stroke-dasharray: 3 3; }
+.dialog-regionMap .rm-card-jump.rm-j-in { color: #8dffa0; }
+.dialog-regionMap .rm-card-jump.rm-j-out { color: #ffc27a; }
+.dialog-regionMap .rm-card-jump.rm-j-bad { color: #aab; }

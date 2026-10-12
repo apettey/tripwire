@@ -40,6 +40,9 @@ const regionMap = {
 		const cur = regionMap.settings(opts), next = { enabled: cur.enabled, overlays: Object.assign({}, cur.overlays), heat: cur.heat };
 		if (change.enabled !== undefined) { next.enabled = !!change.enabled; }
 		if (change.heat !== undefined && regionMap.validHeat(change.heat)) { next.heat = change.heat; }
+		// The jump overlay's ship, JDC level and origin (regionMapJumps.withJump builds it); kept as it is when something else changes
+		const jump = change.jump !== undefined ? change.jump : (opts && opts.regionMap && opts.regionMap.jump);
+		if (jump && typeof jump === "object") { next.jump = jump; }
 		if (change.overlay && regionMap.OVERLAYS.indexOf(change.overlay.name) >= 0) { next.overlays[change.overlay.name] = !!change.overlay.on; }
 		return next;
 	},
