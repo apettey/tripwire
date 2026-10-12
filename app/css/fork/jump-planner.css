@@ -288,3 +288,26 @@
 .jp-home-list .jp-route-fuel { color: #9fc9a0; font-size: 10px; }
 .jp-home-list tr.jp-row-out .jp-route-fuel { color: #6b7178; }
 .jp-tip-fuel { color: #9fc9a0; }
+
+/* Midpoints: station / kills tags, the other systems to jump to, avoided systems in Settings */
+.jp-mid { color: inherit; text-decoration: underline dotted #8a939e; cursor: pointer; }
+.jp-mid:hover { text-decoration: underline; color: #fff; }
+.jp-st { color: #7ddc7d; font-size: 11px; }
+.jp-kl { color: #ff9a7a; font-size: 10px; }
+.jp-av { color: #ffb347; font-size: 10px; }
+.jp-pin { color: #c08cff; font-size: 10px; }
+.jp-home-list tr.jp-row-out .jp-st, .jp-home-list tr.jp-row-out .jp-kl { opacity: 0.6; }
+.jp-home-list tr.jp-alt td { padding: 0 4px 6px 14px; white-space: normal; }
+.jp-alt-box { background: #121417; border: 1px solid #262b31; border-radius: 4px; padding: 4px 6px; color: #c8ccd0; font-size: 11px; cursor: default; }
+.jp-alt-head { margin-bottom: 3px; }
+.jp-alt-close { float: right; }
+.jp-alt-table { width: 100%; border-collapse: collapse; }
+.jp-alt-table th { color: #8a939e; font-weight: normal; text-align: left; position: static; cursor: default; background: transparent; }
+.jp-home-list tr.jp-alt .jp-alt-table td, .jp-home-list tr.jp-alt .jp-alt-table th { padding: 1px 3px; white-space: nowrap; }
+.jp-home-list tr.jp-alt .jp-alt-table .jp-alt-region { color: #aaa; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+.jp-home-list tr.jp-alt .jp-alt-table tr:hover td { background: #1b2026; }
+.jp-home-list tr.jp-alt .jp-alt-table tr.jp-alt-cur td { color: #d8e070; }
+.jp-home-list tr.jp-alt .jp-alt-table .jp-col-act { text-align: right; }
+.jp-alt-box .jp-alt-use, .jp-alt-box .jp-alt-avoid { margin-left: 6px; }
+.jp-avoid-list .jp-chip { display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; background: #1b2026; border: 1px solid #262b31; border-radius: 9px; }
+.jp-avoid-list .jp-chip-x { margin-left: 3px; text-decoration: none; }
