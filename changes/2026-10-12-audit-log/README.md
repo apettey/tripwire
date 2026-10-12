@@ -50,7 +50,7 @@ retention is an operator setting (`AUDIT_LOG_DAYS`, 0 = nothing recorded), not a
 - **Storage.** About 0.3 KB per row including indexes (one summary JSON of 60-150 bytes). A busy mask doing 1,000
   changes a day holds about 60,000 rows (~18 MB) at 60 days.
 - **Upstream files touched:** `signatures.php` (CRLF kept): one `require_once` at the top and one-line calls in the six
-  functions (11 added lines, nothing else changed). Also `docker/config.php`, `.env.example`,
+  functions (12 added lines, nothing else changed). Also `docker/config.php`, `.env.example`,
   `docker-compose.dev.yml`, `docker-compose.prod.yml`, `docker/README.md` (fork-owned config/docs).
-- **Tests:** `php tests/audit_log_test.php` (74 checks: recording per path, mask scoping, retention with a short
+- **Tests:** `php tests/audit_log_test.php` (86 checks: recording per path, mask scoping, retention with a short
   `AUDIT_LOG_DAYS`, prune on write, filters/paging, admin-only HTTP), `app/js-test/fork/audit-log-tab.test.js`.

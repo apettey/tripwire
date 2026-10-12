@@ -364,6 +364,7 @@ function updateWormhole(wormhole $wormhole, $mysql) {
 }
 
 function removeSignature(signature $signature, $mysql) {
+    $auditHole = audit_hole_before($mysql, $signature);
     $query = 'SET @disable_trigger = 1';
     $stmt = $mysql->prepare($query);
     $stmt->execute();
@@ -388,7 +389,7 @@ function removeSignature(signature $signature, $mysql) {
     $success = @$stmt->execute();
 
     if ($success) {
-        audit_signature_removed($mysql, $signature);
+        audit_signature_removed($mysql, $signature, $stmt->rowCount(), $auditHole);
         // Log the user stats
         if ($signature->type != 'wormhole') {
             $query = 'INSERT INTO statistics (userID, characterID, maskID, signatures_deleted) VALUES (:userID, :characterID, :maskID, 1)
@@ -417,7 +418,7 @@ function removeWormhole($wormhole, $mysql) {
     $success = @$stmt->execute();
 
     if ($success) {
-        audit_wormhole_removed($mysql, $auditBefore);
+        audit_wormhole_removed($mysql, $auditBefore, $stmt->rowCount());
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_deleted) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_deleted = wormholes_deleted + 1';

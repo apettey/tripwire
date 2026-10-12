@@ -137,6 +137,58 @@ check('wormhole delete: one row (its signatures add none), by whoever deleted', 
 check('no signature delete rows for wormhole signatures', count(rows(MASK_A, "action = 'delete' AND entity = 'signature'")), 1);
 check('deleting a hole that is gone writes nothing', (function () use ($mysql) { $n = count_rows(); removeWormhole(['id' => 99999999], $mysql); return count_rows() - $n; })(), 0);
 
+// a wormhole signature becomes a regular one: the signature delete cascades to the wormhole (ON DELETE CASCADE) before
+// removeWormhole runs; the hole's deletion is still logged, once, from the snapshot taken before the DELETE
+as_actor(OWNER_A, 'Test Owner');
+list($ok, $c1) = addSignature(['signatureID' => 'cas111', 'systemID' => $A, 'type' => 'wormhole'], $mysql);
+list($ok, $c2) = addSignature(['signatureID' => 'cas222', 'systemID' => $B, 'type' => 'wormhole'], $mysql);
+list($ok, $cw) = addWormhole(['initialID' => $c1->id, 'secondaryID' => $c2->id, 'type' => 'k162', 'parent' => 'initial', 'life' => 'stable', 'mass' => 'stable'], $mysql);
+$beforeCascade = count(rows(MASK_A, "action = 'delete' AND entity = 'wormhole'"));
+list($ok, $f2) = fetchSignature($c2->id, $mysql);
+list($ok, $f1) = fetchSignature($c1->id, $mysql);
+removeSignature($f2, $mysql);
+removeWormhole(['id' => $cw->id], $mysql);   // already gone with its signature
+removeSignature($f1, $mysql);                 // already gone too
+$r = rows(MASK_A, "action = 'delete' AND entity = 'wormhole'");
+check('cascade: the wormhole deletion is logged once, with its systems', [count($r) - $beforeCascade, $r[count($r) - 1]['subject'], $r[count($r) - 1]['systemID'], $r[count($r) - 1]['toSystemID']], [1, 'K162', $A, $B]);
+check('cascade: no signature rows for the hole signatures', count(rows(MASK_A, "subject IN ('CAS111', 'CAS222')")), 0);
+audit_flush_pending();
+check('cascade: nothing pending is flushed', count(rows(MASK_A, "subject IN ('CAS111', 'CAS222') AND entity = 'signature'")), 0);
+
+// orphan hole signatures (no wormhole follows) are logged as signature add / delete
+as_actor(EDITOR, 'Test Editor');
+list($ok, $o1) = addSignature(['signatureID' => 'orp111', 'systemID' => $A, 'type' => 'wormhole', 'name' => 'lonely'], $mysql);
+check('orphan add: not logged until the request ends', count(rows(MASK_A, "subject = 'ORP111'")), 0);
+audit_flush_pending();
+$r = rows(MASK_A, "subject = 'ORP111'");
+check('orphan add: logged as a signature add by the actor', [count($r), $r[0]['entity'], $r[0]['action'], $r[0]['characterID'], $r[0]['detail']['type'] ?? null], [1, 'signature', 'add', EDITOR, 'wormhole']);
+audit_flush_pending();
+check('orphan add: flushed once', count(rows(MASK_A, "subject = 'ORP111'")), 1);
+list($ok, $f) = fetchSignature($o1->id, $mysql);
+removeSignature($f, $mysql);
+$r = rows(MASK_A, "subject = 'ORP111' AND action = 'delete'");
+check('orphan delete: logged as a signature delete', [count($r), $r[0]['entity'] ?? null], [1, 'signature']);
+// added and rolled back in the same request: nothing
+list($ok, $o2) = addSignature(['signatureID' => 'rol111', 'systemID' => $A, 'type' => 'wormhole'], $mysql);
+list($ok, $f) = fetchSignature($o2->id, $mysql);
+removeSignature($f, $mysql);
+audit_flush_pending();
+check('add then rollback of a hole signature logs nothing', count(rows(MASK_A, "subject = 'ROL111'")), 0);
+// a delete that removed nothing is not logged
+list($ok, $f) = fetchSignature($o1->id, $mysql);
+$n = count_rows();
+$ghost = new signature(['id' => 99999999, 'signatureID' => 'ghost1', 'systemID' => $A, 'type' => 'gas']);
+removeSignature($ghost, $mysql);
+check('deleting a signature that is not there logs nothing', count_rows(), $n);
+// not recording: no snapshot queries at all
+putenv('AUDIT_LOG_DAYS=0');
+list($ok, $z) = addSignature(['signatureID' => 'zzz111', 'systemID' => $A, 'type' => 'gas'], $mysql);
+check('off: snapshots are skipped', [audit_signature_row($mysql, $z->id), audit_wormhole_row($mysql, 1), audit_hole_before($mysql, new signature(['id' => 1, 'type' => 'wormhole']))], [null, null, null]);
+putenv('AUDIT_LOG_DAYS');
+check('on: the snapshot has a bookmark flag, not the bookmark', audit_signature_row($mysql, $z->id)['bookmark'], '');
+$mysql->prepare("UPDATE signatures SET bookmark = 'long bookmark text' WHERE id = ?")->execute([$z->id]);
+check('on: a bookmark is a flag', audit_signature_row($mysql, $z->id)['bookmark'], 'set');
+
 // mask scoping: another mask's session writes its own rows only
 as_actor(OWNER_B, 'Test OwnerB', MASK_B);
 addSignature(['signatureID' => 'bbb111', 'systemID' => $A, 'type' => 'gas'], $mysql);

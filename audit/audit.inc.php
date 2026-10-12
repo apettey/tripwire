@@ -72,7 +72,7 @@ function audit_clip($value, $max = AUDIT_VALUE_MAX) {
 function audit_value($field, $value) {
     if ($value === null) return '';
     if ($field === 'systemID' || $field === 'lifeLength') return (int) $value;
-    if ($field === 'bookmark') return $value === '' ? '' : 'set';   // a bookmark is a long game string: only whether there is one
+    if ($field === 'bookmark') return $value === '' || $value === 0 || $value === '0' ? '' : 'set';   // a bookmark is a long game string: only whether there is one
     return audit_clip($value);
 }
 
@@ -145,7 +145,8 @@ function audit_session_who() {
 
 function audit_signature_row(PDO $db, $id) {
     try {
-        $stmt = $db->prepare('SELECT id, signatureID, systemID, type, name, bookmark, lifeLength FROM signatures WHERE id = ? AND maskID = ?');
+        if (audit_days() < 1) return null;   // not recording: no extra queries
+        $stmt = $db->prepare("SELECT id, signatureID, systemID, type, name, IF(bookmark IS NULL OR bookmark = '', '', 'set') AS bookmark, lifeLength FROM signatures WHERE id = ? AND maskID = ?");
         $stmt->execute([(int) $id, audit_session_mask()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
@@ -158,7 +159,8 @@ function audit_signature_row(PDO $db, $id) {
 /** A wormhole row with the systems and signature ids of its two ends (ends may be missing if already deleted) */
 function audit_wormhole_row(PDO $db, $id) {
     try {
-        $stmt = $db->prepare('SELECT w.id, w.type, w.parent, w.life, w.mass, a.systemID AS fromSystem, b.systemID AS toSystem, a.signatureID AS fromSig, b.signatureID AS toSig
+        if (audit_days() < 1) return null;
+        $stmt = $db->prepare('SELECT w.id, w.initialID, w.secondaryID, w.type, w.parent, w.life, w.mass, a.systemID AS fromSystem, b.systemID AS toSystem, a.signatureID AS fromSig, b.signatureID AS toSig
             FROM wormholes w LEFT JOIN signatures a ON a.id = w.initialID LEFT JOIN signatures b ON b.id = w.secondaryID WHERE w.id = ? AND w.maskID = ?');
         $stmt->execute([(int) $id, audit_session_mask()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -166,6 +168,40 @@ function audit_wormhole_row(PDO $db, $id) {
     } catch (Throwable $e) {
         error_log('audit: ' . $e->getMessage());
         return null;
+    }
+}
+
+/** The wormhole a wormhole-type signature belongs to, before the signature is deleted (deleting it cascades to the hole), or null */
+function audit_hole_before(PDO $db, $signature) {
+    try {
+        if (audit_days() < 1 || $signature->type !== 'wormhole') return null;
+        $stmt = $db->prepare('SELECT id FROM wormholes WHERE (initialID = ? OR secondaryID = ?) AND maskID = ? LIMIT 1');
+        $stmt->execute([(int) $signature->id, (int) $signature->id, audit_session_mask()]);
+        $id = $stmt->fetchColumn();
+        return $id ? audit_wormhole_row($db, $id) : null;
+    } catch (Throwable $e) {
+        error_log('audit: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Per request: wormhole-type signature adds not (yet) followed by their wormhole (id => entry), and signature ids already
+ * logged as part of a wormhole deletion. An add whose wormhole never follows is an orphan hole signature and is logged
+ * as a signature add when the request ends (audit_flush_pending).
+ */
+function &audit_request_state() {
+    static $state = ['pending' => [], 'covered' => [], 'registered' => false];
+    return $state;
+}
+
+/** Log the wormhole signatures added in this request that no wormhole claimed */
+function audit_flush_pending() {
+    $state = &audit_request_state();
+    $pending = $state['pending'];
+    $state['pending'] = [];
+    foreach ($pending as $e) {
+        audit_record($e['db'], $e['mask'], $e['who'], 'signature', 'add', (int) $e['state']['systemID'], 0, strtoupper((string) $e['state']['signatureID']), audit_signature_summary($e['state']));
     }
 }
 
@@ -188,8 +224,14 @@ function audit_signature_summary(array $s) {
 /** Wormhole-type signatures are logged as part of their wormhole, so this logs the others only */
 function audit_signature_added(PDO $db, $signature) {
     try {
-        if ($signature->type === 'wormhole') return;
         $s = audit_signature_state($signature);
+        if ($signature->type === 'wormhole') {
+            if (audit_days() < 1) return;
+            $state = &audit_request_state();
+            $state['pending'][(int) $signature->id] = ['db' => $db, 'mask' => audit_session_mask(), 'who' => audit_session_who(), 'state' => $s];
+            if (!$state['registered']) { $state['registered'] = true; register_shutdown_function('audit_flush_pending'); }
+            return;
+        }
         audit_record($db, audit_session_mask(), audit_session_who(), 'signature', 'add', (int) $s['systemID'], 0, strtoupper((string) $s['signatureID']), audit_signature_summary($s));
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }
@@ -209,9 +251,17 @@ function audit_signature_updated(PDO $db, $before, $signature) {
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }
 
-function audit_signature_removed(PDO $db, $signature) {
+/** $rows: rows the DELETE removed; $hole: audit_hole_before() (the hole this deletion took with it, if any) */
+function audit_signature_removed(PDO $db, $signature, $rows = 1, $hole = null) {
     try {
-        if ($signature->type === 'wormhole') return;
+        if ($rows < 1) return;
+        $id = (int) $signature->id;
+        if ($signature->type === 'wormhole') {
+            $state = &audit_request_state();
+            if (isset($state['pending'][$id])) { unset($state['pending'][$id]); return; }   // added and rolled back in this request
+            if ($hole) { audit_wormhole_removed($db, $hole, 1); return; }                  // the delete cascaded to its wormhole
+            if (isset($state['covered'][$id])) return;                                      // logged with its wormhole
+        }
         $s = audit_signature_state($signature);
         audit_record($db, audit_session_mask(), audit_session_who(), 'signature', 'delete', (int) $s['systemID'], 0, strtoupper((string) $s['signatureID']), audit_signature_summary($s));
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
@@ -226,6 +276,8 @@ function audit_wormhole_summary(array $w) {
 
 function audit_wormhole_added(PDO $db, $wormhole) {
     try {
+        $state = &audit_request_state();
+        unset($state['pending'][(int) $wormhole->initialID], $state['pending'][(int) $wormhole->secondaryID]);
         $w = audit_wormhole_row($db, $wormhole->id);
         if (!$w) return;
         audit_record($db, audit_session_mask(), audit_session_who(), 'wormhole', 'add', (int) $w['fromSystem'], (int) $w['toSystem'], audit_clip($w['type'], 40), audit_wormhole_summary($w));
@@ -244,9 +296,12 @@ function audit_wormhole_updated(PDO $db, $before, $wormhole) {
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }
 
-function audit_wormhole_removed(PDO $db, $before) {
+function audit_wormhole_removed(PDO $db, $before, $rows = 1) {
     try {
-        if (!$before) return;
+        if (!$before || $rows < 1) return;
+        $state = &audit_request_state();
+        $state['covered'][(int) $before['initialID']] = true;
+        $state['covered'][(int) $before['secondaryID']] = true;
         audit_record($db, audit_session_mask(), audit_session_who(), 'wormhole', 'delete', (int) $before['fromSystem'], (int) $before['toSystem'], audit_clip($before['type'], 40), audit_wormhole_summary($before));
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }

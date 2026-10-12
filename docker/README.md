@@ -634,7 +634,7 @@ or deleted which signature or wormhole on the mask, newest first, with before/af
 `life stable → critical`, `leads to A → B`). Table `fork_audit_log` is created on first use
 (`docker/sql/audit-log.sql` is the reference).
 
-- **Recording.** `signatures.php`'s six save functions call one helper each after a successful write (11 added lines in
+- **Recording.** `signatures.php`'s six save functions call one helper each after a successful write (12 added lines in
   that upstream file), so dialog and inline edits, pasted scans, the automapper and undo/redo are all covered. The mask and
   the character are the session's. Auditing never fails a save (errors go to the PHP error log).
 - **Retention.** `AUDIT_LOG_DAYS` (default `60`, 1-3650, `0` = nothing recorded and the tab is empty). Older rows are
