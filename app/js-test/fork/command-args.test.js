@@ -29,7 +29,7 @@ describe('Palette argument candidates', () => {
 		});
 		it('title, system behind and the system it leaves', () => {
 			const h = holes()[0];
-			assert.equal(h.title, 'AA · J111111 ⇄ J222222');
+			assert.equal(h.title, 'AA → J222222 (from J111111)');
 			assert.equal(h.systemID, 2);
 			assert.equal(h.parentSystemID, 1);
 			assert.equal(h.subtitle, 'H296 · ABC-123 · EOL');
@@ -244,7 +244,7 @@ describe('Palette one-line commands', () => {
 	describe('breadcrumb and values', () => {
 		it('lists the command and the titles of the filled arguments', () => {
 			const d = run('life eol B2')[0];
-			assert.equal(paletteArgs.breadcrumb(d.command, d.command.args, d.filled), 'Set life › B2 · J111111 ⇄ J444444 › EOL');
+			assert.equal(paletteArgs.breadcrumb(d.command, d.command.args, d.filled), 'Set life › B2 → J444444 (from J111111) › EOL');
 		});
 		it('values are keyed by argument name and leave out unfilled ones', () => {
 			assert.deepEqual(paletteArgs.values([{ name: 'a' }, { name: 'b' }], { 1: { value: 7 } }), { b: 7 });
@@ -271,5 +271,31 @@ describe('Palette one-line commands', () => {
 			assert.equal(paletteArgs.holeToken('  !ab'), '');
 			assert.equal(paletteArgs.holeToken(null), '');
 		});
+	});
+});
+
+describe('Palette: ties and Settings guard', () => {
+	// two different holes both named AA, on different parents
+	const tsys = { 1: { name: 'J111111' }, 2: { name: 'J222222' }, 3: { name: 'J333333' }, 4: { name: 'J444444' } };
+	const n = (v, s, id) => ({ v: v, systemID: s, f: "<div data-sigid='" + id + "'></div>" });
+	const trows = [
+		{ c: [{ v: 1, systemID: 1, f: '<div></div>' }, { v: null }] },
+		{ c: [n(2, 2, 11), { v: 1 }], pathHome: [{ name: 'AA', signatureID: 'abc123' }] },
+		{ c: [n(3, 3, 12), { v: 2 }], pathHome: [{ name: 'A' }, { name: 'AA', signatureID: 'def456' }] }
+	];
+	const hs = () => paletteArgs.holes({ rows: trows, systems: tsys, viewingID: 4 }).map(h => Object.assign(paletteIndex.item(h), { fuzzy: false }));
+	const cmds = [{ id: 'm', title: 'Mark rolling', args: [{ name: 'hole', type: 'hole' }] }];
+	const env = { resolve: (arg, text) => paletteArgs.rank(hs(), text, 8) };
+	it('every hole row shows where it leads and where it comes from', () => {
+		assert.deepEqual(hs().map(h => h.title), ['AA → J222222 (from J111111)', 'AA → J333333 (from J222222)']);
+	});
+	it('two holes named AA tie: the descriptors are marked so nothing is pre-selected', () => {
+		const d = paletteArgs.inline(cmds, 'mark rolling aa', env);
+		assert.equal(d.length, 2);
+		assert.ok(d.every(x => x.tie));
+	});
+	it('a clear winner is not a tie', () => {
+		const d = paletteArgs.inline(cmds, 'mark rolling j333333', env);
+		assert.equal(d[0].tie, false);
 	});
 });

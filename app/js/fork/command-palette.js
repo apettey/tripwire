@@ -865,6 +865,7 @@ const commandPalette = {
 		}
 		st.rows = rows;
 		st.sel = commandPalette.moveSelection(rows, -1, 1);
+		if (rows[st.sel] && rows[st.sel].item && rows[st.sel].item.inline && rows[st.sel].item.inline.tie) { st.sel = -1; }	// a tie: Enter does nothing until a row is picked
 		commandPalette.render();
 		const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 		st.perf.last = t1 - t0;

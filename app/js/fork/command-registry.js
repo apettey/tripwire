@@ -75,7 +75,10 @@ const forkCommands = {
 		const current = function() { return typeof options !== "undefined" ? options : null; };
 		return forkCommands.register({
 			id: def.id, title: def.title, group: def.group || "Panels", icon: def.icon || "", keywords: (def.keywords || []).concat(["show", "hide", "panel"]),
-			enabled: def.available || function() { return current() ? true : "Not available"; },
+			enabled: function(ctx) {
+				if (typeof document !== "undefined" && document.querySelector && document.querySelector("#dialog-options") && typeof $ !== "undefined" && $("#dialog-options").is(":visible")) { return "Close Settings first"; }
+				return def.available ? def.available(ctx) : (current() ? true : "Not available");
+			},
 			hint: function() { return isOn(current()) ? "Shown now: this hides it" : "Hidden now: this shows it"; },
 			run: function() {
 				const o = current();

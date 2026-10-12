@@ -64,7 +64,7 @@ const paletteArgs = {
 			const here = child === viewing || parent === viewing;
 			out.push({
 				key: "hole:" + id, kind: "arg", value: id, systemID: Number(child), parentSystemID: Number(parent), token: token,
-				title: (token ? token + " · " : "") + parentName + " ⇄ " + childName,
+				title: (token ? token + " → " : "") + childName + " (from " + parentName + ")",
 				subtitle: [type && type !== "????" ? type : "", sigID ? sigID.substring(0, 3) + (sigID.length > 3 ? "-" + sigID.substring(3) : "") : "", flags.join(" ")].filter(Boolean).join(" · "),
 				keys: [token, name, childName, digits(childName), parentName, digits(parentName), type, sigID],
 				icon: "tree", tag: "Hole", fuzzy: false, ctx: here ? 120 : 0
@@ -240,6 +240,8 @@ const paletteArgs = {
 				if (args[g.index].type !== "choice" && g.ranked.length > 1 && (free < 0 || g.ranked.length > got[free].ranked.length)) { free = got.indexOf(g); }
 			});
 			const variants = free >= 0 ? got[free].ranked.slice(0, paletteArgs.ALTERNATIVES) : [null];
+			// Two equally good candidates (e.g. two holes named AA): nothing is pre-selected, the user picks
+			const tie = free >= 0 && got[free].ranked.length > 1 && got[free].ranked[0].score === got[free].ranked[1].score;
 			variants.forEach(function(alt) {
 				const filled = {};
 				got.forEach(function(g, gi) { filled[g.index] = gi === free ? alt : g.ranked[0]; });
@@ -250,7 +252,7 @@ const paletteArgs = {
 					if (d) { filled[i] = d; continue; }
 					if (!args[i].optional && next === null) { next = i; }
 				}
-				out.push({ command: match.command, filled: filled, complete: next === null, next: next, score: match.score });
+				out.push({ command: match.command, filled: filled, complete: next === null, next: next, score: match.score, tie: tie });
 			});
 		});
 		return out;

@@ -214,3 +214,24 @@ describe('Registry: arguments, hints, panel toggles', () => {
 		delete global.options;
 	});
 });
+
+describe('Registry: panel toggles while Settings is open', () => {
+	it('are disabled with "Close Settings first"', () => {
+		const had = { d: 'document' in global, dv: global.document, s: '$' in global, sv: global.$, o: 'options' in global, ov: global.options };
+		global.document = { querySelector: () => ({}) };
+		global.$ = () => ({ is: () => true });
+		global.options = {};
+		forkCommands.commands = [];
+		forkCommands.panelToggle({ id: 'panel.z', title: 'Toggle Z', key: 'z' });
+		const c = forkCommands.commands[0];
+		try {
+			assert.equal(c.enabled({}), 'Close Settings first');
+			global.$ = () => ({ is: () => false });
+			assert.equal(c.enabled({}), true);
+		} finally {
+			if (had.d) { global.document = had.dv; } else { delete global.document; }
+			if (had.s) { global.$ = had.sv; } else { delete global.$; }
+			if (had.o) { global.options = had.ov; } else { delete global.options; }
+		}
+	});
+});

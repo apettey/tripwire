@@ -37,7 +37,7 @@ command whose feature is switched off in Settings is greyed with that reason. Th
 - Registry: `forkCommands.register` accepts `args` (`chainSystem`, `system`, `hole`, `signature`, `choice`, `text`;
   `optional`, `default`, `choices`, `filter`) and `hint`; new `forkCommands.panelToggle` (flips `options[key].enabled`,
   saves, runs `options.apply()`, as Settings > Save does).
-- Palette: breadcrumb chip ("Set mass › B2 · J1 ⇄ J2 ›"), step lists with the default first and "Skip" for optional
+- Palette: breadcrumb chip ("Set mass › B2 → J2 (from J1) ›"), step lists with the default first and "Skip" for optional
   arguments (an optional argument with no candidates is skipped), Backspace on an empty box takes back the last
   argument, Esc closes; one-line results above the normal ones ("Fight here › J134939", up to 5 alternatives for an
   ambiguous system/hole). `ctx.holes()` lists the chain's wormholes (wormhole id from the node markup, name from the
@@ -53,6 +53,11 @@ command whose feature is switched off in Settings is greyed with that reason. Th
   sounds in `sound-mute.js`; "Toggle ... panel" for Favourites, Chain kills, System kills, d-scan & local, Watchlist,
   Skyhooks, Structures and Jump planner. Nothing deletes: the only "stop" commands equal the existing Stop rolling /
   Stop preserving mass / Clear fight entries and each asks for confirmation.
+- Review fixes: every hole row reads "AA → J222222 (from J111111)" so equally named holes on different parents are
+  distinguishable; when the top two one-line candidates tie (two holes named AA), nothing is pre-selected and Enter does nothing
+  until a row is picked (arrow keys); the panel toggles are disabled with "Close Settings first" while the Settings dialog is open.
+- Set life / Set mass stay available from the palette even when "Edit life and mass in place" is switched off: the palette is
+  a separate entry point to the same `sigInline.setWormhole` save path (undo included).
 - Upstream files: none. Fork files edited, one small block each: the 11 feature files above plus `chain-killfeed.js`,
   `system-killfeed.js`, `watchlist.js` (panel toggle only), 14 in all.
 - Deviations: "Set route in game" (autopilot picker) is not built; the Watchlist has only the panel toggle; "Jump planner from"
