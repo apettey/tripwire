@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 92,
+      "date": "2026-10-11",
+      "title": "Environment tags and chain effects summary",
+      "description": "Systems on the chain map now show a small storm icon when EVE-Scout has a crowd-reported metaliminal storm there (hover for the type and how long ago it was reported), and an A0 tag on k-space systems with a blue A0 sun. A one-line summary above the map counts the wormhole effects on your chain and names any storms. Turn the tags and summary off in Settings > Map Markers > Environment tags, or only the EVE-Scout storm reports with Storm reports.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-92-environment-tags.png",
+          "caption": "Storm and A0 tags with the chain effects summary"
+        }
+      ]
+    },
+    {
       "pr": 91,
       "date": "2026-10-11",
       "title": "Audit log: who changed what",
