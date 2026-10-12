@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 93,
+      "date": "2026-10-12",
+      "title": "Palette commands with arguments",
+      "description": "Press Ctrl+K and type a command with its target on one line: 'fight AA' marks the system behind hole AA, 'mark rolling A', 'preserve mass AB', 'life eol B2' or 'mass crit B2'. J-codes and system names work too, and when a word fits several things you pick from a short list. A command typed alone asks for what it needs step by step, and Backspace goes back a step. There are also commands to open the Jump planner, Skyhooks, Destinations, d-scan and structures panels and to show or hide each panel. Nothing here deletes anything; the stop commands ask first. Turn the palette off in Settings > General > Command palette.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-93-palette-commands.png",
+          "caption": "Type fight AA, mark rolling A or life eol B2"
+        }
+      ]
+    },
+    {
       "pr": 92,
       "date": "2026-10-11",
       "title": "Environment tags and chain effects summary",
