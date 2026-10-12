@@ -98,7 +98,7 @@ const commandPalette = {
 			const sys = systems[id], meta = info[id], cls = commandPalette.systemClass(sys), region = commandPalette.regionName(sys, env.regions);
 			const name = String(sys.name), jcode = /^J\d{6}$/i.test(name);
 			const statics = Array.isArray(sys.statics) ? sys.statics.map(String) : [];
-			const keys = [name, cls, meta.hole].concat(statics);
+			const keys = [name, cls, meta.hole, (/^[A-Z0-9]+/i.exec(meta.hole) || [""])[0]].concat(statics);	// "AA - DRIFTER": "AA" finds the system behind hole AA
 			if (jcode) { keys.push(name.substring(1)); }
 			if (!sys.class && region) { keys.push(region); }
 			const here = id === viewingID;
@@ -254,7 +254,7 @@ const commandPalette = {
 	state: {
 		open: false, rows: [], sel: -1, scope: { char: "", label: "", kinds: null, rest: "" }, query: "", prev: null, index: null, items: [],
 		previousFocus: null, ctx: null, frecency: {}, eve: null, mouse: [0, 0], liveTimer: null, chainStamp: null, settingStamp: null,
-		perf: { last: 0, samples: [] }
+		perf: { last: 0, samples: [] }, cmd: null, argCache: {}
 	},
 
 	hasDOM: function() {
@@ -324,6 +324,7 @@ const commandPalette = {
 			selectedSigIDs: function() {
 				return $("#sigTable tbody tr.selected").map(function() { return $(this).data("id"); }).get();
 			},
+			holes: function() { return commandPalette.holeDefs(this); },
 			chainSystems: function() {
 				if (!chainIds) {
 					chainIds = [];
@@ -339,6 +340,15 @@ const commandPalette = {
 
 	chainRows: function() {
 		return (typeof chain !== "undefined" && chain && chain.data && chain.data.map && chain.data.map.rows) || [];
+	},
+
+	/** The wormholes on the chain map (cached on the ctx): [{key, value: wormhole id, token, systemID, parentSystemID, title, ...}] */
+	holeDefs: function(ctx) {
+		if (!ctx._holes) {
+			ctx._holes = typeof tripwire !== "undefined" && tripwire.client && typeof appData !== "undefined"
+				? paletteArgs.holes({ rows: commandPalette.chainRows(), wormholes: tripwire.client.wormholes, systems: appData.systems, viewingID: ctx.viewingSystemID }) : [];
+		}
+		return ctx._holes;
 	},
 
 	registerProviders: function() {
@@ -400,15 +410,182 @@ const commandPalette = {
 		st.items = items;
 		st.index = paletteIndex.build(items, commandPalette.ensureEve(), skip);
 		st.prev = null;
+		st.argCache = {};
+	},
+
+	// ---- Arguments (A6): candidates, one-line commands, the step by step flow ----
+
+	/** Prepared candidates (index items) of an argument; strict: no fuzzy matching (one-line commands). Cached per open. */
+	argCandidates: function(command, arg, strict) {
+		const st = commandPalette.state, cacheKey = command.id + "|" + arg.name + (strict ? "|s" : "");
+		if (st.argCache[cacheKey]) { return st.argCache[cacheKey]; }
+		let list = [];
+		const pass = function(c) {
+			if (!arg.filter) { return true; }
+			try { return !!arg.filter(c.value, st.ctx); } catch (e) { return false; }
+		};
+		if (arg.type === "chainSystem") { list = paletteArgs.chainSystems(st.items); }
+		else if (arg.type === "hole") { list = commandPalette.holeDefs(st.ctx).map(paletteIndex.item); }
+		else if (arg.type === "signature") { list = paletteArgs.signatures(st.items); }
+		else if (arg.type === "choice") {
+			try { list = paletteArgs.choices(arg.choices(st.ctx)).map(paletteIndex.item); } catch (e) { console.error("palette: choices of " + arg.name + " failed", e); }
+		}
+		list = list.filter(pass);
+		if (strict) { list = list.map(function(c) { return Object.assign({}, c, { fuzzy: false }); }); }
+		st.argCache[cacheKey] = list;
+		return list;
+	},
+
+	/** Candidates of an argument ranked against typed text (best first, each with .score); [] if none */
+	argRank: function(command, arg, text, strict, limit) {
+		const t = String(text === undefined || text === null ? "" : text).trim();
+		if (!t) { return []; }
+		if (arg.type === "text") { return [{ key: "text:" + t, kind: "arg", value: t, title: t, subtitle: "", tag: "Text", score: 1000 }]; }
+		if (arg.type === "system") {
+			const eve = commandPalette.ensureEve();
+			if (!eve) { return []; }
+			return paletteIndex.search(paletteArgs.index([], eve), t, { limit: limit || 20 }).results.map(function(it) {
+				return Object.assign({}, it, { kind: "arg", value: it.systemID, tag: "System" });
+			});
+		}
+		return paletteArgs.rank(commandPalette.argCandidates(command, arg, strict), t, limit || 20);
+	},
+
+	/** The default value of an argument as a candidate, or null */
+	argDefault: function(command, arg) {
+		if (!arg.default) { return null; }
+		const st = commandPalette.state;
+		let v;
+		try { v = arg.default(st.ctx); } catch (e) { return null; }
+		if (v === undefined || v === null || v === "") { return null; }
+		const found = arg.type === "system" || arg.type === "text" ? null
+			: commandPalette.argCandidates(command, arg).filter(function(c) { return String(c.value) === String(v); })[0];
+		if (found) { return found; }
+		if (arg.type === "system" && typeof appData !== "undefined" && appData.systems[v]) {
+			return { key: "eve:" + v, kind: "arg", value: Number(v), title: appData.systems[v].name, subtitle: "", tag: "System" };
+		}
+		return arg.type === "text" ? { key: "text:" + v, kind: "arg", value: v, title: String(v), tag: "Text" } : null;
+	},
+
+	/** Result rows for a one-line command typed in the box ("fight AA", "mark rolling A", "life eol B2") */
+	inlineItems: function(query) {
+		const st = commandPalette.state;
+		if (!/\S\s+\S/.test(query)) { return []; }
+		const commands = st.items.filter(function(it) { return it.command && it.command.args && it.command.args.length && !it.disabled; }).map(function(it) { return it.command; });
+		if (!commands.length) { return []; }
+		const descs = paletteArgs.inline(commands, query, {
+			resolve: function(arg, text, command) { return commandPalette.argRank(command, arg, text, true, 8); },
+			defaultFor: function(arg, command) { return commandPalette.argDefault(command, arg); }
+		});
+		return descs.map(commandPalette.inlineItem);
+	},
+
+	inlineItem: function(d) {
+		const cmd = d.command, args = cmd.args;
+		const crumb = paletteArgs.breadcrumb(cmd, args, d.filled);
+		const vals = args.map(function(a, i) { return d.filled[i] ? String(d.filled[i].value) : ""; }).join(",");
+		const detail = args.map(function(a, i) { return d.filled[i] && a.type !== "choice" ? d.filled[i].subtitle : ""; }).filter(Boolean)[0];
+		return {
+			key: "inline:" + cmd.id + ":" + vals, freqKey: "cmd:" + cmd.id, kind: "cmd", title: crumb + (d.complete ? "" : " ›"),
+			subtitle: (d.complete ? "Enter runs it" : "Enter asks for the " + (args[d.next].label || args[d.next].name)) + (detail ? " · " + detail : ""), icon: cmd.icon || "", tag: "Command",
+			inline: d, command: cmd, disabled: ""
+		};
+	},
+
+	/** Start the argument steps of a command (filled: {argIndex: candidate} already known) */
+	startCommand: function(command, filled) {
+		const st = commandPalette.state, input = document.getElementById("cp-input");
+		st.cmd = { command: command, args: command.args, filled: filled || {}, skipped: {}, step: -1 };
+		commandPalette.touch("cmd:" + command.id);
+		input.value = "";
+		st.scope = paletteIndex.parseScope("");
+		const next = commandPalette.nextStep();
+		if (next < 0) { commandPalette.runCommand(); return; }
+		st.cmd.step = next;
+		commandPalette.renderChip();
+		commandPalette.update();
+	},
+
+	/** Index of the next argument to ask for, or -1. An optional argument without candidates is skipped. */
+	nextStep: function() {
+		const c = commandPalette.state.cmd;
+		for (let i = 0; i < c.args.length; i++) {
+			if (c.filled[i] || c.skipped[i]) { continue; }
+			const arg = c.args[i];
+			if (arg.optional && (arg.type === "choice" || arg.type === "chainSystem" || arg.type === "hole" || arg.type === "signature")
+				&& !commandPalette.argCandidates(c.command, arg).length) { c.skipped[i] = true; continue; }
+			return i;
+		}
+		return -1;
+	},
+
+	acceptArg: function(item) {
+		const st = commandPalette.state, c = st.cmd, input = document.getElementById("cp-input");
+		if (item.skip) { c.skipped[c.step] = true; } else { c.filled[c.step] = item; }
+		input.value = "";
+		const next = commandPalette.nextStep();
+		if (next < 0) { commandPalette.runCommand(); return; }
+		c.step = next;
+		commandPalette.renderChip();
+		commandPalette.update();
+	},
+
+	/** Backspace on an empty box: take back the last argument, or leave the command */
+	stepBack: function() {
+		const st = commandPalette.state, c = st.cmd;
+		let last = -1;
+		for (let i = 0; i < c.args.length; i++) { if (c.filled[i] || c.skipped[i]) { last = i; } }
+		if (last < 0) { st.cmd = null; } else { delete c.filled[last]; delete c.skipped[last]; c.step = last; }
+		document.getElementById("cp-input").value = "";
+		commandPalette.renderChip();
+		commandPalette.update();
+	},
+
+	runCommand: function() {
+		const st = commandPalette.state, c = st.cmd;
+		const values = paletteArgs.values(c.args, c.filled);
+		st.cmd = null;
+		commandPalette.close(true);
+		commandPalette.activate({ command: c.command, title: c.command.title, key: "cmd:" + c.command.id }, st.ctx, values);
+	},
+
+	runInline: function(item) {
+		const d = item.inline;
+		if (!d.complete) { commandPalette.startCommand(d.command, d.filled); return; }
+		commandPalette.touch("cmd:" + d.command.id);
+		commandPalette.close(true);
+		commandPalette.activate({ command: d.command, title: d.command.title, key: "cmd:" + d.command.id }, commandPalette.state.ctx, paletteArgs.values(d.command.args, d.filled));
+	},
+
+	touch: function(key) {
+		const st = commandPalette.state;
+		paletteIndex.frecencyTouch(st.frecency, key);
+		commandPalette.saveFrecency(st.frecency);
+	},
+
+	/** Rows of the current argument step: a header, "skip" when optional, then the candidates */
+	stepRows: function(query) {
+		const st = commandPalette.state, c = st.cmd, arg = c.args[c.step];
+		const rows = [{ header: c.command.title + " › " + (arg.label || arg.name) }];
+		if (arg.optional) { rows.push({ item: { key: "skip", kind: "arg", skip: true, title: "Skip", subtitle: "Leave out the " + (arg.label || arg.name), tag: "Skip", icon: "" } }); }
+		let list;
+		if (paletteIndex.normalise(query) || arg.type === "text") { list = commandPalette.argRank(c.command, arg, query, false, commandPalette.MAX_ROWS); }
+		else {
+			const def = commandPalette.argDefault(c.command, arg);
+			list = arg.type === "system" ? (def ? [def] : [])
+				: paletteArgs.listAll(commandPalette.argCandidates(c.command, arg), def ? def.value : undefined).slice(0, commandPalette.MAX_ROWS);
+		}
+		list.forEach(function(it) { rows.push({ item: it, hits: query ? paletteIndex.highlight(it.title, query) : [] }); });
+		return rows;
 	},
 
 	// ---- Acting on an item ----
 
-	activate: function(item, ctx) {
+	activate: function(item, ctx, values) {
 		const notify = function(text, color) { if (typeof Notify !== "undefined") { Notify.trigger(commandPalette.escape(text), color); } };
 		try {
 			if (item.command) {
-				forkCommands.execute(item.command, {}, ctx).then(function(r) {
+				forkCommands.execute(item.command, values || {}, ctx).then(function(r) {
 					if (!r.ok) { notify("Could not run \"" + item.title + "\": " + (r.error && r.error.message || r.error), "red"); }
 				});
 			} else if (item.kind === "chain" || item.kind === "eve") {
@@ -617,6 +794,7 @@ const commandPalette = {
 		st.frecency = commandPalette.loadFrecency();
 		st.scope = paletteIndex.parseScope("");
 		st.query = "";
+		st.cmd = null;
 		commandPalette.buildIndex(st.ctx);
 		const el = document.getElementById("cp-overlay"), input = document.getElementById("cp-input");
 		input.value = "";
@@ -638,7 +816,16 @@ const commandPalette = {
 	},
 
 	renderChip: function() {
-		const chip = document.getElementById("cp-chip"), sc = commandPalette.state.scope;
+		const chip = document.getElementById("cp-chip"), st = commandPalette.state, sc = st.scope;
+		const input = document.getElementById("cp-input");
+		if (!input.hasAttribute("data-placeholder")) { input.setAttribute("data-placeholder", input.placeholder); }
+		const arg = st.cmd ? st.cmd.args[st.cmd.step] : null;
+		input.placeholder = arg ? "Filter the " + (arg.label || arg.name) + "…" : input.getAttribute("data-placeholder");
+		if (st.cmd) {
+			chip.textContent = paletteArgs.breadcrumb(st.cmd.command, st.cmd.args, st.cmd.filled) + " ›";
+			chip.className = "cp-chip cp-crumb";
+			return;
+		}
 		chip.textContent = sc.label;
 		chip.className = "cp-chip" + (sc.char ? "" : " cp-hidden");
 	},
@@ -646,7 +833,7 @@ const commandPalette = {
 	onInput: function() {
 		const st = commandPalette.state, input = document.getElementById("cp-input");
 		// A scope prefix typed as the first character becomes a chip
-		if (!st.scope.char) {
+		if (!st.scope.char && !st.cmd) {
 			const parsed = paletteIndex.parseScope(input.value);
 			if (parsed.char) { st.scope = parsed; input.value = parsed.rest; commandPalette.renderChip(); }
 		}
@@ -659,7 +846,9 @@ const commandPalette = {
 		const q = document.getElementById("cp-input").value;
 		st.query = q;
 		let rows, nq = paletteIndex.normalise(q);
-		if (!nq) {
+		if (st.cmd) {
+			rows = commandPalette.stepRows(q);
+		} else if (!nq) {
 			st.prev = null;
 			rows = commandPalette.emptyRows(st.items.filter(function(it) { return !st.scope.kinds || st.scope.kinds[it.kind]; }),
 				paletteIndex.recent(st.frecency, 12), forkCommands.GROUPS, commandPalette.viewName(), function(id) {
@@ -669,9 +858,14 @@ const commandPalette = {
 			const res = paletteIndex.search(st.index, q, { scope: st.scope.kinds, frecency: st.frecency, prev: st.prev, limit: commandPalette.MAX_ROWS });
 			st.prev = res;
 			rows = res.results.map(function(it) { return { item: it, hits: paletteIndex.highlight(it.title, q) }; });
+			if (!st.scope.char) {
+				const inline = commandPalette.inlineItems(q);
+				if (inline.length) { rows = inline.map(function(it) { return { item: it, hits: [] }; }).concat(rows); }
+			}
 		}
 		st.rows = rows;
 		st.sel = commandPalette.moveSelection(rows, -1, 1);
+		if (rows[st.sel] && rows[st.sel].item && rows[st.sel].item.inline && rows[st.sel].item.inline.tie) { st.sel = -1; }	// a tie: Enter does nothing until a row is picked
 		commandPalette.render();
 		const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 		st.perf.last = t1 - t0;
@@ -696,7 +890,7 @@ const commandPalette = {
 				+ "<span class='cp-body'><span class='cp-title'>" + commandPalette.titleHtml(it.title, r.hits) + "</span>"
 				+ (it.subtitle ? "<span class='cp-sub'>" + esc(it.subtitle) + "</span>" : "") + "</span>"
 				+ (it.shortcut ? "<kbd class='cp-kbd'>" + esc(it.shortcut) + "</kbd>" : "")
-				+ "<span class='cp-tag'>" + esc(commandPalette.KIND_LABEL[it.kind] || "") + "</span></li>";
+				+ "<span class='cp-tag'>" + esc(it.tag || commandPalette.KIND_LABEL[it.kind] || "") + "</span></li>";
 		});
 		if (!st.rows.length) { html = "<li role='presentation' class='cp-empty'>No match</li>"; }
 		document.getElementById("cp-list").innerHTML = html;
@@ -745,8 +939,10 @@ const commandPalette = {
 			if (typeof Notify !== "undefined") { Notify.trigger(commandPalette.escape(item.disabled), "yellow"); }
 			return;
 		}
-		paletteIndex.frecencyTouch(st.frecency, item.key);
-		commandPalette.saveFrecency(st.frecency);
+		if (st.cmd) { commandPalette.acceptArg(item); return; }
+		if (item.inline) { commandPalette.runInline(item); return; }
+		if (item.command && item.command.args && item.command.args.length) { commandPalette.startCommand(item.command, {}); return; }
+		commandPalette.touch(item.freqKey || item.key);
 		if (keepOpen) {
 			commandPalette.activate(item, st.ctx);
 			st.ctx = commandPalette.makeContext();
@@ -782,6 +978,7 @@ const commandPalette = {
 				break;
 			}
 			case "Backspace":
+				if (!input.value && st.cmd) { e.preventDefault(); commandPalette.stepBack(); break; }
 				if (!input.value && st.scope.char) {
 					e.preventDefault();
 					st.scope = paletteIndex.parseScope("");

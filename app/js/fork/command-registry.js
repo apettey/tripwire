@@ -9,13 +9,19 @@ const forkCommands = {
 	//     keywords: ["rally"], icon: "flag" (data-icon name), shortcut: "Ctrl+Z" (display only)
 	//     enabled: ctx => true | "reason it is unavailable"   (a disabled command is listed greyed with the reason)
 	//     context: ctx => boolean    listed under "For <viewed system>" and ranked higher
+	//     hint: ctx => "text"        subtitle shown instead of the group (e.g. the current state)
+	//     args: [{name, type, optional, default: ctx => value, choices: ctx => [{value, title, hint}], filter: value => bool}]
+	//                                type: chainSystem | system | hole | signature | choice | text. The palette asks for each
+	//                                (or takes them from one line: "fight AA", "mark rolling A") and calls
+	//                                run({name: value, ...}, ctx): a system id, a wormhole id, a choice's value or text.
 	//     run: (args, ctx) => {}     required; may return a Promise; an exception becomes a red notification
 	//   });
 	//   forkCommands.provider("watchlist", ctx => [{key, kind, title, subtitle, icon, keys: [], run}]);
 	//   forkCommands.invalidate("watchlist");   // its items are rebuilt on the next open
 	//
-	// ctx = {viewingSystemID, ...} built by the palette on open (lazy). Argument commands (`args`) come later.
+	// ctx = {viewingSystemID, selectedSigIDs(), chainSystems(), holes(), trackedCharacterID} built by the palette on open (lazy).
 
+	ARG_TYPES: ["chainSystem", "system", "hole", "signature", "choice", "text"],
 	GROUPS: ["Navigation", "Signatures", "Holes", "Fleet", "Routes", "Intel", "Panels", "App"],
 
 	commands: [],
@@ -29,6 +35,8 @@ const forkCommands = {
 		if (typeof def.run !== "function") { throw new Error(name + "run(args, ctx) is required"); }
 		if (def.enabled !== undefined && typeof def.enabled !== "function") { throw new Error(name + "enabled must be a function"); }
 		if (def.context !== undefined && typeof def.context !== "function") { throw new Error(name + "context must be a function"); }
+		if (def.hint !== undefined && typeof def.hint !== "function") { throw new Error(name + "hint must be a function"); }
+		if (def.args !== undefined) { forkCommands.checkArgs(name, def.args); }
 		const existing = forkCommands.commands.filter(function(c) { return c.id === def.id; })[0];
 		if (existing) {
 			console.warn("forkCommands.register(" + def.id + "): already registered, ignored");
@@ -39,6 +47,46 @@ const forkCommands = {
 		command.keywords = Array.isArray(def.keywords) ? def.keywords : [];
 		forkCommands.commands.push(command);
 		return command;
+	},
+
+	checkArgs: function(name, args) {
+		if (!Array.isArray(args)) { throw new Error(name + "args must be an array"); }
+		const seen = {};
+		args.forEach(function(a) {
+			if (!a || typeof a.name !== "string" || !a.name) { throw new Error(name + "every argument needs a name"); }
+			if (seen[a.name]) { throw new Error(name + "duplicate argument " + a.name); }
+			seen[a.name] = true;
+			if (forkCommands.ARG_TYPES.indexOf(a.type) < 0) { throw new Error(name + "argument " + a.name + ": unknown type " + a.type); }
+			if (a.type === "choice" && typeof a.choices !== "function") { throw new Error(name + "argument " + a.name + ": choices must be a function"); }
+			["default", "filter"].forEach(function(f) {
+				if (a[f] !== undefined && typeof a[f] !== "function") { throw new Error(name + "argument " + a.name + ": " + f + " must be a function"); }
+			});
+		});
+	},
+
+	/**
+	 * "Toggle <panel>" for a panel with an `enabled` option: flips options[key].enabled (the same key as the Settings row),
+	 * saves and runs options.apply() (every panel's own sync is wrapped around it, as for Settings > Save).
+	 * def: {id, title, key, icon, keywords, group, isOn: options => bool (default: enabled !== false), available: ctx => true | reason}
+	 */
+	panelToggle: function(def) {
+		const key = def.key;
+		const isOn = def.isOn || function(o) { return !(o && o[key] && o[key].enabled === false); };
+		const current = function() { return typeof options !== "undefined" ? options : null; };
+		return forkCommands.register({
+			id: def.id, title: def.title, group: def.group || "Panels", icon: def.icon || "", keywords: (def.keywords || []).concat(["show", "hide", "panel"]),
+			enabled: function(ctx) {
+				if (typeof document !== "undefined" && document.querySelector && document.querySelector("#dialog-options") && typeof $ !== "undefined" && $("#dialog-options").is(":visible")) { return "Close Settings first"; }
+				return def.available ? def.available(ctx) : (current() ? true : "Not available");
+			},
+			hint: function() { return isOn(current()) ? "Shown now: this hides it" : "Hidden now: this shows it"; },
+			run: function() {
+				const o = current();
+				o[key] = Object.assign({}, o[key], { enabled: !isOn(o) });
+				if (typeof o.save === "function") { o.save(); }
+				if (typeof o.apply === "function") { o.apply(); }
+			}
+		});
 	},
 
 	/** Dynamic items. opts.volatile: rebuilt on every open (default: cached until invalidate(name)) */
@@ -67,6 +115,12 @@ const forkCommands = {
 		return items;
 	},
 
+	/** The command's own subtitle, "" if none (a broken hint never breaks the palette) */
+	hint: function(c, ctx) {
+		if (!c.hint) { return ""; }
+		try { return String(c.hint(ctx) || ""); } catch (e) { return ""; }
+	},
+
 	/** The registered commands as palette item definitions, for the current ctx (enabled/context evaluated now) */
 	items: function(ctx) {
 		return forkCommands.commands.map(function(c) {
@@ -82,8 +136,8 @@ const forkCommands = {
 			const disabled = enabled === true || enabled === undefined ? "" : (typeof enabled === "string" && enabled ? enabled : "Not available right now");
 			return {
 				key: "cmd:" + c.id, kind: "cmd", id: c.id, title: c.title, group: c.group, icon: c.icon || "", shortcut: c.shortcut || "",
-				subtitle: disabled || c.group, keys: c.keywords.concat([c.group]), disabled: disabled,
-				ctx: inContext && !disabled ? 120 : 0, inContext: inContext, command: c
+				subtitle: disabled || forkCommands.hint(c, ctx) || c.group, keys: c.keywords.concat([c.group]), disabled: disabled,
+				ctx: inContext && !disabled ? 120 : 0, inContext: inContext, command: c, args: c.args || null
 			};
 		});
 	},

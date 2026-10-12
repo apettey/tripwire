@@ -1065,7 +1065,24 @@ const intelScans = {
 		}
 	},
 
+	/** Command palette (Ctrl+K): "Paste d-scan <system>" opens the paste box; "Toggle d-scan & local panel" */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		forkCommands.register({
+			id: "intel.dscan", title: "Paste d-scan", group: "Intel", icon: "search", keywords: ["local", "intel", "scan", "directional"],
+			context: function() { return true; },
+			enabled: function() { return intelScans.enabled(typeof options !== "undefined" ? options : null) ? true : "D-scan & local intel is switched off in Settings"; },
+			args: [{ name: "system", label: "system", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; }, filter: function(id) { return intelScans.isSystem(parseInt(id, 10)); } }],
+			run: function(args) {
+				if (parseInt(args.system, 10) !== parseInt(viewingSystemID, 10)) { tripwire.systemChange(parseInt(args.system, 10)); }
+				intelScans.openDialog(args.system);
+			}
+		});
+		forkCommands.panelToggle({ id: "panel.intelScans", title: "Toggle d-scan & local panel", key: "intelScans", icon: "search", keywords: ["intel", "local", "d-scan"] });
+	},
+
 	init: function() {
+		intelScans.registerCommands();
 		intelScans.setupSettings();
 		intelScans.setupMenu();
 		intelScans.setupPasteDetect();

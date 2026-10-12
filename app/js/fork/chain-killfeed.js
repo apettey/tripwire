@@ -746,6 +746,9 @@ const chainKillFeed = {
 	init: function() {
 		if (typeof systemKillFeed === "undefined") { return; }
 		chainKillFeed.setupSettings();
+		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+			forkCommands.panelToggle({ id: "panel.chainKills", title: "Toggle chain kills panel", key: "chainKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });
+		}
 		// Follow the chain map: every draw (new hole, chain tab or mask switch, system change) re-reads its systems
 		if (typeof chain !== "undefined" && chain && typeof chain.draw === "function" && !chain.draw.chainKillFeedWrapped) {
 			const draw = chain.draw;

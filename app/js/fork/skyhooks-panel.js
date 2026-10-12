@@ -679,6 +679,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			installHook();
 			setupSettings();
 			lastOn = isOn();
+			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+				forkCommands.register({
+					id: "skyhooks.open", title: "Open Skyhooks", group: "Routes", icon: "anchor", keywords: ["skyhook", "planet", "sov", "low-sec", "null-sec", "exit"],
+					enabled: function() { return isOn() ? true : "The Skyhooks panel is switched off in Settings"; },
+					args: [{ name: "exit", label: "exit", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; },
+						filter: function(id) { const s = appData.systems[id]; return !!s && !s.class; } }],
+					run: function(args) { open(args.exit); }
+				});
+				forkCommands.panelToggle({ id: "panel.skyhooks", title: "Toggle Skyhooks panel", key: "skyhooksPanel", icon: "anchor", keywords: ["skyhook"] });
+			}
 
 			const sel = "#" + sp.WIDGET_ID;
 			const $doc = $(document);

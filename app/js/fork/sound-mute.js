@@ -97,6 +97,13 @@ const soundMute = {
 
 	init: function() {
 		soundMute.wrapPlayer();
+		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+			forkCommands.register({
+				id: "sound.toggle", title: "Mute or unmute sounds", group: "App", icon: "alert", keywords: ["sound", "silence", "audio", "speaker"],
+				hint: function() { return soundMute.muted(soundMute.current()) ? "Muted now: this unmutes" : "Sound is on: this mutes"; },
+				run: function() { soundMute.toggle(); }
+			});
+		}
 
 		const $settings = $("#settings");
 		if ($settings.length && !$("#sound-mute").length) {

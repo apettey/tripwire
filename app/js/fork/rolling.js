@@ -466,8 +466,33 @@ const holeRolling = {
 		preserveMass.set = wrapped;
 	},
 
+	/** Command palette (Ctrl+K): "Mark rolling <hole>" (opens the note dialog) and "Stop rolling <hole>" (asks first) */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		const available = function(ctx) {
+			if (!holeRolling.enabled(holeRolling.options())) { return "Rolling markers are switched off in Settings"; }
+			return ctx.holes().length ? true : "No wormholes on the chain map";
+		};
+		forkCommands.register({
+			id: "rolling.mark", title: "Mark rolling", group: "Holes", icon: "connection", keywords: ["roll", "rolling", "close", "hole"],
+			enabled: available,
+			args: [{ name: "hole", label: "hole", type: "hole", filter: function(id) { return !holeRolling.flags[String(id)]; } }],
+			run: function(args) { holeRolling.openDialog(args.hole); }
+		});
+		forkCommands.register({
+			id: "rolling.stop", title: "Stop rolling", group: "Holes", icon: "connection", keywords: ["roll", "rolling", "done", "hole"],
+			enabled: function(ctx) { return Object.keys(holeRolling.flags).length ? available(ctx) : "No hole is marked as rolling"; },
+			args: [{ name: "hole", label: "hole", type: "hole", filter: function(id) { return !!holeRolling.flags[String(id)]; } }],
+			run: function(args) {
+				// Same as the context menu's "Stop rolling"; asks first
+				if (window.confirm("Remove the rolling mark from " + preserveMass.holeLabel(args.hole) + "?")) { return holeRolling.clear(args.hole); }
+			}
+		});
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain || typeof preserveMass === "undefined") { return; }
+		holeRolling.registerCommands();
 		holeRolling.hookSizeTags();
 		holeRolling.hookThreatBadges();
 		holeRolling.hookPreserveMass();
