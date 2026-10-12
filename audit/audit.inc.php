@@ -44,7 +44,7 @@ const AUDIT_SIGNATURE_FIELDS = ['signatureID', 'systemID', 'type', 'name', 'book
 const AUDIT_WORMHOLE_FIELDS = ['type', 'parent', 'life', 'mass'];
 const AUDIT_ENTITIES = ['signature', 'wormhole', 'mask'];
 const AUDIT_ACTIONS = ['add', 'update', 'delete'];
-const AUDIT_MASK_ACTIONS = ['grant', 'revoke', 'block', 'unblock', 'remove', 'defaults'];
+const AUDIT_MASK_ACTIONS = ['grant', 'revoke', 'block', 'unblock', 'remove', 'defaults', 'token-create', 'token-revoke'];
 
 /** Retention in days from AUDIT_LOG_DAYS (constant or environment): 0 = off, otherwise 1..3650, default 60 */
 function audit_days() {
