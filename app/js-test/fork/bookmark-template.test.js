@@ -47,8 +47,14 @@ describe('Bookmark templates', () => {
 		it('Unknown type gives nothing', () => assert.equal(bookmarkTemplate.values({ type: '????' }).type, ''));
 		it('Unknown tokens render as nothing', () => assert.equal(bookmarkTemplate.render('{name} {zzz}', values), 'ab'));
 		it('Unsafe characters in values are dropped', () => assert.equal(bookmarkTemplate.render('{name}', { name: 'A<b>"&' }), 'Ab'));
-		it('A name is used up to 12 characters (what the length check assumes)', () => assert.equal(bookmarkTemplate.values({ name: 'ABCDEFGHIJKLMNOP' }).name, 'ABCDEFGHIJKL'));
-		it('Output is cut at 50 characters', () => assert.equal(bookmarkTemplate.render('{name}', { name: 'x'.repeat(80) }).length, 50));
+		it('A long hand-typed name is kept whole while the string fits (legacy output)', () =>
+			assert.equal(holeNaming.bookmarkString({ name: 'wormholehome1 - x', classText: 'C5', sigAlpha: 'ABC', eol: true }), '=WORMHOLEHOME1 C5 ABC EOL'));
+		it('A name is shortened to 12 only when the string would be over 50', () => {
+			const v = bookmarkTemplate.values({ name: 'ABCDEFGHIJKLMNOP' });
+			assert.equal(bookmarkTemplate.render('{name} {name} {name} {name}', v), 'ABCDEFGHIJKL ABCDEFGHIJKL ABCDEFGHIJKL ABCDEFGHIJK');
+			assert.equal(bookmarkTemplate.render('{name} {name}', v), 'ABCDEFGHIJKLMNOP ABCDEFGHIJKLMNOP');
+		});
+		it('Output is cut at 50 characters', () => assert.equal(bookmarkTemplate.render('{system}', { system: 'x'.repeat(80) }).length, 50));
 		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC EOL'));
 		it('Sample return value', () => assert.equal(bookmarkTemplate.render('!{name} {dir}', bookmarkTemplate.sampleValues('back')), '!AB in'));
 	});

@@ -34,7 +34,7 @@ mask until an admin saves, so the built-in names stay for everyone until then ("
 - New files: `app/js/fork/bookmark-template.js`, `app/css/fork/bookmark-template.css`, `bookmark/bookmark.inc.php`, `public/bookmark_template.php`,
   `tests/bookmark_template_test.php`, `app/js-test/fork/bookmark-template.test.js`. Edited fork files: `hole-naming.js`, `jump-return.js`,
   `mask-admin-tab.js` (audit wording), their two tests, `docker/README.md`. No upstream files touched.
-- Review fixes: the length check assumes a 12-character `{name}` (a name is cut at 12 when used), a hole template can't start with `!` or `<`
+- Review fixes: the length check assumes a 12-character `{name}` (a name is cut to 12 only when the finished string would be over 50), a hole template can't start with `!` or `<`
   (that marks a return bookmark), the templates are read when the Add/Edit Signature dialog opens or a jump is seen if they weren't yet (a failed
   read logs a console warning and uses the built-in names), and the Audit tab words the change ("changed the bookmark names"; `audit-log-tab.js`).
 - Tests: mocha (defaults reproduce the previous strings exactly, rendering, validation, custom templates) and the PHP test (validation, endpoint

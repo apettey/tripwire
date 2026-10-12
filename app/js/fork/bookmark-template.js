@@ -62,8 +62,13 @@ const bookmarkTemplate = {
 
 	/** A bookmark string: the template filled in, spaces tidied (an empty token leaves no gap), at most MAX_OUTPUT characters */
 	render: function(template, values) {
-		const text = bookmarkTemplate.expand(template, values);
-		return text.length > bookmarkTemplate.MAX_OUTPUT ? text.substring(0, bookmarkTemplate.MAX_OUTPUT).trim() : text;
+		const t = bookmarkTemplate;
+		let text = t.expand(template, values);
+		if (text.length > t.MAX_OUTPUT && values && String(values.name || "").length > t.MAX_NAME) {
+			// Only a string that would be too long gets its name shortened (otherwise the output is exactly what the name says)
+			text = t.expand(template, Object.assign({}, values, { name: String(values.name).substring(0, t.MAX_NAME) }));
+		}
+		return text.length > t.MAX_OUTPUT ? text.substring(0, t.MAX_OUTPUT).trim() : text;
 	},
 
 	/** Values for the tokens from what the callers know. info: {name, sigID, type, classText, size, eol, system, dir} */
@@ -75,7 +80,7 @@ const bookmarkTemplate = {
 		const digits = (/^[A-Za-z]{3}[-\s]?([0-9]{3})/.exec(sigRaw) || [])[1];
 		const type = clean(info.type).toUpperCase();
 		return {
-			name: clean(info.name).substring(0, bookmarkTemplate.MAX_NAME), sig: letters, sigid: letters && digits ? letters + "-" + digits : letters,
+			name: clean(info.name), sig: letters, sigid: letters && digits ? letters + "-" + digits : letters,
 			type: /^[A-Z0-9]{3,4}$/.test(type) ? type : "", "class": clean(info.classText), size: clean(info.size),
 			life: info.eol ? "EOL" : "", system: clean(info.system), dir: clean(info.dir)
 		};
