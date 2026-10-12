@@ -1,0 +1,138 @@
+/* Staging scan (fork feature, see app/js/fork/staging-scan.js): the "Staging" button in the chain map header, the
+   panel over the top-right of the chain map, and the STG badge on likely staging systems. */
+
+/* Header button: dim when off, highlighted (like other active header icons) when on */
+#staging-scan-toggle {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 4px;
+	font-size: 10px;
+	line-height: 13px;
+	color: #777;
+	border: 1px solid #444;
+	border-radius: 3px;
+	vertical-align: 1px;
+	cursor: pointer;
+	user-select: none;
+}
+#staging-scan-toggle:hover { color: #CCC; border-color: #777; }
+#staging-scan-toggle.active { color: #ffb347; border-color: #a0702a; }
+
+/* Panel: inside the chain widget, under its header, top-right */
+#chainWidget > .staging-scan {
+	position: absolute;
+	z-index: 5;
+	top: 26px;
+	right: 8px;
+	max-width: calc(100% - 24px);
+	max-height: 60%;	/* leaves the lower part of the map visible */
+	display: flex;
+	flex-direction: column;
+	background: rgba(8, 10, 12, 0.92);
+	border: 1px solid #333;
+	border-radius: 3px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+	color: #CCC;
+	font-size: 11px;
+	text-align: left;
+}
+#chainWidget > .staging-scan.hidden { display: none; }
+
+.staging-scan .ss-head {
+	flex: 0 0 auto;
+	padding: 3px 6px;
+	white-space: nowrap;
+	border-bottom: 1px solid #222;
+	color: #999;
+}
+.staging-scan.ss-collapsed .ss-head { border-bottom: none; }
+.staging-scan .ss-title { color: #CCC; font-weight: bold; }
+.staging-scan .ss-head a { color: #999; text-decoration: none; }
+.staging-scan .ss-head a:hover { color: #FFF; }
+.staging-scan .ss-close { margin-left: 4px; font-size: 13px; }
+.staging-scan .ss-radius { font-size: 10px; padding: 0; height: 16px; }
+.staging-scan .ss-count { color: #ffb347; margin-left: 4px; }
+.staging-scan .ss-mode { color: #d0a050; margin-left: 4px; font-style: italic; }
+
+.staging-scan .ss-body {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	overflow-x: auto;
+	min-height: 0;
+}
+.staging-scan .ss-table { border-collapse: collapse; width: 100%; }
+.staging-scan .ss-table th {
+	position: sticky;
+	top: 0;
+	background: #111;
+	color: #999;
+	font-weight: normal;
+	padding: 2px 5px;
+	text-align: right;
+	white-space: nowrap;
+	cursor: pointer;
+	user-select: none;
+}
+.staging-scan .ss-table th:first-child, .staging-scan .ss-table th:nth-child(3), .staging-scan .ss-table th:last-child { text-align: left; }
+.staging-scan .ss-table th:hover { color: #FFF; }
+.staging-scan .ss-table th.ss-sorted { color: #DDD; }
+.staging-scan .ss-table th.ss-asc::after { content: " \25B4"; }
+.staging-scan .ss-table th.ss-desc::after { content: " \25BE"; }
+.staging-scan .ss-table td { padding: 1px 5px; border-top: 1px solid #1c1c1c; white-space: nowrap; }
+.staging-scan .ss-table tr:hover td { background: rgba(255, 255, 255, 0.04); }
+.staging-scan .ss-num { text-align: right; }
+.staging-scan .ss-region { color: #888; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.staging-scan .ss-hours { color: #777; font-size: 9px; }
+.staging-scan .ss-sys { color: #CCC; }
+.staging-scan tr.ss-origin .ss-sys { font-weight: bold; }
+
+/* Likely staging rows stand out */
+.staging-scan tr.ss-staging td { background: rgba(255, 140, 0, 0.13); }
+.staging-scan tr.ss-staging .ss-sys { color: #ffb347; font-weight: bold; }
+
+.staging-scan .ss-tag {
+	display: inline-block;
+	margin-right: 3px;
+	padding: 0 3px;
+	font-size: 9px;
+	line-height: 12px;
+	border: 1px solid #444;
+	border-radius: 2px;
+	color: #999;
+}
+.staging-scan .ss-tag-likely-staging { color: #111; background: #ffb347; border-color: #ffb347; font-weight: bold; }
+.staging-scan .ss-tag-busy-now { color: #ffb347; border-color: #a0702a; }
+.staging-scan .ss-tag-pvp { color: #ff6b6b; border-color: #8a3030; }
+.staging-scan .ss-tag-ratting { color: #8fd18f; border-color: #3f6f3f; }
+.staging-scan .ss-tag-quiet { color: #666; border-color: #333; }
+
+.staging-scan .ss-foot {
+	flex: 0 0 auto;
+	padding: 2px 6px;
+	border-top: 1px solid #222;
+	color: #777;
+	font-size: 10px;
+	white-space: normal;
+}
+
+/* STG badge on chain nodes: hangs just below the node's bottom-left (environment tags take the bottom-right).
+   Not scoped to #chainMap: the renderers measure node markup outside the map. */
+.staging-badge {
+	position: absolute;	/* [data-nodeid] is position: relative */
+	z-index: 2;
+	left: 2px;
+	bottom: -11px;
+	box-sizing: border-box;
+	height: 12px;
+	padding: 0 3px;
+	border: 1px solid #ffb347;
+	border-radius: 6px;
+	background: #3a2508;
+	color: #ffb347;
+	font-size: 7px;
+	font-weight: bold;
+	line-height: 10px;
+	letter-spacing: 0.2px;
+	cursor: default;
+	pointer-events: auto;
+}

@@ -16,7 +16,7 @@ const maskDefaults = {
 	// the keys the forkSettings.register() calls use, so a new setting with a key has to be added to both.
 	ALLOWED: ["autoMass", "chainKillFeed", "commandPalette", "environmentTags", "favouritesRouteStrip", "highsecRegion", "holeNaming", "intelScans", "jumpReturn",
 		"killReporting", "lootBuyers", "preserveMass", "rollPlan", "rolling", "rollingCalc", "routeHoleFilters", "sigAge", "sigInline", "sigAnomalies", "sizeTags", "skyhooksPanel", "smartNotes",
-		"soundMute", "structures", "systemKillFeed", "systemResidents", "systemThreat", "theraRoute", "watchlist"],
+		"soundMute", "stagingScan", "structures", "systemKillFeed", "systemResidents", "systemThreat", "theraRoute", "watchlist"],
 
 	defaults: {},	// the active mask's defaults {optionsKey: value}
 	updatedBy: "",

@@ -73,7 +73,7 @@ const MASKADMIN_DEFAULTS_MAX_KEYS = 40;
 // with a `key`). The browser has the same list (maskDefaults.ALLOWED); a mocha test keeps both equal to the keys the rows use.
 const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'commandPalette', 'environmentTags', 'favouritesRouteStrip', 'highsecRegion', 'holeNaming', 'intelScans', 'jumpReturn',
     'killReporting', 'lootBuyers', 'preserveMass', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sigInline', 'sigAnomalies', 'sizeTags', 'skyhooksPanel', 'smartNotes',
-    'soundMute', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
+    'soundMute', 'stagingScan', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
 
 function maskadmin_ensure_schema(PDO $db) {
     foreach (MASKADMIN_DDL as $ddl) $db->exec($ddl);

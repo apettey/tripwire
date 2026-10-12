@@ -814,6 +814,29 @@ reach. The range maths is a separate pure engine, `app/js/fork/jump-range.js` (t
   `docker compose -f docker-compose.dev.yml exec -T app php jumprange/tests/jammed_endpoint_test.php`
   (`jumprange/tests/` and `jumprange/tools/` are not in the image).
 
+### Staging scan
+
+Viewing a k-space null-sec system (not Pochven, Zarzakh or wormhole space) opens a panel over the chain map
+(`app/js/fork/staging-scan.js`) listing every system within 5 / 10 / 15 stargate jumps (plain hop count over
+`tripwire.map.shortest`, no wormholes) with its traffic and kills, and puts an STG badge on chain nodes that are likely
+staging systems. "Staging" in the chain map header (and Settings > Map Markers) turns it off: `options.stagingScan`
+(`enabled`, `radius`, `collapsed`). No new external calls. EVE has no public docked-player counts, so ship jumps
+(traffic) and NPC kills (ratters undocked) stand in.
+
+- Last hour: `chain.data.activity` (the chain map's own ESI jumps/kills request).
+- Last 24 hours: `public/staging_activity.php` (`GET`, logged-in session) sums upstream's hourly `system_activity` table
+  (written by `system_activity.cron.php`, see the crontab above) per system: `{"hours":24,"generated":..,"systems":{"<id>":
+  [shipJumps, shipKills, podKills, npcKills, activeHours]}}`, `activeHours` = hours with any jumps; only systems with
+  activity. One `GROUP BY` on the `time` index, cached in `cache/staging-activity.json` for the hour and newest cron row;
+  browsers may reuse it until a few minutes past the next full hour (the client asks at most once per UTC hour, only
+  while the feature is on and a null-sec system is viewed). With no rows yet (fresh install) the panel uses the last
+  hour only and says so; it then tags "Busy now" instead of "Likely staging".
+- Thresholds (`stagingScan.T`): **Likely staging** = among the top 3 of the radius by 24 h jumps, at least 2x the radius
+  median, jumps in at least 16 of the 24 hours, and NPC kills not outnumbering jumps. Tags: **PvP** 24 h ship + pod
+  kills >= 10, **Ratting** 24 h NPC kills >= 200, **Quiet** 24 h jumps < 20 (last hour only: 3 / 30 / 2, "Busy now" at
+  >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
+  outnumber jumps.
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.

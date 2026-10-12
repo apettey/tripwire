@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-12 | [Staging scan](2026-10-12-staging-scan/README.md) | In null-sec, a chain map panel lists systems within 5/10/15 jumps with jumps and kills (last hour, 24 h) and flags likely staging systems; STG badge on the map; `staging_activity.php` |
 | 2026-10-12 | [Palette actions and arrow keys in the signature list](2026-10-12-palette-polish/README.md) | → on a palette result lists its actions; ↑/↓/Enter in the signature list; Clear palette history; screen-reader labels and contrast; `commandPalette.perfReport()` |
 | 2026-10-12 | [Palette commands with arguments](2026-10-12-palette-commands/README.md) | Ctrl+K commands take their target on one line or step by step ("fight AA", "mark rolling A", "preserve mass AB", "life eol B2"), hole names / J-codes / systems / aliases with a pick list when ambiguous; commands registered from 14 fork features (open panels, add destination/favourite, mute, panel show/hide); nothing deletes, stop/clear asks first |
 | 2026-10-12 | [Environment tags and chain effects summary](2026-10-12-environment-tags/README.md) | Storm icon on chain systems with an EVE-Scout metaliminal storm report (server cache, stripped to type/system/time), A0 tag on k-space systems with a blue A0 sun (SDE-generated `public/environment-data/a0-suns.json`), one-line chain effects summary; no ice tags (not in static data); Settings > Map Markers > Environment tags / Storm reports |
