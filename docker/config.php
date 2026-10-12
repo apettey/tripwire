@@ -29,7 +29,7 @@ define('EVE_DUMP', tw_env('EVE_DUMP', 'eve_dump'));
 
 define('TRIPWIRE_API', tw_env_bool('TRIPWIRE_API', true));
 // REST API (docker/README.md#rest-api): personal access tokens always work; the old HTTP Basic login with the account's password only while this is on
-define('TRIPWIRE_API_PASSWORD_AUTH', tw_env_bool('TRIPWIRE_API_PASSWORD_AUTH', true));
+define('TRIPWIRE_API_PASSWORD_AUTH', tw_env_bool('TRIPWIRE_API_PASSWORD_AUTH', false));
 // requests per token and minute (1-100000)
 define('TRIPWIRE_API_RATE_LIMIT', tw_env('TRIPWIRE_API_RATE_LIMIT', 60));
 
