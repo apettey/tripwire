@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 101,
+      "date": "2026-10-12",
+      "title": "Set route in game now sets your destination",
+      "description": "The Set route in game buttons (Favourites, Destinations, Thera and Turnur legs, skyhooks, loot buyers, region map and Jump planner) now just set the system as your in-game destination for the characters you pick, instead of adding a waypoint for every system on the way. Your in-game autopilot settings decide the way there: set it to Prefer safer in game if you want a high-sec only route.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-101-set-destination.png",
+          "caption": "Pick the characters whose destination is set"
+        }
+      ]
+    },
+    {
       "pr": 100,
       "date": "2026-10-12",
       "title": "Jump range on the region map",
