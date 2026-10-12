@@ -157,6 +157,8 @@ describe('Set destination in game', () => {
 			'Destination set in game: Jita for Alice and Bob (19 jumps from Hek)'));
 		it('Done text, one jump', () => assert.equal(autopilotRoute.doneText('Jita', 'Alice', 1, 'Perimeter'),
 			'Destination set in game: Jita for Alice (1 jump from Perimeter)'));
+		it('Done text without a jump count (jump drive target)', () => assert.equal(autopilotRoute.doneText('Jita', 'Alice', null, 'Perimeter'),
+			'Destination set in game: Jita for Alice'));
 		it('All set', () => assert.deepEqual(autopilotRoute.summary([ok('Alice'), ok('Bob')], 'Jita', 19, 'Hek'),
 			{ color: 'green', lines: ['Destination set in game: Jita for Alice and Bob (19 jumps from Hek)'] }));
 		it('Some failed: who succeeded, who failed and why', () => assert.deepEqual(

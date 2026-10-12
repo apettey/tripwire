@@ -92,10 +92,11 @@ const autopilotRoute = {
 		return leg.length < 2 ? null : { destID: leg[leg.length - 1], from: leg[0], jumps: leg.length - 1 };
 	},
 
-	/** Toast text once the destination is set: "Destination set in game: Jita for Alice and Bob (19 jumps from Hek)" */
+	/** Toast text once the destination is set: "Destination set in game: Jita for Alice and Bob (19 jumps from Hek)".
+	jumps null: no jump count (e.g. a jump drive target, where gate jumps say nothing) */
 	doneText: function(dest, who, jumps, from) {
-		return "Destination set in game: " + dest + " for " + who + " (" + jumps + " jump" + (jumps === 1 ? "" : "s")
-			+ (from ? " from " + from : "") + ")";
+		return "Destination set in game: " + dest + " for " + who + (jumps === null || jumps === undefined ? ""
+			: " (" + jumps + " jump" + (jumps === 1 ? "" : "s") + (from ? " from " + from : "") + ")");
 	},
 
 	/** The gate leg of a Favourites panel plan. Direct: from where you are. Through the chain: from the system you
@@ -135,7 +136,7 @@ const autopilotRoute = {
 	errorText: function(error) {
 		const status = error && error.status;
 		if (status === 401 || status === 403) {
-			return "EVE refused it: the login has expired or lacks the autopilot waypoint permission. Log in again with EVE SSO.";
+			return "EVE refused it: the login has expired or lacks the permission to set your destination. Log in again with EVE SSO.";
 		}
 		if (status === 420 || status === 429) { return "ESI is rate limiting requests. Try again in a minute."; }
 		if (!status) { return "Could not reach ESI."; }
@@ -304,14 +305,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		/** Ask which characters get the destination. onSend([character]) runs only on Send, with at least one character. */
-		function pickCharacters(label, jumps, onSend) {
+		function pickCharacters(label, jumps, safe, onSend) {
 			const list = ap.characters(options, tripwire.esi && tripwire.esi.characters);
 			const error = ap.noCharacterError(list);
 			if (error) { notify(ap.escape(error), "red", 8000); return; }
 			const $dialog = ensureDialog();
 			pending = { list: list, onSend: onSend };
-			$dialog.find(".autopilot-chars-route").html(ap.escape(label) + ", " + jumps + " jump"
-				+ (jumps === 1 ? "" : "s") + ". Set destination for:");
+			$dialog.find(".autopilot-chars-route").html(ap.escape(label)
+				+ (jumps === null ? "" : ", " + jumps + " jump" + (jumps === 1 ? "" : "s")) + ". Set destination for:");
+			$dialog.find(".autopilot-chars-safe").toggle(!!safe);
 			$dialog.find(".autopilot-chars-list").html(list.map(function(c) {
 				return "<li class='autopilot-chars-row" + (c.usable ? "" : " disabled") + "'><label>"
 					+ "<input type='checkbox' value='" + ap.escape(c.characterID) + "'" + (c.preselected ? " checked" : "")
@@ -326,11 +328,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		/** Set the end of a route's gate leg as the in-game destination of the characters picked in the dialog */
-		function push(path, label) {
+		/** opts: {safe: the route is Tripwire's high-sec only one (the picker says to set Prefer safer in game),
+		noJumps: leave the jump count out (a jump drive target: EVE's gate route there is something else)} */
+		function push(path, label, opts) {
+			opts = opts || {};
 			if (busy) { notify("Still setting the previous destination, one moment.", "yellow", 4000); return; }
 			const target = ap.destination(path, appData.systems);	// never wormhole space (the autopilot can't route there)
 			if (!target) { notify("Nothing to set: no gate jumps on this route.", "yellow", 5000); return; }
-			pickCharacters(label, target.jumps, function(targets) {
+			if (opts.noJumps) { target.jumps = null; }
+			pickCharacters(label, target.jumps, opts.safe, function(targets) {
 				if (busy) { notify("Still setting the previous destination, one moment.", "yellow", 4000); return; }
 				send(targets, target);
 			});
@@ -435,14 +441,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const index = Number($(this).data("leg")) || 0;
 				const scoutLeg = ap.scoutLeg(plan, index);
 				if (scoutLeg.error) { notify(ap.escape(scoutLeg.error), "yellow", 5000); return; }
-				push(scoutLeg.path, scoutLabel(plan, index, id, flags.route === "safe"));
+				push(scoutLeg.path, scoutLabel(plan, index, id, flags.route === "safe"), { safe: flags.route === "safe" });
 				return;
 			}
 			const leg = ap.favouriteLeg(plan, trackedSystem(), id, function(from, to, safe) {
 				return ap.gatePath(gateMap(), appData.systems, from, to, safe, avoidList());
 			});
 			if (leg.error) { notify(ap.escape(leg.error), "yellow", 5000); return; }
-			push(leg.path, systemName(leg.from) + " → " + systemName(id) + (flags.route === "safe" ? " (safe)" : ""));
+			push(leg.path, systemName(leg.from) + " → " + systemName(id) + (flags.route === "safe" ? " (safe)" : ""), { safe: flags.route === "safe" });
 		}
 
 		// ---- Destinations window: a button in each row ----
@@ -510,6 +516,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='autopilot-chars-tools'><label><input type='checkbox' class='autopilot-chars-all' /> Select all</label></div>"
 				+ "<ul class='autopilot-chars-list'></ul>"
 				+ "<p class='autopilot-chars-hint'>Sets each character's in-game destination, replacing its current route. EVE's autopilot picks the way there, using your in-game route settings.</p>"
+				+ "<p class='autopilot-chars-hint autopilot-chars-safe'>For the high-sec only way, set your autopilot to Prefer safer in game.</p>"
 				+ "</div>");
 			$("#" + DIALOG_ID).on("change", ".autopilot-chars-all", function() {
 				$("#" + DIALOG_ID + " .autopilot-chars-list input:enabled").prop("checked", this.checked);

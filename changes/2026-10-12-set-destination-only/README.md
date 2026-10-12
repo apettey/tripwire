@@ -31,11 +31,14 @@ fix/simplification of an existing action.
   picker, remembered selection, busy guard, per-character errors and the green/yellow/red summary stay; wording is
   now about the destination ("Hek → Jita (safe), 19 jumps. Set destination for:", "Destination set in game: Jita
   for Alice and Bob (19 jumps from Hek)"). Dialog title and tooltips say "Set destination in game"; the safe-route
-  tooltip says to use "Prefer safer" in game.
+  tooltip and the picker (for a safe route) say to set "Prefer safer" in game. The jump planner's target
+  leaves out the jump count (a jump drive jump says nothing about EVE's gate route there); the region map card's
+  second button is now "Set destination for..." (picks characters).
 - Removed the waypoint machinery: `MAX_WAYPOINTS`, `reach`, `waypoints`, `limit`, `sendAll`, `partialText`,
   `characterProgressText` and the per-waypoint progress toast. New pure helper `destination(path, systems)`.
-- Tooltips reworded in `thera-route.js` (`legTitle`), `skyhooks-panel.js`, `loot-buyers.js` and `region-map-view.js`
+- Tooltips reworded in `thera-route.js` (`legTitle`), `skyhooks-panel.js`, `loot-buyers.js` and `region-map-view.js`; ESI 401/403 text no longer mentions waypoints
   ("as your in-game destination").
+- `app/js/fork/jump-planner.js`: passes `{noJumps: true}` to `autopilotRoute.push`.
 - Tests: `app/js-test/fork/autopilot-route.test.js` (waypoint tests replaced by destination / one-call-per-character
   / summary tests), `app/js-test/fork/thera-route.test.js` (leg titles).
 - Upstream "Add Waypoint" menu items and the command palette's "Add waypoint" are unchanged.

@@ -2126,7 +2126,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 			// Get home: the jumps start at the chosen start, not at an exit
 			const from = state.last && state.last.home ? state.last.ctx.exitID : state.selected;
-			autopilotRoute.push([from, id], "Destination " + name(id) + " (jump from " + name(from) + ")");
+			autopilotRoute.push([from, id], "Destination " + name(id) + " (jump from " + name(from) + ")", { noJumps: true });
 		}
 
 		function copy(text, what) {

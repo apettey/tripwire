@@ -416,7 +416,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				"<div class='rm-card-head'><b>" + e(sys.name) + "</b> <span class='rm-sec' style='color:" + rm.secColour(sys.security) + "'>" + rm.secText(sys.security) + "</span>"
 				+ "<button class='rm-card-close' title='Close' aria-label='Close'>&times;</button></div>" + lines.join("")
 				+ "<div class='rm-card-buttons'><button class='rm-dest' title='Set as the in-game destination (clears other waypoints)'>Set destination</button> "
-				+ "<button class='rm-route-btn' title='Set this system as the in-game destination for the characters you pick'>Set route in game</button> "
+				+ "<button class='rm-route-btn' title='Set this system as the in-game destination for the characters you pick'>Set destination for...</button> "
 				+ "<button class='rm-view' title='Open this system in Tripwire'>View in Tripwire</button></div>"
 			);
 		}
