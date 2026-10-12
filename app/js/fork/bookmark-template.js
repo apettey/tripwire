@@ -34,6 +34,13 @@ const bookmarkTemplate = {
 	TEMPLATE_CHARS: /^[A-Za-z0-9 =!<>_.,:;\/|+*()\[\]#@~{}-]*$/,
 	VALUE_STRIP: /[^A-Za-z0-9._ -]/g,
 
+	JUMP_PROMPTS: [
+		{ value: "nomatch", label: "Only when no signature matches (default)" },
+		{ value: "always", label: "Also when someone already named the hole, until it has a signature ID" },
+		{ value: "off", label: "Never" }
+	],
+	jumpPrompt: "nomatch",
+
 	/** The templates in use (the mask's, once loaded; the defaults before) */
 	current: { hole: "={name} {class} {sig} {life}", back: "!{name}" },
 	canEdit: false,
@@ -125,9 +132,16 @@ const bookmarkTemplate = {
 		return typeof own === "string" && !t.validate(kind, own) ? own : t.DEFAULTS[kind];
 	},
 
-	/** Take the templates of a server answer ({templates: {hole, back}}); bad or missing ones fall back to the defaults */
-	use: function(templates) {
+	/** The mask-wide mode of the "Which signature did you jump through?" prompt (app/js/fork/jump-sig-prompt.js): a bad or
+		missing value is the default, "nomatch" */
+	jumpPromptMode: function(value) {
+		return bookmarkTemplate.JUMP_PROMPTS.some(function(m) { return m.value === value; }) ? value : "nomatch";
+	},
+
+	/** Take the templates of a server answer ({templates: {hole, back}, jumpPrompt}); bad or missing ones fall back to the defaults */
+	use: function(templates, jumpPrompt) {
 		const t = bookmarkTemplate;
+		t.jumpPrompt = t.jumpPromptMode(jumpPrompt);
 		t.current = {};
 		t.KINDS.forEach(function(kind) {
 			const own = templates && templates[kind];
@@ -155,11 +169,17 @@ const bookmarkTemplate = {
 		const tokens = t.TOKENS.map(function(tok) {
 			return "<tr><td><code>{" + tok.token + "}</code></td><td>" + esc(tok.help) + "</td><td><code>" + esc(tok.sample) + "</code></td></tr>";
 		}).join("");
+		const mode = t.jumpPromptMode(state && state.jumpPrompt);
+		const prompt = "<h3>After a jump</h3><p class='bt-dim'>When someone jumps through a wormhole the automapper can't tie to a signature, Tripwire can ask which signature they went through "
+			+ "(a small pop-up listing the unlinked wormhole signatures; jumping is never blocked and everyone can hide it in Settings). Best practice is still to set the hole before jumping.</p>"
+			+ "<div class='bt-row'><label>Ask which signature was used</label><select class='bt-jump-prompt'" + (edit ? "" : " disabled") + ">"
+			+ t.JUMP_PROMPTS.map(function(m) { return "<option value='" + m.value + "'" + (m.value === mode ? " selected" : "") + ">" + esc(m.label) + "</option>"; }).join("")
+			+ "</select></div>";
 		const info = state && state.updatedBy ? "Last changed by " + esc(state.updatedBy) + ", " + esc(String(state.updatedAt || "").slice(0, 16)) + "." : "Using Tripwire's built-in names.";
 		return "<div class='bt-message'></div><h3>Bookmark names</h3>"
 			+ "<p class='bt-dim'>Everyone on this mask gets these bookmark strings when a hole is added or saved and after jumping through it. "
 			+ "An empty token leaves no gap. At most " + t.MAX_OUTPUT + " characters. " + (edit ? "" : "Only the mask's owner and the owning corporation's Tripwire admins can change them.") + "</p>"
-			+ rows
+			+ rows + prompt
 			+ (edit ? "<div class='bt-buttons'><button type='button' class='bt-save'>Save</button> <button type='button' class='bt-default'>Use the built-in names</button></div>" : "")
 			+ "<p class='bt-dim'>" + info + "</p>"
 			+ "<h3>Tokens</h3><table class='bt-table'><thead><tr><th>Token</th><th>Is replaced by</th><th>Example</th></tr></thead><tbody>" + tokens + "</tbody></table>";
@@ -179,7 +199,7 @@ const bookmarkTemplate = {
 			t.csrf = data.csrf || t.csrf;
 			t.canEdit = !!data.canEdit;
 			t.loadedAt = Date.now();
-			t.use(data.templates);
+			t.use(data.templates, data.jumpPrompt);
 		}).fail(function(xhr) {
 			t.loadFailed = true;
 			console.warn("bookmark-template: could not load the mask's templates, using the built-in names", t.errorText(xhr));
@@ -205,7 +225,7 @@ const bookmarkTemplate = {
 		}).done(function(answer) {
 			t.state = answer;
 			t.csrf = answer.csrf || t.csrf;
-			t.use(answer.templates);
+			t.use(answer.templates, answer.jumpPrompt);
 		});
 	},
 
@@ -219,7 +239,7 @@ const bookmarkTemplate = {
 	refreshPreview: function() {
 		const t = bookmarkTemplate;
 		let ok = true;
-		t.$window().find(".bt-row").each(function() {
+		t.$window().find(".bt-row[data-kind]").each(function() {
 			const kind = $(this).attr("data-kind");
 			const value = $(this).find(".bt-input").val();
 			const error = t.validate(kind, value);
@@ -244,7 +264,8 @@ const bookmarkTemplate = {
 		$doc.on("click", sel + " .bt-save", function() {
 			if (!t.refreshPreview()) { return; }
 			const body = {};
-			t.$window().find(".bt-row").each(function() { body[$(this).attr("data-kind")] = $(this).find(".bt-input").val().trim(); });
+			t.$window().find(".bt-row[data-kind]").each(function() { body[$(this).attr("data-kind")] = $(this).find(".bt-input").val().trim(); });
+			body.jumpPrompt = t.$window().find(".bt-jump-prompt").val();
 			t.request("save", body).done(function() { t.render_(); t.message("Saved. Members get it the next time their page loads.", false); })
 				.fail(function(xhr) { t.message(t.errorText(xhr), true); });
 		});

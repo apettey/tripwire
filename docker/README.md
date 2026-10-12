@@ -645,6 +645,13 @@ the mask. Table `fork_bookmark_templates` (JSON `data` column, one row per mask)
   only known tokens, and with the longest values the result is at most 50 characters. Values are stripped to `A-Za-z0-9._ -`.
 - **Where used.** `holeNaming.bookmarkString` (Add/Save copy) and `jumpReturn.returnString` (return pop-up): the only two places
   the fork builds a bookmark string. Members read the templates on page load (and again when the tab comes back after 5 minutes).
+- **Which signature did you jump through?** The same tab holds the mask-wide mode of the post-jump pop-up
+  (`app/js/fork/jump-sig-prompt.js`): `nomatch` (default: only when the automapper made a bare hole), `always` (also a hole someone
+  already named, until it has a signature ID) or `off`; `jumpPrompt` in the same row. Users can hide it in Settings > Wormhole Jumps &
+  Mass (`options.jumpSigPrompt`). It never shows while the automapper's own picker is open. Linking a signature is one server
+  transaction (`public/jump_link.php`, `jumplink/jumplink.inc.php`, table `fork_jump_links`): it re-checks that the unknown hole
+  is still bare and the candidate still unlinked, re-points the logged jumps, deletes the bare hole and can be undone with `unlink`.
+  "Use the built-in names" leaves the jump prompt mode alone. Test: `php tests/jump_link_test.php`.
 - **Security.** The mask is the session's; POSTs need `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`; a change is
   in Mask Admin's audit list. Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/bookmark_template_test.php`.
 

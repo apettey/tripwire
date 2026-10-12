@@ -75,7 +75,11 @@ function bookmark_validate($kind, $template) {
     return '';
 }
 
-/** Validate what an admin saves: $input has 'hole' and 'back'. Returns [clean templates|null, errors (kind => message)] */
+/** The "Which signature did you jump through?" prompt, mask-wide: off, only when the automapper found no sig to tie the jump to (default), or after every jump */
+const BOOKMARK_JUMP_PROMPTS = ['off', 'nomatch', 'always'];
+
+/** Validate what an admin saves: $input has 'hole' and 'back', and optionally 'jumpPrompt' (left out = unchanged, see bookmark_save).
+    Returns [clean (hole, back, jumpPrompt when given)|null, errors (kind => message)] */
 function bookmark_validate_input($input) {
     $input = is_array($input) ? $input : [];
     $clean = [];
@@ -85,14 +89,20 @@ function bookmark_validate_input($input) {
         $error = bookmark_validate($kind, $value);
         if ($error !== '') $errors[$kind] = $error; else $clean[$kind] = $value;
     }
+    if (array_key_exists('jumpPrompt', $input)) {
+        if (is_string($input['jumpPrompt']) && in_array($input['jumpPrompt'], BOOKMARK_JUMP_PROMPTS, true)) $clean['jumpPrompt'] = $input['jumpPrompt'];
+        else $errors['jumpPrompt'] = 'The jump prompt has to be off, nomatch or always';
+    }
     return [$errors ? null : $clean, $errors];
 }
 
-/** The mask's templates (defaults for what is missing or no longer valid) and who saved them: [templates, updatedBy, updatedAt] */
+/** The mask's templates (defaults for what is missing or no longer valid), who saved them and the jump prompt mode:
+    [templates, updatedBy, updatedAt, jumpPrompt] */
 function bookmark_load(PDO $db, $mask) {
     $templates = bookmark_defaults();
     $by = '';
     $at = null;
+    $jumpPrompt = 'nomatch';
     $stmt = $db->prepare('SELECT `data`, updatedBy, updatedAt FROM fork_bookmark_templates WHERE maskID = ?');
     $stmt->execute([$mask]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -101,20 +111,30 @@ function bookmark_load(PDO $db, $mask) {
         foreach (['hole', 'back'] as $kind) {
             if (isset($data[$kind]) && is_string($data[$kind]) && bookmark_validate($kind, $data[$kind]) === '') $templates[$kind] = $data[$kind];
         }
+        if (isset($data['jumpPrompt']) && is_string($data['jumpPrompt']) && in_array($data['jumpPrompt'], BOOKMARK_JUMP_PROMPTS, true)) $jumpPrompt = $data['jumpPrompt'];
         $by = (string) $row['updatedBy'];
         $at = $row['updatedAt'];
     }
-    return [$templates, $by, $at];
+    return [$templates, $by, $at, $jumpPrompt];
 }
 
+/** Save the mask's settings. $templates: hole, back and optionally jumpPrompt (left out = keep what is stored, else the default) */
 function bookmark_save(PDO $db, $mask, array $templates, $by) {
+    if (!isset($templates['jumpPrompt'])) $templates['jumpPrompt'] = bookmark_load($db, $mask)[3];
     $stmt = $db->prepare('INSERT INTO fork_bookmark_templates (maskID, `data`, updatedBy, updatedAt) VALUES (?, ?, ?, UTC_TIMESTAMP())'
         . ' ON DUPLICATE KEY UPDATE `data` = VALUES(`data`), updatedBy = VALUES(updatedBy), updatedAt = VALUES(updatedAt)');
-    $stmt->execute([$mask, json_encode(['hole' => $templates['hole'], 'back' => $templates['back']]), mb_substr((string) $by, 0, 100)]);
+    $stmt->execute([$mask, json_encode(['hole' => $templates['hole'], 'back' => $templates['back'], 'jumpPrompt' => $templates['jumpPrompt']]), mb_substr((string) $by, 0, 100)]);
 }
 
-function bookmark_reset(PDO $db, $mask) {
-    $db->prepare('DELETE FROM fork_bookmark_templates WHERE maskID = ?')->execute([$mask]);
+/** "Use the built-in names": the templates go back to the defaults, the jump prompt mode (another setting of the same row) stays as it is */
+function bookmark_reset(PDO $db, $mask, $by = '') {
+    $jumpPrompt = bookmark_load($db, $mask)[3];
+    if ($jumpPrompt === 'nomatch') {
+        $db->prepare('DELETE FROM fork_bookmark_templates WHERE maskID = ?')->execute([$mask]);
+        return;
+    }
+    $defaults = bookmark_defaults();
+    bookmark_save($db, $mask, ['hole' => $defaults['hole'], 'back' => $defaults['back'], 'jumpPrompt' => $jumpPrompt], $by);
 }
 
 /** May this character change the mask's templates: the owner of a custom mask, or a Tripwire admin of the owning corporation (the corp mask: its admins) */
