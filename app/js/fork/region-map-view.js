@@ -3,6 +3,7 @@
 // The bundle concatenates fork files alphabetically: region-map.js defines `regionMap`; everything here runs at DOM ready.
 if (typeof window !== "undefined" && typeof document !== "undefined" && typeof jQuery !== "undefined") {
 	(function() {
+		let rj = null;		// regionMapJumps (region-map-jumps.js), looked up at DOM ready like rm
 		let rm = null;		// regionMap (region-map.js sorts after this file in the bundle, so it is looked up at DOM ready)
 		const NS = "http://www.w3.org/2000/svg";
 		const DIALOG_ID = "dialog-regionMap";
@@ -11,7 +12,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		const state = {
 			layout: null, regionID: null, sel: null, t: { k: 1, x: 0, y: 0 }, view: { w: 800, h: 500 },
-			cache: {}, loading: null, signature: "", timer: null,
+			cache: {}, loading: null, signature: "", timer: null, jumpOn: false, sessionOrigin: null, reach: { key: "", rows: {} }, jumpData: null, jumpLoading: null, jumpFailed: 0,
 			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}
 		};
 
@@ -142,6 +143,104 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		// ---- Overlays ----
 
+		// ---- Jump range overlay (the Jump planner's engine and data, read only) ----
+
+		/** systems.json + ships.json of the Jump planner (same URLs and cache keys, so the browser has them already if the
+		planner was used); loaded once, on first use of the overlay */
+		function loadJumpData() {
+			if (state.jumpData) { return $.Deferred().resolve(state.jumpData).promise(); }
+			if (state.jumpLoading) { return state.jumpLoading; }
+			if (Date.now() - state.jumpFailed < 30000 || typeof jumpRange === "undefined") { return $.Deferred().reject().promise(); }
+			const planner = typeof jumpPlanner !== "undefined" ? jumpPlanner : {};
+			const base = planner.DATA_URL || "jumprange/", v = planner.DATA_VERSION || "";
+			state.jumpLoading = $.when(
+				$.getJSON(base + "systems.json" + (v ? "?v=" + v : "")),
+				$.getJSON(base + "ships.json" + (v ? "?v=" + v + "." + (planner.SHIPS_REV || "") : ""))
+			).then(function(sys, ships) {
+				const coords = jumpRange.decode(sys[0]);
+				state.jumpData = { index: jumpRange.buildIndex(coords, rj.CELL_LY), presets: jumpRange.presets(ships[0]) };
+				state.jumpLoading = null;
+				paint(true);
+				return state.jumpData;
+			}, function() {
+				state.jumpLoading = null;
+				state.jumpFailed = Date.now();
+				paint(true);
+				return $.Deferred().reject().promise();
+			});
+			return state.jumpLoading;
+		}
+
+		/** What the overlay needs for this paint: null when it is off, else {loading | error | res, originID, preset, ...} */
+		function jumpContext(layout) {
+			if (!state.jumpOn) { return null; }
+			if (!state.jumpData) {
+				loadJumpData();
+				return { loading: !state.jumpFailed || Date.now() - state.jumpFailed >= 30000, failed: Date.now() - state.jumpFailed < 30000 };
+			}
+			const cfg = rj.settings(options);
+			const exits = chainExits().map(Number).filter(function(id) { return rm.isKSpace(appData.systems[id]); });
+			const origins = rj.origins({ selected: state.sel, me: myLocation(), exits: exits, systems: appData.systems, choice: state.sessionOrigin || cfg.origin });
+			if (origins.problem) { return { origins: origins, error: "problem", problem: origins.problem }; }
+			if (!origins.id) { return { origins: origins, error: "none" }; }
+			const preset = jumpRange.preset(state.jumpData.presets, cfg.ship);
+			const res = rj.compute({ originID: origins.id, preset: preset, jdc: cfg.jdc, index: state.jumpData.index, systems: appData.systems,
+				ids: layout.systems.map(function(s) { return s.id; }) });
+			return { origins: origins, originID: origins.id, preset: preset, res: res, cfg: cfg, error: res.error };
+		}
+
+		/** The two-jump answer for one system, only asked for the selected system's card and kept per origin, ship and JDC level */
+		function jumpReach(jc, id) {
+			const key = [jc.originID, jc.cfg.ship, jc.cfg.jdc].join("|");
+			if (state.reach.key !== key) { state.reach = { key: key, rows: {} }; }
+			if (state.reach.rows[id] === undefined) {
+				try {
+					state.reach.rows[id] = jumpRange.reach(jc.originID, id, jc.res.range, state.jumpData.index, appData.systems, rj.engineOptions(jc.preset), 2);
+				} catch (e) { state.reach.rows[id] = null; }
+			}
+			return state.reach.rows[id];
+		}
+
+		/** The line for a system: tooltips just say "out of range"; the card (withReach) also looks for a two-jump route */
+		function jumpLine(jc, id, withReach) {
+			const row = jc.res.rows[id];
+			if (!row) { return "No position data for this system"; }
+			return rj.describe(jc.res, row, withReach && row.state === "out" ? jumpReach(jc, id) : null, sysName, appData.systems[id], id);
+		}
+
+		function paintJumpBar(jc) {
+			const $bar = $("#" + DIALOG_ID + " .rm-jbar"), cfg = rj.settings(options);
+			$bar.toggle(state.jumpOn);
+			if (!state.jumpOn) { return; }
+			$bar.find(".rm-jship").val(cfg.ship);
+			$bar.find(".rm-jdc").val(String(cfg.jdc));
+			const $o = $bar.find(".rm-jorigin"), list = jc && jc.origins ? jc.origins.options : [];
+			const html = list.length ? list.map(function(o) { return "<option value='" + rm.escape(o.value) + "'>" + rm.escape(o.label) + "</option>"; }).join("") : "<option value=''>No origin</option>";
+			if ($o.attr("data-html") !== html) { $o.html(html).attr("data-html", html); }
+			$o.val(jc && jc.origins ? jc.origins.value : "");
+			let text;
+			if (!jc || jc.loading) { text = "Loading jump data\u2026"; }
+			else if (jc.failed) { text = "Could not load the jump range data."; }
+			else if (jc.error === "problem") { text = jc.problem; }
+			else if (jc.error === "none") { text = "Select a system, or be in one, to see its jump range."; }
+			else if (jc.error === "origin") { text = "No jump drive can be used from " + sysName(jc.originID) + "."; }
+			else if (jc.error) { text = "No jump data for " + sysName(jc.originID) + "."; }
+			else {
+				const inHere = state.layout.systems.filter(function(s) { return (jc.res.rows[s.id] || {}).state === "in"; }).length;
+				text = jc.res.label + " \u00b7 range " + rj.ly(jc.res.range) + (state.layout.byId[jc.originID] ? "" : " from " + sysName(jc.originID) + " (" + regionName((appData.systems[jc.originID] || {}).regionID) + ")")
+					+ " \u00b7 " + inHere + " in range here";
+			}
+			$bar.find(".rm-jinfo").text(text);
+		}
+
+		/** Open the map on a system with the jump overlay on ("Region map jumps <system> [ship]") */
+		function openJumps(systemID, ship) {
+			state.jumpOn = true;
+			state.sessionOrigin = "selected";	// this session only: the remembered origin choice is left alone
+			if (ship) { saveSetting({ jump: rj.withJump(options, { ship: ship }) }); }	// a ship the user typed is remembered
+			return open({ kind: "system", id: Number(systemID) });
+		}
+
 		function context() {
 			const cfg = rm.settings(options), layout = state.layout;
 			const ids = layout.systems.map(function(s) { return s.id; });
@@ -153,6 +252,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (cfg.overlays.fight) { const f = fightSystem(); ctx.fight = f && layout.byId[f] ? f : null; }
 			if (cfg.heat !== "none") { ctx.heat = rm.heatMap(cfg.heat, ids, activityNow()); }
 			if (cfg.overlays.route && state.sel) { ctx.route = routeTo(state.sel); }
+			ctx.jump = jumpContext(layout);
 			return ctx;
 		}
 
@@ -176,7 +276,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!layout || !state.layers.tags) { return; }
 			if (rm.settings(options).heat !== "none" || state.sel) { ensureActivity(); }
 			const ctx = context();
-			const sig = JSON.stringify([ctx.cfg, ctx.exits, ctx.pilots, ctx.fight, ctx.heat.values, ctx.route && ctx.route.path, state.sel]);
+			const sig = JSON.stringify([ctx.cfg, ctx.exits, ctx.pilots, ctx.fight, ctx.heat.values, ctx.route && ctx.route.path, state.sel,
+				ctx.jump && [ctx.jump.loading, ctx.jump.failed, ctx.jump.error, ctx.jump.originID, ctx.jump.cfg, ctx.jump.res && ctx.jump.res.rows]]);
 			if (!force && sig === state.signature) { return; }
 			state.signature = sig;
 			const L = state.layers;
@@ -249,9 +350,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
 
+			// Jump range: in range ringed, the rest dimmed, the origin marked
+			const jc = ctx.jump && ctx.jump.res && !ctx.jump.error ? ctx.jump : null;
+			layout.systems.forEach(function(s) {
+				const row = jc ? jc.res.rows[s.id] : null, g = $(state.nodes[s.id].g);
+				g.toggleClass("rm-jin", !!row && row.state === "in").toggleClass("rm-jout", !!row && row.state === "out")
+					.toggleClass("rm-jbad", !!row && row.state === "bad").toggleClass("rm-jorigin", !!row && row.state === "origin");
+				if (row && row.state === "origin") { outline(L.tags, s, "rm-jorigin-ring", 3.5); }
+			});
+			$("#" + DIALOG_ID + " .rm-svg").toggleClass("rm-jumping", !!jc);
+			paintJumpBar(ctx.jump);
+
 			// Tooltips and the selected card
 			layout.systems.forEach(function(s) {
 				const parts = [s.name + " (" + rm.secText(secOf(s)) + ")"];
+				if (jc && jc.res.rows[s.id]) { parts.push(jumpLine(jc, s.id)); }
 				const a = activityNow() && activityNow()[s.id];
 				if (a && (a.npcKills || a.shipKills || a.shipJumps)) {
 					parts.push("last hour: " + (a.npcKills || 0) + " NPC kills, " + (a.shipKills || 0) + " ship kills, " + (a.shipJumps || 0) + " jumps");
@@ -291,6 +404,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					+ " (" + e((hole ? hole + ", " : "") + sysName(exitRoute.exit)) + ")</div>");
 			} else if (chainExits().length) {
 				lines.push("<div class='rm-card-row rm-muted'>No gate route from the chain's exits</div>");
+			}
+			if (ctx.jump && ctx.jump.res && !ctx.jump.error && ctx.jump.res.rows[id]) {
+				const row = ctx.jump.res.rows[id];
+				lines.push("<div class='rm-card-row rm-card-jump rm-j-" + row.state + "'>" + (row.state === "origin" ? "" : "Jump here: ") + e(jumpLine(ctx.jump, id, true)) + "</div>");
 			}
 			if (ctx.route && ctx.route.from === "you" && ctx.route.jumps > 0) {
 				lines.push("<div class='rm-card-row'>" + ctx.route.jumps + " jump" + (ctx.route.jumps === 1 ? "" : "s") + " from you</div>");
@@ -372,6 +489,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$d.find(".rm-region").val(String(state.regionID));
 			rm.OVERLAYS.forEach(function(name) { $d.find("input[data-ov='" + name + "']").prop("checked", cfg.overlays[name]); });
 			$d.find(".rm-heat").val(cfg.heat);
+			$d.find("input[data-jump]").prop("checked", state.jumpOn);
 			$d.dialog("option", "title", "Region map – " + (state.layout ? state.layout.name : ""));
 		}
 
@@ -446,6 +564,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				paint(true);
 			});
 			$d.on("change", ".rm-heat", function() { saveSetting({ heat: this.value }); paint(true); });
+			$d.on("change", "input[data-jump]", function() { state.jumpOn = this.checked; paint(true); });
+			$d.on("change", ".rm-jship", function() { saveSetting({ jump: rj.withJump(options, { ship: this.value }) }); paint(true); });
+			$d.on("change", ".rm-jdc", function() { saveSetting({ jump: rj.withJump(options, { jdc: this.value }) }); paint(true); });
+			$d.on("change", ".rm-jorigin", function() { if (this.value) { state.sessionOrigin = null; saveSetting({ jump: rj.withJump(options, { origin: this.value }) }); paint(true); } });
 			$d.on("change", ".rm-region", function() { show(Number(this.value), null); });
 			$d.on("click", ".rm-fit", function() { fitView(); });
 			$d.on("click", ".rm-zoom-in", function() { zoomBy(1.4); });
@@ -521,11 +643,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<input type='text' class='rm-goto' placeholder='Go to system or region' autocomplete='off' /> "
 				+ "<span class='rm-toggles'>" + toggles.map(function(t) {
 					return "<label><input type='checkbox' data-ov='" + t[0] + "' /> " + t[1] + "</label>";
-				}).join("") + "</span> "
+				}).join("") + "<label title='Which systems a jump ship can reach in one jump'><input type='checkbox' data-jump /> Jump range</label></span> "
 				+ "<select class='rm-heat' title='Last hour, from the data Tripwire already loads'>" + Object.keys(rm.HEAT).map(function(k) {
 					return "<option value='" + k + "'>" + (k === "none" ? "Heat: off" : "Heat: " + rm.HEAT[k].label) + "</option>";
 				}).join("") + "</select> "
 				+ "<span class='rm-view-buttons'><button class='rm-zoom-out' title='Zoom out' aria-label='Zoom out'>&minus;</button><button class='rm-zoom-in' title='Zoom in' aria-label='Zoom in'>+</button><button class='rm-fit' title='Fit the whole region' aria-label='Fit the whole region'>Fit</button></span>"
+				+ "</div>"
+				+ "<div class='rm-jbar' style='display:none'>"
+				+ "<select class='rm-jship' title='Ship'>" + rj.SHIPS.map(function(x) { return "<option value='" + x[0] + "'>" + x[1] + "</option>"; }).join("") + "</select> "
+				+ "<select class='rm-jdc' title='Jump Drive Calibration level'>" + [5, 4, 3, 2, 1, 0].map(function(n) { return "<option value='" + n + "'>JDC " + rj.ROMAN[n] + "</option>"; }).join("") + "</select> "
+				+ "<select class='rm-jorigin' title='Where the jump starts'></select> <span class='rm-jinfo'></span>"
 				+ "</div>"
 				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-card hidden'></div>"
 				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"
@@ -583,6 +710,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function setupCommand() {
 			if (typeof forkCommands === "undefined") { return; }
 			forkCommands.register({
+				id: "regionmap.jumps", title: "Region map jumps", group: "Navigation", icon: "follow",
+				keywords: ["jump", "range", "black ops", "blops", "cyno", "bridge", "region map"],
+				enabled: function() { return enabled() ? true : "Turned off in Settings > Routes & Navigation"; },
+				args: [
+					{ name: "system", label: "origin system", type: "system", default: function(ctx) { return rm.canOpen(appData.systems[ctx.viewingSystemID]) ? ctx.viewingSystemID : undefined; } },
+					{ name: "ship", label: "ship", type: "choice", optional: true,
+						choices: function() { return rj.SHIPS.map(function(x) { return { value: x[0], title: x[1], keys: rj.SHIP_KEYS[x[0]] || [] }; }); } }
+				],
+				run: function(args) {
+					if (!rm.canOpen(appData.systems[args.system])) { throw new Error("Pick a k-space system"); }
+					const problem = rj.noDrive(args.system, appData.systems[args.system]);
+					if (problem) { throw new Error(problem); }
+					openJumps(args.system, args.ship);
+				}
+			});
+			forkCommands.register({
 				id: "regionmap.open", title: "Region map", group: "Navigation", icon: "follow", keywords: ["dotlan", "null-sec", "low-sec", "region", "map", "constellation"],
 				enabled: function() { return enabled() ? true : "Turned off in Settings > Routes & Navigation"; },
 				args: [{
@@ -600,6 +743,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function setupSettings() {
 			if (typeof forkSettings === "undefined") { return; }
+			forkSettings.register({
+				section: "routes", order: 72, id: "regionMap-jumpShip", type: "select", key: "regionMap",
+				label: "Region map jump ship:", choices: rj.SHIPS.map(function(x) { return [x[0], x[1]]; }),
+				hint: "The ship the map's Jump range overlay starts with (Black Ops by default). The overlay's header changes it too.",
+				get: function(o) { return rj.settings(o).ship; },
+				set: function(o, ship) { o.regionMap = rm.withSetting(o, { jump: rj.withJump(o, { ship: ship }) }); }
+			});
 			forkSettings.register({
 				section: "routes", order: 70, id: "regionMap-enabled", type: "checkbox", key: "regionMap",
 				label: "Region map:", text: "Show the region map (right-click menu, system panel, Ctrl+K)",
@@ -619,6 +769,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() {
 			try {
 				rm = regionMap;
+				rj = regionMapJumps;
+				rm.openJumps = openJumps;
 				rm.open = open;
 				rm.openSystem = function(systemID) { return open({ kind: "system", id: Number(systemID) }); };
 				buildDialog();

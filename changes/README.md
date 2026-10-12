@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-12 | [Region map: jump range overlay](2026-10-12-region-map-jumps/README.md) | Jump range overlay on the region map (mainly Black Ops): from the selected system, you or a chain exit, systems in one jump are ringed and the rest dimmed, with distances, JDC level, two-jump routes via the Jump planner's engine (read only); Ctrl+K "Region map jumps"; Settings > Routes & Navigation |
 | 2026-10-12 | [Trim spaces from Leads To](2026-10-12-trim-leads-to/README.md) | Pasting a system name copied from the game (trailing space) into the sig dialog's Leads field no longer fails validation; trimmed on paste, change and Save |
 | 2026-10-12 | [Which signature did you jump through?](2026-10-12-jump-sig-prompt/README.md) | After a wormhole jump the automapper couldn't match, a small panel lists the unlinked hole sigs; one server step (`public/jump_link.php`, transaction, re-checks) links it, moves the jump's mass log, removes the placeholder hole and copies the bookmark; one-click undo; mask mode off / no match (default) / always, per-user hide |
 | 2026-10-12 | [Bookmark names set by your mask](2026-10-12-bookmark-templates/README.md) | Mask Admin > Bookmarks: owner/corp admins set the hole and return bookmark templates for everyone on the mask ({name} {sig} {sigid} {type} {class} {size} {life} {system} {dir}, preview, validation); defaults reproduce today's strings; `fork_bookmark_templates`, `public/bookmark_template.php` |

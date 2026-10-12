@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 100,
+      "date": "2026-10-12",
+      "title": "Jump range on the region map",
+      "description": "The region map can now show where a jump ship can go. Tick Jump range in the map's header, pick Black Ops, Jump Freighter, a carrier or another hull and your Jump Drive Calibration level, and choose the origin: the system you selected, you, or one of your chain's exits. Systems reachable in one jump are ringed green and the rest are dimmed; hover or click a system for its distance, or for a two-jump route when it is out of range. Or press Ctrl+K and type region",
+      "images": [
+        {
+          "src": "whats-new/img/pr-100-region-map-jumps.png",
+          "caption": "map"
+        }
+      ]
+    },
+    {
       "pr": 98,
       "date": "2026-10-12",
       "title": "Which signature did you jump through?",
