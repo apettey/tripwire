@@ -42,6 +42,16 @@ change was needed; the parity test passes).
   (no cyno in high-sec, Pochven, Zarzakh or wormhole space; covert cynos for Black Ops; range = base x (1 + 0.2 x JDC))
   come from the engine. Cyno-jammed systems are not tracked here (the planner's live jammer/incursion data is not
   loaded), so an in-range system may be jammed for a normal cyno; Black Ops use covert cynos, which work there.
+- Duplicated on purpose: the overlay decodes `systems.json` and builds its own spatial index (the planner's copy is private
+  to `jump-planner.js`, which this change must not touch); the files come from the browser cache when the planner was used.
+- Only the selected system's card asks the engine for a two-jump route (cached per origin, ship, JDC level and target);
+  tooltips just say "out of range".
+- An origin where no jump drive works (wormhole space, Zarzakh) is reported in the overlay's header and by the Ctrl+K
+  command ("J123456 is wormhole space: no jump drive from there"); high-sec is a valid origin (only targets can't be
+  high-sec).
+- The Ctrl+K command applies its origin for this session only; the ship is remembered only if it was typed.
+- No Setting turns the overlay itself on or off: it is opt-in per session (the header checkbox, or the command), so the
+  map looks as before until someone asks for it. The "Region map jump ship" row only picks the starting ship.
 - Files: new `app/js/fork/region-map-jumps.js` (pure logic), `app/js-test/fork/region-map-jumps.test.js`; edited
   `app/js/fork/region-map.js` (keeps the `jump` settings), `app/js/fork/region-map-view.js`, `app/css/fork/region-map.css`.
   No upstream file and none of the Jump planner's files.

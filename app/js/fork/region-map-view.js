@@ -12,7 +12,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		const state = {
 			layout: null, regionID: null, sel: null, t: { k: 1, x: 0, y: 0 }, view: { w: 800, h: 500 },
-			cache: {}, loading: null, signature: "", timer: null, jumpOn: false, jumpData: null, jumpLoading: null, jumpFailed: 0,
+			cache: {}, loading: null, signature: "", timer: null, jumpOn: false, sessionOrigin: null, reach: { key: "", rows: {} }, jumpData: null, jumpLoading: null, jumpFailed: 0,
 			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}
 		};
 
@@ -180,7 +180,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 			const cfg = rj.settings(options);
 			const exits = chainExits().map(Number).filter(function(id) { return rm.isKSpace(appData.systems[id]); });
-			const origins = rj.origins({ selected: state.sel, me: myLocation(), exits: exits, systems: appData.systems, choice: cfg.origin });
+			const origins = rj.origins({ selected: state.sel, me: myLocation(), exits: exits, systems: appData.systems, choice: state.sessionOrigin || cfg.origin });
+			if (origins.problem) { return { origins: origins, error: "problem", problem: origins.problem }; }
 			if (!origins.id) { return { origins: origins, error: "none" }; }
 			const preset = jumpRange.preset(state.jumpData.presets, cfg.ship);
 			const res = rj.compute({ originID: origins.id, preset: preset, jdc: cfg.jdc, index: state.jumpData.index, systems: appData.systems,
@@ -188,16 +189,23 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return { origins: origins, originID: origins.id, preset: preset, res: res, cfg: cfg, error: res.error };
 		}
 
+		/** The two-jump answer for one system, only asked for the selected system's card and kept per origin, ship and JDC level */
 		function jumpReach(jc, id) {
-			try {
-				return jumpRange.reach(jc.originID, id, jc.res.range, state.jumpData.index, appData.systems, rj.engineOptions(jc.preset), 2);
-			} catch (e) { return null; }
+			const key = [jc.originID, jc.cfg.ship, jc.cfg.jdc].join("|");
+			if (state.reach.key !== key) { state.reach = { key: key, rows: {} }; }
+			if (state.reach.rows[id] === undefined) {
+				try {
+					state.reach.rows[id] = jumpRange.reach(jc.originID, id, jc.res.range, state.jumpData.index, appData.systems, rj.engineOptions(jc.preset), 2);
+				} catch (e) { state.reach.rows[id] = null; }
+			}
+			return state.reach.rows[id];
 		}
 
-		function jumpLine(jc, id) {
+		/** The line for a system: tooltips just say "out of range"; the card (withReach) also looks for a two-jump route */
+		function jumpLine(jc, id, withReach) {
 			const row = jc.res.rows[id];
 			if (!row) { return "No position data for this system"; }
-			return rj.describe(jc.res, row, row.state === "out" ? jumpReach(jc, id) : null, sysName, appData.systems[id], id);
+			return rj.describe(jc.res, row, withReach && row.state === "out" ? jumpReach(jc, id) : null, sysName, appData.systems[id], id);
 		}
 
 		function paintJumpBar(jc) {
@@ -213,6 +221,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			let text;
 			if (!jc || jc.loading) { text = "Loading jump data\u2026"; }
 			else if (jc.failed) { text = "Could not load the jump range data."; }
+			else if (jc.error === "problem") { text = jc.problem; }
 			else if (jc.error === "none") { text = "Select a system, or be in one, to see its jump range."; }
 			else if (jc.error === "origin") { text = "No jump drive can be used from " + sysName(jc.originID) + "."; }
 			else if (jc.error) { text = "No jump data for " + sysName(jc.originID) + "."; }
@@ -227,7 +236,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		/** Open the map on a system with the jump overlay on ("Region map jumps <system> [ship]") */
 		function openJumps(systemID, ship) {
 			state.jumpOn = true;
-			if (ship) { saveSetting({ jump: rj.withJump(options, { ship: ship, origin: "selected" }) }); }
+			state.sessionOrigin = "selected";	// this session only: the remembered origin choice is left alone
+			if (ship) { saveSetting({ jump: rj.withJump(options, { ship: ship }) }); }	// a ship the user typed is remembered
 			return open({ kind: "system", id: Number(systemID) });
 		}
 
@@ -397,7 +407,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 			if (ctx.jump && ctx.jump.res && !ctx.jump.error && ctx.jump.res.rows[id]) {
 				const row = ctx.jump.res.rows[id];
-				lines.push("<div class='rm-card-row rm-card-jump rm-j-" + row.state + "'>" + (row.state === "origin" ? "" : "Jump here: ") + e(jumpLine(ctx.jump, id)) + "</div>");
+				lines.push("<div class='rm-card-row rm-card-jump rm-j-" + row.state + "'>" + (row.state === "origin" ? "" : "Jump here: ") + e(jumpLine(ctx.jump, id, true)) + "</div>");
 			}
 			if (ctx.route && ctx.route.from === "you" && ctx.route.jumps > 0) {
 				lines.push("<div class='rm-card-row'>" + ctx.route.jumps + " jump" + (ctx.route.jumps === 1 ? "" : "s") + " from you</div>");
@@ -557,7 +567,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$d.on("change", "input[data-jump]", function() { state.jumpOn = this.checked; paint(true); });
 			$d.on("change", ".rm-jship", function() { saveSetting({ jump: rj.withJump(options, { ship: this.value }) }); paint(true); });
 			$d.on("change", ".rm-jdc", function() { saveSetting({ jump: rj.withJump(options, { jdc: this.value }) }); paint(true); });
-			$d.on("change", ".rm-jorigin", function() { if (this.value) { saveSetting({ jump: rj.withJump(options, { origin: this.value }) }); paint(true); } });
+			$d.on("change", ".rm-jorigin", function() { if (this.value) { state.sessionOrigin = null; saveSetting({ jump: rj.withJump(options, { origin: this.value }) }); paint(true); } });
 			$d.on("change", ".rm-region", function() { show(Number(this.value), null); });
 			$d.on("click", ".rm-fit", function() { fitView(); });
 			$d.on("click", ".rm-zoom-in", function() { zoomBy(1.4); });
@@ -706,11 +716,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				args: [
 					{ name: "system", label: "origin system", type: "system", default: function(ctx) { return rm.canOpen(appData.systems[ctx.viewingSystemID]) ? ctx.viewingSystemID : undefined; } },
 					{ name: "ship", label: "ship", type: "choice", optional: true,
-						choices: function() { return rj.SHIPS.map(function(x) { return { value: x[0], title: x[1], keys: rj.SHIP_KEYS[x[0]] || [] }; }); },
-						default: function() { return rj.settings(options).ship; } }
+						choices: function() { return rj.SHIPS.map(function(x) { return { value: x[0], title: x[1], keys: rj.SHIP_KEYS[x[0]] || [] }; }); } }
 				],
 				run: function(args) {
 					if (!rm.canOpen(appData.systems[args.system])) { throw new Error("Pick a k-space system"); }
+					const problem = rj.noDrive(args.system, appData.systems[args.system]);
+					if (problem) { throw new Error(problem); }
 					openJumps(args.system, args.ship);
 				}
 			});

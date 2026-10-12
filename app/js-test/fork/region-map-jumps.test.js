@@ -126,6 +126,24 @@ describe('regionMapJumps origin choice', function() {
 	});
 });
 
+describe('regionMapJumps origin problems', function() {
+	it('says why a chosen origin cannot be used instead of falling back', function() {
+		const env = { selected: 31000001, me: 30000003, exits: [30000005], systems, choice: 'selected' };
+		const o = regionMapJumps.origins(env);
+		assert.strictEqual(o.id, null);
+		assert.strictEqual(o.problem, 'J100001 is wormhole space: no jump drive from there');
+		assert.strictEqual(regionMapJumps.origins(Object.assign({}, env, { selected: null, choice: 'you', me: 31000001 })).problem, 'J100001 is wormhole space: no jump drive from there');
+		assert.ok(regionMapJumps.origins(Object.assign({}, env, { choice: 'exit:31000001' })).problem);
+		assert.strictEqual(regionMapJumps.origins(Object.assign({}, env, { selected: 30000002 })).problem, undefined);
+		assert.strictEqual(regionMapJumps.origins(Object.assign({}, env, { selected: null })).problem, undefined, 'nothing selected is not a problem');
+	});
+	it('a high-sec origin is fine (the drive works there; only targets cannot be high-sec)', function() {
+		assert.strictEqual(regionMapJumps.noDrive(30000004, systems[30000004]), '');
+		assert.strictEqual(regionMapJumps.origins({ selected: 30000004, me: null, exits: [], systems, choice: 'selected' }).id, 30000004);
+		assert.strictEqual(regionMapJumps.noDrive(1, undefined), '');
+	});
+});
+
 describe('regionMapJumps settings and arguments', function() {
 	it('defaults to Black Ops, JDC V, the selected system', function() {
 		assert.deepStrictEqual(regionMapJumps.settings({}), { ship: 'group-898', jdc: 5, origin: 'selected' });

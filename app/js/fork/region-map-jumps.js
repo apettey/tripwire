@@ -79,9 +79,24 @@ const regionMapJumps = {
 		(env.exits || []).forEach(function(x) {
 			if (ok(x)) { list.push({ value: "exit:" + x, label: "Exit: " + name(x), id: Number(x) }); }
 		});
+		// A chosen origin where no jump drive works is reported, not quietly replaced by another one
+		const m = /^exit:(\d+)$/.exec(String(env.choice));
+		const wanted = env.choice === "selected" ? env.selected : env.choice === "you" ? env.me : m ? Number(m[1]) : null;
+		const problem = wanted && !ok(wanted) ? regionMapJumps.noDrive(wanted, systems[wanted]) : "";
+		if (problem) { return { options: list, value: env.choice, id: null, problem: problem }; }
 		const used = list.filter(function(o) { return o.value === env.choice; })[0]
 			|| list.filter(function(o) { return o.value === "selected"; })[0] || list.filter(function(o) { return o.value === "you"; })[0] || list[0] || null;
 		return { options: list, value: used ? used.value : "", id: used ? used.id : null };
+	},
+
+	/** Why no jump drive can be used from a system ("" if one can): wormhole space and Zarzakh. (High-sec is fine: the drive works
+	there, it is only the target that cannot be in high-sec.) */
+	noDrive: function(systemID, system) {
+		if (!system || jumpRange.canJumpFrom(systemID, system)) { return ""; }
+		const kind = jumpRange.kind(systemID, system), name = system.name || String(systemID);
+		if (kind === "wh") { return name + " is wormhole space: no jump drive from there"; }
+		if (kind === "zarzakh") { return name + ": no jump drive can be used from there"; }
+		return "No jump drive can be used from " + name;
 	},
 
 	/** The cyno rules for a ship preset: Black Ops light covert cynos; everyone is kept out of high-sec by the engine */
