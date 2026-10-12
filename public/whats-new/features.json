@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 98,
+      "date": "2026-10-12",
+      "title": "Which signature did you jump through?",
+      "description": "When you jump through a wormhole the automapper can't match to a signature, a small pop-up lists the unlinked wormhole signatures so you can link the right one with a click and get its bookmark copied. Mask admins can set it to only appear when nothing matches, appear more often, or switch it off in Mask Admin > Bookmarks; you can hide it for yourself in Settings > Wormhole Jumps & Mass > Which signature prompt.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-98-jump-sig-prompt.png",
+          "caption": "Pick the signature you jumped through"
+        }
+      ]
+    },
+    {
       "pr": 97,
       "date": "2026-10-12",
       "title": "Bookmark names set by your mask",
