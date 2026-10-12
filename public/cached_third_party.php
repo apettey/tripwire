@@ -12,6 +12,7 @@ $fetch_data = array(
 	'invasions' => array('url' => 'https://kybernaut.space/invasions.json', 'cache_file' => 'invasions.json', 'cache_for' => 3600),
 // old thera	'thera' => array('url' => 'https://www.eve-scout.com/api/wormholes', 'cache_file' => 'thera.json', 'cache_for' => 60),
 	'eve-scout-signatures' => array('url' => 'https://api.eve-scout.com/v2/public/signatures', 'cache_file' => 'thera.json', 'cache_for' => 300),
+	'eve-scout-observations' => array('url' => 'https://api.eve-scout.com/v2/public/observations', 'cache_file' => 'eve-scout-observations.json', 'cache_for' => 600),	// fork: storms (environment tags)
 	'fw' => array('url' => 'https://esi.evetech.net/fw/systems/?datasource=tranquility', 'cache_file' => 'fw.json', 'cache_for' => 3600),
 )[$_REQUEST['key']];
 

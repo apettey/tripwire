@@ -1,0 +1,47 @@
+/* Environment tags (fork feature, see app/js/fork/environment-tags.js): storm and A0 icons on chain map nodes, and the
+   chain effects summary above the map. Not scoped to #chainMap: the renderers measure node markup outside the map.
+   Corners already taken: threat badge top-left, skyhook icon and jump-planner ring top-right, intel dot bottom-right
+   and statics / structure icons bottom-left (inside the node), so the tags hang just below the node's bottom-right. */
+.env-tags {
+	position: absolute;	/* [data-nodeid] is position: relative */
+	z-index: 2;
+	right: 2px;
+	bottom: -11px;
+	display: flex;
+	flex-direction: row-reverse;
+	gap: 2px;
+	line-height: 0;
+	pointer-events: auto;
+}
+.env-tag {
+	box-sizing: border-box;
+	height: 12px;
+	min-width: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid #5cc8f5;
+	border-radius: 6px;
+	background: rgba(0, 0, 0, 0.8);
+	color: #5cc8f5;
+	font-size: 7px;
+	font-weight: bold;
+	line-height: 10px;
+	cursor: default;
+}
+.env-tag svg { display: block; }
+.env-tag.env-a0 { padding: 0 2px; color: #9ad0ff; border-color: #4a8fe0; background: #10284a; letter-spacing: -0.3px; }
+
+.env-summary {
+	display: inline-block;
+	margin-left: 10px;
+	max-width: 60%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
+	font-size: 11px;
+	color: #bcc7cf;
+	cursor: default;
+}
+.env-summary.hidden { display: none; }
