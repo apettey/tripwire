@@ -36,9 +36,13 @@ the arrows and Enter. Both are on by default.
   noun already filled in; a disabled one stays greyed with its reason; typing filters the list. Actions are not recorded as
   recents. Pure helper `paletteArgs.finish`; `commandPalette.actionsFor / nounCandidate / openActions / leaveActions`.
 - **Scope prefix alone** (`#`, `@`, `,`) now lists everything in that scope instead of "No match".
-- **Signature table keys** (`sig-inline.js`): with exactly one row selected, no modifier, focus not in a text box, no dialog,
-  no popover: Up/Down move the selection (stops at the first/last row; the page does not scroll), Enter presses the Edit
-  button (`#edit-signature`; not when a button or link has the focus). Nothing happens with no or several rows selected.
+- **Signature table keys** (`sig-inline.js`): with exactly one row selected, no modifier, no dialog, no popover and the focus
+  on the page itself or on a plain element inside the signature widget (never a button, link, tab, summary, form control,
+  [tabindex] / [role] widget, details or scrollable panel: `sigInline.focusOk`): Up/Down move the selection (stops at the
+  first/last row; a held key keeps moving it and the page does not scroll), Enter presses the Edit button (`#edit-signature`;
+  not when it is disabled or a life / mass save of the row is still in flight; a held Enter acts once). Nothing happens with no or several rows selected.
+- "Edit ‹sig›" in the action list: `selectSig` now reports whether the row exists; a missing row gives a red notice, and the edit
+  click is skipped when the Edit button is disabled or the row has a pending inline save.
 - **Clear palette history**: removes `localStorage["tw-palette-frecency"]` (recents and ranking boost); disabled with
   "No palette history yet" when there is nothing; the hint shows how many items are remembered. It only touches this
   browser's palette history.

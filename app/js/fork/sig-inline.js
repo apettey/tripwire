@@ -84,9 +84,12 @@ const sigInline = {
 	selectedCount, popoverField (null = closed)}. Returns {type: "open", field} | {type: "pick", value} |
 	{type: "move", delta} | {type: "close"} | null (leave the key alone). */
 	keyAction: function(s) {
-		if (s.ctrlKey || s.metaKey || s.altKey || s.repeat) { return null; }
+		if (s.ctrlKey || s.metaKey || s.altKey) { return null; }
 		const key = String(s.key || "").toLowerCase();
+		// Held arrow keys keep moving the selection (and keep the page from scrolling); every other key acts once per press
+		if (s.repeat && !(key === "arrowup" || key === "arrowdown") ) { return null; }
 		if (s.popoverField) {
+			if (s.repeat) { return null; }
 			if (s.targetEditable) { return null; }
 			if (key === "tab") { return { type: "close" }; }
 			if (key === "escape") { return { type: "close" }; }
@@ -101,11 +104,23 @@ const sigInline = {
 		const field = sigInline.KEY_FIELD[key];
 		if (field) { return { type: "open", field: field }; }
 		// Keyboard walk through the signature table: with one row selected, up/down move it and Enter edits it
-		// (not on a focused button or link: Enter must keep pressing it)
+		// (only when the focus is on the page itself or plainly inside the signature widget, see focusOk)
+		if (!s.focusOk) { return null; }
 		if (key === "arrowup") { return { type: "nav", delta: -1 }; }
 		if (key === "arrowdown") { return { type: "nav", delta: 1 }; }
-		if (key === "enter" && !s.targetInteractive) { return { type: "edit" }; }
+		if (key === "enter") { return { type: "edit" }; }
 		return null;
+	},
+
+	/** Whether the focused element lets the table keys act: the page body, or a plain element inside the signature widget.
+	Never a button, link, tab, summary, form control, [tabindex] / [role] widget, details or scrollable panel (they use those keys). */
+	focusOk: function(el) {
+		const doc = el && el.ownerDocument;
+		if (!el || (doc && (el === doc.body || el === doc.documentElement))) { return true; }
+		if (!el.closest || !el.closest("#signaturesWidget")) { return false; }
+		if (el.matches && el.matches("button, a, summary, select, input, textarea, [tabindex], [role], [contenteditable]")) { return false; }
+		if (el.closest("details, [role='tab'], [role='tablist'], [role='dialog']")) { return false; }
+		return !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test((el.ownerDocument.defaultView.getComputedStyle(el) || {}).overflowY || ""));
 	},
 
 	/** Index of the row to select after moving from `index` by `delta` in a table of `count` rows (stops at the ends), or -1 */
@@ -357,14 +372,15 @@ const sigInline = {
 			dialogOpen: $(".ui-dialog:visible").length > 0,
 			selectedCount: document.querySelectorAll("#sigTable tbody tr.selected").length,
 			popoverField: p ? p.field : null,
-			targetInteractive: !!(e.target && e.target.closest && e.target.closest("button, a, summary, select, [role='button'], [role='menuitem']"))
+			focusOk: sigInline.focusOk(document.activeElement)
 		});
 		if (!action) { return; }
 		if (action.type === "nav") {
 			sigInline.moveSelection(action.delta);
 		} else if (action.type === "edit") {
 			const $edit = $("#edit-signature");
-			if ($edit.hasClass("disabled")) { return; }
+			const selected = document.querySelector("#sigTable tbody tr.selected");
+			if ($edit.hasClass("disabled") || !selected || selected.querySelector(".sig-inline-saving")) { return; }	// disabled, or a life / mass save is still in flight
 			$edit.trigger("click");
 		} else if (action.type === "open") {
 			const row = document.querySelector("#sigTable tbody tr.selected");

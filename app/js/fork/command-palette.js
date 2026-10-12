@@ -665,7 +665,15 @@ const commandPalette = {
 			out.push({ key: "act:select", kind: "act", title: "Select " + noun.title, subtitle: "Select the signature in the table", icon: "pin", tag: "Signature",
 				run: function() { commandPalette.selectSig(noun.sigID); } });
 			out.push({ key: "act:edit", kind: "act", title: "Edit " + noun.title, subtitle: "Open the signature dialog", icon: "edit", tag: "Signature",
-				run: function() { commandPalette.selectSig(noun.sigID); setTimeout(function() { $("#edit-signature").trigger("click"); }, 0); } });
+				run: function() {
+					if (!commandPalette.selectSig(noun.sigID)) { throw new Error("That signature is no longer in the table"); }
+					setTimeout(function() {
+						// Not when the edit button is disabled, or a life / mass save of the row is still in flight
+						const row = document.querySelector("#sigTable tbody tr[data-id='" + noun.sigID + "']");
+						if (!row || $("#edit-signature").hasClass("disabled") || row.querySelector(".sig-inline-saving")) { return; }
+						$("#edit-signature").trigger("click");
+					}, 0);
+				} });
 		}
 		st.argCommands.forEach(function(it) {
 			const cand = commandPalette.nounCandidate(it.command, noun);
@@ -755,10 +763,11 @@ const commandPalette = {
 
 	selectSig: function(id) {
 		const tr = document.querySelector("#sigTable tbody tr[data-id='" + id + "']");
-		if (!tr) { return; }
+		if (!tr) { return false; }
 		$("#sigTable tbody tr.selected").removeClass("selected");
 		$(tr).addClass("selected");
 		if (tr.scrollIntoView) { tr.scrollIntoView({ block: "nearest" }); }
+		return true;
 	},
 
 	/** Open Settings at a row: expand its section, scroll to it, flash it for 1.5 s and focus its control */

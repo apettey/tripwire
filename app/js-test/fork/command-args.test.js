@@ -297,6 +297,8 @@ describe('Palette: ties and Settings guard', () => {
 	it('a clear winner is not a tie', () => {
 		const d = paletteArgs.inline(cmds, 'mark rolling j333333', env);
 		assert.equal(d[0].tie, false);
+	});
+});
 
 describe('Palette: finishing a partly filled command', () => {
 	const command = { args: [{ name: 'hole', type: 'hole' }, { name: 'life', type: 'choice' }, { name: 'note', type: 'text', optional: true }] };
