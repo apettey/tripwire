@@ -129,6 +129,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `KILL_REPORT_FRIENDLY_CORPORATIONS` | empty | `config.php` (`KILL_REPORT_FRIENDLY_CORPORATIONS`), `public/kills.php` | Comma-separated corporation IDs whose kills and losses count as friendly for every user (each user's own corporation always does), e.g. `98839494` |
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
 | `ZKILL_THREAT_KEEP_DAYS` | `90` | `config.php` (`ZKILL_THREAT_KEEP_DAYS`), `zkill/profile.php` | Days (0-90) the stored kills of systems people look at are kept for the System Threat [90-day profile](#90-day-profile-system-threat) instead of `ZKILL_RETENTION_HOURS`; `0` = off |
+| `AUDIT_LOG_DAYS` | `60` | `config.php` (`AUDIT_LOG_DAYS`), `audit/audit.inc.php` | Days (1-3650) the [audit log](#audit-log) of who changed which signature or wormhole is kept; older entries are never shown and are deleted; `0` = nothing is recorded |
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `INTEL_ZKILL_THREAT_ENABLED` | `true` | `config.php` (`INTEL_ZKILL_THREAT_ENABLED`), `intel/pilots.inc.php` | Whether the worker fetches zKillboard character stats for pilots in shared local scans ([who is in local](#who-is-in-local)). `false` = corporations / alliances only (ESI), nothing is asked from zKillboard for local scans. Without `ZKILL_FEED_ENABLED` neither lookup runs |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
@@ -625,6 +626,24 @@ Mask Admin > Admins & members (`public/mask_admins.php`, `maskadmin/maskadmin.in
 - **Security.** The mask is always the session's mask (no request value names one). Writes need the per-session
   `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`, like `fight.php`. Every change is in the audit list.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/mask_admins_test.php`.
+
+### Audit log
+
+Mask Admin > Audit (`public/audit_log.php`, `audit/audit.inc.php`, `app/js/fork/audit-log-tab.js`): who added, changed
+or deleted which signature or wormhole on the mask, newest first, with before/after (`name none → Foo`,
+`life stable → critical`, `leads to A → B`). Table `fork_audit_log` is created on first use
+(`docker/sql/audit-log.sql` is the reference).
+
+- **Recording.** `signatures.php`'s six save functions call one helper each after a successful write (11 added lines in
+  that upstream file), so dialog and inline edits, pasted scans, the automapper and undo/redo are all covered. The mask and
+  the character are the session's. Auditing never fails a save (errors go to the PHP error log).
+- **Retention.** `AUDIT_LOG_DAYS` (default `60`, 1-3650, `0` = nothing recorded and the tab is empty). Older rows are
+  never shown and are deleted on every 100th write and when an admin opens the tab. About 0.3 KB per row
+  (1,000 changes a day for 60 days is roughly 18 MB per mask).
+- **Who sees it.** Mask admins (owner, corp admin, granted admin; `maskadmin_is_admin`) of the session's mask only.
+  The mask-admin actions of [Mask admins](#mask-admins) (`fork_mask_audit`) appear in the same list. Filters: system
+  (either end of a wormhole), character, kind and date range (UTC); 50 per page.
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/audit_log_test.php`.
 
 ### D-scan and local scans
 
