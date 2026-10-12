@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 89,
+      "date": "2026-10-11",
+      "title": "Edit life and mass in place",
+      "description": "Click the Life or Mass cell of a wormhole in the signature table (or select one row and press L or M) to change it from a small pop-over: Stable or EOL for life, Stable, Destab or Critical for mass. Double-click still opens the full edit dialog, and Ctrl+Z undoes the change. Turn it off in Settings > Signatures.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-89-sig-inline.png",
+          "caption": "Click the Life cell to choose Stable or EOL"
+        }
+      ]
+    },
+    {
       "pr": 88,
       "date": "2026-10-12",
       "title": "Jump planner: smarter midpoints",

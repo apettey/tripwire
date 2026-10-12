@@ -1,0 +1,84 @@
+/* Inline life / mass edits (fork feature: sig-inline).
+   The chips take their colour from the upstream .stable / .destab / .critical classes. */
+body.sig-inline-on #sigTable tbody td:nth-child(5),
+body.sig-inline-on #sigTable tbody td:nth-child(6) {
+	cursor: pointer;
+}
+
+body.sig-inline-on #sigTable tbody td:nth-child(5):hover,
+body.sig-inline-on #sigTable tbody td:nth-child(6):hover {
+	text-decoration: underline dotted 1px;
+	text-underline-offset: 2px;
+}
+
+#sigTable td.sig-inline-saving {
+	opacity: 0.5;
+}
+
+.sig-inline-pop {
+	position: fixed;
+	z-index: 10050;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 6px;
+	background: #151a21;
+	border: 1px solid #3a4452;
+	border-radius: 4px;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65);
+	font-size: 12px;
+}
+
+.sig-inline-pop .sig-inline-title {
+	color: #9aa4b2;
+	margin-right: 2px;
+}
+
+.sig-inline-pop button {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 8px;
+	background: #1f2630;
+	border: 1px solid #3a4452;
+	border-radius: 3px;
+	font: inherit;
+	cursor: pointer;
+}
+
+.sig-inline-pop button:hover,
+.sig-inline-pop button:focus {
+	background: #2b3442;
+	border-color: #6d7b8f;
+	outline: none;
+}
+
+.sig-inline-pop button:focus-visible {
+	outline: 2px solid #8fb4ff;
+	outline-offset: 1px;
+}
+
+/* The current value: bold and underlined as well as outlined, so it does not rely on colour */
+.sig-inline-pop button[aria-selected="true"] {
+	font-weight: bold;
+	text-decoration: underline;
+	border-color: currentColor;
+}
+
+.sig-inline-pop kbd {
+	font: inherit;
+	font-size: 10px;
+	color: #9aa4b2;
+	border: 1px solid #3a4452;
+	border-radius: 2px;
+	padding: 0 3px;
+}
+
+.sig-inline-pop .sig-inline-note {
+	color: #f0b030;
+	margin-left: 4px;
+}
+
+.sig-inline-pop .sig-inline-note:empty {
+	display: none;
+}
