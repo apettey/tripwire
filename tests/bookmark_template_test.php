@@ -40,7 +40,7 @@ $invalid = [
     ['hole', '', 'empty'], ['hole', '   ', 'empty'], ['hole', '={class} {sig}', '{name}'], ['hole', '={name} {nope}', 'Unknown token'],
     ['hole', '={name', 'Unbalanced'], ['hole', '={name}}', 'Unbalanced'], ['hole', '={name} "x"', 'allowed'], ["hole", "={name}\n{sig}", 'allowed'],
     ['hole', '={name}&{sig}', 'allowed'], ['back', '={name}', 'start with'], ['back', '{name}', 'start with'],
-    ['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', str_repeat('x', 81) . '{name}', 'at most 80'], ['other', '{name}', 'Unknown template'],
+    ['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', str_repeat('x', 81) . '{name}', 'at most 80'], ['hole', '!{name}', 'start with'], ['hole', '<{name}', 'start with'], ['hole', '{name} {name} {name} {name}', 'Too long'], ['other', '{name}', 'Unknown template'],
 ];
 foreach ($invalid as $c) {
     $error = bookmark_validate($c[0], $c[1]);

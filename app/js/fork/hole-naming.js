@@ -256,6 +256,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		$(document).on("dialogopen", dialogSel, function() {
 			userEdited = false;
 			allowed = false;
+			bookmarkTemplate.ensureLoaded();	// the Add/Save copy needs the mask's templates (a no-op once they are read)
 			setTimeout(function() {
 				try { allowed = suggestionAllowed(); } catch (e) { allowed = false; }
 				autoFill();

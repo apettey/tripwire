@@ -325,6 +325,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			clearRetries();
 			hidePanel();
 			if (!jumpReturn.enabled(opts())) { return; }
+			bookmarkTemplate.ensureLoaded();	// the return string uses the mask's template (a no-op once read)
 			if (attempt(seq, from, to, jumpAt)) { return; }
 			// The automapper may still be adding/updating the hole: re-check after the next syncs
 			jumpReturn.RETRY_DELAYS_MS.forEach(function(delay) {

@@ -13,7 +13,7 @@ const INVALID = [
 	['hole', '', 'empty'], ['hole', '   ', 'empty'], ['hole', '={class} {sig}', '{name}'], ['hole', '={name} {nope}', 'Unknown token'],
 	['hole', '={name', 'Unbalanced'], ['hole', '={name}}', 'Unbalanced'], ['hole', '={name} "x"', 'allowed'], ['hole', '={name}\n{sig}', 'allowed'],
 	['hole', '={name}&{sig}', 'allowed'], ['back', '={name}', 'start with'], ['back', '{name}', 'start with'],
-	['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', 'x'.repeat(81) + '{name}', 'at most 80'], ['other', '{name}', 'Unknown template']
+	['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', 'x'.repeat(81) + '{name}', 'at most 80'], ['hole', '!{name}', 'start with'], ['hole', '<{name}', 'start with'], ['hole', '{name} {name} {name} {name}', 'Too long'], ['other', '{name}', 'Unknown template']
 ];
 
 describe('Bookmark templates', () => {
@@ -47,6 +47,7 @@ describe('Bookmark templates', () => {
 		it('Unknown type gives nothing', () => assert.equal(bookmarkTemplate.values({ type: '????' }).type, ''));
 		it('Unknown tokens render as nothing', () => assert.equal(bookmarkTemplate.render('{name} {zzz}', values), 'ab'));
 		it('Unsafe characters in values are dropped', () => assert.equal(bookmarkTemplate.render('{name}', { name: 'A<b>"&' }), 'Ab'));
+		it('A name is used up to 12 characters (what the length check assumes)', () => assert.equal(bookmarkTemplate.values({ name: 'ABCDEFGHIJKLMNOP' }).name, 'ABCDEFGHIJKL'));
 		it('Output is cut at 50 characters', () => assert.equal(bookmarkTemplate.render('{name}', { name: 'x'.repeat(80) }).length, 50));
 		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC EOL'));
 		it('Sample return value', () => assert.equal(bookmarkTemplate.render('!{name} {dir}', bookmarkTemplate.sampleValues('back')), '!AB in'));

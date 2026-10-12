@@ -20,7 +20,8 @@ const auditLogTab = {
 	MASK_ACTIONS: {
 		grant: "made {target} a mask admin", revoke: "revoked mask admin from {target}", block: "blocked {target}",
 		unblock: "unblocked {target}", remove: "removed {target}'s access", defaults: "changed the mask defaults",
-		"token-create": "created an API token", "token-revoke": "revoked an API token of {target}"
+		"token-create": "created an API token", "token-revoke": "revoked an API token of {target}",
+		bookmarks: "changed the bookmark names"
 	},
 
 	escape: function(s) {

@@ -36,7 +36,7 @@ function bookmark_defaults() {
 /** The tokens: name => longest value (for the length check). Same list as the browser's bookmarkTemplate.TOKENS. */
 function bookmark_tokens() {
     return [
-        'name' => 'ABCDEFGH', 'sig' => 'ABC', 'sigid' => 'ABC-123', 'type' => 'K162', 'class' => 'Pochven',
+        'name' => 'ABCDEFGHIJKL', 'sig' => 'ABC', 'sigid' => 'ABC-123', 'type' => 'K162', 'class' => 'Pochven',
         'size' => 'VL', 'life' => 'EOL', 'system' => 'ABCDEFGHIJKLM', 'dir' => 'out',
     ];
 }
@@ -66,7 +66,9 @@ function bookmark_validate($kind, $template) {
         if (!array_key_exists($token, bookmark_tokens())) return 'Unknown token {' . $token . '}';
     }
     if (!in_array('name', $tokens, true)) return 'The template needs {name}';
-    if ($kind === 'back' && strpos('!<', substr(trim($template), 0, 1)) === false) return 'A return bookmark has to start with ! or <';
+    $first = substr(trim($template), 0, 1);
+    if ($kind === 'back' && strpos('!<', $first) === false) return 'A return bookmark has to start with ! or <';
+    if ($kind === 'hole' && strpos('!<', $first) !== false) return 'A hole bookmark can\'t start with ! or < (that marks a return bookmark)';
     if (mb_strlen(bookmark_expand($template, bookmark_tokens())) > BOOKMARK_MAX_OUTPUT) {
         return 'Too long: with the longest values it would be over ' . BOOKMARK_MAX_OUTPUT . ' characters';
     }

@@ -10,6 +10,7 @@ const bookmarkTemplate = {
 	REFRESH_AFTER_MS: 300000,
 	MAX_OUTPUT: 50,			// characters in a finished bookmark string
 	MAX_TEMPLATE: 80,		// characters in a template
+	MAX_NAME: 12,			// longest {name} used (the length check assumes it; real names are 1-8)
 	KINDS: ["hole", "back"],
 	DEFAULTS: { hole: "={name} {class} {sig} {life}", back: "!{name}" },
 	KIND_LABELS: {
@@ -19,7 +20,7 @@ const bookmarkTemplate = {
 
 	/** The tokens a template may use: name, what it is, a sample and the longest value it can take (for the length check) */
 	TOKENS: [
-		{ token: "name", help: "the hole's name, e.g. AB (the first letters/digits of the Name field)", sample: "AB", worst: "ABCDEFGH", required: true },
+		{ token: "name", help: "the hole's name, e.g. AB (the first letters/digits of the Name field)", sample: "AB", worst: "ABCDEFGHIJKL", required: true },
 		{ token: "sig", help: "the signature ID letters, e.g. ABC", sample: "ABC", worst: "ABC" },
 		{ token: "sigid", help: "the full signature ID when known, e.g. ABC-123 (else the letters)", sample: "ABC-123", worst: "ABC-123" },
 		{ token: "type", help: "the wormhole type, e.g. C247 (K162 or empty when unknown)", sample: "C247", worst: "K162" },
@@ -74,7 +75,7 @@ const bookmarkTemplate = {
 		const digits = (/^[A-Za-z]{3}[-\s]?([0-9]{3})/.exec(sigRaw) || [])[1];
 		const type = clean(info.type).toUpperCase();
 		return {
-			name: clean(info.name), sig: letters, sigid: letters && digits ? letters + "-" + digits : letters,
+			name: clean(info.name).substring(0, bookmarkTemplate.MAX_NAME), sig: letters, sigid: letters && digits ? letters + "-" + digits : letters,
 			type: /^[A-Z0-9]{3,4}$/.test(type) ? type : "", "class": clean(info.classText), size: clean(info.size),
 			life: info.eol ? "EOL" : "", system: clean(info.system), dir: clean(info.dir)
 		};
@@ -103,7 +104,9 @@ const bookmarkTemplate = {
 			if (!t.known(tokens[i])) { return "Unknown token {" + tokens[i] + "}"; }
 		}
 		if (tokens.indexOf("name") < 0) { return "The template needs {name}"; }
-		if (kind === "back" && "!<".indexOf(template.trim().charAt(0)) < 0) { return "A return bookmark has to start with ! or <"; }
+		const first = template.trim().charAt(0);
+		if (kind === "back" && "!<".indexOf(first) < 0) { return "A return bookmark has to start with ! or <"; }
+		if (kind === "hole" && "!<".indexOf(first) >= 0) { return "A hole bookmark can't start with ! or < (that marks a return bookmark)"; }
 		const worst = {};
 		t.TOKENS.forEach(function(tok) { worst[tok.token] = tok.worst; });
 		if (t.expand(template, worst).length > t.MAX_OUTPUT) { return "Too long: with the longest values it would be over " + t.MAX_OUTPUT + " characters"; }
@@ -172,7 +175,20 @@ const bookmarkTemplate = {
 			t.canEdit = !!data.canEdit;
 			t.loadedAt = Date.now();
 			t.use(data.templates);
+		}).fail(function(xhr) {
+			t.loadFailed = true;
+			console.warn("bookmark-template: could not load the mask's templates, using the built-in names", t.errorText(xhr));
 		});
+	},
+
+	/** Make sure the mask's templates have been read at least once (used before the first copy: Add/Save dialog opening, a jump).
+		Starts a load when none succeeded yet; the answer applies to the next copy. */
+	ensureLoaded: function() {
+		const t = bookmarkTemplate;
+		if (t.loadedAt === 0 && !t.loading) {
+			t.loading = true;
+			t.load().always(function() { t.loading = false; });
+		}
 	},
 
 	request: function(mode, data) {
