@@ -451,6 +451,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		rd.open = open;
 
 		$(function() {
+			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+				forkCommands.register({
+					id: "destinations.open", title: "Open Destinations", group: "Routes", icon: "follow", keywords: ["route", "destination", "trade hub", "jita"],
+					run: function() { open(); }
+				});
+				forkCommands.register({
+					id: "destinations.add", title: "Add destination", group: "Routes", icon: "plus", keywords: ["route", "destination", "k-space"],
+					args: [{ name: "system", label: "k-space system", type: "system" }],
+					run: function(args) {
+						const result = rd.add(rd.saved(), args.system);
+						if (result.error) { throw new Error(result.error); }
+						save(result.list);
+					}
+				});
+			}
 			$("body").append(
 				"<div id='dialog-routeDestinations' class='hidden'>"
 				+ "<form class='route-dest-add' autocomplete='off'>"

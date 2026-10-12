@@ -445,8 +445,33 @@ const preserveMass = {
 		systemThreat.patchChain = wrapped;
 	},
 
+	/** Command palette (Ctrl+K): "Preserve mass <hole>" (opens the reason dialog) and "Stop preserving mass <hole>" (asks first) */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		const available = function(ctx) {
+			if (!preserveMass.enabled(preserveMass.options())) { return "Preserve mass markers are switched off in Settings"; }
+			return ctx.holes().length ? true : "No wormholes on the chain map";
+		};
+		forkCommands.register({
+			id: "preserveMass.set", title: "Preserve mass", group: "Holes", icon: "lock", keywords: ["keep", "do not roll", "hole", "flag"],
+			enabled: available,
+			args: [{ name: "hole", label: "hole", type: "hole", filter: function(id) { return !preserveMass.flags[String(id)]; } }],
+			run: function(args) { preserveMass.openDialog(args.hole); }
+		});
+		forkCommands.register({
+			id: "preserveMass.clear", title: "Stop preserving mass", group: "Holes", icon: "lock-open", keywords: ["preserve", "unflag", "hole"],
+			enabled: function(ctx) { return Object.keys(preserveMass.flags).length ? available(ctx) : "No hole is marked preserve mass"; },
+			args: [{ name: "hole", label: "hole", type: "hole", filter: function(id) { return !!preserveMass.flags[String(id)]; } }],
+			run: function(args) {
+				// Same as the context menu's "Stop preserving mass"; asks first
+				if (window.confirm("Remove the preserve mass flag from " + preserveMass.holeLabel(args.hole) + "?")) { return preserveMass.clear(args.hole); }
+			}
+		});
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain) { return; }
+		preserveMass.registerCommands();
 		preserveMass.hookSizeTags();
 		preserveMass.hookThreatBadges();
 		preserveMass.setupSettings();

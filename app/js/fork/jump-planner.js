@@ -2322,6 +2322,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			hookPreserveMass();	// preserve-mass.js loads after this file: wrap it once everything is there
 			setupSettings();
 			sync();
+			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+				forkCommands.register({
+					id: "jumpPlanner.open", title: "Jump planner from", group: "Routes", icon: "follow", keywords: ["jump", "range", "cyno", "exit", "jf", "blops"],
+					enabled: function() { return isOn() ? true : "The Jump planner is switched off in Settings"; },
+					args: [{ name: "exit", label: "exit", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; },
+						filter: function(id) { return jp.isRangeExit(id, appData.systems[id]); } }],
+					run: function(args) { open(args.exit, true); }
+				});
+				forkCommands.panelToggle({ id: "panel.jumpPlanner", title: "Toggle Jump planner", key: "jumpRange", icon: "follow", keywords: ["jump", "range"] });
+			}
 			const $doc = $(document);
 			const sel = "#" + jp.WIDGET_ID;
 			// The ring icon: open the planner on that exit (and don't let the click reach the node)

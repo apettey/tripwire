@@ -411,9 +411,36 @@ const rally = {
 		});
 	},
 
+	/** Command palette (Ctrl+K): "Fight here <system> [comp]" (a hole name or J-code works for the system) and "Clear fight" */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		forkCommands.register({
+			id: "rally.fightHere", title: "Fight here", group: "Fleet", icon: "alert", keywords: ["rally", "fight", "comp", "set", "move"],
+			context: function() { return true; },
+			enabled: function(ctx) { return ctx.chainSystems().some(rally.isRealSystemID) ? true : "No system on the chain map"; },
+			hint: function() { return rally.state.systemID ? "Fight point: " + rally.systemName(rally.state.systemID) : ""; },
+			args: [
+				{ name: "system", label: "system", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; }, filter: rally.isRealSystemID },
+				{ name: "comp", label: "fleet comp", type: "choice", optional: true, choices: function() {
+					return rally.comps.map(function(c) { return { value: c.id, title: c.name, hint: c.note || "" }; });
+				} }
+			],
+			run: function(args) { return rally.set(args.system, args.comp || ""); }
+		});
+		forkCommands.register({
+			id: "rally.clear", title: "Clear fight", group: "Fleet", icon: "alert", keywords: ["rally", "fight", "stop", "remove"],
+			enabled: function() { return rally.state.systemID ? true : "No fight point is set"; },
+			run: function() {
+				// Same as the banner's clear button; asks first
+				if (window.confirm("Clear the fight point (" + rally.systemName(rally.state.systemID) + ") for everyone on the mask?")) { return rally.clear(); }
+			}
+		});
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain || typeof chain.nodes !== "function") { return; }
 		rally.setupSettings();
+		rally.registerCommands();
 
 		// Decorate every chain build (chain.draw and chain.redraw both go through chain.nodes) so the
 		// highlight is part of the node markup and line modifiers, and survives redraws and collapses.

@@ -846,6 +846,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() {
 			setupSettings();
 			applyEnabled();
+			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+				forkCommands.register({
+					id: "favourites.add", title: "Add favourite", group: "Routes", icon: "star", keywords: ["star", "favorite", "system"],
+					context: function() { return true; },
+					args: [{ name: "system", label: "system", type: "system", default: function(ctx) { return ctx.viewingSystemID; } }],
+					run: function(args) {
+						const result = fp.add(options.favorites, args.system, appData.systems, routeDestinations.findByName);
+						if (result.error) { throw new Error(result.error); }
+						save(result.list);
+					}
+				});
+				forkCommands.panelToggle({ id: "panel.favourites", title: "Toggle Favourites panel", key: "favoritesPanel", icon: "star", keywords: ["favorite", "star"] });
+			}
 
 			const $doc = $(document);
 			const sel = "#" + fp.WIDGET_ID;

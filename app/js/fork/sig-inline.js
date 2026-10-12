@@ -400,7 +400,31 @@ const sigInline = {
 		if (!on) { sigInline.close(true); }
 	},
 
+	/** Command palette (Ctrl+K): "Set life <hole> <stable|EOL>" and "Set mass <hole> <stable|destab|critical>" (undoable, like the cell popover) */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		["life", "mass"].forEach(function(field) {
+			const def = sigInline.FIELDS[field];
+			forkCommands.register({
+				id: "hole.set" + field.charAt(0).toUpperCase() + field.substring(1), title: "Set " + field, group: "Holes", icon: "edit", keywords: field === "life" ? ["eol", "end of life", "stable", "hole"] : ["destab", "critical", "stable", "hole", "mass"],
+				enabled: function(ctx) { return ctx.holes().length ? true : "No wormholes on the chain map"; },
+				args: [
+					{ name: "hole", label: "hole", type: "hole" },
+					{ name: field, label: field, type: "choice", choices: function() {
+						return def.choices.map(function(c) { return { value: c.value, title: c.label, keys: [c.value] }; });
+					} }
+				],
+				run: function(args) {
+					const change = {};
+					change[field] = args[field];
+					return sigInline.setWormhole(args.hole, change);
+				}
+			});
+		});
+	},
+
 	init: function() {
+		sigInline.registerCommands();
 		sigInline.setupSettings();
 		sigInline.syncBody();
 		document.addEventListener("keydown", sigInline.onKeydown, true);

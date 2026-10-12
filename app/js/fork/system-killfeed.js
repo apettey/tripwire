@@ -471,6 +471,9 @@ const systemKillFeed = {
 
 	init: function() {
 		systemKillFeed.setupSettings();
+		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+			forkCommands.panelToggle({ id: "panel.systemKills", title: "Toggle system kills panel", key: "systemKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });
+		}
 		// Follow the viewed system
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.systemKillFeedWrapped) {
 			const systemChange = tripwire.systemChange;

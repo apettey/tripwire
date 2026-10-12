@@ -1352,6 +1352,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() {
 			installHook();
 			setupSettings();
+			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
+				forkCommands.panelToggle({ id: "panel.watchlist", title: "Toggle Watchlist panel", key: "watchlist", icon: "eye", keywords: ["watch", "alert", "pilots"] });
+			}
 			applySettings();
 			setupMaskAdmin();
 			loadFilters();

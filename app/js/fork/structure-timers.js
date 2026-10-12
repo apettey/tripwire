@@ -503,7 +503,25 @@ const structureTimers = {
 		}
 	},
 
+	/** Command palette (Ctrl+K): the Structures panel, for a system or as the timers board */
+	registerCommands: function() {
+		if (typeof forkCommands === "undefined") { return; }
+		const on = function() { return structures.enabled(structureTimers.opts()) ? true : "The Structures panel is switched off in Settings"; };
+		forkCommands.register({
+			id: "structures.show", title: "Show structures", group: "Intel", icon: "home", keywords: ["structure", "citadel", "owner", "pos"],
+			context: function() { return true; }, enabled: on,
+			args: [{ name: "system", label: "system", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; } }],
+			run: function(args) { structureTimers.showPanel("system", args.system); }
+		});
+		forkCommands.register({
+			id: "structures.timers", title: "Show structure timers", group: "Intel", icon: "home", keywords: ["structure", "timer", "reinforced", "armor", "hull"],
+			enabled: on, run: function() { structureTimers.showPanel("timers"); }
+		});
+		forkCommands.panelToggle({ id: "panel.structures", title: "Toggle Structures panel", key: "structures", icon: "home", keywords: ["structure", "timers"] });
+	},
+
 	init: function() {
+		structureTimers.registerCommands();
 		structureTimers.loadFilters();
 		$(document).on("click", "#structuresInfoLine", function() { structureTimers.showPanel("system"); });
 		structureTimers.loadAlerted();
