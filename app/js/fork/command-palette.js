@@ -190,6 +190,37 @@ const commandPalette = {
 		try { localStorage.setItem(commandPalette.STORAGE_KEY, JSON.stringify(map)); } catch (e) { /* storage unavailable */ }
 	},
 
+	// ---- Screen-reader text (pure, tested) ----
+
+	/** Full spoken label of a result: title, kind, detail, shortcut, why it is unavailable */
+	optionLabel: function(it) {
+		const parts = [it.title, it.tag || commandPalette.KIND_LABEL[it.kind] || ""];
+		if (it.subtitle) { parts.push(it.disabled ? "unavailable: " + it.subtitle : it.subtitle); }
+		else if (it.disabled) { parts.push("unavailable"); }
+		if (it.shortcut) { parts.push("shortcut " + it.shortcut); }
+		return parts.filter(Boolean).join(", ");
+	},
+
+	/** Name of the search box for the current mode (the breadcrumb chip is visual only) */
+	inputLabel: function(st) {
+		const base = "Search systems, signatures, settings and commands";
+		if (st && st.cmd && st.cmd.args[st.cmd.step]) {
+			const arg = st.cmd.args[st.cmd.step];
+			return st.cmd.command.title + ": choose the " + (arg.label || arg.name);
+		}
+		if (st && st.noun) { return "Actions for " + st.noun.item.title; }
+		if (st && st.scope && st.scope.label) { return "Search " + st.scope.label.toLowerCase(); }
+		return base;
+	},
+
+	/** What the live region says after a search: the mode and the number of results */
+	liveText: function(st, n) {
+		const count = n ? n + (n === 1 ? " result" : " results") : "No results";
+		if (st && st.cmd && st.cmd.args[st.cmd.step]) { return commandPalette.inputLabel(st) + ". " + count; }
+		if (st && st.noun) { return "Actions for " + st.noun.item.title + ". " + (n ? n + (n === 1 ? " action" : " actions") : "No actions"); }
+		return count;
+	},
+
 	// ---- Rows of the result list ----
 
 	/** Rows for an empty query: recents, the viewed system's context commands, then every command by group.
@@ -220,6 +251,15 @@ const commandPalette = {
 			list.forEach(add);
 		});
 		return rows.slice(0, commandPalette.MAX_ROWS + 8);
+	},
+
+	/** Rows for a scope prefix with nothing typed yet (# signatures, @ chain systems, , settings): everything in the scope,
+	 *  the viewed system's and its neighbours' first */
+	scopeRows: function(items, scope) {
+		const list = items.filter(function(it) { return scope.kinds[it.kind]; }).sort(function(a, b) {
+			return (b.ctx || 0) - (a.ctx || 0) || (String(a.title).toLowerCase() < String(b.title).toLowerCase() ? -1 : 1);
+		}).slice(0, commandPalette.MAX_ROWS);
+		return list.length ? [{ header: scope.label }].concat(list.map(function(it) { return { item: it }; })) : [];
 	},
 
 	/** Markup of a title with the matched characters in <mark> (bold + underline, not colour alone) */
@@ -254,7 +294,7 @@ const commandPalette = {
 	state: {
 		open: false, rows: [], sel: -1, scope: { char: "", label: "", kinds: null, rest: "" }, query: "", prev: null, index: null, items: [],
 		previousFocus: null, ctx: null, frecency: {}, eve: null, mouse: [0, 0], liveTimer: null, chainStamp: null, settingStamp: null,
-		perf: { last: 0, samples: [] }, cmd: null, argCache: {}
+		perf: { last: 0, samples: [], open: 0 }, cmd: null, noun: null, argCache: {}, argCommands: []
 	},
 
 	hasDOM: function() {
@@ -408,6 +448,7 @@ const commandPalette = {
 		const skip = {};
 		items.forEach(function(it) { if (it.kind === "chain") { skip[it.systemID] = true; } });
 		st.items = items;
+		st.argCommands = items.filter(function(it) { return it.command && it.command.args && it.command.args.length; });
 		st.index = paletteIndex.build(items, commandPalette.ensureEve(), skip);
 		st.prev = null;
 		st.argCache = {};
@@ -424,9 +465,11 @@ const commandPalette = {
 			if (!arg.filter) { return true; }
 			try { return !!arg.filter(c.value, st.ctx); } catch (e) { return false; }
 		};
-		if (arg.type === "chainSystem") { list = paletteArgs.chainSystems(st.items); }
-		else if (arg.type === "hole") { list = commandPalette.holeDefs(st.ctx).map(paletteIndex.item); }
-		else if (arg.type === "signature") { list = paletteArgs.signatures(st.items); }
+		// The candidates of a type are prepared once per open and shared by every command that takes that type
+		const shared = function(type, make) { return st.argCache["*" + type] || (st.argCache["*" + type] = make()); };
+		if (arg.type === "chainSystem") { list = shared(arg.type, function() { return paletteArgs.chainSystems(st.items); }); }
+		else if (arg.type === "hole") { list = shared(arg.type, function() { return commandPalette.holeDefs(st.ctx).map(paletteIndex.item); }); }
+		else if (arg.type === "signature") { list = shared(arg.type, function() { return paletteArgs.signatures(st.items); }); }
 		else if (arg.type === "choice") {
 			try { list = paletteArgs.choices(arg.choices(st.ctx)).map(paletteIndex.item); } catch (e) { console.error("palette: choices of " + arg.name + " failed", e); }
 		}
@@ -471,7 +514,7 @@ const commandPalette = {
 	inlineItems: function(query) {
 		const st = commandPalette.state;
 		if (!/\S\s+\S/.test(query)) { return []; }
-		const commands = st.items.filter(function(it) { return it.command && it.command.args && it.command.args.length && !it.disabled; }).map(function(it) { return it.command; });
+		const commands = st.argCommands.filter(function(it) { return !it.disabled; }).map(function(it) { return it.command; });
 		if (!commands.length) { return []; }
 		const descs = paletteArgs.inline(commands, query, {
 			resolve: function(arg, text, command) { return commandPalette.argRank(command, arg, text, true, 8); },
@@ -496,6 +539,7 @@ const commandPalette = {
 	startCommand: function(command, filled) {
 		const st = commandPalette.state, input = document.getElementById("cp-input");
 		st.cmd = { command: command, args: command.args, filled: filled || {}, skipped: {}, step: -1 };
+		st.noun = null;
 		commandPalette.touch("cmd:" + command.id);
 		input.value = "";
 		st.scope = paletteIndex.parseScope("");
@@ -577,6 +621,109 @@ const commandPalette = {
 		}
 		list.forEach(function(it) { rows.push({ item: it, hits: query ? paletteIndex.highlight(it.title, query) : [] }); });
 		return rows;
+	},
+
+	// ---- Actions on a result: noun, then verb (the right arrow on a system or signature) ----
+
+	NOUN_KINDS: { chain: true, eve: true, sig: true },
+
+	/** The candidate for a command's first argument that stands for the noun, or null when the command doesn't fit it */
+	nounCandidate: function(command, noun) {
+		const st = commandPalette.state, arg = command.args[0], sys = noun.kind === "chain" || noun.kind === "eve";
+		const find = function(id) {
+			return commandPalette.argCandidates(command, arg).filter(function(c) { return String(c.value) === String(id); })[0] || null;
+		};
+		if (arg.type === "chainSystem") { return noun.kind === "chain" ? find(noun.systemID) : null; }
+		if (arg.type === "system") {
+			return sys ? { key: "eve:" + noun.systemID, kind: "arg", value: noun.systemID, title: noun.title, subtitle: noun.subtitle, tag: "System" } : null;
+		}
+		if (arg.type === "signature") { return noun.kind === "sig" ? find(noun.sigID) : null; }
+		if (arg.type === "hole") {
+			let id = null;
+			if (noun.kind === "chain") {
+				const h = commandPalette.holeDefs(st.ctx).filter(function(d) { return String(d.systemID) === String(noun.systemID); })[0];
+				id = h ? h.value : null;	// the hole leading into that system
+			} else if (noun.kind === "sig" && typeof tripwire !== "undefined" && tripwire.client) {
+				const wh = Object.keys(tripwire.client.wormholes || {}).map(function(k) { return tripwire.client.wormholes[k]; }).filter(function(w) {
+					return w && (String(w.initialID) === String(noun.sigID) || String(w.secondaryID) === String(noun.sigID));
+				})[0];
+				id = wh ? wh.id : null;
+			}
+			return id === null ? null : find(id);
+		}
+		return null;
+	},
+
+	/** Actions of a system or signature result: the built-in ones, then every command whose first argument is that noun.
+	 *  A command that needs more arguments continues with the steps (the noun is already filled in). */
+	actionsFor: function(noun) {
+		const st = commandPalette.state, out = [];
+		if (noun.kind === "chain" || noun.kind === "eve") {
+			out.push({ key: "act:goto", kind: "act", title: "Go to " + noun.title, subtitle: "View this system", icon: "viewing", tag: "System",
+				run: function() { tripwire.systemChange(noun.systemID); } });
+		} else if (noun.kind === "sig") {
+			out.push({ key: "act:select", kind: "act", title: "Select " + noun.title, subtitle: "Select the signature in the table", icon: "pin", tag: "Signature",
+				run: function() { commandPalette.selectSig(noun.sigID); } });
+			out.push({ key: "act:edit", kind: "act", title: "Edit " + noun.title, subtitle: "Open the signature dialog", icon: "edit", tag: "Signature",
+				run: function() { commandPalette.selectSig(noun.sigID); setTimeout(function() { $("#edit-signature").trigger("click"); }, 0); } });
+		}
+		st.argCommands.forEach(function(it) {
+			const cand = commandPalette.nounCandidate(it.command, noun);
+			if (!cand) { return; }
+			const d = paletteArgs.finish(it.command, { 0: cand }, function(a) { return commandPalette.argDefault(it.command, a); });
+			out.push({
+				key: "act:" + it.command.id, kind: "act", title: it.command.title, icon: it.icon || "", tag: it.group, disabled: it.disabled,
+				subtitle: it.disabled || (d.complete ? forkCommands.hint(it.command, st.ctx) : "Asks for the " + (it.command.args[d.next].label || it.command.args[d.next].name)),
+				inline: { command: it.command, filled: d.filled, complete: d.complete, next: d.next }, command: it.command
+			});
+		});
+		return out;
+	},
+
+	/** Open the action list of the selected result; false when it has none (not a system or signature) */
+	openActions: function() {
+		const st = commandPalette.state, input = document.getElementById("cp-input"), row = st.rows[st.sel];
+		if (st.cmd || st.noun || !row || !row.item || !commandPalette.NOUN_KINDS[row.item.kind]) { return false; }
+		st.noun = { item: row.item, prepared: commandPalette.actionsFor(row.item).map(paletteIndex.item), query: input.value };
+		input.value = "";
+		commandPalette.renderChip();
+		commandPalette.update();
+		return true;
+	},
+
+	/** Back from the action list to the results (and the text) it was opened from */
+	leaveActions: function() {
+		const st = commandPalette.state, input = document.getElementById("cp-input");
+		const q = st.noun ? st.noun.query : "";
+		st.noun = null;
+		input.value = q;
+		st.prev = null;
+		commandPalette.renderChip();
+		commandPalette.update();
+	},
+
+	actionRows: function(query) {
+		const st = commandPalette.state, n = st.noun;
+		const rows = [{ header: "Actions for " + n.item.title }];
+		const list = paletteIndex.normalise(query) ? paletteArgs.rank(n.prepared, query, commandPalette.MAX_ROWS) : n.prepared;
+		list.forEach(function(it) { rows.push({ item: it, hits: query ? paletteIndex.highlight(it.title, query) : [] }); });
+		return rows;
+	},
+
+	// ---- History and timing ----
+
+	clearHistory: function() {
+		const st = commandPalette.state;
+		st.frecency = {};
+		try { localStorage.removeItem(commandPalette.STORAGE_KEY); } catch (e) { /* storage unavailable */ }
+		if (typeof Notify !== "undefined") { Notify.trigger("Palette history cleared", "green"); }
+	},
+
+	/** Timing summary of the searches since the page loaded: {n, median, p95, max (ms per keystroke), open (ms, last open)} */
+	perfReport: function() {
+		const st = commandPalette.state, s = st.perf.samples.slice().sort(function(a, b) { return a - b; });
+		const at = function(p) { return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
+		return { n: s.length, median: at(0.5), p95: at(0.95), max: s.length ? s[s.length - 1] : 0, open: st.perf.open };
 	},
 
 	// ---- Acting on an item ----
@@ -707,6 +854,10 @@ const commandPalette = {
 		add({ id: "chain.mass", title: "Mass dialog", group: "Holes", icon: "prop-mod", keywords: ["jumped", "recorded", "mass used"], enabled: onChain,
 			run: function(args, ctx) { $("#dialog-mass").data("id", nodeOf(ctx).data("sigid")).data("systemID", ctx.viewingSystemID).dialog("open"); } });
 
+		add({ id: "palette.clearHistory", title: "Clear palette history", group: "App", icon: "erase", keywords: ["recent", "recents", "frecency", "forget", "reset"],
+			enabled: function() { return Object.keys(commandPalette.loadFrecency()).length ? true : "No palette history yet"; },
+			hint: function() { const n = Object.keys(commandPalette.loadFrecency()).length; return n + (n === 1 ? " recent item" : " recent items") + " remembered in this browser"; },
+			run: function() { commandPalette.clearHistory(); } });
 		add({ id: "app.settings", title: "Open Settings", group: "App", icon: "settings", keywords: ["options", "preferences"],
 			run: function() { $("#settings").trigger("click"); } });
 		add({ id: "app.whatsNew", title: "What's new", group: "App", icon: "info", keywords: ["changes", "updates", "release"],
@@ -733,12 +884,12 @@ const commandPalette = {
 		const el = document.createElement("div");
 		el.id = "cp-overlay";
 		el.className = "cp-hidden";
-		el.innerHTML = "<div id='cp-panel' role='dialog' aria-modal='true' aria-label='Command palette'>"
+		el.innerHTML = "<div id='cp-panel' role='dialog' aria-modal='true' aria-label='Command palette' aria-describedby='cp-keys'>"
 			+ "<div class='cp-inputrow'><span id='cp-chip' class='cp-chip cp-hidden'></span>"
 			+ "<input id='cp-input' type='text' role='combobox' aria-expanded='true' aria-controls='cp-list' aria-autocomplete='list' "
 			+ "aria-label='Search systems, signatures, settings and commands' placeholder='Search systems, signatures, settings, commands…' autocomplete='off' spellcheck='false' />"
 			+ "</div><ul id='cp-list' role='listbox' aria-label='Results'></ul>"
-			+ "<div id='cp-foot'><span class='cp-keys'>&uarr;&darr; move &middot; &crarr; run &middot; Ctrl+&crarr; keep open &middot; Tab complete &middot; Esc</span>"
+			+ "<div id='cp-foot'><span id='cp-keys' class='cp-keys'>&uarr;&darr; move &middot; &crarr; run &middot; &rarr; actions &middot; Tab complete &middot; Esc close</span>"
 			+ "<span class='cp-scopes'>&gt; cmd &middot; @ sys &middot; # sig &middot; , set</span></div>"
 			+ "<div id='cp-live' class='cp-sr' aria-live='polite'></div></div>";
 		document.body.appendChild(el);
@@ -787,7 +938,7 @@ const commandPalette = {
 	},
 
 	doOpen: function() {
-		const st = commandPalette.state;
+		const st = commandPalette.state, t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
 		commandPalette.build();
 		st.previousFocus = document.activeElement;
 		st.ctx = commandPalette.makeContext();
@@ -795,6 +946,7 @@ const commandPalette = {
 		st.scope = paletteIndex.parseScope("");
 		st.query = "";
 		st.cmd = null;
+		st.noun = null;
 		commandPalette.buildIndex(st.ctx);
 		const el = document.getElementById("cp-overlay"), input = document.getElementById("cp-input");
 		input.value = "";
@@ -803,6 +955,7 @@ const commandPalette = {
 		commandPalette.renderChip();
 		commandPalette.update();
 		input.focus();
+		st.perf.open = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
 	},
 
 	close: function(restore) {
@@ -820,7 +973,13 @@ const commandPalette = {
 		const input = document.getElementById("cp-input");
 		if (!input.hasAttribute("data-placeholder")) { input.setAttribute("data-placeholder", input.placeholder); }
 		const arg = st.cmd ? st.cmd.args[st.cmd.step] : null;
-		input.placeholder = arg ? "Filter the " + (arg.label || arg.name) + "…" : input.getAttribute("data-placeholder");
+		input.placeholder = arg ? "Filter the " + (arg.label || arg.name) + "…" : st.noun ? "Filter the actions…" : input.getAttribute("data-placeholder");
+		input.setAttribute("aria-label", commandPalette.inputLabel(st));
+		if (st.noun) {
+			chip.textContent = st.noun.item.title + " ›";
+			chip.className = "cp-chip cp-crumb";
+			return;
+		}
 		if (st.cmd) {
 			chip.textContent = paletteArgs.breadcrumb(st.cmd.command, st.cmd.args, st.cmd.filled) + " ›";
 			chip.className = "cp-chip cp-crumb";
@@ -833,7 +992,7 @@ const commandPalette = {
 	onInput: function() {
 		const st = commandPalette.state, input = document.getElementById("cp-input");
 		// A scope prefix typed as the first character becomes a chip
-		if (!st.scope.char && !st.cmd) {
+		if (!st.scope.char && !st.cmd && !st.noun) {
 			const parsed = paletteIndex.parseScope(input.value);
 			if (parsed.char) { st.scope = parsed; input.value = parsed.rest; commandPalette.renderChip(); }
 		}
@@ -848,6 +1007,10 @@ const commandPalette = {
 		let rows, nq = paletteIndex.normalise(q);
 		if (st.cmd) {
 			rows = commandPalette.stepRows(q);
+		} else if (st.noun) {
+			rows = commandPalette.actionRows(q);
+		} else if (!nq && st.scope.kinds && !st.scope.kinds.cmd) {
+			rows = commandPalette.scopeRows(st.items, st.scope);
 		} else if (!nq) {
 			st.prev = null;
 			rows = commandPalette.emptyRows(st.items.filter(function(it) { return !st.scope.kinds || st.scope.kinds[it.kind]; }),
@@ -884,7 +1047,7 @@ const commandPalette = {
 		st.rows.forEach(function(r, i) {
 			if (r.header) { html += "<li role='presentation' class='cp-group'>" + esc(r.header) + "</li>"; return; }
 			const it = r.item;
-			html += "<li id='cp-opt-" + i + "' role='option' data-i='" + i + "' aria-selected='" + (i === st.sel) + "'"
+			html += "<li id='cp-opt-" + i + "' role='option' data-i='" + i + "' aria-selected='" + (i === st.sel) + "' aria-label='" + esc(commandPalette.optionLabel(it)) + "'"
 				+ (it.disabled ? " aria-disabled='true'" : "") + " class='cp-row" + (i === st.sel ? " cp-sel" : "") + (it.disabled ? " cp-disabled" : "") + "'>"
 				+ "<i class='cp-icon' data-icon='" + esc(it.icon || "") + "' aria-hidden='true'></i>"
 				+ "<span class='cp-body'><span class='cp-title'>" + commandPalette.titleHtml(it.title, r.hits) + "</span>"
@@ -894,6 +1057,7 @@ const commandPalette = {
 		});
 		if (!st.rows.length) { html = "<li role='presentation' class='cp-empty'>No match</li>"; }
 		document.getElementById("cp-list").innerHTML = html;
+		document.getElementById("cp-input").setAttribute("aria-expanded", st.rows.some(function(r) { return r.item; }) ? "true" : "false");
 		commandPalette.markSelection(false);
 	},
 
@@ -927,7 +1091,7 @@ const commandPalette = {
 		st.liveTimer = setTimeout(function() {
 			const n = rows.filter(function(r) { return r.item; }).length;
 			const live = document.getElementById("cp-live");
-			if (live) { live.textContent = n ? n + (n === 1 ? " result" : " results") : "No results"; }
+			if (live) { live.textContent = commandPalette.liveText(st, n); }
 		}, 300);
 	},
 
@@ -942,7 +1106,7 @@ const commandPalette = {
 		if (st.cmd) { commandPalette.acceptArg(item); return; }
 		if (item.inline) { commandPalette.runInline(item); return; }
 		if (item.command && item.command.args && item.command.args.length) { commandPalette.startCommand(item.command, {}); return; }
-		commandPalette.touch(item.freqKey || item.key);
+		if (item.kind !== "act") { commandPalette.touch(item.freqKey || item.key); }	// actions of a result are not recents
 		if (keepOpen) {
 			commandPalette.activate(item, st.ctx);
 			st.ctx = commandPalette.makeContext();
@@ -977,7 +1141,16 @@ const commandPalette = {
 				if (row && row.item) { input.value = row.item.title; commandPalette.update(); }
 				break;
 			}
+			case "ArrowRight":
+				// At the end of the text, on a system or signature: its actions (noun, then verb)
+				if (!e.shiftKey && !e.ctrlKey && !e.metaKey && input.selectionStart === input.value.length && input.selectionEnd === input.value.length && commandPalette.openActions()) { e.preventDefault(); }
+				break;
+			case "ArrowLeft":
+				if (!input.value && st.cmd) { e.preventDefault(); commandPalette.stepBack(); }
+				else if (st.noun && input.selectionStart === 0 && input.selectionEnd === 0) { e.preventDefault(); commandPalette.leaveActions(); }
+				break;
 			case "Backspace":
+				if (!input.value && st.noun) { e.preventDefault(); commandPalette.leaveActions(); break; }
 				if (!input.value && st.cmd) { e.preventDefault(); commandPalette.stepBack(); break; }
 				if (!input.value && st.scope.char) {
 					e.preventDefault();

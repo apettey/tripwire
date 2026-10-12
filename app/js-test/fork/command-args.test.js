@@ -297,5 +297,28 @@ describe('Palette: ties and Settings guard', () => {
 	it('a clear winner is not a tie', () => {
 		const d = paletteArgs.inline(cmds, 'mark rolling j333333', env);
 		assert.equal(d[0].tie, false);
+
+describe('Palette: finishing a partly filled command', () => {
+	const command = { args: [{ name: 'hole', type: 'hole' }, { name: 'life', type: 'choice' }, { name: 'note', type: 'text', optional: true }] };
+	it('names the first required argument still missing', () => {
+		const f = paletteArgs.finish(command, { 0: { value: 5 } });
+		assert.equal(f.complete, false);
+		assert.equal(f.next, 1);
+		assert.deepEqual(Object.keys(f.filled), ['0']);
+	});
+	it('is complete when only optional arguments are missing', () => {
+		const f = paletteArgs.finish(command, { 0: { value: 5 }, 1: { value: 'critical' } });
+		assert.equal(f.complete, true);
+		assert.equal(f.next, null);
+	});
+	it('a default fills a missing argument', () => {
+		const f = paletteArgs.finish(command, { 0: { value: 5 } }, (arg) => arg.name === 'life' ? { value: 'stable' } : null);
+		assert.equal(f.complete, true);
+		assert.equal(f.filled[1].value, 'stable');
+	});
+	it('does not change the object it is given', () => {
+		const filled = { 0: { value: 5 } };
+		paletteArgs.finish(command, filled, () => ({ value: 1 }));
+		assert.deepEqual(Object.keys(filled), ['0']);
 	});
 });

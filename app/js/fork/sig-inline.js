@@ -99,7 +99,19 @@ const sigInline = {
 		}
 		if (s.shiftKey || s.targetEditable || s.dialogOpen || s.selectedCount !== 1) { return null; }
 		const field = sigInline.KEY_FIELD[key];
-		return field ? { type: "open", field: field } : null;
+		if (field) { return { type: "open", field: field }; }
+		// Keyboard walk through the signature table: with one row selected, up/down move it and Enter edits it
+		// (not on a focused button or link: Enter must keep pressing it)
+		if (key === "arrowup") { return { type: "nav", delta: -1 }; }
+		if (key === "arrowdown") { return { type: "nav", delta: 1 }; }
+		if (key === "enter" && !s.targetInteractive) { return { type: "edit" }; }
+		return null;
+	},
+
+	/** Index of the row to select after moving from `index` by `delta` in a table of `count` rows (stops at the ends), or -1 */
+	neighbour: function(index, delta, count) {
+		if (!(count > 0) || index < 0 || index >= count) { return -1; }
+		return Math.max(0, Math.min(count - 1, index + delta));
 	},
 
 	/** Ids to re-select after a refresh: those of `keep.ids` that were newly inserted as rows (addedIds), while the
@@ -344,10 +356,17 @@ const sigInline = {
 			targetEditable: sigInline.targetEditable(e.target),
 			dialogOpen: $(".ui-dialog:visible").length > 0,
 			selectedCount: document.querySelectorAll("#sigTable tbody tr.selected").length,
-			popoverField: p ? p.field : null
+			popoverField: p ? p.field : null,
+			targetInteractive: !!(e.target && e.target.closest && e.target.closest("button, a, summary, select, [role='button'], [role='menuitem']"))
 		});
 		if (!action) { return; }
-		if (action.type === "open") {
+		if (action.type === "nav") {
+			sigInline.moveSelection(action.delta);
+		} else if (action.type === "edit") {
+			const $edit = $("#edit-signature");
+			if ($edit.hasClass("disabled")) { return; }
+			$edit.trigger("click");
+		} else if (action.type === "open") {
 			const row = document.querySelector("#sigTable tbody tr.selected");
 			const cell = row && row.children[sigInline.FIELDS[action.field].column - 1];
 			if (!cell || !sigInline.open(cell)) { return; }
@@ -360,6 +379,17 @@ const sigInline = {
 		}
 		e.preventDefault();
 		e.stopPropagation();
+	},
+
+	/** Select the row above / below the selected one (the page does not scroll); stays on the first / last row */
+	moveSelection: function(delta) {
+		const rows = Array.prototype.slice.call(document.querySelectorAll("#sigTable tbody tr"));
+		const current = document.querySelector("#sigTable tbody tr.selected");
+		const to = sigInline.neighbour(rows.indexOf(current), delta, rows.length);
+		if (to < 0 || rows[to] === current) { return; }
+		$(current).removeClass("selected");
+		$(rows[to]).addClass("selected");
+		if (rows[to].scrollIntoView) { rows[to].scrollIntoView({ block: "nearest" }); }
 	},
 
 	onCellClick: function(e) {
@@ -377,7 +407,7 @@ const sigInline = {
 		// Settings > Signatures row; takes effect on Save (Reset = on)
 		forkSettings.register({
 			section: "signatures", order: 45, id: "sigInline-enabled", type: "checkbox", key: "sigInline",
-			label: "Edit life and mass in place:", text: "Click the Life or Mass cell, or press L / M on a selected row",
+			label: "Edit life and mass in place:", text: "Click the Life or Mass cell, or press L / M on a selected row; up / down move the selection, Enter edits the row",
 			get: function(o) { return sigInline.enabled(o); },
 			set: function(o, on) { o.sigInline = { enabled: on }; }
 		});

@@ -243,19 +243,29 @@ const paletteArgs = {
 			// Two equally good candidates (e.g. two holes named AA): nothing is pre-selected, the user picks
 			const tie = free >= 0 && got[free].ranked.length > 1 && got[free].ranked[0].score === got[free].ranked[1].score;
 			variants.forEach(function(alt) {
-				const filled = {};
-				got.forEach(function(g, gi) { filled[g.index] = gi === free ? alt : g.ranked[0]; });
-				let next = null;
-				for (let i = 0; i < args.length; i++) {
-					if (filled[i]) { continue; }
-					const d = env.defaultFor ? env.defaultFor(args[i], match.command) : null;
-					if (d) { filled[i] = d; continue; }
-					if (!args[i].optional && next === null) { next = i; }
-				}
-				out.push({ command: match.command, filled: filled, complete: next === null, next: next, score: match.score, tie: tie });
+				const typed = {};
+				got.forEach(function(g, gi) { typed[g.index] = gi === free ? alt : g.ranked[0]; });
+				const done = paletteArgs.finish(match.command, typed, function(a) { return env.defaultFor ? env.defaultFor(a, match.command) : null; });
+				out.push({ command: match.command, filled: done.filled, complete: done.complete, next: done.next, score: match.score, tie: tie });
 			});
 		});
 		return out;
+	},
+
+	/**
+	 * Complete a partly filled command: defaults fill what is missing, then `next` is the first required argument still
+	 * missing (null: runnable). filled: {argIndex: candidate}; defaultFor(arg) -> candidate | null. Returns {filled, complete, next}.
+	 */
+	finish: function(command, filled, defaultFor) {
+		const args = command.args || [], out = Object.assign({}, filled);
+		let next = null;
+		for (let i = 0; i < args.length; i++) {
+			if (out[i]) { continue; }
+			const d = defaultFor ? defaultFor(args[i]) : null;
+			if (d) { out[i] = d; continue; }
+			if (!args[i].optional && next === null) { next = i; }
+		}
+		return { filled: out, complete: next === null, next: next };
 	},
 
 	/** Values object for command.run: {argName: value} from filled candidates (index -> candidate) */
