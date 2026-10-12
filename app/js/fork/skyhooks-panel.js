@@ -505,7 +505,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<span class='sky-window' title='" + esc(sp.windowText(r.skyhook.start, r.skyhook.end, t)) + " EVE time'>" + esc(sp.windowText(r.skyhook.start, r.skyhook.end, t)) + "</span>"
 				+ "<span class='sky-countdown'>" + esc(sp.countdown(r.skyhook.start, r.skyhook.end, t)) + "</span>"
 				+ (r.nearest.jumps > 0 && typeof autopilotRoute !== "undefined" && typeof autopilotRoute.push === "function"
-					? "<i class='sky-route' data-icon='auto' title='Set route in game: gate route from " + esc(originName) + " to " + esc(sys.name) + " as autopilot waypoints'></i>" : "<i class='sky-route-none'></i>")
+					? "<i class='sky-route' data-icon='auto' title='Set destination in game: " + esc(sys.name) + " as your in-game destination (gate route from " + esc(originName) + ")'></i>" : "<i class='sky-route-none'></i>")
 				+ "</li>";
 		}
 
