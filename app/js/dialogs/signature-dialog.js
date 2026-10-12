@@ -204,6 +204,7 @@ sigDialog.openSignatureDialog = function(e) {
 
 				$("#form-signature").submit(function(e) {
 					e.preventDefault();
+					$("#dialog-signature [name='leadsTo']").val((i, v) => v.trim());	// fork: names copied from the game end in a space
 					var form = $(this).serializeObject();
 					var valid = true;
 					ValidationTooltips.close();
