@@ -121,7 +121,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `CDN_DOMAIN` | `$TRIPWIRE_DOMAIN` | `config.php` (`CDN_DOMAIN`) | Host serving images/css/js |
 | `APP_NAME` | `Tripwire` | `config.php` (`APP_NAME`) | Name shown in the UI |
 | `TRIPWIRE_API` | `true` | `config.php` (`TRIPWIRE_API`) | Enables the `/api` endpoints |
-| `TRIPWIRE_API_PASSWORD_AUTH` | `true` | `config.php`, `api/token-auth.php` | Deprecated: the old API login with the account password (HTTP Basic). Set `false` once your scripts use [personal access tokens](#rest-api) (`/api/v1` never takes passwords) |
+| `TRIPWIRE_API_PASSWORD_AUTH` | `false` | `config.php`, `api/token-auth.php` | Deprecated and off by default: the old API login with the account password (HTTP Basic). Set `true` only for old scripts that can't use [personal access tokens](#rest-api) (`/api/v1` never takes passwords) |
 | `TRIPWIRE_API_RATE_LIMIT` | `60` | `config.php`, `api/tokens.inc.php` | API requests per token and minute (1-100000); more get 429 |
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `ENABLE_ASSETS_SCOPE` | `false` | `config.php` (`ENABLE_ASSETS_SCOPE`), `public/login.php` | Asks tracking characters (Tracking > Add) for `esi-assets.read_assets.v1`, so [fitted jump mass](#fitted-jump-mass) can read the active ship's fit. EVE SSO refuses a scope your CCP developer application doesn't have (`invalid_scope`, adding characters fails), so: 1. enable `esi-assets.read_assets.v1` on the application at developers.eveonline.com, 2. set `ENABLE_ASSETS_SCOPE=true` and restart, 3. users remove and re-add their tracking characters. Without it jumps are logged with the hull mass only |
@@ -683,7 +683,7 @@ or deleted which signature or wormhole on the mask, newest first, with before/af
 | Mask | fixed by the token (exactly one) | `maskID` parameter |
 | Access | read only, revocable, expires if you say so | read only, but needs the real password (SSO users have none) |
 | Endpoints | `/api/v1/...` and the old `signatures`, `wormholes`, `comments` | the old `signatures`, `wormholes`, `comments`, `statistics` |
-| Switch | always on | `TRIPWIRE_API_PASSWORD_AUTH` (default `true` for now) |
+| Switch | always on | `TRIPWIRE_API_PASSWORD_AUTH` (default `false`) |
 
 **Tokens.** Settings > General > API tokens: name it, pick an expiry (90 days by default, or none), Create. The token
 `twp_<id>_<64 hex>` is shown once with a Copy button; the server keeps only its SHA-256. A token belongs to your character
@@ -723,8 +723,8 @@ curl -H "Authorization: Bearer $TOKEN" https://tripwire.example.com/api/v1/timer
 curl -H "Authorization: Bearer $TOKEN" "https://tripwire.example.com/api/v1/notes?systemID=31000005"
 ```
 
-**Moving off passwords.** `TRIPWIRE_API_PASSWORD_AUTH` defaults to `true` so existing scripts keep working; it is deprecated.
-Once your scripts use tokens, **set it to `false`** (recommended): the old Basic login then answers 401 (`/api/v1` never accepts passwords). Basic auth has no rate limit and sends the real account password on every request.
+**Passwords are off.** `TRIPWIRE_API_PASSWORD_AUTH` defaults to `false`: the old Basic login answers 401 (`/api/v1` never accepts passwords). Move scripts to tokens; set it to `true` only temporarily for a script that can't change yet.
+Basic auth has no rate limit and sends the real account password on every request, which is why it is off.
 
 Files: `api/tokens.inc.php` (tokens, access, rate limit), `api/v1.inc.php` (endpoints), `api/token-auth.php` (the login
 in front of upstream's `api/auth.php`, which `public/api.php` now requires through it: one changed line there),

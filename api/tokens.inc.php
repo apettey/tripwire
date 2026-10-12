@@ -78,11 +78,11 @@ function api_token_rate_limit() {
     return max(1, min(100000, (int) $raw));
 }
 
-/** Whether the old HTTP Basic (account password) authentication still works: TRIPWIRE_API_PASSWORD_AUTH, default true */
+/** Whether the old HTTP Basic (account password) authentication still works: TRIPWIRE_API_PASSWORD_AUTH, default false (off) */
 function api_password_auth_enabled() {
     if (defined('TRIPWIRE_API_PASSWORD_AUTH')) return (bool) TRIPWIRE_API_PASSWORD_AUTH;
     $raw = getenv('TRIPWIRE_API_PASSWORD_AUTH');
-    return $raw === false || $raw === '' || !in_array(strtolower($raw), ['0', 'false', 'no', 'off'], true);
+    return $raw !== false && in_array(strtolower(trim($raw)), ['1', 'true', 'yes', 'on'], true);
 }
 
 /** One line of user text, control characters gone, cut to $max characters */

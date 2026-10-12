@@ -277,7 +277,7 @@ check('touch: junk REMOTE_ADDR stored as nothing', api_token_get($db, $rowU['id'
 
 // the password switch
 putenv('TRIPWIRE_API_PASSWORD_AUTH');
-check('password auth: on by default', api_password_auth_enabled(), true);
+check('password auth: off by default', api_password_auth_enabled(), false);
 foreach (['false', '0', 'no', 'off', 'FALSE'] as $v) { putenv('TRIPWIRE_API_PASSWORD_AUTH=' . $v); check('password auth: off for ' . $v, api_password_auth_enabled(), false); }
 putenv('TRIPWIRE_API_PASSWORD_AUTH=true');
 check('password auth: on for true', api_password_auth_enabled(), true);
@@ -439,10 +439,10 @@ check('legacy+token: another mask asked for', api('signatures?maskID=' . MASK_B,
 check('legacy+token: statistics are not available to tokens', api('statistics', $httpToken)[0], 404);
 check('legacy+token: unknown', api('whatever', $httpToken)[0], 404);
 
-// the old Basic login still works (TRIPWIRE_API_PASSWORD_AUTH defaults to on)
+// the old Basic login is off by default (TRIPWIRE_API_PASSWORD_AUTH unset in the dev stack)
 $basic = ['Authorization: Basic ' . base64_encode('apitok-test-1:pw-' . MEMBER)];
 list($st, $out) = http('GET', 'api/signatures?maskID=' . MASK_A . '&systemID=' . SYSTEM2, null, null, $basic);
-check('basic: still works', [$st, is_array($out) ? array_column($out, 'signatureID') : $out], [200, ['ABC123', 'DEF456']]);
+check('basic: refused by default', $st, 401);
 check('basic: wrong password', http('GET', 'api/signatures?maskID=' . MASK_A, null, null, ['Authorization: Basic ' . base64_encode('apitok-test-1:wrong')])[0], 401);
 check('basic: no credentials', http('GET', 'api/signatures?maskID=' . MASK_A, null)[0], 401);
 
