@@ -23,7 +23,10 @@ function api_fail($status, $message, array $headers = []) {
 }
 
 $twBearer = api_token_bearer($_SERVER);
-$twPath = explode('/', isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : '');   // "/v1/chain" -> ['', 'v1', 'chain']
+// public/api.php routes on $_REQUEST['q'], where a cookie named q may override the rewrite's query parameter (request_order): a token request
+// is checked and routed on the query parameter only, so the allow-list below is what api.php runs
+if ($twBearer !== null) $_REQUEST['q'] = isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : '';
+$twPath = explode('/', isset($_REQUEST['q']) && is_string($_REQUEST['q']) ? $_REQUEST['q'] : '');   // "/v1/chain" -> ['', 'v1', 'chain']
 
 if ($twBearer === null) {
     if (isset($twPath[1]) && $twPath[1] === 'v1') {
@@ -62,5 +65,15 @@ if ($twBearer === null) {
     }
     if (!isset($twPath[1]) || !in_array($twPath[1], ['signatures', 'wormholes', 'comments'], true)) {
         api_fail(404, 'Not found');
+    }
+    if ($twPath[1] === 'comments') {
+        // the old comments endpoint prints the stored HTML as is; for a token it is sanitised again on the way out, as /api/v1/notes
+        require_once(__DIR__ . '/../note-html.inc.php');
+        $output = null;
+        include(__DIR__ . '/comments/get.php');
+        if (is_array($output)) foreach ($output as $row) $row->comment = sanitizeNoteHtml($row->comment);
+        header('Content-Type: application/json');
+        echo json_encode($output);
+        exit();
     }
 }

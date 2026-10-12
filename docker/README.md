@@ -698,7 +698,7 @@ curl -H "Authorization: Bearer $TOKEN" "https://tripwire.example.com/api/v1/note
 ```
 
 **Moving off passwords.** `TRIPWIRE_API_PASSWORD_AUTH` defaults to `true` so existing scripts keep working; it is deprecated.
-Once your scripts use tokens, set it to `false`: the old Basic login then answers 401 (`/api/v1` never accepts passwords).
+Once your scripts use tokens, **set it to `false`** (recommended): the old Basic login then answers 401 (`/api/v1` never accepts passwords). Basic auth has no rate limit and sends the real account password on every request.
 
 Files: `api/tokens.inc.php` (tokens, access, rate limit), `api/v1.inc.php` (endpoints), `api/token-auth.php` (the login
 in front of upstream's `api/auth.php`, which `public/api.php` now requires through it: one changed line there),

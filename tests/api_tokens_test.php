@@ -432,6 +432,9 @@ list($st, $legacy) = api('signatures?systemID=' . SYSTEM, $httpToken);
 check('legacy+token: signatures of the token\'s mask', [$st, array_column($legacy, 'signatureID')], [200, ['ABC123', 'DEF456', 'GHI789']]);   // the old query also returns every wormhole signature of the mask
 check('legacy+token: wormholes', array_column(api('wormholes', $httpToken)[1], 'type'), ['B274']);
 check('legacy+token: comments', count(api('comments', $httpToken)[1]), 1);
+check('legacy+token: comments are sanitised', [strpos(api('comments', $httpToken)[2], '<script'), strpos(api('comments', $httpToken)[2], 'onerror')], [false, false]);
+check('q cookie can not re-route a token request', [api('v1/chain', $httpToken, 'GET', ['Cookie: q=/statistics'])[1]['holes'] !== null, api('signatures', $httpToken, 'GET', ['Cookie: q=/statistics&characterID=1'])[0]], [true, 200]);
+check('q cookie: /v1 hidden behind a cookie', api('statistics', $httpToken, 'GET', ['Cookie: q=/v1/chain'])[0], 404);
 check('legacy+token: another mask asked for', api('signatures?maskID=' . MASK_B, $httpToken)[0], 403);
 check('legacy+token: statistics are not available to tokens', api('statistics', $httpToken)[0], 404);
 check('legacy+token: unknown', api('whatever', $httpToken)[0], 404);
