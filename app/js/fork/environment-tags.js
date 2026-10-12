@@ -16,10 +16,10 @@ const environmentTags = {
 	MAX_SUMMARY_STORMS: 3,
 
 	STORMS: {
-		electric: { name: "Electric", color: "#5cc8f5" },
-		exotic: { name: "Exotic", color: "#c78cff" },
-		gamma: { name: "Gamma", color: "#6fe28a" },
-		plasma: { name: "Plasma", color: "#ff8a5c" }
+		electric: { name: "Electric", full: "Electric Storm", color: "#5cc8f5" },
+		exotic: { name: "Exotic", full: "Exotic Storm", color: "#c78cff" },
+		gamma: { name: "Gamma", full: "Gamma Ray Storm", color: "#6fe28a" },
+		plasma: { name: "Plasma", full: "Plasma Storm", color: "#ff8a5c" }
 	},
 
 	/** Wormhole effects in the order the summary lists them: [Tripwire's effect text, short name] */
@@ -47,7 +47,7 @@ const environmentTags = {
 	/**
 	 * The storms of an EVE-Scout observations answer.
 	 * @param list the parsed JSON (an array; anything else gives no storms)
-	 * @return {systemID: {kind, name, reportedMs, hoursInSystem}}; only observation_category "storm" of a known kind,
+	 * @return {systemID: {kind, reportedMs, hoursInSystem}} (no text of the feed is kept: tooltips come from our own constants); only observation_category "storm" of a known kind,
 	 *         the newest report per system, reports older than MAX_REPORT_AGE_H dropped
 	 */
 	parseStorms: function(list, nowMs) {
@@ -64,7 +64,6 @@ const environmentTags = {
 			const hours = Number(o.hours_in_system);
 			out[id] = {
 				kind: kind,
-				name: typeof o.display_name === "string" && o.display_name ? o.display_name.slice(0, 40) : environmentTags.STORMS[kind].name + " Storm",
 				reportedMs: at,
 				hoursInSystem: isFinite(hours) && hours >= 0 ? hours : null
 			};
@@ -91,7 +90,7 @@ const environmentTags = {
 	},
 
 	stormTip: function(storm, nowMs) {
-		let tip = storm.name + ", reported " + environmentTags.ago(nowMs - storm.reportedMs);
+		let tip = environmentTags.STORMS[storm.kind].full + ", reported " + environmentTags.ago(nowMs - storm.reportedMs);
 		if (storm.hoursInSystem !== null) { tip += " (already there " + Math.round(storm.hoursInSystem) + " h)"; }
 		return tip + " - crowd-sourced by EVE-Scout";
 	},
@@ -248,6 +247,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const text = on ? et.summaryText(et.summaryModel(state.ids, system, ctx().storms, nameOf)) : "";
 			const $s = $summary();
 			$s.text(text).attr("data-tooltip", text ? et.escape(text) : "").toggleClass("hidden", !text);
+			// The tooltip is HTML (jBox): the text is escaped once above (system names are our own static data)
+			if (typeof Tooltips !== "undefined" && !$s.data("envTip")) { Tooltips.attach($s); $s.data("envTip", true); }
 		}
 
 		function redrawChain() {
@@ -271,6 +272,29 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
 			wrapped.environmentTagsWrapped = true;
 			chain.nodes = wrapped;
+		}
+
+		// ---- tooltips: jBox keeps every element it is attached to, so detach the old tags and attach the new ones after each draw ----
+		let tipEls = null;
+		function attachTips() {
+			if (typeof Tooltips === "undefined") { return; }
+			if (tipEls && tipEls.length && Tooltips.detach) { Tooltips.detach(tipEls); }
+			tipEls = $("#chainMap .env-tag[data-tooltip]");
+			if (tipEls.length) { Tooltips.attach(tipEls); }
+		}
+		let drawHooked = false;
+		function installDrawHook() {
+			if (drawHooked || typeof chain === "undefined" || !chain || typeof chain.draw !== "function" || chain.draw.environmentTagsWrapped) { return; }
+			drawHooked = true;
+			const previous = chain.draw;
+			const wrapped = function() {
+				const result = previous.apply(this, arguments);
+				try { attachTips(); setTimeout(attachTips, 400); } catch (e) { console.warn("Environment tags: tooltips", e); }
+				return result;
+			};
+			Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
+			wrapped.environmentTagsWrapped = true;
+			chain.draw = wrapped;
 		}
 
 		// ---- data ----
@@ -326,9 +350,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 		}
 
-		installHook();
+		installHook(); installDrawHook();
 		$(function() {
-			installHook();
+			installHook(); installDrawHook();
 			setupSettings();
 			loadA0();
 			loadStorms();

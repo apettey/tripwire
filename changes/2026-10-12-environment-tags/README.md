@@ -30,6 +30,12 @@ in `maskDefaults.ALLOWED` and `MASKADMIN_DEFAULTS_ALLOW`). With Storm reports of
   insert `.env-tags` into node HTML, so it works in all four renderers; the tags hang just below the node's bottom-right
   corner (top-left is the threat badge, top-right the skyhook icon and jump-planner ring, bottom-right inside the node the
   intel dot, bottom-left statics and structure icons). The summary is a span after the chain toolbar's icons.
+- Review round 1: tooltips are built only from our own constants (jBox renders `data-tooltip` as HTML, so no EVE-Scout
+  text is used; the feed's `display_name` is dropped); tooltips are attached after each chain draw (checked by hovering a
+  storm tag, an A0 tag and the summary, `tooltip.png`); the feed is stripped server-side (`environment_tags.inc.php`) to
+  storms with category, type, system, time and hours before it is cached, written atomically, and a stale copy keeps its
+  age when a refresh fails (retry at most every 60 s); `orgchart-top.png` shows size tags and environment tags together.
+  Tests: `tests/environment_tags_test.php`.
 - Storms: EVE-Scout `https://api.eve-scout.com/v2/public/observations` (verified live: `observation_category` "storm" with
   `observation_type` `electric|exotic|gamma|plasma` + `_a`/`_b`, `hours_in_system`, `created_at`, `system_id`; other
   categories such as `space_oddity` are ignored). Fetched by the server only, through the existing
@@ -43,6 +49,6 @@ in `maskDefaults.ALLOWED` and `MASKADMIN_DEFAULTS_ALLOW`). With Storm reports of
   leaves out route destination rows.
 - Tests: `app/js-test/fork/environment-tags.test.js` (parsing, tagging, summary). The two mask-defaults tests no longer
   hard-code the allow-list length (26).
-- Upstream files touched: `public/cached_third_party.php` (one array row), `maskadmin/maskadmin.inc.php` (allow-list);
+- Upstream files touched: `public/cached_third_party.php` (one array row and one `if` line), `maskadmin/maskadmin.inc.php` (allow-list);
   fork files: `app/js/fork/mask-defaults.js`, the two mask-defaults tests.
 - No new third-party host from the browser; the server calls `api.eve-scout.com`, already used for Thera/Turnur.

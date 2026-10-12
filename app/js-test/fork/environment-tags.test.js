@@ -47,6 +47,16 @@ describe('environmentTags', () => {
 			assert.strictEqual(out[9], undefined);
 		});
 
+		it('never carries feed text into a tooltip (malicious display_name / system_name)', () => {
+			const evil = '<img src=x onerror=alert(1)>"\'';
+			const storms = environmentTags.parseStorms([obs({ display_name: evil, system_name: evil, created_by_name: evil })], NOW);
+			assert.deepStrictEqual(Object.keys(storms[30000017]).sort(), ['hoursInSystem', 'kind', 'reportedMs']);
+			const tags = environmentTags.tagsFor(30000017, {}, { storms: storms, nowMs: NOW });
+			const html = environmentTags.tagsHtml(tags);
+			assert.ok(html.indexOf('onerror') < 0 && html.indexOf('<img') < 0, html);
+			assert.ok(/Gamma Ray Storm, reported/.test(tags[0].tip));
+		});
+
 		it('survives junk', () => {
 			assert.deepStrictEqual(environmentTags.parseStorms(null, NOW), {});
 			assert.deepStrictEqual(environmentTags.parseStorms({ a: 1 }, NOW), {});
