@@ -20,7 +20,7 @@ Before: Catch on the region map, no skyhook information (they were only in the s
 overlay on: gold pills on systems with a raidable skyhook (count and value), the filters row under the header, the
 "Skyhooks in Catch" list (jumps from you) with links to the neighbouring regions, and the card of GMLH-K with its skyhook.
 
-Staging scan with skyhook tags: ![staging scan](staging-scan.jpg)
+Staging scan with skyhook tags: ![staging scan](staging-scan.png)
 
 ## Settings
 
