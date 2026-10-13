@@ -1,0 +1,79 @@
+/* Region map (fork-owned, see app/js/fork/region-map.js and region-map-view.js) */
+
+.dialog-regionMap .ui-dialog-content { padding: 0; overflow: hidden; }
+.dialog-regionMap .rm-wrap { display: flex; flex-direction: column; height: 100%; }
+
+.dialog-regionMap .rm-bar { flex: 0 0 auto; padding: 6px 8px; background: #151515; border-bottom: 1px solid #333; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.dialog-regionMap .rm-bar select,
+.dialog-regionMap .rm-bar input[type=text] { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; max-width: 170px; }
+.dialog-regionMap .rm-bar .rm-goto { width: 125px; }
+.dialog-regionMap .rm-bar label { color: #bbb; white-space: nowrap; cursor: pointer; font-size: 12px; }
+.dialog-regionMap .rm-toggles { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; }
+.dialog-regionMap .rm-view-buttons { margin-left: auto; white-space: nowrap; }
+.dialog-regionMap .rm-view-buttons button,
+.dialog-regionMap .rm-card button { background: #222; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.dialog-regionMap .rm-view-buttons button:hover,
+.dialog-regionMap .rm-card button:hover { background: #333; border-color: #888; }
+
+.dialog-regionMap .rm-stage { position: relative; flex: 1 1 auto; min-height: 0; background: #07090d; }
+.dialog-regionMap .rm-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; user-select: none; display: block; }
+.dialog-regionMap .rm-svg.rm-dragging { cursor: grabbing; }
+
+.dialog-regionMap .rm-clabel { fill: #9db4d0; opacity: 0.22; font-size: 34px; font-weight: bold; pointer-events: none; }
+.dialog-regionMap .rm-edge { stroke: #51657c; stroke-width: 2.2; }
+.dialog-regionMap .rm-route { stroke: #ff4fd8; stroke-width: 5; stroke-linecap: round; opacity: 0.95; }
+
+.dialog-regionMap .rm-sys { cursor: pointer; }
+.dialog-regionMap .rm-sys rect { stroke: rgba(0, 0, 0, 0.65); stroke-width: 1; }
+.dialog-regionMap .rm-sys text { fill: #000; font-size: 12px; font-weight: bold; text-anchor: middle; pointer-events: none; }
+.dialog-regionMap .rm-sys:hover rect { stroke: #fff; stroke-width: 2; }
+
+.dialog-regionMap .rm-stub { cursor: pointer; }
+.dialog-regionMap .rm-stub line { stroke: #7f95ad; stroke-width: 2.2; stroke-dasharray: 5 4; }
+.dialog-regionMap .rm-stub text { fill: #9fc3ff; font-size: 12px; font-weight: bold; }
+.dialog-regionMap .rm-stub:hover line { stroke: #fff; }
+.dialog-regionMap .rm-stub:hover text { fill: #fff; text-decoration: underline; }
+
+.dialog-regionMap .rm-layer-tags { pointer-events: none; }
+.dialog-regionMap .rm-layer-tags .rm-pill, .dialog-regionMap .rm-layer-tags .rm-badge { pointer-events: auto; }
+.dialog-regionMap .rm-outline { fill: none; }
+.dialog-regionMap .rm-exit { stroke: #ffb400; }
+.dialog-regionMap .rm-you { stroke: #38e8ff; }
+.dialog-regionMap .rm-fight { stroke: #ff3030; stroke-dasharray: 6 3; animation: rm-pulse 1.6s ease-in-out infinite; }
+.dialog-regionMap .rm-route-node { stroke: #ff4fd8; }
+.dialog-regionMap .rm-selected { stroke: #fff; }
+.dialog-regionMap .rm-pill rect { fill: #ffb400; }
+.dialog-regionMap .rm-pill text { fill: #1a1000; font-size: 11px; font-weight: bold; }
+.dialog-regionMap .rm-pill-you rect { fill: #38e8ff; }
+.dialog-regionMap .rm-pill-you text { fill: #00252b; }
+.dialog-regionMap .rm-badge circle { fill: #2a7bd6; stroke: #fff; stroke-width: 1.5; }
+.dialog-regionMap .rm-badge text { fill: #fff; font-size: 11px; font-weight: bold; }
+.dialog-regionMap .rm-flag { fill: #ff6b6b; font-size: 12px; font-weight: bold; }
+@keyframes rm-pulse { 50% { opacity: 0.45; } }
+
+.dialog-regionMap .rm-card { position: absolute; right: 10px; bottom: 28px; width: 290px; background: rgba(16, 18, 24, 0.94); border: 1px solid #4a5568; border-radius: 4px; padding: 8px 10px; color: #ccc; font-size: 12px; }
+.dialog-regionMap .rm-card.hidden { display: none; }
+.dialog-regionMap .rm-card-head { font-size: 15px; color: #fff; margin-bottom: 2px; }
+.dialog-regionMap .rm-card-head .rm-sec { font-weight: bold; margin-left: 4px; }
+.dialog-regionMap .rm-card .rm-card-close { float: right; cursor: pointer; color: #999; background: none; border: 0; padding: 0 2px; font-size: 18px; line-height: 14px; }
+.dialog-regionMap .rm-card .rm-card-close:hover { color: #fff; background: none; }
+.dialog-regionMap .rm-card-sub { color: #8aa; margin-bottom: 4px; }
+.dialog-regionMap .rm-card-row { margin: 2px 0; }
+.dialog-regionMap .rm-muted { color: #888; }
+.dialog-regionMap .rm-card-buttons { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+
+.dialog-regionMap .rm-hint { position: absolute; left: 6px; bottom: 4px; color: #8c98a8; font-size: 11px; pointer-events: none; background: rgba(7, 9, 13, 0.8); padding: 1px 5px; border-radius: 3px; }
+
+#infoLinks .rm-info-sep, #infoLinks .rm-info-link { display: none; }
+
+/* Jump range overlay (region-map-jumps.js): in range ringed green, the rest dimmed, the origin marked */
+.dialog-regionMap .rm-jbar { flex: 0 0 auto; padding: 4px 8px; background: #101820; border-bottom: 1px solid #2c3a48; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: #bcd; }
+.dialog-regionMap .rm-jbar select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; max-width: 190px; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jout { opacity: 0.38; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jbad { opacity: 0.2; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jin rect { stroke: #5dff7a; stroke-width: 3.5; }
+.dialog-regionMap .rm-svg.rm-jumping .rm-jorigin rect { stroke: #fff; stroke-width: 3; }
+.dialog-regionMap .rm-jorigin-ring { stroke: #ffffff; stroke-dasharray: 3 3; }
+.dialog-regionMap .rm-card-jump.rm-j-in { color: #8dffa0; }
+.dialog-regionMap .rm-card-jump.rm-j-out { color: #ffc27a; }
+.dialog-regionMap .rm-card-jump.rm-j-bad { color: #aab; }

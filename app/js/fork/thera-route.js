@@ -406,11 +406,11 @@ const theraRoute = {
 		});
 	},
 
-	/** Tooltip for the "Set route in game" button of one gate leg */
+	/** Tooltip for the "Set destination in game" button of one gate leg */
 	legTitle: function(leg, name) {
 		const jumps = leg.path.length - 1;
-		const parts = ["Set route in game" + (leg.count > 1 ? ", leg " + (leg.index + 1) + " of " + leg.count : "") + ": the gates from "
-			+ name(leg.from) + " to " + name(leg.to) + " (" + jumps + " jump" + (jumps === 1 ? "" : "s") + ") as autopilot waypoints."];
+		const parts = ["Set destination in game" + (leg.count > 1 ? ", leg " + (leg.index + 1) + " of " + leg.count : "") + ": " + name(leg.to)
+			+ " as your in-game destination (" + jumps + " jump" + (jumps === 1 ? "" : "s") + " by gates from " + name(leg.from) + ")."];
 		if (leg.after && leg.after.hub) {
 			parts.push("Send it once you are " + (leg.after.hub === leg.from ? "in " : "out of " + theraRoute.HUBS[leg.after.hub] + " in ")
 				+ name(leg.from) + ": the autopilot can't route through wormholes.");

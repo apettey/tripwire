@@ -1,6 +1,78 @@
 {
   "features": [
     {
+      "pr": 101,
+      "date": "2026-10-12",
+      "title": "Set route in game now sets your destination",
+      "description": "The Set route in game buttons (Favourites, Destinations, Thera and Turnur legs, skyhooks, loot buyers, region map and Jump planner) now just set the system as your in-game destination for the characters you pick, instead of adding a waypoint for every system on the way. Your in-game autopilot settings decide the way there: set it to Prefer safer in game if you want a high-sec only route.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-101-set-destination.png",
+          "caption": "Pick the characters whose destination is set"
+        }
+      ]
+    },
+    {
+      "pr": 100,
+      "date": "2026-10-12",
+      "title": "Jump range on the region map",
+      "description": "The region map can now show where a jump ship can go. Tick Jump range in the map's header, pick Black Ops, Jump Freighter, a carrier or another hull and your Jump Drive Calibration level, and choose the origin: the system you selected, you, or one of your chain's exits. Systems reachable in one jump are ringed green and the rest are dimmed; hover or click a system for its distance, or for a two-jump route when it is out of range. Or press Ctrl+K and type region",
+      "images": [
+        {
+          "src": "whats-new/img/pr-100-region-map-jumps.png",
+          "caption": "map"
+        }
+      ]
+    },
+    {
+      "pr": 98,
+      "date": "2026-10-12",
+      "title": "Which signature did you jump through?",
+      "description": "When you jump through a wormhole the automapper can't match to a signature, a small pop-up lists the unlinked wormhole signatures so you can link the right one with a click and get its bookmark copied. Mask admins can set it to only appear when nothing matches, appear more often, or switch it off in Mask Admin > Bookmarks; you can hide it for yourself in Settings > Wormhole Jumps & Mass > Which signature prompt.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-98-jump-sig-prompt.png",
+          "caption": "Pick the signature you jumped through"
+        }
+      ]
+    },
+    {
+      "pr": 97,
+      "date": "2026-10-12",
+      "title": "Bookmark names set by your mask",
+      "description": "Mask admins can now choose how bookmark names look in Mask Admin > Bookmarks, for example =A C5 ABC EOL or A-ABC-123 C5 L. Everyone on the mask gets the same bookmark text when they add a hole or jump through one. Until an admin changes it, nothing is different.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-97-bookmark-templates.png",
+          "caption": "Mask Admin > Bookmarks"
+        }
+      ]
+    },
+    {
+      "pr": 96,
+      "date": "2026-10-12",
+      "title": "API tokens for scripts and bots",
+      "description": "You can now create personal API tokens so your own scripts and bots can read your mask's chain, signatures, structures, timers and notes without your password. Open Settings > General > API tokens, name a token and copy it, because it is shown only once. Tokens are read-only, tied to the mask you are on, optionally expire, and stop working at once if you revoke them or lose access to the mask. Mask admins can see and revoke the tokens of their mask in Mask Admin > API tokens.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-96-api-tokens.png",
+          "caption": "Settings > General > API tokens"
+        }
+      ]
+    },
+    {
+      "pr": 95,
+      "date": "2026-10-12",
+      "title": "Region map",
+      "description": "A Dotlan-style map of a k-space region. Right-click a system on the chain map and choose Region map, use the Region map link in the system panel, or press Ctrl+K and type \"region map\" with a system or region name. It shows your chain's exits with their hole names, you and your pilots, the Fight here system, the route to a system you click, and last-hour NPC kills, ship kills or jumps as heat. Click a system for the jumps from your chain and to set a destination or route in game, double-click to open it in Tripwire, and click a gate label to cross into the neighbouring region. Turn it off in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-95-region-map.png",
+          "caption": "Delve with chain exits, you, Fight here, NPC-kill heat and a route"
+        }
+      ]
+    },
+    {
       "pr": 94,
       "date": "2026-10-12",
       "title": "Palette actions and arrow keys in the signature list",

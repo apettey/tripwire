@@ -4,6 +4,7 @@ include('public/js/combine');
 include('app/js/tripwire/genericSystemTypes');
 include('app/js/wormholeAnalysis');
 include('app/js/systemAnalysis');
+include('app/js/fork/bookmark-template');
 include('app/js/fork/hole-naming');
 
 describe('Hole naming', () => {

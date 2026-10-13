@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { include } = require('../helpers/helpers');
+include('app/js/fork/bookmark-template');
 include('app/js/fork/hole-naming');
 include('app/js/fork/jump-return');
 

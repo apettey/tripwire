@@ -121,6 +121,8 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `CDN_DOMAIN` | `$TRIPWIRE_DOMAIN` | `config.php` (`CDN_DOMAIN`) | Host serving images/css/js |
 | `APP_NAME` | `Tripwire` | `config.php` (`APP_NAME`) | Name shown in the UI |
 | `TRIPWIRE_API` | `true` | `config.php` (`TRIPWIRE_API`) | Enables the `/api` endpoints |
+| `TRIPWIRE_API_PASSWORD_AUTH` | `false` | `config.php`, `api/token-auth.php` | Deprecated and off by default: the old API login with the account password (HTTP Basic). Set `true` only for old scripts that can't use [personal access tokens](#rest-api) (`/api/v1` never takes passwords) |
+| `TRIPWIRE_API_RATE_LIMIT` | `60` | `config.php`, `api/tokens.inc.php` | API requests per token and minute (1-100000); more get 429 |
 | `ENABLE_SEARCH_SCOPE` | `true` | `config.php` (`ENABLE_SEARCH_SCOPE`) | Requests the ESI search scope at login |
 | `ENABLE_ASSETS_SCOPE` | `false` | `config.php` (`ENABLE_ASSETS_SCOPE`), `public/login.php` | Asks tracking characters (Tracking > Add) for `esi-assets.read_assets.v1`, so [fitted jump mass](#fitted-jump-mass) can read the active ship's fit. EVE SSO refuses a scope your CCP developer application doesn't have (`invalid_scope`, adding characters fails), so: 1. enable `esi-assets.read_assets.v1` on the application at developers.eveonline.com, 2. set `ENABLE_ASSETS_SCOPE=true` and restart, 3. users remove and re-add their tracking characters. Without it jumps are logged with the hull mass only |
 | `EVE_DUMP` | `eve_dump` | `config.php` (`EVE_DUMP`) | EVE SDE database name (upstream `tools/` only, not in the image) |
@@ -627,6 +629,32 @@ Mask Admin > Admins & members (`public/mask_admins.php`, `maskadmin/maskadmin.in
   `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`, like `fight.php`. Every change is in the audit list.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/mask_admins_test.php`.
 
+### Bookmark names
+
+Mask Admin > Bookmarks (`public/bookmark_template.php`, `bookmark/bookmark.inc.php`, `app/js/fork/bookmark-template.js`): the
+strings Tripwire copies for in-game bookmarks are built from two templates per mask, set by the mask's owner and the owning
+corporation's Tripwire admins (`maskadmin_base_level`: owner, corp admin; the corp mask: its admins) and used by everyone on
+the mask. Table `fork_bookmark_templates` (JSON `data` column, one row per mask) is created on first use.
+
+- **Templates.** *Hole bookmark*, copied when a named hole is added or saved (default `={name} {class} {sig} {life}`, e.g.
+  `=A C5 ABC EOL`) and *Return bookmark*, offered after a jump (default `!{name}`, must start with `!` or `<` because that is
+  how a name is told from a return bookmark). The defaults are exactly what Tripwire made before templates, so nothing changes
+  until an admin saves. Tokens: `{name}` (required), `{sig}` (ABC), `{sigid}` (ABC-123), `{type}`, `{class}` (class of the system it
+  leads to), `{size}` (S/M/L/VL/XL), `{life}` (EOL), `{system}`, `{dir}` (out / in). An empty token leaves no gap.
+- **Rules** (browser and server check the same): at most 80 characters, letters, digits, spaces and `= ! < > _ . , : ; / | + * ( ) [ ] # @ ~ -`,
+  only known tokens, and with the longest values the result is at most 50 characters. Values are stripped to `A-Za-z0-9._ -`.
+- **Where used.** `holeNaming.bookmarkString` (Add/Save copy) and `jumpReturn.returnString` (return pop-up): the only two places
+  the fork builds a bookmark string. Members read the templates on page load (and again when the tab comes back after 5 minutes).
+- **Which signature did you jump through?** The same tab holds the mask-wide mode of the post-jump pop-up
+  (`app/js/fork/jump-sig-prompt.js`): `nomatch` (default: only when the automapper made a bare hole), `always` (also a hole someone
+  already named, until it has a signature ID) or `off`; `jumpPrompt` in the same row. Users can hide it in Settings > Wormhole Jumps &
+  Mass (`options.jumpSigPrompt`). It never shows while the automapper's own picker is open. Linking a signature is one server
+  transaction (`public/jump_link.php`, `jumplink/jumplink.inc.php`, table `fork_jump_links`): it re-checks that the unknown hole
+  is still bare and the candidate still unlinked, re-points the logged jumps, deletes the bare hole and can be undone with `unlink`.
+  "Use the built-in names" leaves the jump prompt mode alone. Test: `php tests/jump_link_test.php`.
+- **Security.** The mask is the session's; POSTs need `X-CSRF-Token`, `X-Requested-With`, JSON and a same-origin `Origin`; a change is
+  in Mask Admin's audit list. Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/bookmark_template_test.php`.
+
 ### Audit log
 
 Mask Admin > Audit (`public/audit_log.php`, `audit/audit.inc.php`, `app/js/fork/audit-log-tab.js`): who added, changed
@@ -644,6 +672,68 @@ or deleted which signature or wormhole on the mask, newest first, with before/af
   The mask-admin actions of [Mask admins](#mask-admins) (`fork_mask_audit`) appear in the same list. Filters: system
   (either end of a wormhole), character, kind and date range (UTC); 50 per page.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/audit_log_test.php`.
+
+### REST API
+
+`/api` (`public/api.php`, on when `TRIPWIRE_API=true`) has two ways to log in:
+
+| | Personal access token (new) | Account password (upstream, deprecated) |
+| --- | --- | --- |
+| Header | `Authorization: Bearer twp_...` | HTTP Basic with the Tripwire username and password |
+| Mask | fixed by the token (exactly one) | `maskID` parameter |
+| Access | read only, revocable, expires if you say so | read only, but needs the real password (SSO users have none) |
+| Endpoints | `/api/v1/...` and the old `signatures`, `wormholes`, `comments` | the old `signatures`, `wormholes`, `comments`, `statistics` |
+| Switch | always on | `TRIPWIRE_API_PASSWORD_AUTH` (default `false`) |
+
+**Tokens.** Settings > General > API tokens: name it, pick an expiry (90 days by default, or none), Create. The token
+`twp_<id>_<64 hex>` is shown once with a Copy button; the server keeps only its SHA-256. A token belongs to your character
+and to the mask you are on when you create it (read only; at most 10 active tokens per user). Revoke it there, or a mask admin
+revokes it in Mask Admin > API tokens (owner, corp admin, granted admin of that mask; they see name, owner, last used, not the
+address). Create and revoke are written to the mask's [audit log](#audit-log). The table `fork_api_tokens` (and
+`fork_api_rate`) is created on first use (`docker/sql/api-tokens.sql` is the reference).
+
+**On every request** the server checks, in this order: the token exists, matches (constant time), is not revoked or expired
+(401); its character still has access to its mask by the session rule (`tripwire_mask_allowed`) and is not blocked
+in Mask Admin or banned (403, so leaving the corporation or being removed from a mask kills the token without anyone
+revoking it); the rate limit (429, `Retry-After`; `TRIPWIRE_API_RATE_LIMIT`, default 60 per token and minute); then
+the method (only `GET` and `HEAD`, otherwise 405) and the mask (a `maskID` parameter must name the token's own mask or
+the answer is 403). `lastUsedAt` and the address (`REMOTE_ADDR`, so behind a proxy it is the proxy unless nginx is set
+up for the real client address) are written at most every 5 minutes. A mask reached only through the alliance can not
+hold a token: Tripwire stores no alliance per character, so that access could not be re-checked on an API request.
+
+**Endpoints** (JSON, times ISO 8601 UTC, every answer `Cache-Control: no-store`, `X-RateLimit-*` headers):
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/v1` | the token: mask, scope, name, expiry, character |
+| `GET /api/v1/chain` | `systems` (systemID, signature and wormhole counts) and `holes` (type, `size` S/M/L/VL/XL, max jump and total mass, life, mass state, both ends with system, signature id and name) |
+| `GET /api/v1/signatures[?systemID=]` | the mask's signatures (id, type, name, bookmark, life, who, when) |
+| `GET /api/v1/structures[?systemID=]` | live structures; with `systemID` also the recently gone ones |
+| `GET /api/v1/timers` | active structure timers, soonest first |
+| `GET /api/v1/notes[?systemID=]` | system notes (`html` is sanitised), alias `comments` |
+
+Lists are capped at 5000 rows (`truncated` says when more exist). The old read endpoints work with a token too (`/api/signatures`,
+`/api/wormholes`, `/api/comments`, same output as before; `/api/statistics` does not). Errors are `{"error": "..."}`.
+
+```bash
+TOKEN=twp_12_0123...   # from Settings > General > API tokens
+curl -H "Authorization: Bearer $TOKEN" https://tripwire.example.com/api/v1/chain
+curl -H "Authorization: Bearer $TOKEN" "https://tripwire.example.com/api/v1/signatures?systemID=31000005"
+curl -H "Authorization: Bearer $TOKEN" https://tripwire.example.com/api/v1/timers
+curl -H "Authorization: Bearer $TOKEN" "https://tripwire.example.com/api/v1/notes?systemID=31000005"
+```
+
+**Passwords are off.** `TRIPWIRE_API_PASSWORD_AUTH` defaults to `false`: the old Basic login answers 401 (`/api/v1` never accepts passwords). Move scripts to tokens; set it to `true` only temporarily for a script that can't change yet.
+Basic auth has no rate limit and sends the real account password on every request, which is why it is off.
+
+Files: `api/tokens.inc.php` (tokens, access, rate limit), `api/v1.inc.php` (endpoints), `api/token-auth.php` (the login
+in front of upstream's `api/auth.php`, which `public/api.php` now requires through it: one changed line there),
+`api/wormhole-types.json` (a copy of `tools/wormholes.json`, which is not in the image; a test keeps them equal),
+`public/api_tokens.php` (management: session, CSRF token in `X-CSRF-Token`, `X-Requested-With`, JSON only, same-origin),
+`app/js/fork/api-tokens.js`, `app/js/fork/api-tokens-tab.js`.
+
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/api_tokens_test.php` (library, endpoints, HTTP: CSRF,
+  revoke IDOR, mask admins, the audit entries, the old Basic login) and mocha `app/js-test/fork/api-tokens.test.js`.
 
 ### D-scan and local scans
 

@@ -8,7 +8,7 @@ if (!TRIPWIRE_API) {
 }
 
 require_once('../db.inc.php');
-require_once('../api/auth.php');
+require_once('../api/token-auth.php'); // fork: Bearer tokens and /api/v1; includes api/auth.php for password auth
 
 header('Content-Type: application/json');
 $output = null;
