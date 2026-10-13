@@ -217,9 +217,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		if (typeof chain !== "undefined") { homeRegion.install(chain); homeRegion.installDraw(chain); }
 
 		// Group highlight while the pointer is over any tag (delegated: survives redraws without new handlers)
-		$(document).on("mouseenter", "#chainMap ." + homeRegion.CLASS, function() { $("#chainMap").addClass(homeRegion.HOVER_CLASS); });
+		$(document).on("mouseenter", "#chainMap ." + homeRegion.CLASS, function() {
+			$("#chainMap").addClass(homeRegion.HOVER_CLASS);
+			// Collapsing a node (double-click) redraws the nodes without chain.draw: give a new tag its tooltip now
+			if (typeof Tooltips !== 'undefined' && Tooltips.attach && $(this).is("[data-tooltip]") && !(homeRegion.tipEls && homeRegion.tipEls.is(this))) {
+				Tooltips.attach($(this));
+				homeRegion.tipEls = homeRegion.tipEls ? homeRegion.tipEls.add(this) : $(this);
+			}
+		});
 		$(document).on("mouseleave", "#chainMap ." + homeRegion.CLASS, function() { $("#chainMap").removeClass(homeRegion.HOVER_CLASS); });
 		$(document).on("change", "#homeRegion-color", homeRegion.showSample);
+		// A double-click (collapse/expand) can remove the tag under the pointer without a mouseleave
+		$(document).on("dblclick", "#chainMap", function() { $("#chainMap").removeClass(homeRegion.HOVER_CLASS); });
 
 		// Settings > Map Markers. Takes effect on Save (upstream Save runs options.apply() -> chain.redraw(), then
 		// options.save(), which persists options.homeRegion); Close discards it; Reset deletes the key (= on, teal).
