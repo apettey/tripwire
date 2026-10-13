@@ -12,3 +12,9 @@ body .critical.life-expired { color: #F052D8; font-weight: bold; }
 .eol.life-map-lt1h, #chainMap .eol.life-map-lt1h, #guide .eol.life-map-lt1h { border-style: dotted; }
 .eol.life-map-eol, #chainMap .eol.life-map-eol, #guide .eol.life-map-eol { border-style: double; }
 /* The line width stays upstream's (it shows the hole size: .temp.jm-* in chainmap-radial.css) */
+/* The org chart's lines (table cell borders) and the legend are 1-2px, where a double border draws solid: 3px shows
+   two thin lines */
+#chainMap td.life-map-eol.google-visualization-orgchart-linebottom { border-bottom-width: 3px; }
+#chainMap td.life-map-eol.google-visualization-orgchart-lineleft { border-left-width: 3px; }
+#chainMap td.life-map-eol.google-visualization-orgchart-lineright { border-right-width: 3px; }
+#guide div.eol.life-map-eol { border-bottom-width: 3px; }
