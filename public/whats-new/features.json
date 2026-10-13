@@ -25,6 +25,18 @@
       ]
     },
     {
+      "pr": 103,
+      "date": "2026-10-13",
+      "title": "Shorter suggested hole names",
+      "description": "Suggested hole names now mark a medium or small hole with a number only once along a path, so you no longer get names like A678. Past a medium hole (A6), the next medium or large hole gets a letter (A6A), and only a small hole gets a number again (A61). Past a small hole, every hole gets a letter.\n\nTurn suggestions off in Settings > Signatures > Suggest hole names.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-103-hole-names.png",
+          "caption": "A medium hole behind A6 is now A6A"
+        }
+      ]
+    },
+    {
       "pr": 101,
       "date": "2026-10-12",
       "title": "Set route in game now sets your destination",
