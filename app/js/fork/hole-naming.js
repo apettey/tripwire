@@ -1,7 +1,8 @@
 const holeNaming = {
 	// Hierarchical wormhole naming: holes leaving the chain root get one character, holes leaving a deeper
 	// system get the name of the hole leading into that system plus one character.
-	// Large holes use letters, small (frigate) holes digits 1-5, medium holes digits 6-9.
+	// Large holes use letters, small (frigate) holes digits 1-5, medium holes digits 6-9;
+	// the size digit is added only once along a path (see nextName).
 	LETTERS: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 	SMALL_DIGITS: "12345",
 	MEDIUM_DIGITS: "6789",
@@ -35,7 +36,20 @@ const holeNaming = {
 		return "large";
 	},
 
+	/** Most restrictive size marked in a name token: 'small' if it has a small digit, else 'medium' if it has a
+		medium digit, else 'large'. */
+	pathSize: function(token) {
+		const s = String(token === undefined || token === null ? "" : token);
+		let size = "large";
+		for (let i = 0; i < s.length; i++) {
+			if (holeNaming.SMALL_DIGITS.indexOf(s.charAt(i)) !== -1) { return "small"; }
+			if (holeNaming.MEDIUM_DIGITS.indexOf(s.charAt(i)) !== -1) { size = "medium"; }
+		}
+		return size;
+	},
+
 	/** Next free name below the prefix: prefix + lowest unused character of the size class.
+		The size digit is skipped (letters used instead) when the prefix already marks that size or a smaller one.
 		usedNames are the (full) names of sibling holes; only those whose leading token is exactly
 		prefix + 1 character count. Digit classes fall back to letters; returns null if nothing is free. */
 	nextName: function(prefix, usedNames, sizeClass) {
@@ -48,6 +62,11 @@ const holeNaming = {
 				used[token.charAt(prefix.length)] = true;
 			}
 		});
+		// A size digit is only added when the hole is more restrictive than the path so far: past a small hole
+		// everything is letters, past a medium hole only a small hole gets a digit again (AB6 -> AB6A, AB61).
+		const pathSize = holeNaming.pathSize(prefix);
+		if (sizeClass === "medium" && pathSize !== "large") { sizeClass = "large"; }
+		if (sizeClass === "small" && pathSize === "small") { sizeClass = "large"; }
 		const pools = sizeClass === "small" ? [holeNaming.SMALL_DIGITS, holeNaming.LETTERS] :
 			sizeClass === "medium" ? [holeNaming.MEDIUM_DIGITS, holeNaming.LETTERS] :
 			[holeNaming.LETTERS];

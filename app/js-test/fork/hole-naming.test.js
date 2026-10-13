@@ -46,7 +46,14 @@ describe('Hole naming', () => {
 		it('Child of A', () => assert.equal(holeNaming.nextName('A', [], 'large'), 'AA'));
 		it('Child of AA', () => assert.equal(holeNaming.nextName('AA', ['AAB'], 'large'), 'AAA'));
 		it('Small digits', () => assert.equal(holeNaming.nextName('AAA', [], 'small'), 'AAA1'));
-		it('Medium digits', () => assert.equal(holeNaming.nextName('AAA1', [], 'medium'), 'AAA16'));
+		it('Medium past a small hole uses letters', () => assert.equal(holeNaming.nextName('AAA1', [], 'medium'), 'AAA1A'));
+		it('Medium past a medium hole uses letters', () => assert.equal(holeNaming.nextName('A6', [], 'medium'), 'A6A'));
+		it('Medium past a medium hole skips used letters', () => assert.equal(holeNaming.nextName('A6', ['A6A'], 'medium'), 'A6B'));
+		it('Medium deeper past a medium hole uses letters', () => assert.equal(holeNaming.nextName('A6B', [], 'medium'), 'A6BA'));
+		it('Small past a small hole uses letters', () => assert.equal(holeNaming.nextName('A1', [], 'small'), 'A1A'));
+		it('Small deeper past medium then small uses letters', () => assert.equal(holeNaming.nextName('A61', [], 'small'), 'A61A'));
+		it('Small digits exhausted: the letter hole no longer marks small', () => assert.equal(holeNaming.nextName('A', [], 'small'), 'A1'));
+		it('Small deeper past a medium hole gets a digit', () => assert.equal(holeNaming.nextName('A6B', [], 'small'), 'A6B1'));
 		it('Medium child of AB', () => assert.equal(holeNaming.nextName('AB', [], 'medium'), 'AB6'));
 		it('Small child of AB6', () => assert.equal(holeNaming.nextName('AB6', [], 'small'), 'AB61'));
 		it('Small skips used digits', () => assert.equal(holeNaming.nextName('', ['1', '2', '4'], 'small'), '3'));
@@ -57,6 +64,14 @@ describe('Hole naming', () => {
 		it('Letters exhausted gives null', () => assert.equal(holeNaming.nextName('', holeNaming.LETTERS.split(''), 'large'), null));
 		it('Lower case prefix', () => assert.equal(holeNaming.nextName('ba', ['BAA'], 'large'), 'BAB'));
 		it('Null prefix gives null', () => assert.equal(holeNaming.nextName(null, [], 'large'), null));
+	});
+
+	describe('pathSize', () => {
+		it('Letters only is large', () => assert.equal(holeNaming.pathSize('AB'), 'large'));
+		it('Empty is large', () => assert.equal(holeNaming.pathSize(''), 'large'));
+		it('Medium digit', () => assert.equal(holeNaming.pathSize('A6B'), 'medium'));
+		it('Small digit', () => assert.equal(holeNaming.pathSize('A1'), 'small'));
+		it('Small wins over medium', () => assert.equal(holeNaming.pathSize('A61'), 'small'));
 	});
 
 	describe('prefixFor', () => {
