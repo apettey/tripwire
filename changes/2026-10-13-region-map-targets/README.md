@@ -42,8 +42,10 @@ Chain map badge (target 5 on 1DQ1-A): ![chain badge](chain-badge.png)
   with a mask (canonicalised; the mask guard in `db.inc.php` already checked access), `X-Requested-With` on changes,
   system IDs validated against the k-space list of `public/jumprange/systems.json`, note cleaned (control characters,
   60 characters), expiry 1/3/6/24 h or "until" at most 7 days ahead (none sent: an existing target keeps its expiry),
-  25 per mask (409 when full; checked and written in one transaction that locks the mask's rows, with INSERT ... ON
-  DUPLICATE KEY UPDATE, so concurrent adds can't pass the cap or collide). Audit log: add,
+  25 per mask (409 when full). Adds of one mask are serialised with a MySQL named lock (`GET_LOCK('map_targets:<mask>', 5)`,
+  released on every path; 503 if it isn't free in 5 s) and written with INSERT ... ON DUPLICATE KEY UPDATE, so concurrent
+  adds can't pass the cap, collide or deadlock (row/gap locks are not used). Ctrl+K "Target" on an existing target keeps
+  its expiry, and its note unless one is typed. Audit log: add,
   update, delete and clear as entity `target` (Mask Admin > Audit shows them, filter "Region map targets").
 - Region map: Shift+click toggles a target; the card has a note field, an expiry choice ("until its skyhook window ends"
   first when the system has one; for an existing target "keep (expires in ...)" is preselected, so saving a note keeps

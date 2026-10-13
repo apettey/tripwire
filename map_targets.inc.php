@@ -16,6 +16,7 @@ require_once(__DIR__ . '/jumprange/jammed.inc.php');	// jump_jammed_known_system
 if (!defined('MAP_TARGETS_MAX_PER_MASK')) define('MAP_TARGETS_MAX_PER_MASK', 25);
 if (!defined('MAP_TARGETS_NOTE_MAX')) define('MAP_TARGETS_NOTE_MAX', 60);
 if (!defined('MAP_TARGETS_HOURS')) define('MAP_TARGETS_HOURS', '1,3,6,24');	// expiry choices
+if (!defined('MAP_TARGETS_LOCK_WAIT')) define('MAP_TARGETS_LOCK_WAIT', 5);	// seconds an add waits for another add of the same mask
 if (!defined('MAP_TARGETS_MAX_SECONDS')) define('MAP_TARGETS_MAX_SECONDS', 7 * 86400);	// "until" (a skyhook window's end) at most this far ahead
 
 /** Create fork_map_targets if it doesn't exist. Throws PDOException on failure (the connection's error mode is left alone). */
@@ -111,17 +112,22 @@ function map_targets_count($mysql, $mask) {
 }
 
 /** Add a target at the end of the list, or (already a target) change its note, and its expiry unless $expires is null
-	(null for a new target: the default 6 h). One transaction that locks the mask's rows first (SELECT ... FOR UPDATE, which
-	also locks the gap where a new row of the mask would go), so two members adding at the same time can neither pass the
-	cap together nor collide on the primary key; the write itself is INSERT ... ON DUPLICATE KEY UPDATE.
-	@return 'add', 'update' or 'full' (a new target and the mask has $max already) */
+	(null for a new target: the default 6 h). Adds of one mask are serialised with a named lock (GET_LOCK
+	'map_targets:<mask>', waiting at most MAP_TARGETS_LOCK_WAIT seconds, released on every path), so two members adding at
+	the same time can neither pass the cap together nor collide on the primary key. No row or gap locks are taken (those
+	deadlocked under REPEATABLE READ), so there is nothing to deadlock on. The write is INSERT ... ON DUPLICATE KEY UPDATE.
+	@return 'add', 'update', 'full' (a new target and the mask has $max already) or 'busy' (the lock wasn't free in time) */
 function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, $max = MAP_TARGETS_MAX_PER_MASK) {
-	$own = !$mysql->inTransaction();
-	if ($own && !$mysql->beginTransaction()) throw new PDOException('Could not start a transaction');
+	$name = 'map_targets:' . $mask;
+	$lock = $mysql->prepare('SELECT GET_LOCK(:name, :wait)');
+	if ($lock) { $lock->bindValue(':name', $name); $lock->bindValue(':wait', MAP_TARGETS_LOCK_WAIT, PDO::PARAM_INT); }
+	$got = map_targets_exec($lock, 'lock map targets')->fetchColumn();
+	$lock->closeCursor();
+	if ((int)$got !== 1) return 'busy';
 	try {
-		$stmt = $mysql->prepare('SELECT systemID, ord, expires FROM fork_map_targets WHERE maskID = :mask FOR UPDATE');
+		$stmt = $mysql->prepare('SELECT systemID, ord, expires FROM fork_map_targets WHERE maskID = :mask');
 		if ($stmt) $stmt->bindValue(':mask', $mask);
-		$rows = map_targets_exec($stmt, 'lock fork_map_targets')->fetchAll(PDO::FETCH_ASSOC);
+		$rows = map_targets_exec($stmt, 'read fork_map_targets')->fetchAll(PDO::FETCH_ASSOC);
 		$exists = false;
 		$live = 0;
 		$maxOrd = -1;
@@ -131,13 +137,8 @@ function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, 
 			$maxOrd = max($maxOrd, (int)$row['ord']);
 			if ((int)$row['systemID'] === (int)$systemID) $exists = true;
 		}
-		if (!$exists && $live >= $max) {
-			if ($own) $mysql->rollBack();
-			return 'full';
-		}
-		$purge = $mysql->prepare('DELETE FROM fork_map_targets WHERE maskID = :mask AND expires <= :now');
-		if ($purge) { $purge->bindValue(':mask', $mask); $purge->bindValue(':now', $now, PDO::PARAM_INT); }
-		map_targets_exec($purge, 'purge fork_map_targets');
+		if (!$exists && $live >= $max) return 'full';
+		map_targets_purge($mysql, $mask, $now);
 
 		$stmt = $mysql->prepare('INSERT INTO fork_map_targets (maskID, systemID, note, ord, createdByID, createdByName, created, expires)
 			VALUES (:mask, :systemID, :note, :ord, :byID, :byName, :created, :expires)
@@ -155,11 +156,10 @@ function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, 
 			$stmt->bindValue(':keep', $expires, $expires === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
 		}
 		map_targets_exec($stmt, 'add to fork_map_targets');
-		if ($own) $mysql->commit();
 		return $exists ? 'update' : 'add';
-	} catch (Throwable $e) {
-		if ($own && $mysql->inTransaction()) $mysql->rollBack();
-		throw $e;
+	} finally {
+		$release = $mysql->prepare('SELECT RELEASE_LOCK(:name)');
+		if ($release) { $release->bindValue(':name', $name); $release->execute(); $release->closeCursor(); }
 	}
 }
 

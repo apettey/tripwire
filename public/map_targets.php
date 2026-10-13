@@ -80,6 +80,7 @@ try {
 			if ($expires === false) map_targets_fail(400, 'Invalid expiry');
 			$action = map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now);
 			if ($action === 'full') map_targets_fail(409, 'At most ' . MAP_TARGETS_MAX_PER_MASK . ' targets per mask');
+			if ($action === 'busy') map_targets_fail(503, 'Someone else is changing the targets, try again');
 			$row = map_targets_get($mysql, $mask, $systemID);
 			$at = $row ? (int)$row['expires'] : 0;
 			// "HH:MM" EVE time when it is within a day, with the date ("10-15 18:20") when further away

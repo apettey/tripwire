@@ -364,7 +364,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				],
 				run: function(args) {
 					if (!mt.canTarget(appData.systems[args.system])) { throw new Error("Pick a k-space system"); }
-					const xhr = add(args.system, mt.commandNote(args.note));
+					// Already a target: keep its expiry, and its note unless the command gives one
+					const existing = find(args.system), note = mt.commandNote(args.note);
+					const xhr = add(args.system, note || (existing ? existing.note : ""), existing ? "keep" : undefined);
 					if (xhr) { xhr.done(function() { notify("Target set: " + mt.escape(sysName(args.system)) + " (the whole mask sees it)", "green", 4000); }); }
 				}
 			});

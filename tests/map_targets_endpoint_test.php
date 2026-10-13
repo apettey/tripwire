@@ -49,6 +49,25 @@ function call($method, $params = [], $session = null, $xhr = true) {
 	$status = preg_match('/STATUS (\d+)/', $err, $m) ? (int) $m[1] : 0;
 	return [$status, json_decode($body, true)];
 }
+/** Several POSTs at the same time (one PHP process each). @return [status, ...] in the order given */
+function call_parallel(array $paramsList) {
+	$procs = [];
+	foreach ($paramsList as $params) {
+		$request = ['method' => 'POST', 'get' => [], 'post' => $params, 'session' => session_a(), 'headers' => ['X-Requested-With' => 'XMLHttpRequest']];
+		$p = proc_open(['php', __DIR__ . '/map_targets_runner.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+		fwrite($pipes[0], json_encode($request));
+		fclose($pipes[0]);
+		$procs[] = [$p, $pipes];
+	}
+	$out = [];
+	foreach ($procs as [$p, $pipes]) {
+		stream_get_contents($pipes[1]);
+		$err = stream_get_contents($pipes[2]);
+		proc_close($p);
+		$out[] = preg_match('/STATUS (\d+)/', $err, $m) ? (int) $m[1] : 0;
+	}
+	return $out;
+}
 /** Target system IDs of a response, in list order */
 function ids($body) { return array_map(function ($t) { return $t['systemID']; }, $body['targets'] ?? []); }
 function cleanup($mysql) {
@@ -180,6 +199,22 @@ $new = map_targets_get($mysql, MASK_A, $known[MAP_TARGETS_MAX_PER_MASK]);
 check('cap: the new one goes last, default 6 h', [(int)$new['ord'], (int)$new['expires'] - time() > 6 * 3600 - 10], [MAP_TARGETS_MAX_PER_MASK, true]);
 check('cap: the expired one was purged', map_targets_get($mysql, MASK_A, $known[3]), null);
 check('add on an existing row inside the function: update, expiry kept with null', [map_targets_add($mysql, MASK_A, $known[0], 'y', null, $who, time()), (int)map_targets_get($mysql, MASK_A, $known[0])['expires'] > time()], ['update', true]);
+
+// --- Concurrent adds (the named lock): never above the cap, no deadlock (500), no lock left behind ---
+cleanup($mysql);
+check('parallel adds on an empty mask: all succeed', call_parallel(array_map(function ($i) use ($known) { return ['mode' => 'add', 'systemID' => $known[$i]]; }, range(0, 5))), [200, 200, 200, 200, 200, 200]);
+check('parallel adds: six rows, order numbers 0..5', array_map(function ($t) { return $t['ord']; }, map_targets_list($mysql, MASK_A, time())), range(0, 5));
+for ($i = 6; $i < MAP_TARGETS_MAX_PER_MASK - 2; $i++) map_targets_add($mysql, MASK_A, $known[$i], '', time() + 3600, $who, time());
+$statuses = call_parallel(array_map(function ($i) use ($known) { return ['mode' => 'add', 'systemID' => $known[$i]]; }, range(30, 35)));
+sort($statuses);
+check('parallel adds at the cap: two fit, four are refused, none fails', $statuses, [200, 200, 409, 409, 409, 409]);
+check('parallel adds at the cap: exactly 25', map_targets_count($mysql, MASK_A), MAP_TARGETS_MAX_PER_MASK);
+check('the lock is free afterwards', (int)$mysql->query("SELECT IS_FREE_LOCK('map_targets:" . MASK_A . "')")->fetchColumn(), 1);
+// Lock held by someone else for longer than the wait: busy (503), not a hang or a 500
+$mysql->query("SELECT GET_LOCK('map_targets:" . MASK_A . "', 1)")->fetchColumn();
+check('lock held elsewhere: 503', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'z'])[0], 503);
+$mysql->query("SELECT RELEASE_LOCK('map_targets:" . MASK_A . "')")->fetchColumn();
+check('lock released: the change goes through', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'z'])[0], 200);
 
 cleanup($mysql);
 echo "$count checks, $failures failures\n";
