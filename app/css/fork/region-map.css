@@ -95,7 +95,7 @@
 .dialog-regionMap .rm-sky-soon { opacity: 0.85; }
 
 /* Side panel: collapsible lists over the top-left of the map */
-.dialog-regionMap .rm-side { position: absolute; left: 8px; top: 8px; width: 320px; max-height: calc(100% - 44px); overflow-y: auto; background: rgba(16, 18, 24, 0.94); border: 1px solid #4a5568; border-radius: 4px; color: #ccc; font-size: 12px; }
+.dialog-regionMap .rm-side { position: absolute; left: 8px; top: 8px; width: 350px; max-height: calc(100% - 44px); overflow-y: auto; background: rgba(16, 18, 24, 0.94); border: 1px solid #4a5568; border-radius: 4px; color: #ccc; font-size: 12px; }
 .dialog-regionMap .rm-side.hidden { display: none; }
 .dialog-regionMap .rm-side-sec + .rm-side-sec { border-top: 1px solid #333; }
 .dialog-regionMap .rm-side-head { padding: 5px 8px; color: #fff; display: flex; align-items: center; gap: 4px; }
@@ -111,7 +111,7 @@
 .dialog-regionMap .rm-s-kind.rm-s-lava { background: #e8743d; }
 .dialog-regionMap .rm-s-kind.rm-s-ice { background: #7fd0ee; }
 .dialog-regionMap .rm-s-val { flex: 0 0 40px; font-size: 10px; letter-spacing: -0.5px; }
-.dialog-regionMap .rm-s-time { flex: 0 0 64px; text-align: right; }
+.dialog-regionMap .rm-s-time { flex: 0 0 96px; text-align: right; }
 .dialog-regionMap .rm-s-jumps { flex: 0 0 34px; text-align: right; color: #aaa; }
 .dialog-regionMap .rm-srow.rm-s-open .rm-s-time { color: #ff7a6b; font-weight: bold; }
 .dialog-regionMap .rm-srow.rm-s-soon .rm-s-time { color: #e8a33d; }
