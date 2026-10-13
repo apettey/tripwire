@@ -68,7 +68,7 @@ const jumpReturn = {
 		try {
 			out.size = holeNaming.sizeLetter(out.type);
 			out.system = holeNaming.systemName(to);
-			if (wormhole && typeof lifeStates !== "undefined") { out.life = lifeStates.bookmarkLife(wormhole, lifeStates.sigsOf(wormhole), lifeStates.now(), lifeStates.isOn()); }
+			if (wormhole && typeof lifeStates !== "undefined" && lifeStates.isOn()) { out.life = lifeStates.bookmarkLife(wormhole, lifeStates.sigsOf(wormhole), lifeStates.now(), lifeStates.isOn()); }
 			if (typeof systemAnalysis !== "undefined") { out.classText = holeNaming.classText(systemAnalysis.analyse(from).systemTypeName); }
 		} catch (e) { /* the other tokens stay empty */ }
 		return out;
