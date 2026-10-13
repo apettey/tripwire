@@ -161,5 +161,27 @@ describe('maskDefaults', () => {
 			maskDefaults.defaults = {};
 			maskDefaults.inherited = {};
 		});
+		it('still installs when options carry a saved maskDefaultsWrapped flag, and never saves the flag', () => {
+			// options.get() returns every own field; older versions stored the flag, options load it back on page load
+			const fake = {
+				maskDefaultsWrapped: true,
+				applied: 0,
+				get() { const d = {}; for (const k in this) { if (typeof this[k] !== 'function' && this[k] !== undefined) d[k] = this[k]; } return d; },
+				apply() { this.applied++; }
+			};
+			maskDefaults.defaults = { homeRegion: { enabled: true, color: 'amber' } };
+			maskDefaults.inherited = {};
+			maskDefaults.install(fake);
+			fake.apply();
+			assert.deepStrictEqual(fake.homeRegion, { enabled: true, color: 'amber' });
+			assert.strictEqual(fake.applied, 1);
+			assert.ok(!('maskDefaultsWrapped' in fake.get()));
+			assert.ok(!('homeRegion' in fake.get()));
+			const get = fake.get;
+			maskDefaults.install(fake);	// once only
+			assert.strictEqual(fake.get, get);
+			maskDefaults.defaults = {};
+			maskDefaults.inherited = {};
+		});
 	});
 });

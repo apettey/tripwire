@@ -22,6 +22,7 @@ const maskDefaults = {
 	updatedBy: "",
 	updatedAt: null,
 	inherited: {},	// optionsKey -> copy of the default that was put into options
+	installedOn: null,	// the options object install() wrapped
 
 	clone: function(value) {
 		return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -140,18 +141,23 @@ const maskDefaults = {
 
 	/** Make options.get() leave out inherited keys, and options.apply() fill the defaults in first */
 	install: function(opts) {
-		if (!opts || opts.maskDefaultsWrapped) { return; }
+		// The flag is kept here, not on opts: options.get() saves every own field of options, so a flag on it was
+		// stored and loaded back on the next page load, and install() then skipped and no default ever applied
+		if (!opts || maskDefaults.installedOn === opts) { return; }
+		maskDefaults.installedOn = opts;
 		const get = opts.get;
 		const apply = opts.apply;
 		opts.get = function() {
-			return maskDefaults.strip(get.apply(this, arguments), maskDefaults.inherited);
+			const out = maskDefaults.strip(get.apply(this, arguments), maskDefaults.inherited);
+			delete out.maskDefaultsWrapped;	// stored by older versions
+			return out;
 		};
 		opts.apply = function() {
 			maskDefaults.overlay(this, maskDefaults.defaults, maskDefaults.inherited);
 			return apply.apply(this, arguments);
 		};
 		Object.keys(apply).forEach(function(k) { opts.apply[k] = apply[k]; });
-		opts.maskDefaultsWrapped = true;
+		Object.defineProperty(opts, "maskDefaultsWrapped", { value: true, writable: true, configurable: true, enumerable: false });
 	},
 
 	/** A new defaults answer (page load, or after an admin saved): use it and redraw with it */
@@ -159,7 +165,7 @@ const maskDefaults = {
 		maskDefaults.defaults = maskDefaults.normalise(data && data.defaults);
 		maskDefaults.updatedBy = data && data.updatedBy ? String(data.updatedBy) : "";
 		maskDefaults.updatedAt = data && data.updatedAt ? String(data.updatedAt) : null;
-		if (typeof options !== "undefined" && options.maskDefaultsWrapped && typeof options.apply === "function") {
+		if (typeof options !== "undefined" && maskDefaults.installedOn === options && typeof options.apply === "function") {
 			options.apply();
 		}
 	},

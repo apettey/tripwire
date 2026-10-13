@@ -1,30 +1,52 @@
-/* House mark after the system name on chain map nodes in home's region (fork feature: home-region).
-   The other node corners and edges are taken (threat badge top-left, pilots top-right, targets left, statics and
-   watchlist bottom-left, scans and environment tags bottom-right, size/mass markers on the connections), and the
-   class and hole type lines share their space with the effect, pilot and activity icons, so the mark goes on the
-   name line. It is small and inline, so it adds only a few pixels to the node's width. The renderers lay nodes
-   out from their size measured in #temp-div-node-width (chain-map-renderer-base.js), so the rules apply there too. */
-#chainMap .nodeSystem .home-region-mark,
-#temp-div-node-width .nodeSystem .home-region-mark {
+/* Region tag ("R09") after the system name of home and of chain map systems in home's region (fork feature:
+   home-region). The node's corners and edges are taken (threat badge top-left, pilots top-right, targets left,
+   statics and watchlist bottom-left, scans and environment tags bottom-right, size/mass markers on the connections)
+   and the class and hole type lines share their space with the effect, pilot and activity icons, so the tag goes on
+   the name line. It is shorter than the line, so the node keeps its height. Not scoped to #chainMap: the renderers
+   measure nodes in #temp-div-node-width (chain-map-renderer-base.js) and Settings shows a sample. */
+.home-region-mark {
+	--hr: 63, 191, 179;	/* teal; the colour classes below set it (RGB, used with alpha) */
 	display: inline-block;
-	margin-left: 2px;
-	color: #7fa6bd;
-	opacity: 0.8;
-	line-height: 0;
-	vertical-align: baseline;
-	cursor: help;
+	position: relative;	/* keeps the screen reader text inside the tag */
+	margin-left: 3px;
+	padding: 0 2px;
+	font-size: 8px;
+	font-weight: normal;
+	font-style: normal;
+	line-height: 8px;
+	letter-spacing: 0.02em;
+	text-transform: none;
+	vertical-align: 1px;
+	white-space: nowrap;
+	color: rgb(var(--hr));
+	background: rgba(var(--hr), 0.14);
+	border: 1px solid rgba(var(--hr), 0.55);
+	border-radius: 4px;
+	cursor: default;
 }
-#chainMap .nodeSystem .home-region-icon,
-#temp-div-node-width .nodeSystem .home-region-icon {
-	display: inline-block;
-	width: 7px;
-	height: 7px;
-	fill: currentColor;
+/* The old org chart zeroes padding on everything inside its table (chainmap.css) */
+#chainMap .nodeSystem .home-region-mark { margin-left: 3px; padding: 0 2px; }
+
+.home-region-mark.home-region-c-teal { --hr: 63, 191, 179; }
+.home-region-mark.home-region-c-blue { --hr: 102, 160, 240; }
+.home-region-mark.home-region-c-violet { --hr: 178, 140, 240; }
+.home-region-mark.home-region-c-pink { --hr: 236, 122, 184; }
+.home-region-mark.home-region-c-amber { --hr: 232, 182, 80; }
+.home-region-mark.home-region-c-green { --hr: 120, 200, 110; }
+
+/* Home's own tag: same colour, solid border */
+.home-region-mark.home-region-home { background: rgba(var(--hr), 0.24); border-color: rgb(var(--hr)); }
+
+/* Pointer over any tag: the whole group lights up (colours and shadow only, nothing moves) */
+#chainMap.home-region-hover .home-region-mark {
+	color: #fff;
+	background: rgba(var(--hr), 0.55);
+	border-color: rgb(var(--hr));
+	box-shadow: 0 0 6px 1px rgba(var(--hr), 0.85);
 }
 
 /* Tooltip text for screen readers */
-#chainMap .nodeSystem .home-region-sr,
-#temp-div-node-width .nodeSystem .home-region-sr {
+.home-region-mark .home-region-sr {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -32,3 +54,7 @@
 	clip: rect(0 0 0 0);
 	white-space: nowrap;
 }
+
+/* Settings > Map Markers: colour picker sized to its content, sample tag next to it */
+#dialog-options #homeRegion-color { width: auto; min-width: 0; }
+#dialog-options #homeRegion-sample { vertical-align: middle; }

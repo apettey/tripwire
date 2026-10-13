@@ -1,11 +1,29 @@
 const homeRegion = {
-	// Chain map: a small house mark next to the name of every wormhole system in the same region as home (the
-	// active chain tab's system), fork feature. Setting: options.homeRegion.enabled (missing = on).
-	// Keep `const homeRegion` on the first line: the test helper only turns the first `const` into a global.
+	// Chain map: a small region tag ("R09" for C-R00009) after the name of home (the active chain tab's system) and of
+	// every chain system in the same wormhole region, so the tag shows the group (fork feature). Hovering a tag shows
+	// the region and highlights the whole group. Settings: options.homeRegion = { enabled, color } (missing = on, teal);
+	// mask admins can make it a mask default (mask-defaults.js). Keep `const homeRegion` on the first line: the test
+	// helper only turns the first `const` into a global.
+
+	/** Colours a tag can have: key -> name. The key is only ever used through color(), which checks it against this
+	list, so a stored value never reaches the markup or CSS as such. Styles: home-region.css (.home-region-c-<key>). */
+	PALETTE: [["teal", "Teal"], ["blue", "Blue"], ["violet", "Violet"], ["pink", "Pink"], ["amber", "Amber"], ["green", "Green"]],
+	DEFAULT_COLOR: "teal",
 
 	/** Whether the feature is on in the given user options (on unless explicitly false) */
 	enabled: function(opts) {
 		return !(opts && opts.homeRegion && opts.homeRegion.enabled === false);
+	},
+
+	/** Whether a value is one of the palette's keys */
+	isColor: function(value) {
+		return typeof value === "string" && homeRegion.PALETTE.some(function(p) { return p[0] === value; });
+	},
+
+	/** The tag colour from the user options: a palette key, the default for anything else */
+	color: function(opts) {
+		const value = opts && opts.homeRegion ? opts.homeRegion.color : undefined;
+		return homeRegion.isColor(value) ? value : homeRegion.DEFAULT_COLOR;
 	},
 
 	/** Home system id: the system the active chain tab starts from (options.chain.tabs[options.chain.active].systemID),
@@ -35,12 +53,28 @@ const homeRegion = {
 		return home.regionID;
 	},
 
-	/** Whether a chain node's system gets the mark: a known system, not home itself, in home's region */
-	sameRegion: function(systemID, homeID, regionID, systems) {
+	/** Whether a chain node's system is in the group: a known system in home's region (home included) */
+	inRegion: function(systemID, regionID, systems) {
 		if (!regionID || !systems || systemID === null || systemID === undefined) { return false; }
-		if (String(systemID) === String(homeID)) { return false; }
 		const system = systems[systemID];
 		return !!(system && system.regionID && system.regionID == regionID);
+	},
+
+	/** Short region code for the tag: "R09" for "C-R00009" (number without leading zeros, at least 2 digits);
+	from the region id when the name doesn't have that form (11000009 -> "R09") */
+	regionCode: function(name, regionID) {
+		const pad = function(n) { return "R" + (n < 10 ? "0" : "") + n; };
+		const m = /-R0*(\d+)$/.exec(String(name || ""));
+		if (m) { return pad(Number(m[1])); }
+		const id = Number(regionID);
+		if (id > 11000000 && id < 11001000) { return pad(id - 11000000); }
+		return "R?";
+	},
+
+	/** Tooltip text: "C-R00009 · home's region · 3 systems on the chain" (home) or "... · same region as home ..." */
+	tooltip: function(regionName, code, isHome, count) {
+		return (regionName || code) + " · " + (isHome ? "home's region" : "same region as home") +
+			(count > 1 ? " · " + count + " systems on the chain" : "");
 	},
 
 	escape: function(text) {
@@ -48,27 +82,22 @@ const homeRegion = {
 			.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 	},
 
-	/** Tooltip text; regionName may be missing */
-	title: function(regionName) {
-		return 'Same region as home' + (regionName ? ' (' + regionName + ')' : '');
-	},
-
 	CLASS: 'home-region-mark',
 
-	/** The mark: a tiny house icon with the tooltip, plus the same text for screen readers */
-	markerHtml: function(regionName) {
-		const text = homeRegion.escape(homeRegion.title(regionName));
-		return "<span class='" + homeRegion.CLASS + "' title='" + text + "'>" +
-			"<svg class='home-region-icon' viewBox='0 0 10 10' aria-hidden='true' focusable='false'>" +
-			"<path d='M5 0.6 L9.6 4.8 H8.2 V9.4 H6 V6.6 H4 V9.4 H1.8 V4.8 H0.4 Z'/></svg>" +
-			"<span class='home-region-sr'>, " + text.charAt(0).toLowerCase() + text.substring(1) + "</span></span>";
+	/** The tag. The tooltip goes in data-tooltip for Tripwire's jBox tooltips, which show it as HTML, so it is
+	escaped twice (once for the attribute, once for the tooltip). Screen readers get the same text, hidden. */
+	markerHtml: function(code, tip, color, isHome) {
+		const esc = homeRegion.escape;
+		const key = homeRegion.isColor(color) ? color : homeRegion.DEFAULT_COLOR;
+		return "<span class='" + homeRegion.CLASS + " home-region-c-" + key + (isHome ? " home-region-home" : "") +
+			"' data-tooltip='" + esc(esc(tip)) + "'>" + esc(code) + "<span class='home-region-sr'>, " + esc(tip) + "</span></span>";
 	},
 
-	/** Add the mark at the end of a chain node's name line (h4.nodeSystem, after the name or its link).
-	Returns the markup unchanged when it already has the mark, null when there is no name line. */
+	/** Add the tag at the end of a chain node's name line (h4.nodeSystem, after the name or its link).
+	Returns the markup unchanged when it already has a tag, null when there is no name line. */
 	insertMarker: function(html, marker) {
 		if (typeof html !== 'string' || !marker) { return null; }
-		if (html.indexOf("class='" + homeRegion.CLASS + "'") >= 0) { return html; }
+		if (html.indexOf("class='" + homeRegion.CLASS + " ") >= 0) { return html; }
 		const open = "<h4 class='nodeSystem'>";
 		const start = html.indexOf(open);
 		if (start < 0) { return null; }
@@ -77,26 +106,35 @@ const homeRegion = {
 		return html.substring(0, end) + marker + html.substring(end);
 	},
 
-	/** Decorate the result of chain.nodes() in place: mark every node in home's region (not home itself).
+	/** Decorate the result of chain.nodes() in place: tag home and every node in home's region.
 	@param result { map: { rows } } from chain.nodes
 	@param homeID home system id (homeSystemID) or null
 	@param systems appData.systems
-	@param regions appData.regions ({ regionID: { name } }) */
-	decorate: function(result, homeID, systems, regions) {
+	@param regions appData.regions ({ regionID: { name } })
+	@param color palette key (color()) */
+	decorate: function(result, homeID, systems, regions, color) {
 		if (!result || !result.map || !Array.isArray(result.map.rows)) { return result; }
 		const regionID = homeRegion.homeRegionID(homeID, systems);
 		if (!regionID) { return result; }
 		const region = regions && regions[regionID];
-		const marker = homeRegion.markerHtml(region && region.name ? String(region.name) : '');
-		result.map.rows.forEach(function(row) {
+		const name = region && region.name ? String(region.name) : '';
+		const code = homeRegion.regionCode(name, regionID);
+		const rows = result.map.rows.filter(function(row) {
+			const node = row && row.c && row.c[0];
+			if (!node || typeof node.f !== 'string' || row.destination || String(node.v).indexOf('dest-') === 0) { return false; }
+			return homeRegion.inRegion(node.systemID, regionID, systems);
+		});
+		const distinct = {};
+		rows.forEach(function(row) { distinct[String(row.c[0].systemID)] = true; });
+		const count = Object.keys(distinct).length;
+		rows.forEach(function(row) {
 			try {
-				const node = row && row.c && row.c[0];
-				if (!node || typeof node.f !== 'string' || row.destination || String(node.v).indexOf('dest-') === 0) { return; }
-				if (!homeRegion.sameRegion(node.systemID, homeID, regionID, systems)) { return; }
-				const html = homeRegion.insertMarker(node.f, marker);
+				const node = row.c[0];
+				const isHome = String(node.systemID) === String(homeID);
+				const html = homeRegion.insertMarker(node.f, homeRegion.markerHtml(code, homeRegion.tooltip(name, code, isHome, count), color, isHome));
 				if (html) { node.f = html; }
 			} catch (e) {
-				if (typeof console !== 'undefined') { console.warn('home-region: could not mark chain node', e); }
+				if (typeof console !== 'undefined') { console.warn('home-region: could not tag chain node', e); }
 			}
 		});
 		return result;
@@ -111,7 +149,7 @@ const homeRegion = {
 		return typeof tripwire !== 'undefined' && tripwire.regions ? tripwire.regions : undefined;
 	},
 
-	/** Wrap chain.nodes so every redraw (tab change, Settings Save/Reset via options.apply()) is marked */
+	/** Wrap chain.nodes so every redraw (tab change, Settings Save/Reset via options.apply()) is tagged */
 	install: function(chainObj) {
 		// The flag lives on the chain, not on chain.nodes: other features wrap chain.nodes later without copying it
 		if (!chainObj || typeof chainObj.nodes !== 'function' || chainObj.homeRegionInstalled) { return; }
@@ -121,25 +159,83 @@ const homeRegion = {
 			const result = previous.apply(this, arguments);
 			const opts = typeof options !== 'undefined' ? options : undefined;
 			if (!homeRegion.enabled(opts)) { return result; }
-			return homeRegion.decorate(result, homeRegion.homeSystemID(opts), homeRegion.systems(), homeRegion.regions());
+			return homeRegion.decorate(result, homeRegion.homeSystemID(opts), homeRegion.systems(), homeRegion.regions(), homeRegion.color(opts));
 		};
 		Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
 		chainObj.nodes = wrapped;
+	},
+
+	// ---- browser: tooltips, group highlight, Settings row ----
+
+	HOVER_CLASS: 'home-region-hover',
+	tipEls: null,
+
+	/** jBox keeps every element it is attached to: detach the old tags and attach the new ones after each draw */
+	attachTips: function() {
+		if (typeof Tooltips === 'undefined' || !Tooltips.attach) { return; }
+		if (homeRegion.tipEls && homeRegion.tipEls.length && Tooltips.detach) { Tooltips.detach(homeRegion.tipEls); }
+		homeRegion.tipEls = $("#chainMap ." + homeRegion.CLASS + "[data-tooltip]");
+		if (homeRegion.tipEls.length) { Tooltips.attach(homeRegion.tipEls); }
+	},
+
+	/** Wrap chain.draw: new tooltips after each draw, and no group highlight left from tags that are gone */
+	installDraw: function(chainObj) {
+		if (!chainObj || typeof chainObj.draw !== 'function' || chainObj.homeRegionDrawInstalled) { return; }
+		chainObj.homeRegionDrawInstalled = true;
+		const previous = chainObj.draw;
+		const wrapped = function() {
+			const result = previous.apply(this, arguments);
+			try {
+				$("#chainMap").removeClass(homeRegion.HOVER_CLASS);
+				homeRegion.attachTips();
+				setTimeout(homeRegion.attachTips, 400);	// renderers that place nodes a moment later
+			} catch (e) { console.warn('home-region: tooltips', e); }
+			return result;
+		};
+		Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
+		chainObj.draw = wrapped;
+	},
+
+	/** Settings row: on/off and the colour, with a sample tag */
+	settingsHtml: function() {
+		const esc = homeRegion.escape;
+		return "<label><input type='checkbox' id='homeRegion-enabled' /> Tag systems in the same region as home</label><br/>" +
+			"<label>Colour: <select id='homeRegion-color'>" +
+			homeRegion.PALETTE.map(function(p) { return "<option value='" + esc(p[0]) + "'>" + esc(p[1]) + "</option>"; }).join('') +
+			"</select></label> <span id='homeRegion-sample' class='" + homeRegion.CLASS + " home-region-c-" + homeRegion.DEFAULT_COLOR + "'>R09</span>";
+	},
+
+	showSample: function() {
+		const key = homeRegion.isColor($("#homeRegion-color").val()) ? $("#homeRegion-color").val() : homeRegion.DEFAULT_COLOR;
+		$("#homeRegion-sample").attr("class", homeRegion.CLASS + " home-region-c-" + key);
 	}
 };
 
 if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn && jQuery.fn.dialog) {
-	if (typeof chain !== "undefined") { homeRegion.install(chain); }
+	if (typeof chain !== "undefined") { homeRegion.install(chain); homeRegion.installDraw(chain); }
 	$(function() {
-		if (typeof chain !== "undefined") { homeRegion.install(chain); }
+		if (typeof chain !== "undefined") { homeRegion.install(chain); homeRegion.installDraw(chain); }
+
+		// Group highlight while the pointer is over any tag (delegated: survives redraws without new handlers)
+		$(document).on("mouseenter", "#chainMap ." + homeRegion.CLASS, function() { $("#chainMap").addClass(homeRegion.HOVER_CLASS); });
+		$(document).on("mouseleave", "#chainMap ." + homeRegion.CLASS, function() { $("#chainMap").removeClass(homeRegion.HOVER_CLASS); });
+		$(document).on("change", "#homeRegion-color", homeRegion.showSample);
 
 		// Settings > Map Markers. Takes effect on Save (upstream Save runs options.apply() -> chain.redraw(), then
-		// options.save(), which persists options.homeRegion); Close discards it; Reset = on (upstream then redraws).
+		// options.save(), which persists options.homeRegion); Close discards it; Reset deletes the key (= on, teal).
+		// A mask admin's choice can become the mask default (Mask Admin > Admins & members), see mask-defaults.js.
 		forkSettings.register({
-			section: "markers", order: 22, id: "homeRegion-enabled", type: "checkbox", key: "homeRegion",
-			label: "Home region:", text: "Mark systems in the same region as home",
-			get: function(o) { return homeRegion.enabled(o); },
-			set: function(o, on) { o.homeRegion = { enabled: on }; }
+			section: "markers", order: 22, id: "homeRegion", type: "custom", key: "homeRegion",
+			label: "Home region:", html: homeRegion.settingsHtml(), keywords: "region tag colour color home",
+			load: function(o) {
+				$("#homeRegion-enabled").prop("checked", homeRegion.enabled(o));
+				$("#homeRegion-color").val(homeRegion.color(o));
+				homeRegion.showSample();
+			},
+			save: function(o) {
+				const value = $("#homeRegion-color").val();
+				o.homeRegion = { enabled: $("#homeRegion-enabled").prop("checked"), color: homeRegion.isColor(value) ? value : homeRegion.DEFAULT_COLOR };
+			}
 		});
 	});
 }

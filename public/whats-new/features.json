@@ -4,11 +4,11 @@
       "pr": 111,
       "date": "2026-10-13",
       "title": "Home region marker",
-      "description": "Wormhole systems on the chain map that are in the same region as your home now show a small house mark after their name. Hover it to see the region. Home is the system your chain tab starts from.\n\nDon’t want it? Turn it off in Settings > Map Markers.",
+      "description": "Home (the system your chain tab starts from) and every system on the chain map in the same wormhole region now carry a small region tag after their name, like R09 for C-R00009, so you can see the group at a glance. Hover a tag to see the region and highlight every system in it.\n\nMask admins can set the tag colour for everyone through Mask Admin > Admins & members > Mask default settings. Turn it off or pick your own colour in Settings > Map Markers.",
       "images": [
         {
           "src": "whats-new/img/pr-111-home-region.png",
-          "caption": "ABC and GHI share home’s region; DEF is in another region"
+          "caption": "Home, ABC and GHI carry the R09 tag of home’s region; DEF is in another region"
         }
       ]
     },
