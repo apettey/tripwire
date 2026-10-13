@@ -7,7 +7,18 @@ function read(f) {
 	.replace(/^const /, '')
 	.replace(/\nconst /, '');
 }
+// The game data (appData, plus the generic system types the app adds to it) is loaded once and shared, so
+// every test file sees the same full appData whatever order the runner loads the files in.
+let gameData;
 function include(f) {
+	if(f === 'public/js/combine') {
+		if(!gameData) { evalFile(f); evalFile('app/js/tripwire/genericSystemTypes'); gameData = global.appData; }
+		global.appData = gameData;
+		return;
+	}
+	return evalFile(f);
+}
+function evalFile(f) {
 	return eval.apply(global, [
 		read(f + '.js') + '\n//# sourceURL=' + f
 	]);

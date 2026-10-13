@@ -4,6 +4,7 @@ const document = {
 		document.elementsById = {}; // Add element objects here before looking up with getElementById
 		if(!global.document) { global.document = document; }
 	},
+	teardown: () => { if(global.document === document) { delete global.document; } },	// don't leak into other test files
 	getElementById: id => document.elementsById[id],
 	createElement: tag => new Element(tag),	
 };

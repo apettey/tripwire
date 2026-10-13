@@ -35,6 +35,7 @@ describe('Mask rendering', () => {
 			document.elementsById['mask'] = document.createElement('a');
 			document.elementsById['mask-menu-mask-list'] = document.createElement('div');
 		});
+		afterEach(() => document.teardown());
 		
 		it('should update current mask', () => {
 			maskRendering.update( [ sampleData[2] ], "98363074.2" );
