@@ -6,31 +6,9 @@ body .critical.life-lt1h { color: #FF4747; }
 body .critical.life-expired { color: #F052D8; font-weight: bold; }
 
 
-/* Chain map: <4h keeps upstream's dashed line (.eol); <1h and EOL are dotted (the canvas map draws dotted as short
-   dashes); the node behind an EOL hole has a small EOL tag. Also in the map legend. */
+/* Chain map: <4h keeps upstream's dashed line (.eol); <1h is dotted and EOL sparse dots (the canvas map draws
+   dotted as short dashes and double as sparse dots, chain-map-renderer-base.js). Also in the map legend. */
 /* the plain selectors are for the canvas renderers, which read the style of an off-map element */
-.eol.life-map-lt1h, #chainMap .eol.life-map-lt1h, #guide .eol.life-map-lt1h,
-.eol.life-map-eol, #chainMap .eol.life-map-eol, #guide .eol.life-map-eol { border-style: dotted; }
+.eol.life-map-lt1h, #chainMap .eol.life-map-lt1h, #guide .eol.life-map-lt1h { border-style: dotted; }
+.eol.life-map-eol, #chainMap .eol.life-map-eol, #guide .eol.life-map-eol { border-style: double; }
 /* The line width stays upstream's (it shows the hole size: .temp.jm-* in chainmap-radial.css) */
-
-#chainMap div.node.life-tagged { position: relative; }
-
-.life-map-tag {
-	display: inline-block;
-	padding: 0 3px;
-	border: 1px solid #F052D8;
-	border-radius: 3px;
-	background: #2a0b26;
-	color: #F052D8;
-	font: bold 9px/11px verdana, sans-serif;
-	pointer-events: none;
-}
-
-/* Also in the node size probe (chain-map-renderer-base.js measureNode), so the tag doesn't widen the node */
-#chainMap .life-map-tag, #temp-div-node-width .life-map-tag {
-	position: absolute;
-	top: -13px;
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 2;
-}

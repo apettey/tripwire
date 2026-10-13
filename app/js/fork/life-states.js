@@ -215,13 +215,12 @@ const lifeStates = {
 		return lifeStates.label(lifeStates.derive("critical", remaining));
 	},
 
-	// Chain map: <4h keeps upstream's dashed line ("eol"); <1h is dotted; EOL is dotted with a small EOL tag on the node
+	// Chain map: <4h keeps upstream's dashed line ("eol"); <1h is dotted; EOL is sparse dots (no text on the map)
 	MAP_CLASSES: { lt4h: "life-map-lt4h", lt1h: "life-map-lt1h", expired: "life-map-eol" },	// not the sig list's classes: those set a text colour, which the canvas map reads as the aura colour
 
 	/** Add the life classes to chain.nodes() output, in place. lines: [childNode, parentNode, modifiers, wormholeID];
 	rows: the map rows ({c: [{v, f}, {v}]}); stateOf(wormholeID): the hole's state. Each line of a critical hole ('eol')
-	gets its class; lines further out get "<class>-chain" like upstream's inherited modifiers; the node behind an EOL
-	hole gets the tag. Returns {wormholeID: state} of the critical holes. */
+	gets its class; lines further out get "<class>-chain" like upstream's inherited modifiers. Returns {wormholeID: state} of the critical holes. */
 	decorateMap: function(lines, rows, stateOf) {
 		const states = {}, byChild = {};
 		(lines || []).forEach(function(line) {
@@ -246,21 +245,7 @@ const lifeStates = {
 				up = byChild[up[1]];
 			}
 		});
-		(rows || []).forEach(function(row) {
-			const node = row && row.c && row.c[0];
-			const line = node && byChild[node.v];
-			if (!line || line[2].indexOf("life-map-eol") < 0 || typeof node.f !== "string" || node.f.indexOf("life-map-tag") >= 0) { return; }
-			node.f = lifeStates.tagNode(node.f);
-		});
 		return states;
-	},
-
-	/** Node markup with the EOL tag: a class on the node div and the tag inside it (fixed text only) */
-	tagNode: function(markup) {
-		const m = /<div([^>]*class='node)([^']*')([^>]*)>/.exec(markup);
-		if (!m) { return markup; }
-		const open = "<div" + m[1] + " life-tagged" + m[2] + m[3] + ">";
-		return markup.substring(0, m.index) + open + "<span class='life-map-tag' title='EOL: closure imminent'>EOL</span>" + markup.substring(m.index + m[0].length);
 	},
 
 	/** The chain map legend (an HTML string in a tooltip): the <4h / <1h / EOL lines next to upstream's End of Life row,
@@ -271,7 +256,7 @@ const lifeStates = {
 		const row = /(<tr><td><div class='guide eol'><\/div><\/td><td>)End of Life(<\/td>.*?<\/tr>)/.exec(out);
 		if (!row) { return out; }
 		const extra = "<tr class='life-states-legend'><td><div class='guide eol life-map-lt1h'></div></td><td>&lt;1h</td></tr>"
-			+ "<tr class='life-states-legend'><td><div class='guide eol life-map-eol'></div></td><td>EOL <span class='life-map-tag'>EOL</span></td></tr>";
+			+ "<tr class='life-states-legend'><td><div class='guide eol life-map-eol'></div></td><td>EOL</td></tr>";
 		return out.substring(0, row.index) + row[1] + "&lt;4h (End of Life)" + row[2] + extra + out.substring(row.index + row[0].length);
 	},
 
@@ -448,7 +433,7 @@ const lifeStates = {
 
 	mapStates: {},	// {wormholeID: state} of the critical holes as the chain map was last drawn
 
-	/** Chain map lines and EOL tags (all renderers draw from chain.nodes() output) */
+	/** Chain map lines (all renderers draw from chain.nodes() output) */
 	hookMap: function() {
 		if (typeof chain === "undefined" || !chain || typeof chain.nodes !== "function" || chain.nodes.lifeStatesWrapped) { return; }
 		const previous = chain.nodes;

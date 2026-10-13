@@ -258,15 +258,12 @@ describe('Wormhole life states', () => {
 			lifeStates.decorateMap(m.lines, m.rows, () => null);
 			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-map-lt4h']);
 		});
-		it('tags only the node behind an EOL hole, once', () => {
+		it('puts no text on the map: node markup is left alone', () => {
 			const m = make();
+			const before = m.rows.map(r => r.c[0].f);
 			lifeStates.decorateMap(m.lines, m.rows, id => states[id]);
-			lifeStates.decorateMap(m.lines, m.rows, id => states[id]);
-			assert.ok(/class='node life-tagged eol destab'><span class='life-map-tag'[^>]*>EOL<\/span><div class='nodeIcons'>/.test(m.rows[3].c[0].f), m.rows[3].c[0].f);
-			assert.equal((m.rows[3].c[0].f.match(/life-map-tag/g) || []).length, 1);
-			[0, 1, 2, 4, 5].forEach(i => assert.ok(m.rows[i].c[0].f.indexOf('life-map-tag') < 0, i));
+			assert.deepStrictEqual(m.rows.map(r => r.c[0].f), before);
 		});
-		it('leaves markup it does not recognise alone', () => assert.equal(lifeStates.tagNode('<span>x</span>'), '<span>x</span>'));
 		it('copes with no lines', () => assert.deepStrictEqual(lifeStates.decorateMap(undefined, undefined, () => null), {}));
 	});
 

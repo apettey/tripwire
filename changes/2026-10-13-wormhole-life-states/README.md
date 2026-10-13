@@ -16,8 +16,8 @@ cell (L, then 1-4) and with Ctrl+K "Set life". The chain map draws each state di
 | --- | --- |
 | ![before](before.png) | ![after](after.png) |
 
-Chain map: <4h (B) keeps the dashed line, <1h (C, here also mass critical) is dotted, EOL (D) is dotted
-with an EOL tag. A is stable (mass destabbed).
+Chain map: <4h (B) keeps the dashed line, <1h (C, here also mass critical) is dotted, EOL (D) is sparse
+dots. A is stable (mass destabbed). No text is added to the map.
 
 ![chain map](after-map.png)
 
@@ -44,8 +44,9 @@ line on the map and "EOL" in bookmark names.
   (<4h), 1h (<1h), eol / expired / closing (EOL); the hole list shows the state. `life-wording.js`: tooltips for the
   four buttons.
 - Chain map: a `chain.nodes` wrapper adds `life-lt4h` / `life-lt1h` / `life-eol` (and `-chain` for the holes further
-  out) next to upstream's `eol` modifier (map-only class names, so the sig list colours don't change the aura). It
-  also tags the node behind an EOL hole. CSS makes <1h and EOL dotted; line widths stay upstream's (hole size). This works for every renderer (org chart, top, side, radial). The map legend gets the
+  out) next to upstream's `eol` modifier (map-only class names, so the sig list colours don't change the aura). CSS makes
+  <1h dotted and EOL `double`, which the canvas renderers draw as sparse dots (one more entry in the dash table in
+  upstream `app/js/chain-map-renderer-base.js`); no text on the map; line widths stay upstream's (hole size). This works for every renderer (org chart, top, side, radial). The map legend gets the
   <1h and EOL lines.
 - Bookmark names: the `{life}` token (`bookmark-template.js`) is `<4h`, `<1h` or `EOL` for the hole's state (empty
   when stable; `EOL` for any critical hole with the setting off). Callers: `hole-naming.js` (dialog save),
