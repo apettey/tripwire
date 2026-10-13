@@ -9,6 +9,14 @@ Suggested hole names marked every medium or small hole with a digit, so a chain 
 medium and large holes get letters (`A6` -> `A6A`) and only a small hole gets a digit again (`A61`); past a small
 hole everything gets letters.
 
+## Before / After
+
+Add Signature for a medium hole in the system behind hole `A6`:
+
+| Before | After |
+| --- | --- |
+| ![before](before.png) | ![after](after.png) |
+
 ## Settings
 
 No new toggle: this refines the existing Settings > Signatures > Suggest hole names, which still turns it off.
