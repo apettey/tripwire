@@ -4,6 +4,7 @@ const sigInline = {
 	// Double-click still opens the dialog. Only the changed field is sent (the dialog sends everything), and the
 	// change is pushed on the same undo stack as the dialog's, so Ctrl+Z restores it.
 	// sigInline.setWormhole(wormholeID, {life|mass: value}) is the save path; the command palette reuses it.
+	// Life offers Stable / <4h / <1h / Expired when the life states setting is on (life-states.js), else Stable / EOL.
 	// Setting: options.sigInline.enabled (missing = on). Keep `const sigInline` on the first line: the test helper
 	// strips it to define a global.
 
@@ -28,6 +29,20 @@ const sigInline = {
 		return !(o && o.sigInline && o.sigInline.enabled === false);
 	},
 
+	/** Whether life uses the four states (life-states.js) */
+	statesOn: function() {
+		return typeof lifeStates !== "undefined" && lifeStates.isOn();
+	},
+
+	/** The choices of a field: life's four states when they are on, else FIELDS[field].choices */
+	choices: function(field) {
+		if (field === "life" && sigInline.statesOn()) {
+			return lifeStates.STATES.map(function(s, i) { return { value: s.key, label: s.label, key: String(i + 1), keys: s.keys }; });
+		}
+		const def = sigInline.FIELDS[field];
+		return def ? def.choices : [];
+	},
+
 	/** Field name for a table column (1-based), or null */
 	fieldForColumn: function(column) {
 		const names = Object.keys(sigInline.FIELDS);
@@ -39,21 +54,43 @@ const sigInline = {
 
 	/** The choice for a hotkey digit, or null */
 	choiceForKey: function(field, key) {
-		const def = sigInline.FIELDS[field];
-		if (!def) { return null; }
-		return def.choices.filter(function(c) { return c.key === key; })[0] || null;
+		return sigInline.choices(field).filter(function(c) { return c.key === key; })[0] || null;
 	},
 
 	choiceFor: function(field, value) {
-		const def = sigInline.FIELDS[field];
-		if (!def) { return null; }
-		return def.choices.filter(function(c) { return c.value === value; })[0] || null;
+		return sigInline.choices(field).filter(function(c) { return c.value === value; })[0] || null;
 	},
 
-	/** Text of the table cell for a value: what upstream renders (life: Stable / EOL, mass: the raw value) */
+	/** Text of the table cell for a value: what upstream renders (life: Stable / EOL, mass: the raw value);
+	a life state shows its label (<4h, <1h, Expired) */
 	cellText: function(field, value) {
-		if (field === "life") { return { critical: "EOL", stable: "Stable" }[value] || value; }
+		if (field === "life") {
+			const state = typeof lifeStates !== "undefined" ? lifeStates.state(value) : null;
+			return { critical: "EOL", stable: "Stable" }[value] || (state ? state.label : value);
+		}
 		return value;
+	},
+
+	/** Classes of the table cell for a value (the colour): the value, or a life state's classes */
+	cellClass: function(field, value) {
+		const state = field === "life" && typeof lifeStates !== "undefined" ? lifeStates.state(value) : null;
+		return state ? state.cls : value;
+	},
+
+	/** The value shown for a wormhole's field: its life state when those are on, else the stored value */
+	valueOf: function(wormhole, field) {
+		if (field === "life" && wormhole && sigInline.statesOn()) { return lifeStates.current(wormhole); }
+		return wormhole ? wormhole[field] : undefined;
+	},
+
+	/** What a change of the field by someone else would change: the stored value (and for life states, the timers) */
+	snapshot: function(wormhole, field) {
+		if (!wormhole) { return undefined; }
+		if (field === "life" && sigInline.statesOn()) {
+			const sigs = lifeStates.sigsOf(wormhole);
+			return [wormhole.life, (sigs[0] || {}).lifeLeft, (sigs[1] || {}).lifeLeft].join("|");
+		}
+		return wormhole[field];
 	},
 
 	/** The wormhole a signature belongs to (wormholes: tripwire.client.wormholes), or undefined */
@@ -64,8 +101,12 @@ const sigInline = {
 	},
 
 	/** Payload for tripwire.refresh: only the changed field, both signature ids (the server needs them).
-	Null when nothing would change (unknown field/value, or the hole already has that value). */
-	buildPayload: function(wormhole, field, value) {
+	Null when nothing would change (unknown field/value, or the hole already has that value).
+	states: {sigs: [sig1, sig2], now} when life uses the four states: the value is a state, see lifeStates.payload */
+	buildPayload: function(wormhole, field, value, states) {
+		if (field === "life" && states && typeof lifeStates !== "undefined") {
+			return lifeStates.payload(wormhole, states.sigs[0], states.sigs[1], value, states.now);
+		}
 		if (!wormhole || !sigInline.choiceFor(field, value)) { return null; }
 		if (wormhole[field] === value) { return null; }
 		const change = { id: wormhole.id };
@@ -77,7 +118,9 @@ const sigInline = {
 	refresh replacing the client's objects cannot change it. */
 	undoEntry: function(wormhole, sig1, sig2) {
 		const copy = function(o) { return JSON.parse(JSON.stringify(o)); };
-		return { action: "update", signatures: [{ wormhole: copy(wormhole), signatures: [copy(sig1), copy(sig2)] }] };
+		// lifeLeft after lifeLength, so the server restores the timer (the life state) and doesn't recompute it
+		const sig = function(o) { const c = copy(o); return typeof lifeStates !== "undefined" ? lifeStates.lifeLeftLast(c) : c; };
+		return { action: "update", signatures: [{ wormhole: copy(wormhole), signatures: [sig(sig1), sig(sig2)] }] };
 	},
 
 	/** What a key press means. state: {key, ctrlKey, metaKey, altKey, shiftKey, repeat, targetEditable, dialogOpen,
@@ -142,11 +185,14 @@ const sigInline = {
 	},
 
 	/** What to do with an open popover after the table's rows were re-rendered (the 10 s refresh).
-	prev: {field, value} shown in the popover; wormhole: the client's current wormhole (or undefined);
-	rowExists: the row is still in the table. */
-	reanchor: function(prev, wormhole, rowExists) {
+	prev: {field, value, snap} shown in the popover; wormhole: the client's current wormhole (or undefined);
+	rowExists: the row is still in the table; now: {value, snap} of the wormhole now (default: its stored field).
+	Only a change of the stored data (snap) counts, not a life state moving on with time. */
+	reanchor: function(prev, wormhole, rowExists, now) {
 		if (!rowExists || !wormhole) { return { action: "close" }; }
-		if (wormhole[prev.field] !== prev.value) { return { action: "changed", value: wormhole[prev.field] }; }
+		const cur = now || { value: wormhole[prev.field], snap: wormhole[prev.field] };
+		const before = prev.snap !== undefined ? prev.snap : prev.value;
+		if (cur.snap !== before) { return { action: "changed", value: cur.value }; }
 		return { action: "keep" };
 	},
 
@@ -170,13 +216,14 @@ const sigInline = {
 		const field = Object.keys(change || {})[0];
 		const value = field ? change[field] : undefined;
 		const wh = tripwire.client.wormholes[wormholeID];
-		const payload = sigInline.buildPayload(wh, field, value);
+		const s1 = wh && tripwire.client.signatures[wh.initialID], s2 = wh && tripwire.client.signatures[wh.secondaryID];
+		const states = field === "life" && sigInline.statesOn() ? { sigs: [s1, s2], now: lifeStates.now() } : null;
+		const payload = sigInline.buildPayload(wh, field, value, states);
 		if (!payload) {
 			if (wh && sigInline.choiceFor(field, value)) { return Promise.resolve("same"); }
 			Notify.trigger("Could not save: that wormhole is no longer on the map", "red");
 			return Promise.resolve("failed");
 		}
-		const s1 = tripwire.client.signatures[wh.initialID], s2 = tripwire.client.signatures[wh.secondaryID];
 		if (!s1 || !s2) {
 			Notify.trigger("Could not save: the wormhole's signatures are missing", "red");
 			return Promise.resolve("failed");
@@ -188,7 +235,7 @@ const sigInline = {
 		const before = cells.map(function(c) { return { cell: c, cls: c.className, text: c.textContent }; });
 		const def = sigInline.FIELDS[field];
 		cells.forEach(function(c) {
-			$(c).removeClass("stable destab critical").addClass(value + " sig-inline-saving");
+			$(c).removeClass("stable destab critical life-lt4h life-lt1h life-expired").addClass(sigInline.cellClass(field, value) + " sig-inline-saving");
 			c.textContent = sigInline.cellText(field, value);
 		});
 
@@ -254,8 +301,9 @@ const sigInline = {
 		el.setAttribute("role", "listbox");
 		el.setAttribute("aria-label", def.title);
 		let html = "<span class='sig-inline-title'>" + def.title + "</span>";
-		def.choices.forEach(function(c) {
-			html += "<button type='button' role='option' class='" + c.value + "' data-value='" + c.value + "' aria-selected='" + (wh[field] === c.value) + "'>"
+		const value = sigInline.valueOf(wh, field);
+		sigInline.choices(field).forEach(function(c) {
+			html += "<button type='button' role='option' class='" + sigInline.cellClass(field, c.value) + "' data-value='" + c.value + "' aria-selected='" + (value === c.value) + "'>"
 				+ "<kbd>" + c.key + "</kbd>" + c.label + "</button>";
 		});
 		html += "<span class='sig-inline-note' role='status' aria-live='polite'></span>";
@@ -270,7 +318,7 @@ const sigInline = {
 			if (btn) { sigInline.pick(btn.getAttribute("data-value")); }
 		});
 		document.body.appendChild(el);
-		sigInline.pop = { el: el, field: field, sigID: row.dataset.id, wormholeID: wh.id, value: wh[field], prevFocus: prevFocus };
+		sigInline.pop = { el: el, field: field, sigID: row.dataset.id, wormholeID: wh.id, value: value, snap: sigInline.snapshot(wh, field), prevFocus: prevFocus };
 		sigInline.place(cell);
 		const current = el.querySelector("button[aria-selected='true']") || el.querySelector("button");
 		if (current) { current.focus(); }
@@ -341,12 +389,13 @@ const sigInline = {
 		if (!p) { return; }
 		const row = document.querySelector("#sigTable tbody tr[data-id='" + p.sigID + "']");
 		const wh = tripwire.client.wormholes[p.wormholeID];
-		const result = sigInline.reanchor({ field: p.field, value: p.value }, wh, !!row);
+		const result = sigInline.reanchor({ field: p.field, value: p.value, snap: p.snap }, wh, !!row, wh ? { value: sigInline.valueOf(wh, p.field), snap: sigInline.snapshot(wh, p.field) } : null);
 		if (result.action === "close") { sigInline.close(true); return; }
 		const cell = row.children[sigInline.FIELDS[p.field].column - 1];
 		if (!cell) { sigInline.close(true); return; }
 		if (result.action === "changed") {
 			p.value = result.value;
+			p.snap = sigInline.snapshot(wh, p.field);
 			Array.prototype.forEach.call(p.el.querySelectorAll("button"), function(b) {
 				b.setAttribute("aria-selected", String(b.getAttribute("data-value") === result.value));
 			});
@@ -446,18 +495,17 @@ const sigInline = {
 		if (!on) { sigInline.close(true); }
 	},
 
-	/** Command palette (Ctrl+K): "Set life <hole> <stable|EOL>" and "Set mass <hole> <stable|destab|critical>" (undoable, like the cell popover) */
+	/** Command palette (Ctrl+K): "Set life <hole> <stable|EOL>" (with life states: <stable|4h|1h|expired>) and "Set mass <hole> <stable|destab|critical>" (undoable, like the cell popover) */
 	registerCommands: function() {
 		if (typeof forkCommands === "undefined") { return; }
 		["life", "mass"].forEach(function(field) {
-			const def = sigInline.FIELDS[field];
 			forkCommands.register({
-				id: "hole.set" + field.charAt(0).toUpperCase() + field.substring(1), title: "Set " + field, group: "Holes", icon: "edit", keywords: field === "life" ? ["eol", "end of life", "stable", "hole"] : ["destab", "critical", "stable", "hole", "mass"],
+				id: "hole.set" + field.charAt(0).toUpperCase() + field.substring(1), title: "Set " + field, group: "Holes", icon: "edit", keywords: field === "life" ? ["eol", "end of life", "stable", "hole", "4h", "1h", "expired"] : ["destab", "critical", "stable", "hole", "mass"],
 				enabled: function(ctx) { return ctx.holes().length ? true : "No wormholes on the chain map"; },
 				args: [
 					{ name: "hole", label: "hole", type: "hole" },
 					{ name: field, label: field, type: "choice", choices: function() {
-						return def.choices.map(function(c) { return { value: c.value, title: c.label, keys: [c.value] }; });
+						return sigInline.choices(field).map(function(c) { return { value: c.value, title: c.label, keys: c.keys || [c.value] }; });
 					} }
 				],
 				run: function(args) {

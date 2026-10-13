@@ -376,6 +376,7 @@ sigDialog.openSignatureDialog = function(e) {
 							payload = {"signatures": {"add": [signature]}};
 						}
 					}
+					if (typeof lifeStates !== "undefined") { lifeStates.dialogPayload(payload); }	// fork: <4h / <1h / Expired timer
 
 					$("#dialog-signature").parent().find(":button:contains('Save')").button("disable");
 
@@ -457,6 +458,7 @@ sigDialog.openSignatureDialog = function(e) {
 						$("#dialog-signature input[name='signatureID2_Numeric']").val(otherSignature.signatureID ? otherSignature.signatureID.substr(3, 5) : "");
 						$("#dialog-signature [name='wormholeName2']").val(otherSignature.name);
 						$("#dialog-signature [name='wormholeLife'][value='"+wormhole.life+"']").prop("checked", true);
+						if (typeof lifeStates !== "undefined") { lifeStates.dialogPrefill(wormhole); }	// fork: <4h / <1h / Expired
 						$("#dialog-signature [name='wormholeMass'][value='"+wormhole.mass+"']").prop("checked", true);
 						if (wormhole[wormhole.parent+"ID"] == signature.id) {
 							$("#dialog-signature input[name='wormholeType']").val(wormhole.type).change();

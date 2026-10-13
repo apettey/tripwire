@@ -1,0 +1,7 @@
+/* Wormhole life states (fork feature: life-states). Stable is upstream's green; the critical states get warmer
+   from <4h (orange) over <1h (upstream's EOL red) to Expired (magenta). Used by the sig dialog's buttons,
+   the sig list's Life cell and the inline life popover. */
+body .critical.life-lt4h { color: #FF8A3D; }
+body .critical.life-lt1h { color: #FF4747; }
+body .critical.life-expired { color: #F052D8; font-weight: bold; }
+

@@ -1,11 +1,63 @@
 const assert = require('assert');
 const { include } = require('../helpers/helpers');
 include('app/js/fork/sig-inline');
+include('app/js/fork/life-states');
 
 describe('Inline life / mass edits', () => {
 	const wh = { id: '7', initialID: '11', secondaryID: '12', type: 'H296', parent: 'initial', life: 'stable', mass: 'stable' };
 	const s1 = { id: '11', signatureID: 'ABC123', lifeLeft: '2026-10-12 20:00:00' };
 	const s2 = { id: '12', signatureID: 'XYZ789', lifeLeft: '2026-10-12 20:00:00' };
+	// Upstream's two life values unless a test switches the life states on
+	let statesOn;
+	before(() => { statesOn = sigInline.statesOn; sigInline.statesOn = () => false; });
+	after(() => { sigInline.statesOn = statesOn; });
+
+	describe('with life states (Stable / <4h / <1h / Expired)', () => {
+		const H = 3600000, now = Date.UTC(2026, 9, 13, 12, 0, 0);
+		const at = ms => lifeStates.formatTime(ms);
+		const sig = (id, left) => ({ id: id, lifeTime: '2026-10-13 00:00:00', lifeLength: '57600', lifeLeft: at(left) });
+		beforeEach(() => { sigInline.statesOn = () => true; });
+		afterEach(() => { sigInline.statesOn = () => false; });
+		it('offers the four states on keys 1-4, with EOL as a typed key of <4h', () => {
+			assert.deepStrictEqual(sigInline.choices('life').map(c => c.value), ['stable', 'lt4h', 'lt1h', 'expired']);
+			assert.deepStrictEqual(sigInline.choices('life').map(c => c.label), ['Stable', '<4h', '<1h', 'Expired']);
+			assert.deepStrictEqual(sigInline.choiceForKey('life', '3'), sigInline.choices('life')[2]);
+			assert.ok(sigInline.choices('life')[1].keys.includes('eol'));
+			assert.deepStrictEqual(sigInline.choices('mass').map(c => c.value), ['stable', 'destab', 'critical']);
+		});
+		it('number keys pick a state in the life popover', () => {
+			const act = o => sigInline.keyAction(Object.assign({ key: '', selectedCount: 1, popoverField: 'life' }, o));
+			assert.deepStrictEqual(act({ key: '4' }), { type: 'pick', value: 'expired' });
+			assert.deepStrictEqual(act({ key: '2' }), { type: 'pick', value: 'lt4h' });
+		});
+		it('cell text and colour of a state', () => {
+			assert.equal(sigInline.cellText('life', 'lt1h'), '<1h');
+			assert.equal(sigInline.cellText('life', 'expired'), 'Expired');
+			assert.equal(sigInline.cellClass('life', 'expired'), 'critical life-expired');
+			assert.equal(sigInline.cellClass('mass', 'destab'), 'destab');
+		});
+		it('builds the life change with the new timer on both signatures', () => {
+			const p = sigInline.buildPayload(wh, 'life', 'lt1h', { sigs: [sig('11', now + 10 * H), sig('12', now + 10 * H)], now: now });
+			assert.deepStrictEqual(p, { signatures: { update: [{ wormhole: { id: '7', life: 'critical' }, signatures: [
+				{ id: '11', lifeLeft: at(now + H) }, { id: '12', lifeLeft: at(now + H) }] }] } });
+		});
+		it('nothing to send when the hole is already in that state', () => {
+			const crit = Object.assign({}, wh, { life: 'critical' });
+			assert.equal(sigInline.buildPayload(crit, 'life', 'lt1h', { sigs: [sig('11', now + 30 * 60000), sig('12', now + 30 * 60000)], now: now }), null);
+			assert.equal(sigInline.buildPayload(wh, 'life', 'stable', { sigs: [sig('11', now + 10 * H), sig('12', now + 10 * H)], now: now }), null);
+		});
+		it('the undo entry puts lifeLeft after lifeLength, so the server restores the timer', () => {
+			const full = { id: '11', lifeTime: 'a', lifeLeft: 'b', lifeLength: 'c', name: 'n' };
+			const e = sigInline.undoEntry(wh, full, full);
+			assert.deepStrictEqual(Object.keys(e.signatures[0].signatures[0]), ['id', 'lifeTime', 'lifeLength', 'name', 'lifeLeft']);
+			assert.deepStrictEqual(Object.keys(full), ['id', 'lifeTime', 'lifeLeft', 'lifeLength', 'name']);	// the client's object is untouched
+		});
+		it('reanchor ignores a state moving on with time, but reports changed data', () => {
+			const prev = { field: 'life', value: 'lt4h', snap: 'critical|x|x' };
+			assert.deepStrictEqual(sigInline.reanchor(prev, wh, true, { value: 'lt1h', snap: 'critical|x|x' }), { action: 'keep' });
+			assert.deepStrictEqual(sigInline.reanchor(prev, wh, true, { value: 'expired', snap: 'critical|y|y' }), { action: 'changed', value: 'expired' });
+		});
+	});
 
 	describe('enabled', () => {
 		it('is on when the key is missing', () => { assert.equal(sigInline.enabled({}), true); assert.equal(sigInline.enabled(undefined), true); });
@@ -69,7 +121,8 @@ describe('Inline life / mass edits', () => {
 			assert.equal(sigInline.fieldForColumn(6), 'mass');
 			[1, 2, 3, 4, 7].forEach(c => assert.equal(sigInline.fieldForColumn(c), null));
 		});
-		it('life offers only Stable and EOL', () => {
+		it('life offers only Stable and EOL (life states off)', () => {
+			assert.deepStrictEqual(sigInline.choices('life').map(c => c.value), ['stable', 'critical']);
 			assert.deepStrictEqual(sigInline.FIELDS.life.choices.map(c => c.value), ['stable', 'critical']);
 			assert.deepStrictEqual(sigInline.FIELDS.life.choices.map(c => c.label), ['Stable', 'EOL']);
 		});

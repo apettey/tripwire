@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-13 | [Wormhole life states](2026-10-13-wormhole-life-states/README.md) | Life buttons Stable / <4h / <1h / Expired (as in game since Catalyst) instead of Stable / EOL, in the sig dialog, sig list Life cell and Ctrl+K; no schema change (critical + the signature timer); undo restores the timer; Settings > Signatures toggle |
 | 2026-10-12 | [API password login off by default](2026-10-12-api-password-auth-off/README.md) | `TRIPWIRE_API_PASSWORD_AUTH` defaults to `false`: the old HTTP Basic API login (account password, no rate limit) answers 401; use personal API tokens (#96); set it to `true` temporarily for old scripts |
 | 2026-10-12 | [Set route in game: set the destination only](2026-10-12-set-destination-only/README.md) | "Set route in game" now sets just the destination (one ESI call per picked character, clearing other waypoints) instead of a waypoint per system; EVE's autopilot and in-game route settings pick the way; waypoint code removed; no toggle (click-only fix) |
 | 2026-10-12 | [Region map: jump range overlay](2026-10-12-region-map-jumps/README.md) | Jump range overlay on the region map (mainly Black Ops): from the selected system, you or a chain exit, systems in one jump are ringed and the rest dimmed, with distances, JDC level, two-jump routes via the Jump planner's engine (read only); Ctrl+K "Region map jumps"; Settings > Routes & Navigation |
