@@ -62,14 +62,15 @@ const lifeStates = {
 	},
 
 	/** Time left (ms, negative once past) on a signature's timer, or null when it has none: no signature, an
-	unreadable time, or a "never expires" signature (lifeLength 0) whose timer was never set (lifeLeft <= lifeTime) */
+	unreadable time, or a "never expires" signature (lifeLength 0) whose timer was never set (the server then stores
+	lifeLeft = lifeTime exactly; a timer set to Expired is a second before "now", so it never equals lifeTime) */
 	remaining: function(sig, now) {
 		if (!sig) { return null; }
 		const left = lifeStates.parseTime(sig.lifeLeft);
 		if (isNaN(left)) { return null; }
 		if (Number(sig.lifeLength) === 0) {
 			const start = lifeStates.parseTime(sig.lifeTime);
-			if (isNaN(start) || left <= start) { return null; }
+			if (isNaN(start) || left === start) { return null; }
 		}
 		return left - now;
 	},
@@ -108,13 +109,14 @@ const lifeStates = {
 		return false;
 	},
 
-	/** Timer end (ms) for picking a state: kept when already inside the band, else the band's top. null for
-	stable (the server puts back the natural timer) or an unknown state. */
+	/** Timer end (ms) for picking a state: kept when already inside the band, else the band's top (Expired: a second
+	ago, so it can't equal a new signature's lifeTime, see remaining). null for stable (the server puts back the
+	natural timer) or an unknown state. */
 	targetLifeLeft: function(key, remaining, now) {
 		const s = lifeStates.state(key);
 		if (!s || s.life !== "critical") { return null; }
 		if (lifeStates.inBand(key, remaining)) { return now + remaining; }
-		return now + s.top * lifeStates.HOUR;
+		return s.top ? now + s.top * lifeStates.HOUR : now - 1000;
 	},
 
 	/** Refresh payload for setting a hole's state from the sig list / command palette: the wormhole's life and,
@@ -132,18 +134,29 @@ const lifeStates = {
 	},
 
 	/** Give the dialog's payload the picked state's timer. entry: the {wormhole, signatures} entry of the payload;
-	key: the picked state; current: the hole's current signatures (none for a new hole). */
-	applyToEntry: function(entry, key, current, now) {
+	key: the picked state; current: the hole's current signatures (none for a new hole); unchanged: the state is the
+	one the dialog opened with, so each signature keeps its current timer (the state may have moved on while the
+	dialog was open: that must not reset it). The dialog sends lifeLength, which would recompute the timer. */
+	applyToEntry: function(entry, key, current, now, unchanged) {
 		if (!entry || !entry.wormhole || typeof entry.wormhole !== "object" || entry.wormhole.life !== "critical") { return false; }
 		const s = lifeStates.state(key);
 		if (!s || s.life !== "critical") { return false; }
+		const set = function(sig, value) {
+			delete sig.lifeLeft;
+			sig.lifeLeft = value;	// after lifeLength: the server applies the keys in order
+		};
+		if (unchanged) {
+			const byId = {};
+			(current || []).forEach(function(c) { if (c && c.id !== undefined) { byId[c.id] = c; } });
+			(entry.signatures || []).forEach(function(sig) {
+				const c = sig && byId[sig.id];
+				if (c && c.lifeLeft) { set(sig, c.lifeLeft); }
+			});
+			return true;
+		}
 		const target = lifeStates.targetLifeLeft(key, lifeStates.holeRemaining(current, now), now);
 		if (target === null) { return false; }
-		(entry.signatures || []).forEach(function(sig) {
-			if (!sig) { return; }
-			delete sig.lifeLeft;
-			sig.lifeLeft = lifeStates.formatTime(target);	// after lifeLength: the server applies the keys in order
-		});
+		(entry.signatures || []).forEach(function(sig) { if (sig) { set(sig, lifeStates.formatTime(target)); } });
 		return true;
 	},
 
@@ -249,7 +262,10 @@ const lifeStates = {
 		const key = wormhole.life === "critical" ? (lifeStates.isOn() ? lifeStates.current(wormhole) : "lt4h") : "stable";
 		const input = document.querySelector("#dialog-signature [name='wormholeLife'][data-life-state='" + key + "']");
 		if (input) { input.checked = true; }
+		lifeStates.prefilled = { wormholeID: String(wormhole.id), key: key };
 	},
+
+	prefilled: null,	// {wormholeID, key}: the state the dialog opened with (dialogPrefill)
 
 	/** Called from the signature dialog's submit with the payload it built: add the picked state's timer */
 	dialogPayload: function(payload) {
@@ -261,7 +277,9 @@ const lifeStates = {
 		if (!key) { return; }
 		const sigs = (typeof tripwire !== "undefined" && tripwire.client && tripwire.client.signatures) || {};
 		const current = (entry.signatures || []).map(function(s) { return s && s.id ? sigs[s.id] : null; }).filter(Boolean);
-		lifeStates.applyToEntry(entry, key, current, lifeStates.now());
+		const p = lifeStates.prefilled;
+		const unchanged = !!(p && entry.wormhole.id !== undefined && String(entry.wormhole.id) === p.wormholeID && p.key === key);
+		lifeStates.applyToEntry(entry, key, current, lifeStates.now(), unchanged);
 	},
 
 	/** Life cells of the sig list (and the automapper's picker): text and colour for the hole's state now */
@@ -274,15 +292,18 @@ const lifeStates = {
 			bySig[wh.initialID] = wh;
 			bySig[wh.secondaryID] = wh;
 		});
+		let changed = false;
 		Array.prototype.forEach.call(document.querySelectorAll("#sigTable tbody tr[data-id]"), function(tr) {
 			const wh = bySig[tr.getAttribute("data-id")];
 			const cell = tr.children[4];
 			if (!wh || !cell || cell.classList.contains("sig-inline-saving") || cell.getAttribute("colspan")) { return; }
 			const key = on ? lifeStates.current(wh) : null;
 			const text = key ? lifeStates.label(key) : ({ critical: "EOL", stable: "Stable" }[wh.life] || wh.life);
-			if (cell.textContent !== text) { cell.textContent = text; }
+			if (cell.textContent !== text) { cell.textContent = text; changed = true; }
 			lifeStates.CLASSES.split(" ").forEach(function(c) { cell.classList.toggle(c, !!key && key !== "stable" && c === "life-" + key); });
 		});
+		// The table sorter caches the cell texts: sorting by Life must see the new ones
+		if (changed && typeof $ !== "undefined") { $("#sigTable").trigger("update"); }
 	},
 
 	setupSettings: function() {

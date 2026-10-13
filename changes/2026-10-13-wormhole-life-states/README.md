@@ -29,12 +29,14 @@ mask-defaults allow-list). Off: upstream's Stable / EOL buttons and behaviour ev
   expiry (upstream's `wormholeClean` event). "Never expires" signatures (life length 0) get a timer too, but the server
   never deletes them.
 - New `app/js/fork/life-states.js` (pure logic, dialog buttons, sig list Life text and colours, settings row) and
-  `app/css/fork/life-states.css` (<4h orange, <1h red, Expired magenta). The dialog's two extra buttons are added from JS;
+  `app/css/fork/life-states.css` (<4h amber, <1h red, Expired magenta). The dialog's two extra buttons are added from JS;
   upstream's EOL button becomes "<4h".
 - `app/js/fork/sig-inline.js`: four choices (keys 1-4), state-aware payload, cell text/colour and popover sync; undo
   restores the life and the timer. `command-args.js` / `command-palette.js`: Ctrl+K "Set life" takes stable / eol / 4h /
   1h / expired; the hole list shows the state instead of EOL. `life-wording.js`: tooltips for the four buttons.
 - Undo/redo send whole signatures, and the server applies `lifeLength` after `lifeLeft`, which reset the timer.
   `lifeLeft` is now sent after `lifeLength` (a `tripwire.refresh` wrapper), so undo restores the exact timer.
+- Undo now restores a hole's old EOL timer for everyone (setting on or off). So undoing a mistaken Stable on a hole
+  that expired long ago can bring it back already past its timer, and the server may clean it up soon after.
 - Upstream files touched (small, local): `app/js/dialogs/signature-dialog.js` (two hook lines: prefill and payload),
   `signatures.php` (a change to EOL keeps a timer the request sent instead of forcing now + 4 h). Also `docs/eve-wormhole-primer.md`.

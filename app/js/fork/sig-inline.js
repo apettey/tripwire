@@ -77,6 +77,11 @@ const sigInline = {
 		return state ? state.cls : value;
 	},
 
+	/** A life value in the current mode: with life states on, upstream's "critical" (EOL) is "lt4h" */
+	normalise: function(field, value) {
+		return field === "life" && value === "critical" && sigInline.statesOn() ? "lt4h" : value;
+	},
+
 	/** The value shown for a wormhole's field: its life state when those are on, else the stored value */
 	valueOf: function(wormhole, field) {
 		if (field === "life" && wormhole && sigInline.statesOn()) { return lifeStates.current(wormhole); }
@@ -198,7 +203,9 @@ const sigInline = {
 
 	// ---- Save path ----
 
-	/** Save a change to one wormhole: sigInline.setWormhole(wormholeID, {life: "critical"}) or {mass: "destab"}.
+	/** Save a change to one wormhole: sigInline.setWormhole(wormholeID, {life: "lt1h"}) or {mass: "destab"}.
+	Life takes a state (stable / lt4h / lt1h / expired) when life states are on, else stable / critical; "critical"
+	means "lt4h" with states on.
 	Updates the table cell at once (restored if the save fails), and on success pushes the undo entry so Ctrl+Z
 	works. Returns a Promise of "saved" | "same" | "failed". */
 	setWormhole: function(wormholeID, change) {
@@ -214,7 +221,7 @@ const sigInline = {
 
 	saveNow: function(wormholeID, change) {
 		const field = Object.keys(change || {})[0];
-		const value = field ? change[field] : undefined;
+		const value = sigInline.normalise(field, field ? change[field] : undefined);
 		const wh = tripwire.client.wormholes[wormholeID];
 		const s1 = wh && tripwire.client.signatures[wh.initialID], s2 = wh && tripwire.client.signatures[wh.secondaryID];
 		const states = field === "life" && sigInline.statesOn() ? { sigs: [s1, s2], now: lifeStates.now() } : null;

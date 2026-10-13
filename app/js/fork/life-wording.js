@@ -23,6 +23,7 @@ const lifeWording = {
 	IDS: ["wormholeLifeStable", "wormholeLifeEOL", "wormholeLifeLt1h", "wormholeLifeExpired"],
 
 	apply: function() {
+		if (typeof document === "undefined" || typeof document.querySelector !== "function") { return; }
 		const statesOn = typeof lifeStates !== "undefined" && lifeStates.isOn();
 		lifeWording.IDS.forEach(function(id) {
 			const label = document.querySelector("label[for='" + id + "']");

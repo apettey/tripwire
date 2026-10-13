@@ -89,7 +89,7 @@ describe('Wormhole life states', () => {
 			assert.equal(lifeStates.targetLifeLeft('lt4h', null, now), now + 4 * H);
 			assert.equal(lifeStates.targetLifeLeft('lt1h', 3 * H, now), now + H);
 			assert.equal(lifeStates.targetLifeLeft('lt1h', -M, now), now + H);
-			assert.equal(lifeStates.targetLifeLeft('expired', 3 * H, now), now);
+			assert.equal(lifeStates.targetLifeLeft('expired', 3 * H, now), now - 1000);	// a second ago, see remaining
 		});
 		it('none for stable or an unknown state', () => {
 			assert.equal(lifeStates.targetLifeLeft('stable', H, now), null);
@@ -107,9 +107,9 @@ describe('Wormhole life states', () => {
 			const p = lifeStates.payload(wh('stable'), sig('11', now + 3 * H), sig('12', now + 3 * H), 'lt4h', now);
 			assert.equal(p.signatures.update[0].signatures[0].lifeLeft, at(now + 3 * H));
 		});
-		it('<4h -> Expired: the timer ends now', () => {
+		it('<4h -> Expired: the timer ends now (a second ago)', () => {
 			const p = lifeStates.payload(wh('critical'), sig('11', now + 3 * H), sig('12', now + 3 * H), 'expired', now);
-			assert.deepStrictEqual(p.signatures.update[0].signatures, [{ id: '11', lifeLeft: at(now) }, { id: '12', lifeLeft: at(now) }]);
+			assert.deepStrictEqual(p.signatures.update[0].signatures, [{ id: '11', lifeLeft: at(now - 1000) }, { id: '12', lifeLeft: at(now - 1000) }]);
 		});
 		it('critical -> stable sends only the life (the server puts back the natural timer)', () => {
 			assert.deepStrictEqual(lifeStates.payload(wh('critical'), sig('11', now + 3 * H), sig('12', now + 3 * H), 'stable', now), {
@@ -136,7 +136,7 @@ describe('Wormhole life states', () => {
 			const e = entry('critical');
 			assert.equal(lifeStates.applyToEntry(e, 'expired', [sig('11', now + 3 * H)], now), true);
 			e.signatures.forEach(s => {
-				assert.equal(s.lifeLeft, at(now));
+				assert.equal(s.lifeLeft, at(now - 1000));
 				assert.deepStrictEqual(Object.keys(s).slice(-2), ['lifeLength', 'lifeLeft']);
 			});
 		});
@@ -144,6 +144,29 @@ describe('Wormhole life states', () => {
 			const e = entry('critical');
 			lifeStates.applyToEntry(e, 'lt1h', [sig('11', now + 40 * M), sig('12', now + 40 * M)], now);
 			assert.equal(e.signatures[0].lifeLeft, at(now + 40 * M));
+		});
+		it('the state the dialog opened with keeps each signature timer, even if it moved on meanwhile', () => {
+			const e = entry('critical');
+			// opened at 1h01m left (<4h), saved two minutes later (now <1h): no reset to 4 hours
+			assert.equal(lifeStates.applyToEntry(e, 'lt4h', [sig('11', now - 1 * M), sig('12', now + 59 * M)], now, true), true);
+			assert.equal(e.signatures[0].lifeLeft, at(now - 1 * M));
+			assert.equal(e.signatures[1].lifeLeft, at(now + 59 * M));
+			assert.deepStrictEqual(Object.keys(e.signatures[0]).slice(-2), ['lifeLength', 'lifeLeft']);
+		});
+		it('unchanged leaves a signature without a current timer alone (it gets the server default)', () => {
+			const e = entry('critical');
+			lifeStates.applyToEntry(e, 'lt1h', [sig('11', now + 30 * M)], now, true);
+			assert.equal(e.signatures[0].lifeLeft, at(now + 30 * M));
+			assert.equal(e.signatures[1].lifeLeft, undefined);
+		});
+		it('a "never expires" hole added as Expired stays Expired', () => {
+			const e = { wormhole: { life: 'critical' }, signatures: [{ signatureID: 'abc123', lifeLength: '0' }, { signatureID: 'xyz789', lifeLength: '0' }] };
+			lifeStates.applyToEntry(e, 'expired', [], now);
+			// the server stores lifeTime = its own now (here the same second, or a little later)
+			[now, now + 2000].forEach(serverNow => {
+				const stored = e.signatures.map(s => ({ lifeTime: at(serverNow), lifeLength: '0', lifeLeft: s.lifeLeft }));
+				assert.equal(lifeStates.deriveHole({ life: 'critical' }, stored, now), 'expired');
+			});
 		});
 		it('a new hole (no current signatures) gets the band top', () => {
 			const e = entry('critical');

@@ -30,6 +30,12 @@ describe('Inline life / mass edits', () => {
 			assert.deepStrictEqual(act({ key: '4' }), { type: 'pick', value: 'expired' });
 			assert.deepStrictEqual(act({ key: '2' }), { type: 'pick', value: 'lt4h' });
 		});
+		it('upstream "critical" means <4h (the command palette and old callers may still send it)', () => {
+			assert.equal(sigInline.normalise('life', 'critical'), 'lt4h');
+			assert.equal(sigInline.normalise('mass', 'critical'), 'critical');
+			sigInline.statesOn = () => false;
+			assert.equal(sigInline.normalise('life', 'critical'), 'critical');
+		});
 		it('cell text and colour of a state', () => {
 			assert.equal(sigInline.cellText('life', 'lt1h'), '<1h');
 			assert.equal(sigInline.cellText('life', 'expired'), 'Expired');
