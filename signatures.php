@@ -630,7 +630,7 @@ if (isset($_POST['signatures'])) {
                             list($result, $wormhole, $msg) = fetchWormhole($request['wormhole']['id'], $mysql);
                             if ($result && $wormhole) {
                                 // Set wormhole to/from critical life
-                                if (isset($request['wormhole']['life']) && $wormhole->life != $request['wormhole']['life'] && $request['wormhole']['life'] == 'critical') {
+                                if (isset($request['wormhole']['life']) && $wormhole->life != $request['wormhole']['life'] && $request['wormhole']['life'] == 'critical' && !isset($request['signatures'][0]['lifeLeft'])) {   // fork: a sent timer (<1h, Expired, undo) wins
                                     $signature->lifeLeft = date('Y-m-d H:i:s', strtotime('4 hour'));
                                     $signature2->lifeLeft = date('Y-m-d H:i:s', strtotime('4 hour'));
                                     updateSignature($signature, $mysql);

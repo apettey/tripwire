@@ -386,7 +386,8 @@ const commandPalette = {
 	holeDefs: function(ctx) {
 		if (!ctx._holes) {
 			ctx._holes = typeof tripwire !== "undefined" && tripwire.client && typeof appData !== "undefined"
-				? paletteArgs.holes({ rows: commandPalette.chainRows(), wormholes: tripwire.client.wormholes, systems: appData.systems, viewingID: ctx.viewingSystemID }) : [];
+				? paletteArgs.holes({ rows: commandPalette.chainRows(), wormholes: tripwire.client.wormholes, systems: appData.systems, viewingID: ctx.viewingSystemID,
+					lifeLabel: typeof lifeStates !== "undefined" && lifeStates.isOn() ? function(wh) { return lifeStates.label(lifeStates.current(wh)); } : null }) : [];
 		}
 		return ctx._holes;
 	},

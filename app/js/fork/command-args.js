@@ -27,7 +27,7 @@ const paletteArgs = {
 	/**
 	 * The wormholes on the chain map as palette items (value = wormhole id). env: {rows (chain.data.map.rows),
 	 * wormholes (tripwire.client.wormholes, optional: when given, a hole must exist there), systems (appData.systems),
-	 * viewingID}. The node's markup carries the wormhole id (data-sigid); the hole's name is the last pathHome entry.
+	 * viewingID, lifeLabel (optional: the life text of a critical hole, default "EOL")}. The node's markup carries the wormhole id (data-sigid); the hole's name is the last pathHome entry.
 	 * Keys: hole name (token and full), the system behind it (name, J-code digits), the system it leaves, wormhole
 	 * type, sig ID. Holes touching the viewed system rank first.
 	 */
@@ -59,7 +59,7 @@ const paletteArgs = {
 			const childName = sysName(child), parentName = sysName(parent);
 			const sigID = last.signatureID ? String(last.signatureID).toUpperCase() : "";
 			const flags = [];
-			if (wh && wh.life === "critical") { flags.push("EOL"); }
+			if (wh && wh.life === "critical") { flags.push(env.lifeLabel ? env.lifeLabel(wh) : "EOL"); }	// <4h / <1h / EOL with life states
 			if (wh && wh.mass === "critical") { flags.push("critical"); } else if (wh && wh.mass === "destab") { flags.push("destab"); }
 			const here = child === viewing || parent === viewing;
 			out.push({

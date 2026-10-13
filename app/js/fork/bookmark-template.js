@@ -26,13 +26,14 @@ const bookmarkTemplate = {
 		{ token: "type", help: "the wormhole type, e.g. C247 (K162 or empty when unknown)", sample: "C247", worst: "K162" },
 		{ token: "class", help: "the class of the system it leads to: C1-C6, HS, LS, NS, Thera ... (empty when ambiguous)", sample: "C5", worst: "Pochven" },
 		{ token: "size", help: "the biggest ship that fits: S, M, L, VL or XL (empty when the type is unknown)", sample: "L", worst: "VL" },
-		{ token: "life", help: "EOL when the hole is end of life, else empty", sample: "EOL", worst: "EOL" },
+		{ token: "life", help: "the hole's life when it is ending: <4h, <1h or EOL (just EOL for any of them if the member turned the life states off in Settings), else empty", sample: "<1h", worst: "EOL" },
 		{ token: "system", help: "the system the bookmark is saved in", sample: "J123456", worst: "ABCDEFGHIJKLM" },
 		{ token: "dir", help: "out for the hole bookmark, in for the return bookmark", sample: "out", worst: "out" }
 	],
 	// What a bookmark may contain: letters, digits, spaces and these marks. Tokens are written {name}.
 	TEMPLATE_CHARS: /^[A-Za-z0-9 =!<>_.,:;\/|+*()\[\]#@~{}-]*$/,
 	VALUE_STRIP: /[^A-Za-z0-9._ -]/g,
+	LIFE_STRIP: /[^A-Za-z0-9<]/g,	// {life} may be <4h / <1h
 
 	JUMP_PROMPTS: [
 		{ value: "nomatch", label: "Only when no signature matches (default)" },
@@ -63,7 +64,7 @@ const bookmarkTemplate = {
 		const t = bookmarkTemplate;
 		return String(template === undefined || template === null ? "" : template).replace(/\{([^{}]*)\}/g, function(m, token) {
 			const value = values ? values[token.toLowerCase()] : "";
-			return t.known(token.toLowerCase()) && value !== undefined && value !== null ? String(value).replace(t.VALUE_STRIP, "") : "";
+			return t.known(token.toLowerCase()) && value !== undefined && value !== null ? String(value).replace(token.toLowerCase() === "life" ? t.LIFE_STRIP : t.VALUE_STRIP, "") : "";
 		}).replace(/\s+/g, " ").trim();
 	},
 
@@ -78,7 +79,8 @@ const bookmarkTemplate = {
 		return text.length > t.MAX_OUTPUT ? text.substring(0, t.MAX_OUTPUT).trim() : text;
 	},
 
-	/** Values for the tokens from what the callers know. info: {name, sigID, type, classText, size, eol, system, dir} */
+	/** Values for the tokens from what the callers know. info: {name, sigID, type, classText, size, life, eol, system, dir}:
+		life is the hole's life text ("", "<4h", "<1h", "EOL"; lifeStates.bookmarkLife); without it eol (true = "EOL") */
 	values: function(info) {
 		info = info || {};
 		const clean = function(v) { return String(v === undefined || v === null ? "" : v).trim(); };
@@ -89,7 +91,7 @@ const bookmarkTemplate = {
 		return {
 			name: clean(info.name), sig: letters, sigid: letters && digits ? letters + "-" + digits : letters,
 			type: /^[A-Z0-9]{3,4}$/.test(type) ? type : "", "class": clean(info.classText), size: clean(info.size),
-			life: info.eol ? "EOL" : "", system: clean(info.system), dir: clean(info.dir)
+			life: info.life !== undefined && info.life !== null ? clean(info.life) : (info.eol ? "EOL" : ""), system: clean(info.system), dir: clean(info.dir)
 		};
 	},
 
@@ -119,6 +121,8 @@ const bookmarkTemplate = {
 		const first = template.trim().charAt(0);
 		if (kind === "back" && "!<".indexOf(first) < 0) { return "A return bookmark has to start with ! or <"; }
 		if (kind === "hole" && "!<".indexOf(first) >= 0) { return "A hole bookmark can't start with ! or < (that marks a return bookmark)"; }
+		// {life} can be <4h / <1h: first in a hole bookmark (only optional tokens before it) it would look like a return bookmark
+		if (kind === "hole" && /^\s*(?:\{(?!name\})[a-z]*\}\s*)*\{life\}/i.test(template)) { return "A hole bookmark can't start with {life} (<4h / <1h would mark a return bookmark)"; }
 		const worst = {};
 		t.TOKENS.forEach(function(tok) { worst[tok.token] = tok.worst; });
 		if (t.expand(template, worst).length > t.MAX_OUTPUT) { return "Too long: with the longest values it would be over " + t.MAX_OUTPUT + " characters"; }

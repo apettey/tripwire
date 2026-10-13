@@ -59,7 +59,7 @@ const jumpReturn = {
 		return best;
 	},
 
-	/** What the return template's other tokens ({type}, {size}, {class}, {system}, {sig}) are for a jump from -> to through
+	/** What the return template's other tokens ({type}, {size}, {class}, {system}, {sig}, {life}) are for a jump from -> to through
 		hole (from findJumpHole): the hole's type and size, the class of the system it leads back to, the system the
 		bookmark is saved in, and the signature ID of its sig there. Anything unknown is left out. */
 	templateValues: function(hole, from, to, wormholes) {
@@ -68,6 +68,7 @@ const jumpReturn = {
 		try {
 			out.size = holeNaming.sizeLetter(out.type);
 			out.system = holeNaming.systemName(to);
+			if (wormhole && typeof lifeStates !== "undefined" && lifeStates.isOn()) { out.life = lifeStates.bookmarkLife(wormhole, lifeStates.sigsOf(wormhole), lifeStates.now(), lifeStates.isOn()); }
 			if (typeof systemAnalysis !== "undefined") { out.classText = holeNaming.classText(systemAnalysis.analyse(from).systemTypeName); }
 		} catch (e) { /* the other tokens stay empty */ }
 		return out;

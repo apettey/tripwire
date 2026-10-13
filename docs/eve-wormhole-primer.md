@@ -90,6 +90,8 @@ game patches; the source of truth for numbers in this repo is `public/js/combine
   `stable` (>= 50% left), `destab` / destabilised (< 50%), `critical` (< 10%).
 - **Lifetime**: each type has a total life (approx. 4.5h to 48h, see `life`). In-game, a hole under
   approx. 4h left is **EOL** ("end of life"). Stored as `wormholes.life` = `stable` | `critical` (EOL).
+  Since Catalyst the game shows "less than 4 hours", "less than 1 hour" and "Expired"; the fork shows these as
+  <4h / <1h / EOL from the critical hole's signature timer (`lifeLeft`), see `app/js/fork/life-states.js`.
 - **Collapsing / rolling**: pushing mass through on purpose (often a battleship going back and forth,
   with prop mods on or a Higgs anchor to change mass) to close a hole. Corps **roll** their static to
   get a fresh connection, or roll holes to cut off hostiles. Tripwire's mass panel has toggles for this

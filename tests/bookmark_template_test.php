@@ -32,7 +32,7 @@ function check($name, $actual, $expected) {
 
 // ---- 1. validation ----
 $valid = [
-    ['hole', '={name} {class} {sig} {life}'], ['hole', '{name}-{sigid} {type}'], ['hole', '{NAME} {Size} {system}'],
+    ['hole', '={name} {class} {sig} {life}'], ['hole', '{name} {life}'], ['hole', '={life} {name}'], ['hole', '{name}-{sigid} {type}'], ['hole', '{NAME} {Size} {system}'],
     ['back', '!{name}'], ['back', '<{name} {dir}'], ['back', '! {name} {system}'],
 ];
 foreach ($valid as $c) check('valid ' . $c[0] . ' ' . $c[1], bookmark_validate($c[0], $c[1]), '');
@@ -41,6 +41,7 @@ $invalid = [
     ['hole', '={name', 'Unbalanced'], ['hole', '={name}}', 'Unbalanced'], ['hole', '={name} "x"', 'allowed'], ["hole", "={name}\n{sig}", 'allowed'],
     ['hole', '={name}&{sig}', 'allowed'], ['back', '={name}', 'start with'], ['back', '{name}', 'start with'],
     ['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', str_repeat('x', 81) . '{name}', 'at most 80'], ['hole', '!{name}', 'start with'], ['hole', '<{name}', 'start with'], ['hole', '{name} {name} {name} {name}', 'Too long'], ['other', '{name}', 'Unknown template'],
+    ['hole', '{life} {name}', 'start with'], ['hole', ' {class}{Life} {name}', 'start with'],
 ];
 foreach ($invalid as $c) {
     $error = bookmark_validate($c[0], $c[1]);

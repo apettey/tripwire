@@ -141,7 +141,8 @@ const jumpSigPrompt = {
 	bookmark: function(plan, candidate, from, classText) {
 		return holeNaming.bookmarkString({
 			name: plan.originName, classText: classText, sigID: plan.origin.signatureID, type: candidate.wormhole.type,
-			size: holeNaming.sizeLetter(candidate.wormhole.type), system: holeNaming.systemName(from), eol: candidate.wormhole.life === "critical"
+			size: holeNaming.sizeLetter(candidate.wormhole.type), system: holeNaming.systemName(from), eol: candidate.wormhole.life === "critical",
+			life: typeof lifeStates !== "undefined" ? lifeStates.bookmarkLife(candidate.wormhole, lifeStates.sigsOf(candidate.wormhole), lifeStates.now(), lifeStates.isOn()) : undefined
 		});
 	},
 

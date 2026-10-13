@@ -6,14 +6,15 @@ include('app/js/fork/jump-return');
 
 // The same cases as tests/bookmark_template_test.php (the server validates with the same rules)
 const VALID = [
-	['hole', '={name} {class} {sig} {life}'], ['hole', '{name}-{sigid} {type}'], ['hole', '{NAME} {Size} {system}'],
+	['hole', '={name} {class} {sig} {life}'], ['hole', '{name} {life}'], ['hole', '={life} {name}'], ['hole', '{name}-{sigid} {type}'], ['hole', '{NAME} {Size} {system}'],
 	['back', '!{name}'], ['back', '<{name} {dir}'], ['back', '! {name} {system}']
 ];
 const INVALID = [
 	['hole', '', 'empty'], ['hole', '   ', 'empty'], ['hole', '={class} {sig}', '{name}'], ['hole', '={name} {nope}', 'Unknown token'],
 	['hole', '={name', 'Unbalanced'], ['hole', '={name}}', 'Unbalanced'], ['hole', '={name} "x"', 'allowed'], ['hole', '={name}\n{sig}', 'allowed'],
 	['hole', '={name}&{sig}', 'allowed'], ['back', '={name}', 'start with'], ['back', '{name}', 'start with'],
-	['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', 'x'.repeat(81) + '{name}', 'at most 80'], ['hole', '!{name}', 'start with'], ['hole', '<{name}', 'start with'], ['hole', '{name} {name} {name} {name}', 'Too long'], ['other', '{name}', 'Unknown template']
+	['hole', '{name} {system} {system} {system} {system}', 'Too long'], ['hole', 'x'.repeat(81) + '{name}', 'at most 80'], ['hole', '!{name}', 'start with'], ['hole', '<{name}', 'start with'], ['hole', '{name} {name} {name} {name}', 'Too long'], ['other', '{name}', 'Unknown template'],
+	['hole', '{life} {name}', 'start with'], ['hole', ' {class}{Life} {name}', 'start with']
 ];
 
 describe('Bookmark templates', () => {
@@ -55,7 +56,20 @@ describe('Bookmark templates', () => {
 			assert.equal(bookmarkTemplate.render('{name} {name}', v), 'ABCDEFGHIJKLMNOP ABCDEFGHIJKLMNOP');
 		});
 		it('Output is cut at 50 characters', () => assert.equal(bookmarkTemplate.render('{system}', { system: 'x'.repeat(80) }).length, 50));
-		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC EOL'));
+		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC <1h'));
+		it('a hole bookmark never starts with < (an old template that starts with {life})', () => {
+			assert.equal(holeNaming.bookmarkString({ name: 'A', sigAlpha: 'ABC', life: '<1h', template: '{life} {name} {sig}' }), '1h A ABC');
+			assert.equal(holeNaming.bookmarkString({ name: 'A', sigAlpha: 'ABC', life: 'EOL', template: '{life} {name} {sig}' }), 'EOL A ABC');
+		});
+		it('{life} is the life state (<4h, <1h, EOL), with < kept; without it eol gives EOL', () => {
+			const hole = v => bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.values(Object.assign({ name: 'A', classText: 'C5', sigAlpha: 'ABC' }, v)));
+			assert.equal(hole({ life: '<1h', eol: true }), '=A C5 ABC <1h');
+			assert.equal(hole({ life: '<4h' }), '=A C5 ABC <4h');
+			assert.equal(hole({ life: 'EOL' }), '=A C5 ABC EOL');
+			assert.equal(hole({ life: '', eol: true }), '=A C5 ABC');
+			assert.equal(hole({ eol: true }), '=A C5 ABC EOL');
+			assert.equal(hole({ life: "<b>'x\"" }), '=A C5 ABC <bx');	// only letters, digits and < survive
+		});
 		it('Sample return value', () => assert.equal(bookmarkTemplate.render('!{name} {dir}', bookmarkTemplate.sampleValues('back')), '!AB in'));
 	});
 

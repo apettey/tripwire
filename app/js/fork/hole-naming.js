@@ -176,12 +176,13 @@ const holeNaming = {
 
 	/** In-game bookmark string for a named hole, built from the mask's hole template (Mask Admin > Bookmark names; the
 		default "={name} {class} {sig} {life}" gives "=<name> <class> <SIG>[ EOL]", e.g. "=A C5 ABC EOL"). Returns null
-		without a name. args: {name, classText, sigAlpha | sigID, type, size, system, eol, template?} */
+		without a name. args: {name, classText, sigAlpha | sigID, type, size, system, life, eol, template?} */
 	bookmarkString: function(args) {
 		const token = holeNaming.leadingToken(args && args.name);
 		if (!token) { return null; }
 		const values = bookmarkTemplate.values(Object.assign({}, args, { name: token, dir: "out" }));
-		return bookmarkTemplate.render(args.template || bookmarkTemplate.active("hole"), values) || null;
+		// A hole bookmark never starts with < (the return bookmark mark), e.g. from an old template that starts with {life}
+		return bookmarkTemplate.render(args.template || bookmarkTemplate.active("hole"), values).replace(/^<+\s*/, "") || null;
 	},
 
 	/** Settings > Signatures "Suggest hole names" (a missing key means on) */
@@ -344,7 +345,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				type: entry.wormhole.type,
 				size: holeNaming.sizeLetter(entry.wormhole.type),
 				system: holeNaming.systemName(thisSide.systemID),
-				eol: entry.wormhole.life === "critical"
+				eol: entry.wormhole.life === "critical",
+				life: typeof lifeStates !== "undefined" ? lifeStates.entryLife(entry, lifeStates.entryCurrent(entry), lifeStates.now(), lifeStates.isOn()) : undefined	// <4h / <1h / EOL
 			});
 		}
 		holeNaming.bookmarkForPayload = bookmarkForPayload;

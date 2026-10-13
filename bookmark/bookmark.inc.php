@@ -69,6 +69,8 @@ function bookmark_validate($kind, $template) {
     $first = substr(trim($template), 0, 1);
     if ($kind === 'back' && strpos('!<', $first) === false) return 'A return bookmark has to start with ! or <';
     if ($kind === 'hole' && strpos('!<', $first) !== false) return 'A hole bookmark can\'t start with ! or < (that marks a return bookmark)';
+    // {life} can be <4h / <1h: first in a hole bookmark (only optional tokens before it) it would look like a return bookmark
+    if ($kind === 'hole' && preg_match('/^\s*(?:\{(?!name\})[a-z]*\}\s*)*\{life\}/i', $template)) return 'A hole bookmark can\'t start with {life} (<4h / <1h would mark a return bookmark)';
     if (mb_strlen(bookmark_expand($template, bookmark_tokens())) > BOOKMARK_MAX_OUTPUT) {
         return 'Too long: with the longest values it would be over ' . BOOKMARK_MAX_OUTPUT . ' characters';
     }

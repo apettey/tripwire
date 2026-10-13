@@ -3,6 +3,7 @@ const { include } = require('../helpers/helpers');
 include('app/js/fork/bookmark-template');
 include('app/js/fork/hole-naming');
 include('app/js/fork/jump-sig-prompt');
+include('app/js/fork/life-states');
 
 const FROM = 31001880, TO = 31001881, ELSEWHERE = 31000005;
 
@@ -195,10 +196,19 @@ describe('Jump signature prompt', () => {
 			const p = planFor(21);
 			assert.equal(jumpSigPrompt.bookmark(p.plan, p.candidate, FROM, 'C5'), 'A-ABC-123 H296 C5');
 		});
-		it('End of life is marked', () => {
+		it('End of life is marked (life states off: EOL for any critical hole)', () => {
 			const p = planFor(21);
 			p.candidate.wormhole.life = 'critical';
-			assert.equal(jumpSigPrompt.bookmark(p.plan, p.candidate, FROM, ''), '=A ABC EOL');
+			const on = lifeStates.isOn;
+			lifeStates.isOn = () => false;
+			try { assert.equal(jumpSigPrompt.bookmark(p.plan, p.candidate, FROM, ''), '=A ABC EOL'); } finally { lifeStates.isOn = on; }
+		});
+		it('With life states the bookmark says the state (<4h without a timer)', () => {
+			const p = planFor(21);
+			p.candidate.wormhole.life = 'critical';
+			const on = lifeStates.isOn;
+			lifeStates.isOn = () => true;
+			try { assert.equal(jumpSigPrompt.bookmark(p.plan, p.candidate, FROM, ''), '=A ABC <4h'); } finally { lifeStates.isOn = on; }
 		});
 		it('An unnamed hole has no bookmark yet', () => {
 			const p = planFor(31);
