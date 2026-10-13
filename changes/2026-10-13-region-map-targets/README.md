@@ -13,13 +13,13 @@ autopilot.
 
 | Before | After |
 | --- | --- |
-| ![before](before.jpg) | ![after](after.jpg) |
+| ![before](before.jpg) | ![after](after.png) |
 
 Before: the region map with skyhooks only. After: six targets (one in Delve, one in Heimatar: targets are mask-wide and
 the list shows every region), numbered rings on A-803L and GJ0-OJ, the Targets list (who marked it, expires in, jumps from
 you, reorder and remove), and the card of GJ0-OJ with its target block (note, expiry, Save / Remove target).
 
-Sending waypoints (the existing character picker of "Set destination for..."): ![waypoints](waypoints.jpg)
+Sending waypoints (the existing character picker of "Set destination for..."): ![waypoints](waypoints.png)
 
 Chain map badge (target 5 on 1DQ1-A): ![chain badge](chain-badge.png)
 
