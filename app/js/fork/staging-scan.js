@@ -22,6 +22,9 @@ const stagingScan = {
 		ratting: 1000,		// 24 h NPC kills for "Ratting"
 		quiet: 20,			// fewer 24 h jumps than this: "Quiet"
 		ratterPenalty: 0.5,	// score factor when NPC kills outnumber jumps (a ratting system, not a staging)
+		fullHours: 20,		// history covering fewer hours than this (fresh install, cron outage): activeHours and quiet are
+							// scaled by hours / 24 and the panel says "last N h"
+		retryMs: 600000,	// the server's newest row is from an earlier hour (cron not run yet): ask again after 10 minutes
 		// Last hour only (no 24 h data yet): same idea, hourly numbers
 		hour: { minJumps: 20, pvpKills: 3, ratting: 30, quiet: 2 }
 	},
@@ -91,7 +94,27 @@ const stagingScan = {
 			out[id] = { jumps: num(0), shipKills: num(1), podKills: num(2), npcKills: num(3), activeHours: num(4) };
 			n++;
 		});
-		return n ? { hours: Number(data.hours) || 24, systems: out } : null;
+		const h = data.hours === undefined ? 24 : Number(data.hours);
+		const hours = isFinite(h) ? Math.max(0, Math.min(24, Math.round(h))) : 0;
+		const latest = Number(data.latest);
+		return n && hours > 0 ? { hours: hours, latest: isFinite(latest) && latest > 0 ? latest : null, systems: out } : null;
+	},
+
+	/** Whether the server's newest row (unix seconds) is from the current UTC hour, i.e. the cron has run this hour */
+	isCurrent: function(latest, nowMs) {
+		return Number(latest) > 0 && Number(latest) * 1000 >= Math.floor(nowMs / 3600000) * 3600000;
+	},
+
+	/**
+	 * The 24 h thresholds for a history of `hours` hours: with less than T.fullHours, activeHours and quiet are scaled by
+	 * hours / 24 (the other rules stay).
+	 * @return {activeHours, quiet, partial, label ("24h" or "N h")}
+	 */
+	coverage: function(hours) {
+		const T = stagingScan.T;
+		const h = Math.max(1, Math.min(24, Number(hours) || 24));
+		if (h >= T.fullHours) { return { activeHours: T.activeHours, quiet: T.quiet, partial: false, label: "24h" }; }
+		return { activeHours: Math.max(1, Math.ceil(T.activeHours * h / 24)), quiet: T.quiet * h / 24, partial: true, label: h + "h" };
 	},
 
 	median: function(values) {
@@ -106,12 +129,13 @@ const stagingScan = {
 	 * @param list [{id, jumps}] from bfs()
 	 * @param now {systemID: {shipJumps, shipKills, podKills, npcKills}} (last hour, may be empty/null)
 	 * @param day parseDay() result, or null: then the scan uses the last hour only
-	 * @return {mode: "24h"|"hour", hours, median, rows: [{id, jumps, now: {jumps, kills, npc}, day: {jumps, kills, npc, activeHours}|null,
+	 * @return {mode: "24h"|"hour", hours (history covered), partial (fewer than T.fullHours), label ("24h", "N h"), median, rows: [{id, jumps, now: {jumps, kills, npc}, day: {jumps, kills, npc, activeHours}|null,
 	 *          value (the jumps the ranking uses), score, staging, busy, tags: [..]}]} sorted by score (desc), then distance
 	 */
 	analyse: function(list, now, day) {
 		const T = stagingScan.T;
 		const mode = day ? "24h" : "hour";
+		const win = stagingScan.coverage(day ? day.hours : 24);
 		now = now || {};
 		const rows = (list || []).map(function(s) {
 			const a = now[s.id] || {};
@@ -136,12 +160,12 @@ const stagingScan = {
 			const base = r.day || r.now;
 			// few NPC kills: a system where NPC kills outnumber jumps is a ratting system, not a staging
 			if (!(r.value > 0) || r.value < T.medianFactor * median || base.npc > base.jumps) { return; }
-			if (r.day) { r.staging = r.day.activeHours >= T.activeHours; }
+			if (r.day) { r.staging = r.day.activeHours >= win.activeHours; }
 			else { r.busy = r.value >= T.hour.minJumps; }
 		});
 
 		rows.forEach(function(r) {
-			const th = r.day ? T : T.hour;
+			const th = r.day ? { pvpKills: T.pvpKills, ratting: T.ratting, quiet: win.quiet } : T.hour;
 			const base = r.day || r.now;
 			if (r.staging) { r.tags.push("Likely staging"); }
 			if (r.busy) { r.tags.push("Busy now"); }
@@ -151,7 +175,7 @@ const stagingScan = {
 		});
 
 		rows.sort(function(a, b) { return b.score - a.score || a.jumps - b.jumps || a.id - b.id; });
-		return { mode: mode, hours: day ? day.hours : 1, median: median, rows: rows };
+		return { mode: mode, hours: day ? day.hours : 1, partial: !!day && win.partial, label: day ? win.label : "1h", median: median, rows: rows };
 	},
 
 	/** IDs of the "Likely staging" systems of a scan */
@@ -226,7 +250,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 	(function() {
 		const ss = stagingScan;
 		const state = {
-			origin: null, cache: {}, day: null, dayHour: null, dayXhr: null, dayFailedAt: 0,
+			origin: null, cache: {}, day: null, dayHour: null, dayXhr: null, dayRetryAt: 0,
 			scan: null, stagingKey: "", sort: { key: "score", dir: -1 }, timer: null, nowRef: null
 		};
 		const BADGE_TIP = "Likely staging system (Staging scan): busy all day, few NPC kills";
@@ -261,24 +285,25 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function list(origin, radius) {
 			const key = origin + ":" + radius;
-			if (!state.cache[key]) {
-				const graph = typeof tripwire !== "undefined" && tripwire.map ? tripwire.map.shortest : (typeof appData !== "undefined" ? appData.map.shortest : null);
-				state.cache[key] = ss.bfs(graph, origin, radius);
-			}
-			return state.cache[key];
+			if (state.cache[key]) { return state.cache[key]; }
+			const graph = (typeof tripwire !== "undefined" && tripwire.map && tripwire.map.shortest) || (typeof appData !== "undefined" && appData.map && appData.map.shortest) || null;
+			const out = ss.bfs(graph, origin, radius);
+			if (graph) { state.cache[key] = out; }	// no graph yet: try again next time
+			return out;
 		}
 
 		// ---- 24 h data: at most once per UTC hour, only while on and in null-sec ----
 		function loadDay() {
 			const hour = utcHour();
-			if (state.dayHour === hour || state.dayXhr || Date.now() - state.dayFailedAt < 120000) { return; }
+			if (state.dayHour === hour || state.dayXhr || Date.now() < state.dayRetryAt) { return; }
 			state.dayXhr = $.ajax({ url: ss.URL, data: { h: hour }, type: "GET", dataType: "JSON", cache: true, timeout: 20000 })
 				.done(function(data) {
 					state.day = ss.parseDay(data);
-					state.dayHour = hour;
+					// The cron has not written this hour yet: keep what came, ask again in a while (the server sent a short max-age)
+					if (data && ss.isCurrent(data.latest, Date.now())) { state.dayHour = hour; } else { state.dayRetryAt = Date.now() + ss.T.retryMs; }
 					schedule();
 				})
-				.fail(function() { state.dayFailedAt = Date.now(); })
+				.fail(function() { state.dayRetryAt = Date.now() + 120000; })
 				.always(function() { state.dayXhr = null; });
 		}
 
@@ -451,19 +476,21 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				+ "</select> jumps - " + n + " systems"
 				+ (staging ? " <span class='ss-count'>" + staging + " likely staging</span>" : "")
 				+ (scan.mode === "hour" ? " <span class='ss-mode' title='No 24 hour history on the server yet'>last hour only</span>" : "")
+				+ (scan.partial ? " <span class='ss-mode' title='The server has only " + scan.hours + " hours of history: busy-hours and quiet thresholds are scaled to that'>last " + scan.hours + " h only</span>" : "")
 				+ " <a href='#' class='ss-close' title='Turn the staging scan off (the Staging button brings it back)'>&times;</a>"
 				+ "</div>";
 			if (!collapsed) {
 				const rows = ss.sortRows(scan.rows, state.sort.key, state.sort.dir, info);
 				const dayCol = scan.mode === "24h";
+				const lbl = scan.label;
 				const rmap = regionMapOn();
 				html += "<div class='ss-body'><table class='ss-table'><thead><tr>"
 					+ header("name", "System") + header("jumps", "Jumps", "Stargate jumps from " + originInfo.name)
 					+ "<th>Region</th>" + header("sec", "Sec")
 					+ header("nowJumps", "Jumps/h", "Ship jumps through the system in the last hour (ESI)")
-					+ (dayCol ? header("dayJumps", "Jumps 24h", "Ship jumps in the last 24 hours, and in how many of those hours there was traffic") : "")
-					+ header("dayKills", dayCol ? "Kills 24h" : "Kills/h", "Ship and pod kills")
-					+ header("dayNpc", dayCol ? "NPC 24h" : "NPC/h", "NPC kills: ratters undocked")
+					+ (dayCol ? header("dayJumps", "Jumps " + lbl, "Ship jumps in the last " + scan.hours + " hours, and in how many of those hours there was traffic") : "")
+					+ header("dayKills", dayCol ? "Kills " + lbl : "Kills/h", "Ship and pod kills")
+					+ header("dayNpc", dayCol ? "NPC " + lbl : "NPC/h", "NPC kills: ratters undocked")
 					+ header("score", "Tags", "Sorted by staging score: jumps, spread over the day, fewer if NPC kills outnumber jumps")
 					+ "</tr></thead><tbody>";
 				rows.forEach(function(row) {
@@ -472,14 +499,15 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					const region = i.regionID !== originInfo.regionID ? regionName(i.regionID) : "";
 					const base = row.day || row.now;
 					html += "<tr class='" + (row.staging ? "ss-staging" : "") + (row.id === origin ? " ss-origin" : "") + "'>"
-						+ "<td><a href='.?system=" + encodeURIComponent(i.name) + "' class='ss-sys' data-system='" + row.id + "'>" + ss.escape(i.name) + "</a>"
+						+ "<td><a href='" + ss.escape(".?system=" + encodeURIComponent(i.name)) + "' class='ss-sys' data-system='" + row.id + "'>" + ss.escape(i.name) + "</a>"
 						+ (rmap ? " <a href='#' class='ss-rmap' data-system='" + row.id + "' title='Open on the region map' aria-label='Open "
 							+ ss.escape(i.name) + " on the region map'>" + RMAP_ICON + "</a>" : "") + "</td>"
 						+ "<td class='ss-num'>" + row.jumps + "</td>"
 						+ "<td class='ss-region'>" + ss.escape(region) + "</td>"
 						+ "<td class='ss-num " + ss.escape(s.systemTypeClass || "") + "'>" + ss.secText(i.security) + "</td>"
 						+ "<td class='ss-num'>" + row.now.jumps + "</td>"
-						+ (dayCol ? "<td class='ss-num'>" + row.day.jumps + " <span class='ss-hours' title='Hours with traffic'>" + row.day.activeHours + "h</span></td>" : "")
+						+ (dayCol ? "<td class='ss-num'>" + row.day.jumps + " <span class='ss-hours' title='Busy in " + row.day.activeHours + " of the last " + scan.hours
+							+ " hours (hours with any jumps)'>&middot; " + row.day.activeHours + "/" + scan.hours + " h busy</span></td>" : "")
 						+ "<td class='ss-num'>" + base.kills + "</td>"
 						+ "<td class='ss-num'>" + base.npc + "</td>"
 						+ "<td class='ss-tags'>" + row.tags.map(function(t) {

@@ -34,7 +34,8 @@ Toggle: the "Staging" button in the chain map header, and Settings > Map Markers
 - `app/js/fork/staging-scan.js`, `app/css/fork/staging-scan.css`: gate BFS, scoring and tags (pure, tested in
   `app/js-test/fork/staging-scan.test.js`), the panel, the header button and the chain node badge. Hooks
   `tripwire.systemChange`, `chain.nodes` and `chain.activity` by wrapping them.
-- Tags: PvP (24 h ship + pod kills >= 10), Ratting (24 h NPC kills >= 1000), Quiet (24 h jumps < 20).
+- Tags: PvP (24 h ship + pod kills >= 10), Ratting (24 h NPC kills >= 1000), Quiet (24 h jumps < 20). With less than
+  20 hours of history the busy-hours and Quiet thresholds scale to the hours the server has, and the panel says so.
 - `public/staging_activity.php` (new): 24 h sums per system from upstream's `system_activity` table (no new external
   calls, file cache per hour). Thresholds and the endpoint are documented in docker/README.md#staging-scan.
 - `app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`: `stagingScan` in the mask defaults allow-list.
