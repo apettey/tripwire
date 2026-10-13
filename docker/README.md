@@ -923,7 +923,8 @@ staging systems. A small map icon next to each system opens it on the region map
   the next full hour, or 5 minutes while this hour's cron row is missing (the client then asks again after 10 minutes,
   otherwise once per UTC hour, only while the feature is on and a null-sec system is viewed). With less than 20 hours of
   history (fresh install, cron outage) the busy-hours and Quiet thresholds are scaled by hours / 24 and the panel says
-  "last N h only"; with none, it uses the last hour only and says so, tagging "Busy now" instead of "Likely staging".
+  "last N h only"; below 6 hours (`T.minHours`) nothing is "Likely staging" (no STG badge), the top systems are tagged
+  "Busy now" (20 jumps per covered hour) while the N-hour sums are still shown; with none, it uses the last hour only and says so, tagging "Busy now" instead of "Likely staging".
 - Thresholds (`stagingScan.T`): **Likely staging** = among the top 3 of the radius by 24 h jumps, at least 2x the radius
   median, jumps in at least 16 of the 24 hours, and NPC kills not outnumbering jumps. Tags: **PvP** 24 h ship + pod
   kills >= 10, **Ratting** 24 h NPC kills >= 1000, **Quiet** 24 h jumps < 20 (last hour only: 3 / 30 / 2, "Busy now" at

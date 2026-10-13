@@ -95,12 +95,16 @@ describe('stagingScan', () => {
 
 	describe('coverage', () => {
 		it('keeps the thresholds from 20 hours of history', () => {
-			assert.deepStrictEqual(stagingScan.coverage(24), { activeHours: 16, quiet: 20, partial: false, label: '24h' });
-			assert.deepStrictEqual(stagingScan.coverage(20), { activeHours: 16, quiet: 20, partial: false, label: '24h' });
+			assert.deepStrictEqual(stagingScan.coverage(24), { activeHours: 16, quiet: 20, partial: false, canFlag: true, label: '24h' });
+			assert.deepStrictEqual(stagingScan.coverage(20), { activeHours: 16, quiet: 20, partial: false, canFlag: true, label: '24h' });
 		});
 		it('scales busy hours and quiet to shorter history', () => {
-			assert.deepStrictEqual(stagingScan.coverage(6), { activeHours: 4, quiet: 5, partial: true, label: '6h' });
-			assert.deepStrictEqual(stagingScan.coverage(1), { activeHours: 1, quiet: 20 / 24, partial: true, label: '1h' });
+			assert.deepStrictEqual(stagingScan.coverage(6), { activeHours: 4, quiet: 5, partial: true, canFlag: true, label: '6h' });
+		});
+		it('never flags staging with less than 6 hours of history', () => {
+			assert.strictEqual(stagingScan.coverage(5).canFlag, false);
+			assert.strictEqual(stagingScan.coverage(1).canFlag, false);
+			assert.strictEqual(stagingScan.coverage(1).label, '1h');
 		});
 	});
 
@@ -122,6 +126,16 @@ describe('stagingScan', () => {
 		it('scales Quiet to the covered hours', () => {
 			assert.deepStrictEqual(row(2).tags, []);
 			assert.deepStrictEqual(row(3).tags, ['Quiet']);
+		});
+		[1, 2].forEach(h => {
+			it(h + ' h of history: no likely staging, the top system is "Busy now"', () => {
+				const short = stagingScan.analyse(list, {}, Object.assign({}, day, { hours: h }));
+				assert.strictEqual(short.partial, true);
+				assert.strictEqual(short.label, h + 'h');
+				assert.deepStrictEqual(stagingScan.stagingIDs(short), []);
+				assert.deepStrictEqual(short.rows.find(r => r.id === S(1)).tags.slice(0, 1), ['Busy now']);
+				assert.ok(short.rows.find(r => r.id === S(1)).day, 'still shows the N-hour sums');
+			});
 		});
 		it('full history is not partial', () => {
 			const full = stagingScan.analyse(list, {}, Object.assign({}, day, { hours: 24 }));

@@ -24,6 +24,7 @@ const stagingScan = {
 		ratterPenalty: 0.5,	// score factor when NPC kills outnumber jumps (a ratting system, not a staging)
 		fullHours: 20,		// history covering fewer hours than this (fresh install, cron outage): activeHours and quiet are
 							// scaled by hours / 24 and the panel says "last N h"
+		minHours: 6,		// with less history than this nothing is "Likely staging" (no STG badge): the top systems get "Busy now"
 		retryMs: 600000,	// the server's newest row is from an earlier hour (cron not run yet): ask again after 10 minutes
 		// Last hour only (no 24 h data yet): same idea, hourly numbers
 		hour: { minJumps: 20, pvpKills: 3, ratting: 30, quiet: 2 }
@@ -107,14 +108,14 @@ const stagingScan = {
 
 	/**
 	 * The 24 h thresholds for a history of `hours` hours: with less than T.fullHours, activeHours and quiet are scaled by
-	 * hours / 24 (the other rules stay).
-	 * @return {activeHours, quiet, partial, label ("24h" or "N h")}
+	 * hours / 24 (the other rules stay); with less than T.minHours nothing can be flagged as staging (canFlag false).
+	 * @return {activeHours, quiet, partial, canFlag, label ("24h" or "N h")}
 	 */
 	coverage: function(hours) {
 		const T = stagingScan.T;
 		const h = Math.max(1, Math.min(24, Number(hours) || 24));
-		if (h >= T.fullHours) { return { activeHours: T.activeHours, quiet: T.quiet, partial: false, label: "24h" }; }
-		return { activeHours: Math.max(1, Math.ceil(T.activeHours * h / 24)), quiet: T.quiet * h / 24, partial: true, label: h + "h" };
+		if (h >= T.fullHours) { return { activeHours: T.activeHours, quiet: T.quiet, partial: false, canFlag: true, label: "24h" }; }
+		return { activeHours: Math.max(1, Math.ceil(T.activeHours * h / 24)), quiet: T.quiet * h / 24, partial: true, canFlag: h >= T.minHours, label: h + "h" };
 	},
 
 	median: function(values) {
@@ -160,8 +161,8 @@ const stagingScan = {
 			const base = r.day || r.now;
 			// few NPC kills: a system where NPC kills outnumber jumps is a ratting system, not a staging
 			if (!(r.value > 0) || r.value < T.medianFactor * median || base.npc > base.jumps) { return; }
-			if (r.day) { r.staging = r.day.activeHours >= win.activeHours; }
-			else { r.busy = r.value >= T.hour.minJumps; }
+			if (r.day && win.canFlag) { r.staging = r.day.activeHours >= win.activeHours; }
+			else { r.busy = r.value >= T.hour.minJumps * (day ? day.hours : 1); }	// too little history to say "all day"
 		});
 
 		rows.forEach(function(r) {
