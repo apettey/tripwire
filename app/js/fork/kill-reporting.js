@@ -12,6 +12,7 @@ const killReporting = {
 	MAX_TOASTS: 4,
 	MAX_SYSTEMS: 1000,
 	MAX_QUEUE: 8,
+	MAX_NOTIFY: 2,	// desktop notifications per poll before the rest are summed up in one
 
 	/** Categories, highest priority first */
 	categories: ["loss", "kill", "gank", "neutral"],
@@ -173,7 +174,8 @@ const killReporting = {
 		return Object.keys(seen).map(Number).sort(function(a, b) { return a - b; });
 	},
 
-	/** Short label of the hole leading to a chain row's system: its name, else the first 3 letters of the signature */
+	/** Short label of the hole leading to a chain row's system: its name, else the first 3 letters of the signature.
+	 *  Same as chainKillFeed.holeLabel (chain-killfeed.js): keep the two identical. */
 	holeLabel: function(row) {
 		const last = row && Array.isArray(row.pathHome) && row.pathHome.length ? row.pathHome[row.pathHome.length - 1] : null;
 		if (!last) { return ""; }
@@ -216,6 +218,31 @@ const killReporting = {
 			title: (killReporting.labels[category] || category) + " in " + (killReporting.placeText(place) || "the chain"),
 			body: pilots + (pilots === 1 ? " pilot" : " pilots") + (isk ? " — " + isk + " ISK" : "")
 		};
+	},
+
+	/** Desktop notifications for one poll's kills: the first MAX_NOTIFY (highest priority first), then one summary
+	 *  for the rest, so a brawl doesn't flood the desktop. items: [{ kill, category, place }]
+	@return [{ title, body, tag, kill }] (kill is missing on the summary) */
+	notifications: function(items) {
+		const rank = function(c) { const i = killReporting.categories.indexOf(c); return i < 0 ? 99 : i; };
+		const sorted = (Array.isArray(items) ? items : []).filter(function(item) { return item; })
+			.map(function(item, i) { return { item: item, i: i }; })
+			.sort(function(a, b) { return rank(a.item.category) - rank(b.item.category) || a.i - b.i; })
+			.map(function(x) { return x.item; });
+		const shown = sorted.slice(0, killReporting.MAX_NOTIFY).map(function(item) {
+			const text = killReporting.notificationText(item.kill, item.category, item.place);
+			return { title: text.title, body: text.body, tag: "tripwire-kill-" + (parseInt(item.kill && item.kill.killID, 10) || 0), kill: item.kill };
+		});
+		const rest = sorted.slice(killReporting.MAX_NOTIFY);
+		if (rest.length) {
+			const places = [];
+			rest.forEach(function(item) {
+				const text = killReporting.placeText(item.place);
+				if (text && places.indexOf(text) < 0) { places.push(text); }
+			});
+			shown.push({ title: rest.length + " more " + (rest.length === 1 ? "kill" : "kills") + " in the chain", body: places.join(", "), tag: "tripwire-kill-more" });
+		}
+		return shown;
 	},
 
 	/** Remember a kill for the chain map marker: marks = { systemID: { category, until } }. A higher-priority
@@ -439,25 +466,26 @@ const killReporting = {
 		} catch (e) { /* old browsers */ }
 	},
 
-	/** Desktop notification, only while Tripwire isn't the page you're looking at */
-	notify: function(kill, category, place) {
+	/** Desktop notifications, only while Tripwire isn't the page you're looking at. items: [{ kill, category, place }] */
+	notify: function(items) {
 		if (typeof Notification === "undefined" || Notification.permission !== "granted" || !document.hidden) { return; }
-		try {
-			const text = killReporting.notificationText(kill, category, place);
-			const shipID = parseInt(kill && kill.victimShipTypeID, 10) || 0;
-			const n = new Notification(text.title, {
-				body: text.body,
-				tag: "tripwire-kill-" + (parseInt(kill && kill.killID, 10) || 0),
-				icon: shipID ? "https://image.eveonline.com/Type/" + shipID + "_64.png" : undefined
-			});
-			n.onclick = function() {
-				window.focus();
-				killReporting.focusNode(kill.systemID);
-				n.close();
-			};
-		} catch (e) {
-			console.warn("Kill Reporting: could not show a desktop notification", e);
-		}
+		killReporting.notifications(items).forEach(function(note) {
+			try {
+				const shipID = parseInt(note.kill && note.kill.victimShipTypeID, 10) || 0;
+				const n = new Notification(note.title, {
+					body: note.body,
+					tag: note.tag,
+					icon: shipID ? "https://image.eveonline.com/Type/" + shipID + "_64.png" : undefined
+				});
+				n.onclick = function() {
+					window.focus();
+					if (note.kill) { killReporting.focusNode(note.kill.systemID); }
+					n.close();
+				};
+			} catch (e) {
+				console.warn("Kill Reporting: could not show a desktop notification", e);
+			}
+		});
 	},
 
 	/** Fade the pop-up out after TOAST_MS of the page being visible (not hovered) */
@@ -468,18 +496,25 @@ const killReporting = {
 		const stop = function() {
 			if (timer) { clearTimeout(timer); timer = null; left -= Date.now() - started; }
 		};
+		// Self-cleaning: however the toast went (close button, trimmed, another feature), its handler goes with it
+		const gone = function() {
+			if ($toast.closest("body").length) { return false; }
+			stop();
+			$(document).off("visibilitychange", onVisibility);
+			return true;
+		};
 		const start = function() {
-			if (timer || document.hidden || $toast.is(":hover") || !$toast.closest("body").length) { return; }
+			if (gone() || timer || document.hidden || $toast.is(":hover")) { return; }
 			started = Date.now();
 			timer = setTimeout(function() {
+				timer = null;
 				$(document).off("visibilitychange", onVisibility);
 				$toast.fadeOut(400, function() { $toast.remove(); });
 			}, Math.max(0, left));
 		};
-		const onVisibility = function() { if (document.hidden) { stop(); } else { start(); } };
+		const onVisibility = function() { if (gone()) { return; } if (document.hidden) { stop(); } else { start(); } };
 		$(document).on("visibilitychange", onVisibility);
 		$toast.on("mouseenter", stop).on("mouseleave", start);
-		$toast.on("remove-toast", function() { stop(); $(document).off("visibilitychange", onVisibility); });
 		start();
 	},
 
@@ -491,7 +526,7 @@ const killReporting = {
 		if (!$box.data("killReportingBound")) {
 			// Also when structure-timers.js created the box first
 			$box.data("killReportingBound", true);
-			$box.on("click", ".kill-toast-close", function() { $(this).closest(".kill-toast").trigger("remove-toast").remove(); });
+			$box.on("click", ".kill-toast-close", function() { $(this).closest(".kill-toast").remove(); });
 			$box.on("click", ".kill-toast[data-systemid]", function(e) {
 				if ($(e.target).closest("a, .kill-toast-close, .kill-toast-desktop").length) { return; }
 				killReporting.focusNode($(this).attr("data-systemid"));
@@ -510,7 +545,7 @@ const killReporting = {
 		}
 		$box.append($toast);
 		while ($box.children(".kill-toast").length > killReporting.MAX_TOASTS) {
-			$box.children(".kill-toast").first().trigger("remove-toast").remove();
+			$box.children(".kill-toast").first().remove();
 		}
 		killReporting.armDismiss($toast);
 	},
@@ -519,13 +554,14 @@ const killReporting = {
 		const settings = killReporting.current();
 		const result = killReporting.plan(kills, killReporting.chainSystemIDs(), settings.threshold);
 		const now = Date.now();
-		result.reports.forEach(function(r) {
+		const items = result.reports.map(function(r) {
 			const place = killReporting.placeFor(r.kill.systemID);
 			if (settings.popup) { killReporting.toast(r.kill, r.category, place); }
-			if (settings.desktop) { killReporting.notify(r.kill, r.category, place); }
 			killReporting.mark(killReporting.marks, Number(r.kill.systemID), r.category, now);
+			return { kill: r.kill, category: r.category, place: place };
 		});
-		if (result.reports.length) { killReporting.applyMarks(); }
+		if (settings.desktop && items.length) { killReporting.notify(items); }
+		if (items.length) { killReporting.applyMarks(); }
 		if (settings.enabled) {
 			result.sounds.forEach(function(c) { killReporting.enqueue(c, settings); });
 		}
@@ -602,7 +638,9 @@ const killReporting = {
 			unsupported: "This browser can't show desktop notifications.",
 			denied: "Blocked by the browser: allow notifications for this site in the browser's site settings.",
 			granted: "",
-			"default": $("#killReporting-desktop").prop("checked") ? "The browser asks for permission when you click Save." : ""
+			"default": !$("#killReporting-desktop").prop("checked") ? "" : killReporting.desktopWasOn
+				? "Not allowed yet: click \"Also alert me\" on a kill pop-up to let the browser ask."
+				: "The browser asks for permission when you click Save."
 		}[permission] || "");
 	},
 
@@ -654,10 +692,16 @@ const killReporting = {
 		forkSettings.register({
 			section: "killReporting", id: "killReporting", type: "custom", rows: html.rows, key: "killReporting",
 			keywords: "sound volume pop-up gank",
-			load: function() { killReporting.fillForm(killReporting.current()); },
+			load: function() {
+				killReporting.desktopWasOn = killReporting.current().desktop;
+				killReporting.fillForm(killReporting.current());
+			},
 			save: function(o) {
 				o.killReporting = killReporting.readForm();
-				if (o.killReporting.desktop) { killReporting.requestDesktop(); }	// Save is a click, so the browser may ask
+				// Ask only when it was just switched on (Save is a click, so the browser may ask). When it's on by
+				// default the first pop-up has a link that asks, so an unrelated Save never brings up a prompt.
+				if (o.killReporting.desktop && !killReporting.desktopWasOn) { killReporting.requestDesktop(); }
+				killReporting.desktopWasOn = o.killReporting.desktop;
 			}
 		});
 		// Drawn on the map, so Map Markers. Registered after the row above: its Save runs later and keeps this value.

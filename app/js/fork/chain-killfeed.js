@@ -73,7 +73,8 @@ const chainKillFeed = {
 		return !!(last && last.path);
 	},
 
-	/** Short label of the hole leading to a chain row's system: its name, else the first 3 letters of the signature */
+	/** Short label of the hole leading to a chain row's system: its name, else the first 3 letters of the signature.
+	 *  Same as killReporting.holeLabel (kill-reporting.js): keep the two identical. */
 	holeLabel: function(row) {
 		const last = row && Array.isArray(row.pathHome) && row.pathHome.length ? row.pathHome[row.pathHome.length - 1] : null;
 		if (!last) { return ""; }

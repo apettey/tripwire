@@ -254,6 +254,30 @@ describe('Kill reporting', () => {
 		});
 	});
 
+	describe('notifications', () => {
+		const item = (id, category, label) => ({ kill: { killID: id, attackerCharacterCount: 2 }, category, place: { label, name: 'J' + id } });
+		it('one per kill up to MAX_NOTIFY', () => {
+			const n = kr().notifications([item(1, 'neutral', 'A'), item(2, 'neutral', 'B')]);
+			assert.deepEqual(n.map(x => x.tag), ['tripwire-kill-1', 'tripwire-kill-2']);
+			assert.equal(n[0].title, 'Small gank (neutral kill) in A · J1');
+			assert.equal(n[0].kill.killID, 1);
+		});
+		it('sums up the rest of a brawl in one, highest priority first', () => {
+			const items = [item(1, 'neutral', 'A'), item(2, 'loss', 'B'), item(3, 'neutral', 'A'), item(4, 'gank', 'C'), item(5, 'neutral', 'A')];
+			const n = kr().notifications(items);
+			assert.equal(n.length, kr().MAX_NOTIFY + 1);
+			assert.deepEqual(n.slice(0, 2).map(x => x.kill.killID), [2, 4]);
+			assert.equal(n[2].title, '3 more kills in the chain');
+			assert.equal(n[2].body, 'A · J1, A · J3, A · J5');
+			assert.equal(n[2].kill, undefined);
+			assert.equal(kr().notifications(items.slice(0, 3))[2].title, '1 more kill in the chain');
+		});
+		it('tolerates garbage', () => {
+			assert.deepEqual(kr().notifications(null), []);
+			assert.equal(kr().notifications([null, item(1, 'kill', 'A')]).length, 1);
+		});
+	});
+
 	describe('mark', () => {
 		const MARK = () => kr().MARK_MS;
 		it('marks a system and restarts the timer on every kill', () => {

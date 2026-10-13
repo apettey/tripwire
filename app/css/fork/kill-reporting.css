@@ -168,17 +168,18 @@
 	font-size: 90%;
 }
 
-/* Chain map: systems with a recent kill (Settings > Map Markers > Kill markers) */
-#chainMap .kill-reporting-mark {
-	--kill-mark: 153, 153, 153;
-	box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9);
+/* Chain map: systems with a recent kill (Settings > Map Markers > Kill markers). `div.node` beats upstream's
+   `#chainMap div.node { box-shadow }` so the ring shows without the animation too (reduced motion). */
+#chainMap div.node.kill-reporting-mark {
+	--kill-mark: 210, 210, 210;
+	box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9), 0 0 6px 3px rgba(var(--kill-mark), 0.4);
 	animation: kill-reporting-pulse 1.6s ease-in-out infinite;
 }
 
-#chainMap .kill-reporting-mark-loss { --kill-mark: 224, 65, 58; }
-#chainMap .kill-reporting-mark-kill { --kill-mark: 63, 191, 63; }
-#chainMap .kill-reporting-mark-gank { --kill-mark: 240, 140, 26; }
-#chainMap .kill-reporting-mark-neutral { --kill-mark: 210, 210, 210; }
+#chainMap div.node.kill-reporting-mark-loss { --kill-mark: 224, 65, 58; }
+#chainMap div.node.kill-reporting-mark-kill { --kill-mark: 63, 191, 63; }
+#chainMap div.node.kill-reporting-mark-gank { --kill-mark: 240, 140, 26; }
+#chainMap div.node.kill-reporting-mark-neutral { --kill-mark: 210, 210, 210; }
 
 @keyframes kill-reporting-pulse {
 	0%, 100% { box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9), 0 0 4px 2px rgba(var(--kill-mark), 0.5); }
@@ -186,7 +187,7 @@
 }
 
 /* Clicked pop-up: flash the node */
-#chainMap .kill-reporting-flash {
+#chainMap div.node.kill-reporting-flash {
 	outline: 3px solid #fff;
 	outline-offset: 3px;
 	animation: kill-reporting-flash 0.5s ease-in-out 5 alternate;
@@ -198,8 +199,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	#chainMap .kill-reporting-mark,
-	#chainMap .kill-reporting-flash {
+	#chainMap div.node.kill-reporting-mark,
+	#chainMap div.node.kill-reporting-flash {
 		animation: none;
 	}
 }
