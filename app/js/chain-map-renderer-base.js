@@ -204,7 +204,7 @@ const ChainMapRendererBase = function(owner) {
 				drawConnections(ctx, map.circles[ci].nodes, function(node) {		
 					ctx.lineWidth = lineWeightFactor * parseInt(propertyFromCssClass(node.styles, 'border-width')) || 2;
 					ctx.strokeStyle = propertyFromCssClass(node.styles, 'border-top-color');
-					ctx.setLineDash ({ dashed: [5, 3], dotted: [1.5, 4] }[propertyFromCssClass(node.styles, 'border-top-style')] || []);
+					ctx.setLineDash ({ dashed: [5, 3], dotted: [1.5, 4], double: [1.5, 9] }[propertyFromCssClass(node.styles, 'border-top-style')] || []);
 					ctx.stroke();
 				});					
 
