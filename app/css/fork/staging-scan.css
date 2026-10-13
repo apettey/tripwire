@@ -105,6 +105,8 @@
 .staging-scan .ss-tag-pvp { color: #ff6b6b; border-color: #8a3030; }
 .staging-scan .ss-tag-ratting { color: #8fd18f; border-color: #3f6f3f; }
 .staging-scan .ss-tag-quiet { color: #666; border-color: #333; }
+.staging-scan .ss-tag-sky { color: #c9a253; border-color: #6b5320; border-style: dashed; cursor: pointer; }
+.staging-scan .ss-tag-sky.ss-tag-sky-now { color: #2a1a00; background: #f0b34a; border-color: #f0b34a; border-style: solid; font-weight: bold; }
 
 .staging-scan .ss-foot {
 	flex: 0 0 auto;

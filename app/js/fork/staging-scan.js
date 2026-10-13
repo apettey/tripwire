@@ -343,6 +343,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					const id = parseInt(this.getAttribute("data-system"), 10);
 					if (id && id !== viewing() && typeof tripwire !== "undefined") { tripwire.systemChange(id); }
 				});
+				$p.on("click", ".ss-tag-sky[data-sky]", function(e) {
+					e.preventDefault();
+					if (typeof regionMap !== "undefined" && regionMap.openSkyhooks) { regionMap.openSkyhooks(Number(this.getAttribute("data-sky"))); }
+				});
 				$p.on("click", "th[data-sort]", function() {
 					const key = this.getAttribute("data-sort");
 					state.sort = state.sort.key === key ? { key: key, dir: -state.sort.dir } : { key: key, dir: key === "name" || key === "jumps" || key === "sec" ? 1 : -1 };
@@ -414,6 +418,28 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (state.stagingKey !== was) { redrawChain(); }
 		}
 
+		// ---- Skyhook tag: the shared skyhook data (skyhooks-panel.js's loader, every 5 minutes at most), loaded only while
+		// the scan's table is shown ----
+		let skyListening = false;
+		function skyBySystem() {
+			if (typeof skyhooksPanel === "undefined" || !skyhooksPanel.store || typeof regionMapSkyhooks === "undefined") { return null; }
+			const store = skyhooksPanel.store;
+			if (!skyListening) { skyListening = true; store.onChange(function() { if (state.scan) { render(); } }); }
+			const st = store.get();
+			if (!st.data) { return null; }
+			try {
+				const cfg = regionMapSkyhooks.stagingSettings(skyhooksPanel.settings(options.skyhooksPanel));
+				return regionMapSkyhooks.bySystem(st.data.skyhooks, store.systemFor, store.now(), cfg, st.planets);
+			} catch (e) { console.warn("Staging scan: skyhooks", e); return null; }
+		}
+		function skyTagHtml(sky, id) {
+			const entry = sky && sky[id];
+			const tag = entry ? regionMapSkyhooks.stagingTag(entry) : "";
+			if (!tag) { return ""; }
+			const tip = regionMapSkyhooks.tooltip(entry, skyhooksPanel.store.now()).join("\n") + "\nClick: region map with Skyhooks";
+			return "<span class='ss-tag ss-tag-sky" + (entry.open ? " ss-tag-sky-now" : "") + "' data-sky='" + Number(id) + "' title='" + ss.escape(tip) + "'>" + ss.escape(tag) + "</span>";
+		}
+
 		function header(key, text, title) {
 			const cls = state.sort.key === key ? " class='ss-sorted " + (state.sort.dir > 0 ? "ss-asc" : "ss-desc") + "'" : "";
 			return "<th data-sort='" + key + "'" + cls + (title ? " title='" + ss.escape(title) + "'" : "") + ">" + text + "</th>";
@@ -444,6 +470,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!collapsed) {
 				const rows = ss.sortRows(scan.rows, state.sort.key, state.sort.dir, info);
 				const dayCol = scan.mode === "24h";
+				const sky = skyBySystem();
 				html += "<div class='ss-body'><table class='ss-table'><thead><tr>"
 					+ header("name", "System") + header("jumps", "Jumps", "Stargate jumps from " + originInfo.name)
 					+ "<th>Region</th>" + header("sec", "Sec")
@@ -469,7 +496,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 						+ "<td class='ss-num'>" + base.npc + "</td>"
 						+ "<td class='ss-tags'>" + row.tags.map(function(t) {
 							return "<span class='ss-tag ss-tag-" + ss.escape(t.toLowerCase().replace(/[^a-z]+/g, "-")) + "'>" + ss.escape(t) + "</span>";
-						}).join("") + "</td></tr>";
+						}).join("") + skyTagHtml(sky, row.id) + "</td></tr>";
 				});
 				html += "</tbody></table></div>"
 					+ "<div class='ss-foot'>Jumps and kills from ESI (hourly). EVE has no public docked-player counts; NPC kills show ratters.</div>";

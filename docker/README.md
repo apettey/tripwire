@@ -211,14 +211,17 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 ### Raidable skyhooks
 
-The Raidable skyhooks box (opened from the skyhook icon on low-sec / null-sec chain systems) reads `public/skyhooks.php`, which serves one server-wide copy of ESI's public
+Raidable skyhooks are shown on the region map (its "Skyhooks" overlay, opened from the skyhook icon on low-sec /
+null-sec chain systems or Ctrl+K "Skyhooks") and as a tag in the staging scan; the floating Raidable skyhooks box was
+retired on 2026-10-13 (its saved layout entry is dropped on load). All of them share one browser-side loader
+(`skyhooksPanel.store`, at most one request per 5 minutes, only while something shows skyhooks) of `public/skyhooks.php`, which serves one server-wide copy of ESI's public
 `GET /skyhooks/raidable` (`skyhooks.inc.php`, cache in `cache/skyhooks.json`). Browsers never call ESI for it: the
 route's rate-limit group allows only 30 requests per 15 minutes per IP. The server asks ESI at most once per 5
 minutes (exclusive `flock`, so concurrent requests don't stampede; after an error not again for 60 s), sends
 `X-Compatibility-Date: 2026-10-01` for this one call (the pinned date answers 404), respects the pauses of
 `esi/esi.inc.php`, and serves the old list when ESI fails. No env vars. Tests:
-`docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network) and
-`app/js-test/fork/skyhooks-panel.test.js`.
+`docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network),
+`app/js-test/fork/skyhooks-panel.test.js` and `app/js-test/fork/region-map-skyhooks.test.js`.
 
 ### zKillboard integration
 

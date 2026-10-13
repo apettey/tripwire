@@ -4,16 +4,18 @@
 if (typeof window !== "undefined" && typeof document !== "undefined" && typeof jQuery !== "undefined") {
 	(function() {
 		let rj = null;		// regionMapJumps (region-map-jumps.js), looked up at DOM ready like rm
+		let rs = null;		// regionMapSkyhooks (region-map-skyhooks.js), looked up at DOM ready like rm
 		let rm = null;		// regionMap (region-map.js sorts after this file in the bundle, so it is looked up at DOM ready)
 		const NS = "http://www.w3.org/2000/svg";
 		const DIALOG_ID = "dialog-regionMap";
 		const POLL_MS = 3000;
 		const HOUR_MS = 3600 * 1000;
+		const SKY_TICK_S = 30;		// skyhook countdowns (tooltips, card, list) are rewritten every 30 s, without a repaint
 
 		const state = {
 			layout: null, regionID: null, sel: null, t: { k: 1, x: 0, y: 0 }, view: { w: 800, h: 500 },
 			cache: {}, loading: null, signature: "", timer: null, jumpOn: false, sessionOrigin: null, reach: { key: "", rows: {} }, jumpData: null, jumpLoading: null, jumpFailed: 0,
-			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}
+			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}, skyTick: 0
 		};
 
 		// ---- Live data (read from Tripwire's own globals; nothing here calls a third party) ----
@@ -253,7 +255,145 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (cfg.heat !== "none") { ctx.heat = rm.heatMap(cfg.heat, ids, activityNow()); }
 			if (cfg.overlays.route && state.sel) { ctx.route = routeTo(state.sel); }
 			ctx.jump = jumpContext(layout);
+			ctx.sky = skyContext(layout, ctx.me);
 			return ctx;
+		}
+
+		// ---- Skyhooks overlay (the data comes from skyhooks-panel.js's shared loader, skyhooks.php: never ESI from here) ----
+
+		function skyStore() { return typeof skyhooksPanel !== "undefined" && skyhooksPanel.store ? skyhooksPanel.store : null; }
+		function skyCfg() { return skyhooksPanel.settings(options.skyhooksPanel); }
+
+		/** Where the side list counts jumps from: you (in k-space), else the chain's k-space exits */
+		function skyOrigins(me) {
+			if (me && rm.isKSpace(appData.systems[me])) { return { ids: [me], from: "you" }; }
+			const exits = chainExits().map(Number).filter(function(id) { return rm.isKSpace(appData.systems[id]); });
+			return { ids: exits, from: exits.length ? "exit" : "" };
+		}
+
+		/** null when the overlay is off, else {loading, error, cfg, now, bySys, ...} */
+		function skyContext(layout, me) {
+			const store = skyStore();
+			if (!rm.settings(options).overlays.skyhooks || !store || !rs) { return null; }
+			const st = store.get(), now = store.now(), cfg = skyCfg();
+			const out = { cfg: cfg, now: now, bySys: {}, error: st.error, planetsFailed: st.planetsFailed, loading: !st.data, data: st.data, planets: st.planets, origins: skyOrigins(me), ids: [], sig: "" };
+			if (!st.data) { return out; }
+			try { out.bySys = rs.bySystem(st.data.skyhooks, store.systemFor, now, cfg, st.planets); } catch (e) { console.error("Region map: skyhooks failed", e); }
+			out.ids = layout.systems.map(function(s) { return s.id; });
+			out.sig = rs.signature(out.bySys, out.ids);
+			return out;
+		}
+
+		/** Open the map on a system with the Skyhooks overlay on (the chain map's skyhook icon, Ctrl+K "Skyhooks").
+		The overlay is switched on as the user's saved choice, so the header checkbox and the next opening agree. */
+		function openSkyhooks(systemID) {
+			if (!rm.settings(options).overlays.skyhooks) { saveSetting({ overlay: { name: "skyhooks", on: true } }); }
+			return open({ kind: "system", id: Number(systemID) });
+		}
+
+		function paintSkyBar(sky) {
+			const $bar = $("#" + DIALOG_ID + " .rm-sbar");
+			$bar.toggle(!!sky);
+			if (!sky) { return; }
+			const cfg = sky.cfg;
+			if (!$bar.find(":focus").length) {
+				$bar.find(".rm-swindow").val(cfg.window);
+				$bar.find(".rm-shours").val(String(cfg.soonHours)).toggle(cfg.window === "soon");
+				["lava", "ice", "low", "null"].forEach(function(k) { $bar.find("input[data-sky='" + k + "']").prop("checked", cfg[k]); });
+			}
+			let text;
+			if (sky.loading) { text = sky.error ? sky.error : "Loading skyhooks\u2026"; }
+			else {
+				let here = 0, open = 0;
+				state.layout.systems.forEach(function(s) { const x = sky.bySys[s.id]; if (x) { here += x.items.length; open += x.open; } });
+				const notes = [];
+				if (sky.error) { notes.push(sky.error + " Showing the last list."); }
+				else if (sky.data.error && sky.data.stale && !sky.data.unavailable) { notes.push("ESI is not answering: the list is from " + skyhooksPanel.duration(sky.now - sky.data.fetched) + " ago."); }
+				else if (sky.data.unavailable) { notes.push(sky.data.error || "Skyhook data unavailable."); }
+				if (sky.planetsFailed && !sky.planets) { notes.push("Planet details could not be loaded."); }
+				text = here + " skyhook" + (here === 1 ? "" : "s") + " here, " + open + " open now (EVE time)" + (notes.length ? " \u00b7 " + notes.join(" ") : "");
+			}
+			$bar.find(".rm-sinfo").text(text);
+		}
+
+		/** Jumps for the side list (one search from you or all the chain's exits, cached by skyhooks-panel.js) */
+		function skyJumps(sky) {
+			try { return sky.origins.ids.length ? skyStore().jumpsFrom(sky.origins.ids) : {}; } catch (e) { console.error("Region map: skyhook jumps failed", e); return {}; }
+		}
+
+		/** The "Skyhooks in <region>" list of the side panel */
+		function renderSide(ctx) {
+			const $side = $("#" + DIALOG_ID + " .rm-side");
+			const sky = ctx.sky;
+			if (!sky) { $side.find(".rm-side-sky").remove(); $side.toggleClass("hidden", !$side.children().length); return; }
+			let $sec = $side.find(".rm-side-sky");
+			if (!$sec.length) { $sec = $("<div class='rm-side-sec rm-side-sky'></div>").appendTo($side); }
+			$side.removeClass("hidden");
+			const e = rm.escape, sp = skyhooksPanel, collapsed = ctx.cfg.collapsed.skyhooks;
+			const rows = sky.loading ? [] : rs.regionRows(sky.bySys, sky.ids, skyJumps(sky), sky.cfg.sort);
+			let html = "<div class='rm-side-head'><a href='#' class='rm-side-toggle' data-list='skyhooks' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
+				+ "<b>Skyhooks in " + e(state.layout.name) + "</b> <span class='rm-muted'>(" + rows.length + ")</span>";
+			if (!collapsed) {
+				html += " <select class='rm-ssort' title='Sort the list'>" + [["jumps", "by jumps"], ["start", "by window"], ["value", "by value"]].map(function(o) {
+					return "<option value='" + o[0] + "'" + (o[0] === sky.cfg.sort ? " selected" : "") + ">" + o[1] + "</option>";
+				}).join("") + "</select>";
+			}
+			html += "</div>";
+			if (!collapsed) {
+				if (sky.loading) { html += "<div class='rm-muted rm-side-note'>" + e(sky.error || "Loading\u2026") + "</div>"; }
+				else if (!rows.length) { html += "<div class='rm-muted rm-side-note'>No raidable skyhook here matches the filters.</div>"; }
+				const from = sky.origins.from === "you" ? "from you" : sky.origins.from === "exit" ? "from the nearest chain exit" : "";
+				html += "<ul class='rm-slist'>" + rows.map(function(r) {
+					const item = r.skyhook, p = item.planet || {}, name = sysName(item.systemID);
+					const jumps = r.nearest ? (r.nearest.jumps === 0 ? "here" : r.nearest.jumps + " j") : "\u2013";
+					return "<li class='rm-srow rm-s-" + item.state + "' data-id='" + item.systemID + "' title='" + e(name + " " + rs.itemText(item, sky.now) + (r.nearest ? " \u00b7 " + (r.nearest.jumps === 0 ? "0 jumps" : r.nearest.jumps + " jumps") + " " + from : "")) + "'>"
+						+ "<span class='rm-s-sys'>" + e(name) + (p.number ? " " + e(p.number) : "") + "</span>"
+						+ "<span class='rm-s-kind rm-s-" + e(p.kind || "unknown") + "'>" + e(rs.kindText(p.kind)) + "</span>"
+						+ "<span class='rm-s-val'>" + (r.rating ? sp.ratingHtml(r.rating) : "") + "</span>"
+						+ "<span class='rm-s-time'>" + e(sp.countdown(item.start, item.end, sky.now).replace("open now, ", "")) + "</span>"
+						+ "<span class='rm-s-jumps' title='Gate jumps " + e(from) + "'>" + e(jumps) + "</span></li>";
+				}).join("") + "</ul>";
+				if (!sky.loading) {
+					const nb = rs.neighbours(sky.bySys, state.layout.stubs.map(function(st) { return st.toRegionID; }), appData.systems);
+					const total = nb.reduce(function(n, x) { return n + x.count; }, 0);
+					if (total) {
+						html += "<div class='rm-side-note'>" + total + " more in neighbouring regions: " + nb.map(function(x) {
+							return "<a href='#' class='rm-snb' data-region='" + x.regionID + "'>" + e(regionName(x.regionID)) + " (" + x.count + ")</a>";
+						}).join(", ") + "</div>";
+					}
+				}
+			}
+			if ($sec.attr("data-html") !== html) { $sec.html(html).attr("data-html", html); }
+		}
+
+		/** The card's "Skyhooks" block for the selected system: the ones passing the filters, and how many the filters hide */
+		function skyCardHtml(sky, id) {
+			if (!sky || sky.loading) { return ""; }
+			const e = rm.escape, entry = sky.bySys[id];
+			const all = rs.bySystem(sky.data.skyhooks.filter(function(x) { return Number(x.systemID) === id; }), skyStore().systemFor, sky.now,
+				Object.assign({}, sky.cfg, { window: "all", low: true, null: true, lava: true, ice: true }), sky.planets)[id];
+			if (!all) { return ""; }
+			const shown = entry ? entry.items : [];
+			const hidden = all.items.length - shown.length;
+			return "<div class='rm-card-sky'><div class='rm-card-sky-head'>\u2693 Skyhooks</div>" + shown.map(function(item) {
+				return "<div class='rm-card-row rm-s-" + item.state + "'>" + e(rs.itemText(item, sky.now)) + "</div>";
+			}).join("") + (hidden > 0 ? "<div class='rm-card-row rm-muted'>" + hidden + " more hidden by the Skyhooks filters</div>" : "") + "</div>";
+		}
+
+		function drawSky(L, layout, sky, fight) {
+			if (!sky || sky.loading) { return; }
+			layout.systems.forEach(function(s) {
+				const m = rs.marker(sky.bySys[s.id]);
+				if (!m) { return; }
+				const w = 17 + m.text.length * 7;
+				const g = el("g", { "class": "rm-sky rm-sky-" + m.state, transform: "translate(" + (s.x - rm.BOX_W / 2).toFixed(1) + " " + (s.y - rm.BOX_H / 2 - 17).toFixed(1) + ")" }, L.tags);
+				el("rect", { width: w, height: 15, rx: 7 }, g);
+				el("text", { x: 3, y: 12, "class": "rm-sky-glyph" }, g, "\u2693");
+				if (m.text) { el("text", { x: 15, y: 11 }, g, m.text); }
+				state.nodes[s.id].sky = el("title", null, g);
+				state.nodes[s.id].sky.textContent = rs.tooltip(sky.bySys[s.id], sky.now).join("\n");
+				if (fight === s.id) { $(L.tags).find(".rm-flag").attr("transform", "translate(0 -17)"); }
+			});
 		}
 
 		/** The route to the selected system, drawn on the map: from where you are (k-space), else from the nearest chain exit */
@@ -276,9 +416,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!layout || !state.layers.tags) { return; }
 			if (rm.settings(options).heat !== "none" || state.sel) { ensureActivity(); }
 			const ctx = context();
+			const sky = ctx.sky;
 			const sig = JSON.stringify([ctx.cfg, ctx.exits, ctx.pilots, ctx.fight, ctx.heat.values, ctx.route && ctx.route.path, state.sel,
-				ctx.jump && [ctx.jump.loading, ctx.jump.failed, ctx.jump.error, ctx.jump.originID, ctx.jump.cfg, ctx.jump.res && ctx.jump.res.rows]]);
-			if (!force && sig === state.signature) { return; }
+				ctx.jump && [ctx.jump.loading, ctx.jump.failed, ctx.jump.error, ctx.jump.originID, ctx.jump.cfg, ctx.jump.res && ctx.jump.res.rows],
+				sky && [sky.loading, sky.error, sky.cfg, sky.sig, sky.origins, !!sky.planets, sky.data && sky.data.fetched]]);
+			const tick = sky ? Math.floor(sky.now / SKY_TICK_S) : 0;
+			if (!force && sig === state.signature) {
+				// Only the countdowns changed: rewrite the texts (tooltips, card, list), keep the drawing
+				if (sky && tick !== state.skyTick) { state.skyTick = tick; texts(ctx); }
+				return;
+			}
+			state.skyTick = tick;
 			state.signature = sig;
 			const L = state.layers;
 			["heat", "tags", "route"].forEach(function(name) { while (L[name].firstChild) { L[name].removeChild(L[name].firstChild); } });
@@ -348,6 +496,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					el("title", null, g).textContent = others + " tracked pilot" + (others === 1 ? "" : "s") + " in " + s.name;
 				}
 			});
+			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; });
+			drawSky(L, layout, sky, ctx.fight);
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
 
 			// Jump range: in range ringed, the rest dimmed, the origin marked
@@ -360,18 +510,30 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 			$("#" + DIALOG_ID + " .rm-svg").toggleClass("rm-jumping", !!jc);
 			paintJumpBar(ctx.jump);
+			paintSkyBar(sky);
+			texts(ctx);
+		}
 
-			// Tooltips and the selected card
+		/** Tooltips, the selected card and the side list: everything with a countdown in it */
+		function texts(ctx) {
+			const layout = state.layout, sky = ctx.sky;
+			const jc = ctx.jump && ctx.jump.res && !ctx.jump.error ? ctx.jump : null;
 			layout.systems.forEach(function(s) {
-				const parts = [s.name + " (" + rm.secText(secOf(s)) + ")"];
+				let parts = [s.name + " (" + rm.secText(secOf(s)) + ")"];
 				if (jc && jc.res.rows[s.id]) { parts.push(jumpLine(jc, s.id)); }
 				const a = activityNow() && activityNow()[s.id];
 				if (a && (a.npcKills || a.shipKills || a.shipJumps)) {
 					parts.push("last hour: " + (a.npcKills || 0) + " NPC kills, " + (a.shipKills || 0) + " ship kills, " + (a.shipJumps || 0) + " jumps");
 				}
+				if (sky && !sky.loading && sky.bySys[s.id]) {
+					const tip = rs.tooltip(sky.bySys[s.id], sky.now);
+					parts = parts.concat(tip);
+					if (state.nodes[s.id].sky) { state.nodes[s.id].sky.textContent = tip.join("\n"); }
+				}
 				state.nodes[s.id].title.textContent = parts.join("\n");
 			});
 			renderCard(ctx);
+			renderSide(ctx);
 		}
 
 		function outline(parent, s, cls, width) {
@@ -412,6 +574,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (ctx.route && ctx.route.from === "you" && ctx.route.jumps > 0) {
 				lines.push("<div class='rm-card-row'>" + ctx.route.jumps + " jump" + (ctx.route.jumps === 1 ? "" : "s") + " from you</div>");
 			}
+			lines.push(skyCardHtml(ctx.sky, id));
 			$card.removeClass("hidden").html(
 				"<div class='rm-card-head'><b>" + e(sys.name) + "</b> <span class='rm-sec' style='color:" + rm.secColour(sys.security) + "'>" + rm.secText(sys.security) + "</span>"
 				+ "<button class='rm-card-close' title='Close' aria-label='Close'>&times;</button></div>" + lines.join("")
@@ -580,6 +743,33 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				open(target);
 			});
 
+			// Skyhooks: the filters are the old box's (options.skyhooksPanel), the list's sort too
+			const saveSky = function(patch) {
+				try {
+					options.skyhooksPanel = rs.withFilter(options.skyhooksPanel, patch);
+					if (patch.sort) { options.skyhooksPanel.sort = patch.sort; }
+					options.save();
+				} catch (e) { console.error("Region map: could not save the skyhook filter", e); }
+				paint(true);
+			};
+			$d.on("change", ".rm-swindow", function() { saveSky({ window: this.value }); });
+			$d.on("change", ".rm-shours", function() { saveSky({ soonHours: Number(this.value) }); });
+			$d.on("change", "input[data-sky]", function() { const p = {}; p[$(this).attr("data-sky")] = this.checked; saveSky(p); });
+			$d.on("change", ".rm-ssort", function() { saveSky({ sort: this.value }); });
+			$d.on("click", ".rm-side-toggle", function(e) {
+				e.preventDefault();
+				const name = $(this).attr("data-list");
+				saveSetting({ collapsed: { name: name, on: !rm.settings(options).collapsed[name] } });
+				paint(true);
+			});
+			$d.on("click", ".rm-srow", function() {
+				const id = Number($(this).attr("data-id"));
+				select(id);
+				centreOnSystem(id, Math.max(1, state.t.k));
+			});
+			$d.on("click", ".rm-snb", function(e) { e.preventDefault(); show(Number($(this).attr("data-region")), null); });
+			$d.on("wheel pointerdown", ".rm-side", function(e) { e.stopPropagation(); });
+
 			// Card
 			$d.on("click", ".rm-card-close", function() { select(null); });
 			$d.on("click", ".rm-dest", function() { if (state.sel) { setDestination(state.sel); } });
@@ -635,7 +825,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function buildDialog() {
-			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"]];
+			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"], ["skyhooks", "Skyhooks"]];
 			$("body").append(
 				"<div id='" + DIALOG_ID + "' class='hidden'><div class='rm-wrap'>"
 				+ "<div class='rm-bar'>"
@@ -654,7 +844,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<select class='rm-jdc' title='Jump Drive Calibration level'>" + [5, 4, 3, 2, 1, 0].map(function(n) { return "<option value='" + n + "'>JDC " + rj.ROMAN[n] + "</option>"; }).join("") + "</select> "
 				+ "<select class='rm-jorigin' title='Where the jump starts'></select> <span class='rm-jinfo'></span>"
 				+ "</div>"
-				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-card hidden'></div>"
+				+ "<div class='rm-sbar' style='display:none'><span class='rm-slabel'>\u2693 Skyhooks:</span> "
+				+ "<select class='rm-swindow' title='Theft window'><option value='now'>Vulnerable now</option><option value='soon'>Opens within</option><option value='all'>All windows</option></select> "
+				+ "<select class='rm-shours' title='Hours'>" + skyhooksPanel.SOON_HOURS_CHOICES.map(function(h) { return "<option value='" + h + "'>" + h + " h</option>"; }).join("") + "</select> "
+				+ "<label title='Lava planets: Magmatic Gas'><input type='checkbox' data-sky='lava' /> Lava</label>"
+				+ "<label title='Ice planets: Superionic Ice'><input type='checkbox' data-sky='ice' /> Ice</label>"
+				+ "<label><input type='checkbox' data-sky='low' /> Low-sec</label>"
+				+ "<label><input type='checkbox' data-sky='null' /> Null-sec</label> <span class='rm-sinfo'></span>"
+				+ "</div>"
+				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-side hidden'></div><div class='rm-card hidden'></div>"
 				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"
 				+ "</div></div>");
 		}
@@ -770,7 +968,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			try {
 				rm = regionMap;
 				rj = regionMapJumps;
+				rs = typeof regionMapSkyhooks !== "undefined" ? regionMapSkyhooks : null;
 				rm.openJumps = openJumps;
+				rm.openSkyhooks = openSkyhooks;
+				if (skyStore()) {
+					skyStore().onChange(function() {
+						const $d = $("#" + DIALOG_ID);
+						if (state.layout && $d.hasClass("ui-dialog-content") && $d.dialog("isOpen")) { paint(true); }
+					});
+				}
 				rm.open = open;
 				rm.openSystem = function(systemID) { return open({ kind: "system", id: Number(systemID) }); };
 				buildDialog();

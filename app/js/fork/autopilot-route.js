@@ -1,6 +1,6 @@
 const autopilotRoute = {
 	// "Set destination in game": sets the end of the gate leg of a route Tripwire worked out (Favourites panel,
-	// Destinations window, Thera/Turnur legs, skyhooks, loot buyers, region map, jump planner) as each picked
+	// Destinations window, Thera/Turnur legs, loot buyers, region map, jump planner) as each picked
 	// character's in-game destination: one ESI call per character. EVE's autopilot picks the way there with the
 	// player's own route settings (fork-owned file). Pure logic here; the UI is at the bottom.
 	// Keep `const autopilotRoute` on the first line: the test helper strips it to define a global.
