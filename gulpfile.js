@@ -107,7 +107,4 @@ gulp.task('css', function(cb) {
     }
 });
 
-gulp.task('test', cb => {
-	gulp.src(['app/js-test/**/*.js']).pipe(mocha());
-	cb();
-});
+gulp.task('test', () => gulp.src(['app/js-test/**/*.js']).pipe(mocha()));
