@@ -17,7 +17,7 @@ const lifeStates = {
 
 	STATES: [
 		{ key: "stable", label: "Stable", life: "stable", cls: "stable", keys: ["stable", "reliable"] },
-		{ key: "lt4h", label: "<4h", life: "critical", cls: "critical life-lt4h", top: 4, keys: ["eol", "4h", "lt4h"] },
+		{ key: "lt4h", label: "<4h", life: "critical", cls: "critical life-lt4h", top: 4, keys: ["eol", "4h", "lt4h", "critical"] },
 		{ key: "lt1h", label: "<1h", life: "critical", cls: "critical life-lt1h", top: 1, keys: ["1h", "lt1h"] },
 		{ key: "expired", label: "Expired", life: "critical", cls: "critical life-expired", top: 0, keys: ["expired", "closing"] }
 	],
