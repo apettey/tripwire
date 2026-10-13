@@ -13,7 +13,7 @@ autopilot.
 
 | Before | After |
 | --- | --- |
-| ![before](before.jpg) | ![after](after.png) |
+| ![before](before.png) | ![after](after.png) |
 
 Before: the region map with skyhooks only. After: six targets (one in Delve, one in Heimatar: targets are mask-wide and
 the list shows every region), numbered rings on A-803L and GJ0-OJ, the Targets list (who marked it, expires in, jumps from
@@ -41,10 +41,13 @@ Chain map badge (target 5 on 1DQ1-A): ![chain badge](chain-badge.png)
   target; new ones go last) / remove / clear / reorder. Same rules as `rally.php` / `jump_jammed.php`: logged-in session
   with a mask (canonicalised; the mask guard in `db.inc.php` already checked access), `X-Requested-With` on changes,
   system IDs validated against the k-space list of `public/jumprange/systems.json`, note cleaned (control characters,
-  60 characters), expiry 1/3/6/24 h or "until" at most 7 days ahead, 25 per mask (409 when full). Audit log: add,
+  60 characters), expiry 1/3/6/24 h or "until" at most 7 days ahead (none sent: an existing target keeps its expiry),
+  25 per mask (409 when full; checked and written in one transaction that locks the mask's rows, with INSERT ... ON
+  DUPLICATE KEY UPDATE, so concurrent adds can't pass the cap or collide). Audit log: add,
   update, delete and clear as entity `target` (Mask Admin > Audit shows them, filter "Region map targets").
 - Region map: Shift+click toggles a target; the card has a note field, an expiry choice ("until its skyhook window ends"
-  first when the system has one) and Mark as target / Save / Remove target. Rings and numbered discs on the map, the
+  first when the system has one; for an existing target "keep (expires in ...)" is preselected, so saving a note keeps
+  the expiry) and Mark as target / Save / Remove target. Rings and numbered discs on the map, the
   number and note in the tooltip. The side panel's "Targets (N/25)" list: order, system (region when elsewhere: click
   opens that region), note, who marked it, expires in, jumps from you (else from the nearest chain exit); drag, or the
   up/down arrows, to reorder; remove; "Clear all" (asks first); "Shortest order" (nearest neighbour by gate jumps with

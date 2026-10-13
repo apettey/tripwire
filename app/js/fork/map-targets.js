@@ -71,8 +71,9 @@ const mapTargets = {
 		return { hours: mapTargets.DEFAULT_HOURS, label: mapTargets.DEFAULT_HOURS + " h" };
 	},
 
-	/** The POST parameters of an expiry choice: "skyhook" (with until), or a number of hours */
+	/** The POST parameters of an expiry choice: "keep" (nothing), "skyhook" (with until), or a number of hours */
 	expiryParams: function(choice, until) {
+		if (choice === "keep") { return {}; }	// no expiry sent: the server keeps the target's current one
 		if (choice === "skyhook" && Number(until) > 0) { return { until: String(Math.floor(Number(until))) }; }
 		const h = Number(choice);
 		return { hours: String(mapTargets.HOURS.indexOf(h) >= 0 ? h : mapTargets.DEFAULT_HOURS) };
@@ -254,7 +255,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return { list: mt.live(state.list, now()), loaded: state.loadedAt > 0, error: state.error, now: now() };
 		}
 
-		function find(id) { return state.list.filter(function(t) { return t.systemID === Number(id); })[0] || null; }
+		/** A live target (an expired one that the server hasn't purged yet counts as none) */
+		function find(id) { return mt.live(state.list, now()).filter(function(t) { return t.systemID === Number(id); })[0] || null; }
 
 		/** The latest end of the system's raidable skyhook windows (any filter), for the default expiry; 0 when none */
 		function skyhookEnd(id) {

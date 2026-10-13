@@ -56,6 +56,7 @@ describe('Map targets', () => {
 			assert.deepEqual(mt.expiryParams('3'), { hours: '3' });
 			assert.deepEqual(mt.expiryParams('5'), { hours: '6' });
 			assert.deepEqual(mt.expiryParams('skyhook', 0), { hours: '6' });
+			assert.deepEqual(mt.expiryParams('keep'), {});	// an existing target keeps its expiry
 		});
 		it('duration text', () => {
 			assert.equal(mt.duration(2 * 3600 + 600), '2h10m');

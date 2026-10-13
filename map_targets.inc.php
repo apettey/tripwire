@@ -110,31 +110,57 @@ function map_targets_count($mysql, $mask) {
 	return (int)map_targets_exec($stmt, 'count fork_map_targets')->fetchColumn();
 }
 
-/** Add a target at the end of the list, or (already a target) change its note and expiry. @return 'add' or 'update' */
-function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now) {
-	$existing = map_targets_get($mysql, $mask, $systemID);
-	if ($existing) {
-		$stmt = $mysql->prepare('UPDATE fork_map_targets SET note = :note, expires = :expires WHERE maskID = :mask AND systemID = :systemID');
-		if ($stmt) {
-			$stmt->bindValue(':note', $note); $stmt->bindValue(':expires', $expires, PDO::PARAM_INT);
-			$stmt->bindValue(':mask', $mask); $stmt->bindValue(':systemID', $systemID, PDO::PARAM_INT);
+/** Add a target at the end of the list, or (already a target) change its note, and its expiry unless $expires is null
+	(null for a new target: the default 6 h). One transaction that locks the mask's rows first (SELECT ... FOR UPDATE, which
+	also locks the gap where a new row of the mask would go), so two members adding at the same time can neither pass the
+	cap together nor collide on the primary key; the write itself is INSERT ... ON DUPLICATE KEY UPDATE.
+	@return 'add', 'update' or 'full' (a new target and the mask has $max already) */
+function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, $max = MAP_TARGETS_MAX_PER_MASK) {
+	$own = !$mysql->inTransaction();
+	if ($own && !$mysql->beginTransaction()) throw new PDOException('Could not start a transaction');
+	try {
+		$stmt = $mysql->prepare('SELECT systemID, ord, expires FROM fork_map_targets WHERE maskID = :mask FOR UPDATE');
+		if ($stmt) $stmt->bindValue(':mask', $mask);
+		$rows = map_targets_exec($stmt, 'lock fork_map_targets')->fetchAll(PDO::FETCH_ASSOC);
+		$exists = false;
+		$live = 0;
+		$maxOrd = -1;
+		foreach ($rows as $row) {
+			if ((int)$row['expires'] <= $now) continue;	// expired: purged below, doesn't count
+			$live++;
+			$maxOrd = max($maxOrd, (int)$row['ord']);
+			if ((int)$row['systemID'] === (int)$systemID) $exists = true;
 		}
-		map_targets_exec($stmt, 'update fork_map_targets');
-		return 'update';
+		if (!$exists && $live >= $max) {
+			if ($own) $mysql->rollBack();
+			return 'full';
+		}
+		$purge = $mysql->prepare('DELETE FROM fork_map_targets WHERE maskID = :mask AND expires <= :now');
+		if ($purge) { $purge->bindValue(':mask', $mask); $purge->bindValue(':now', $now, PDO::PARAM_INT); }
+		map_targets_exec($purge, 'purge fork_map_targets');
+
+		$stmt = $mysql->prepare('INSERT INTO fork_map_targets (maskID, systemID, note, ord, createdByID, createdByName, created, expires)
+			VALUES (:mask, :systemID, :note, :ord, :byID, :byName, :created, :expires)
+			ON DUPLICATE KEY UPDATE note = :note2, expires = COALESCE(:keep, expires)');
+		if ($stmt) {
+			$stmt->bindValue(':mask', $mask);
+			$stmt->bindValue(':systemID', $systemID, PDO::PARAM_INT);
+			$stmt->bindValue(':note', $note);
+			$stmt->bindValue(':note2', $note);
+			$stmt->bindValue(':ord', $maxOrd + 1, PDO::PARAM_INT);
+			$stmt->bindValue(':byID', (int)$who['id'], PDO::PARAM_INT);
+			$stmt->bindValue(':byName', mb_substr((string)$who['name'], 0, 100, 'UTF-8'));
+			$stmt->bindValue(':created', $now, PDO::PARAM_INT);
+			$stmt->bindValue(':expires', $expires === null ? $now + 6 * 3600 : $expires, PDO::PARAM_INT);
+			$stmt->bindValue(':keep', $expires, $expires === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+		}
+		map_targets_exec($stmt, 'add to fork_map_targets');
+		if ($own) $mysql->commit();
+		return $exists ? 'update' : 'add';
+	} catch (Throwable $e) {
+		if ($own && $mysql->inTransaction()) $mysql->rollBack();
+		throw $e;
 	}
-	$stmt = $mysql->prepare('INSERT INTO fork_map_targets (maskID, systemID, note, ord, createdByID, createdByName, created, expires)
-		SELECT :mask, :systemID, :note, COALESCE(MAX(ord), -1) + 1, :byID, :byName, :created, :expires FROM fork_map_targets WHERE maskID = :mask2');
-	if ($stmt) {
-		$stmt->bindValue(':mask', $mask); $stmt->bindValue(':mask2', $mask);
-		$stmt->bindValue(':systemID', $systemID, PDO::PARAM_INT);
-		$stmt->bindValue(':note', $note);
-		$stmt->bindValue(':byID', (int)$who['id'], PDO::PARAM_INT);
-		$stmt->bindValue(':byName', mb_substr((string)$who['name'], 0, 100, 'UTF-8'));
-		$stmt->bindValue(':created', $now, PDO::PARAM_INT);
-		$stmt->bindValue(':expires', $expires, PDO::PARAM_INT);
-	}
-	map_targets_exec($stmt, 'add to fork_map_targets');
-	return 'add';
 }
 
 /** Remove one target; returns whether there was one */

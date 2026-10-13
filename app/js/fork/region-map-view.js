@@ -283,10 +283,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const s = layout.byId[t.systemID];
 				if (!s) { return; }
 				outline(L.tags, s, "rm-target", 3);
-				const g = el("g", { "class": "rm-tnum", transform: "translate(" + (s.x - rm.BOX_W / 2 - 3).toFixed(1) + " " + s.y.toFixed(1) + ")" }, L.tags);
+				const g = el("g", { "class": "rm-tnum", "data-id": s.id, transform: "translate(" + (s.x - rm.BOX_W / 2 - 3).toFixed(1) + " " + s.y.toFixed(1) + ")" }, L.tags);
 				el("circle", { r: 9 }, g);
 				el("text", { y: 4, "text-anchor": "middle" }, g, String(i + 1));
-				el("title", null, g).textContent = targetLine(t, i + 1, tc.now);
+				state.nodes[s.id].tnum = el("title", null, g);
+				state.nodes[s.id].tnum.textContent = targetLine(t, i + 1, tc.now);
 			});
 		}
 
@@ -303,8 +304,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!tc || !mapTargets.canTarget(appData.systems[id])) { return ""; }
 			const e = rm.escape, hit = tc.numbers[id];
 			const end = tStore().skyhookEnd(id), def = mapTargets.defaultExpiry(end, tc.now);
-			const choices = (def.until ? [["skyhook", "until its skyhook window ends"]] : []).concat(mapTargets.HOURS.map(function(h) { return [String(h), h + " h"]; }));
-			const sel = def.until ? "skyhook" : String(def.hours);
+			// An existing target keeps its expiry unless another one is picked (saving only a note must not reset it)
+			const choices = (hit ? [["keep", "keep (expires in " + mapTargets.duration(hit.target.expires - tc.now) + ")"]] : [])
+				.concat(def.until ? [["skyhook", "until its skyhook window ends"]] : []).concat(mapTargets.HOURS.map(function(h) { return [String(h), h + " h"]; }));
+			const sel = hit ? "keep" : def.until ? "skyhook" : String(def.hours);
 			const expiry = "<select class='rm-texpiry' title='When the target goes away by itself'>" + choices.map(function(c) {
 				return "<option value='" + c[0] + "'" + (c[0] === sel ? " selected" : "") + ">" + e(c[1]) + "</option>";
 			}).join("") + "</select>";
@@ -325,14 +328,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!tc) { $side.find(".rm-side-targets").remove(); return; }
 			let $sec = $side.find(".rm-side-targets");
 			if (!$sec.length) { $sec = $("<div class='rm-side-sec rm-side-targets'></div>").prependTo($side); }
-			if ($sec.find(":focus").is("select, input")) { return; }
 			const e = rm.escape, collapsed = ctx.cfg.collapsed.targets;
 			const origins = skyOrigins(ctx.me);
 			let jumps = {};
 			if (!collapsed && tc.list.length && origins.ids.length && skyStore()) { try { jumps = skyStore().jumpsFrom(origins.ids); } catch (err) { jumps = {}; } }
 			const from = origins.from === "you" ? "from you" : origins.from === "exit" ? "from the nearest chain exit" : "";
-			let html = "<div class='rm-side-head'><a href='#' class='rm-side-toggle' data-list='targets' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
-				+ "<b>Targets</b> <span class='rm-muted'>(" + tc.list.length + "/" + mapTargets.MAX + ")</span><span class='rm-thint rm-muted' title='Shift+click a system on the map to mark or remove it'>shift+click</span></div>";
+			const head = "<a href='#' class='rm-side-toggle' data-list='targets' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
+				+ "<b>Targets</b> <span class='rm-muted'>(" + tc.list.length + "/" + mapTargets.MAX + ")</span><span class='rm-thint rm-muted' title='Shift+click a system on the map to mark or remove it'>shift+click</span>";
+			let html = "";
 			if (!collapsed) {
 				if (!tc.loaded) { html += "<div class='rm-muted rm-side-note'>" + e(tc.error || "Loading\u2026") + "</div>"; }
 				else if (!tc.list.length) { html += "<div class='rm-muted rm-side-note'>No targets. Select a system and click \u201cMark as target\u201d, or Shift+click it. The whole mask sees them.</div>"; }
@@ -355,7 +358,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 						+ "<button class='rm-tclear' title='Remove every target of the mask'>Clear all</button> <span class='rm-tsend-status rm-muted'></span></div>";
 				}
 			}
-			if ($sec.attr("data-html") !== html) { $sec.html(html).attr("data-html", html); }
+			// keep the sending progress line while the list is redrawn
+			const status = $sec.find(".rm-tsend-status").text();
+			setSection($sec, head, html);
+			if (status) { $sec.find(".rm-tsend-status").text(status); }
 		}
 
 		function targetIDs() { const tc = state.lastTargets; return tc ? tc.list.map(function(t) { return t.systemID; }) : []; }
@@ -455,7 +461,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!sky) { $side.find(".rm-side-sky").remove(); return; }
 			let $sec = $side.find(".rm-side-sky");
 			if (!$sec.length) { $sec = $("<div class='rm-side-sec rm-side-sky'></div>").appendTo($side); }
-			if ($sec.find(":focus").is("select")) { return; }
 			const e = rm.escape, sp = skyhooksPanel, collapsed = ctx.cfg.collapsed.skyhooks;
 			const rows = sky.loading ? [] : rs.regionRows(sky.bySys, sky.ids, skyJumps(sky), sky.cfg.sort);
 			let head = "<a href='#' class='rm-side-toggle' data-list='skyhooks' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
@@ -568,10 +573,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				ctx.targets && [ctx.targets.loaded, ctx.targets.error, ctx.targets.sig]]);
 			state.lastSky = sky;
 			state.lastTargets = ctx.targets;
-			const tick = sky ? Math.floor(sky.now / SKY_TICK_S) : 0;
+			// Countdowns (skyhook windows, target expiries) tick every 30 s
+			const tick = sky || ctx.targets ? Math.floor((sky ? sky.now : ctx.targets.now) / SKY_TICK_S) : 0;
 			if (!force && sig === state.signature) {
 				// Only the countdowns changed: rewrite the texts (tooltips, card, list), keep the drawing
-				if (sky && tick !== state.skyTick) { state.skyTick = tick; texts(ctx); }
+				if (tick && tick !== state.skyTick) { state.skyTick = tick; texts(ctx); }
 				return;
 			}
 			state.skyTick = tick;
@@ -644,7 +650,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					el("title", null, g).textContent = others + " tracked pilot" + (others === 1 ? "" : "s") + " in " + s.name;
 				}
 			});
-			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; });
+			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; state.nodes[s.id].tnum = null; });
 			drawSky(L, layout, sky, ctx.fight, ctx.exits);
 			drawTargets(L, layout, ctx.targets);
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
@@ -680,7 +686,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					if (state.nodes[s.id].sky) { state.nodes[s.id].sky.textContent = tip.join("\n"); }
 				}
 				const hit = ctx.targets && ctx.targets.numbers[s.id];
-				if (hit) { parts.push(targetLine(hit.target, hit.n, ctx.targets.now)); }
+				if (hit) {
+					parts.push(targetLine(hit.target, hit.n, ctx.targets.now));
+					if (state.nodes[s.id].tnum) { state.nodes[s.id].tnum.textContent = targetLine(hit.target, hit.n, ctx.targets.now); }
+				}
 				state.nodes[s.id].title.textContent = parts.join("\n");
 			});
 			renderCard(ctx);

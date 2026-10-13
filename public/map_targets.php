@@ -72,13 +72,18 @@ try {
 			if ($systemID === false) map_targets_fail(400, 'Invalid systemID (k-space systems only)');
 			$note = map_targets_note(isset($_POST['note']) ? $_POST['note'] : '');
 			if ($note === false) map_targets_fail(400, 'Invalid note');
-			$expires = map_targets_expiry(isset($_POST['hours']) ? $_POST['hours'] : null, isset($_POST['until']) ? $_POST['until'] : null, $now);
+			$hours = isset($_POST['hours']) ? $_POST['hours'] : null;
+			$until = isset($_POST['until']) ? $_POST['until'] : null;
+			// Neither given: an existing target keeps its expiry (the card's "keep" choice), a new one gets the default
+			$keep = ($hours === null || $hours === '') && ($until === null || $until === '');
+			$expires = $keep ? null : map_targets_expiry($hours, $until, $now);
 			if ($expires === false) map_targets_fail(400, 'Invalid expiry');
-			if (!map_targets_get($mysql, $mask, $systemID) && map_targets_count($mysql, $mask) >= MAP_TARGETS_MAX_PER_MASK) {
-				map_targets_fail(409, 'At most ' . MAP_TARGETS_MAX_PER_MASK . ' targets per mask');
-			}
 			$action = map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now);
-			$audit($action, $systemID, $note, array('expires' => gmdate('H:i', $expires)));
+			if ($action === 'full') map_targets_fail(409, 'At most ' . MAP_TARGETS_MAX_PER_MASK . ' targets per mask');
+			$row = map_targets_get($mysql, $mask, $systemID);
+			$at = $row ? (int)$row['expires'] : 0;
+			// "HH:MM" EVE time when it is within a day, with the date ("10-15 18:20") when further away
+			$audit($action, $systemID, $note, $at ? array('expires' => gmdate($at - $now > 86400 ? 'm-d H:i' : 'H:i', $at)) : array());
 		} else if ($mode === 'remove') {
 			$systemID = map_targets_system_id(isset($_POST['systemID']) ? $_POST['systemID'] : '');
 			if ($systemID === false) map_targets_fail(400, 'Invalid systemID');

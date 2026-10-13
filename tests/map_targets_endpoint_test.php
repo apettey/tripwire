@@ -116,6 +116,9 @@ check('same mask, other member: sees it and adds at the end', ids($body), [AMAMA
 check('second target by the other member', $body['targets'][1]['createdBy']['name'], 'Other Pilot');
 [$status, $body] = call('POST', ['mode' => 'add', 'systemID' => AMAMAKE, 'note' => 'new note', 'hours' => '24']);
 check('add again: note and expiry changed, order kept, still two', [ids($body), $body['targets'][0]['note'], $body['targets'][0]['expires'] - $body['now']], [[AMAMAKE, EC_P8R], 'new note', 86400]);
+$expiresBefore = $body['targets'][0]['expires'];
+[$status, $body] = call('POST', ['mode' => 'add', 'systemID' => AMAMAKE, 'note' => 'only the note']);
+check('note only (no expiry sent): the expiry is kept', [$status, $body['targets'][0]['note'], $body['targets'][0]['expires']], [200, 'only the note', $expiresBefore]);
 [$status, $body] = call('POST', ['mode' => 'reorder', 'order' => EC_P8R . ',' . AMAMAKE]);
 check('reorder', [$status, ids($body)], [200, [EC_P8R, AMAMAKE]]);
 [$status, $body] = call('POST', ['mode' => 'add', 'systemID' => JITA]);
@@ -153,7 +156,12 @@ check('clear', [$status, $body['targets']], [200, []]);
 // --- Audit entries (when the audit log records) ---
 if (audit_days() > 0) {
 	check('audit: add, add (other member), update, add, delete, clear', audit_actions($mysql),
-		['add:' . AMAMAKE, 'add:' . EC_P8R, 'update:' . AMAMAKE, 'add:' . JITA, 'delete:' . AMAMAKE, 'clear:0']);
+		['add:' . AMAMAKE, 'add:' . EC_P8R, 'update:' . AMAMAKE, 'update:' . AMAMAKE, 'add:' . JITA, 'delete:' . AMAMAKE, 'clear:0']);
+	$row = $mysql->query("SELECT detail FROM fork_audit_log WHERE maskID = " . MASK_A . " AND entity = 'target' AND action = 'add' ORDER BY id LIMIT 1")->fetchColumn();
+	check('audit: the expiry is HH:MM within a day', preg_match('/^\{"expires":"\d\d:\d\d"\}$/', (string)$row), 1);
+	call('POST', ['mode' => 'add', 'systemID' => AMAMAKE, 'until' => (string)(time() + 2 * 86400)]);
+	$row = $mysql->query("SELECT detail FROM fork_audit_log WHERE maskID = " . MASK_A . " AND entity = 'target' ORDER BY id DESC LIMIT 1")->fetchColumn();
+	check('audit: with the date when more than a day away', preg_match('/^\{"expires":"\d\d-\d\d \d\d:\d\d"\}$/', (string)$row), 1);
 }
 
 // --- Cap per mask ---
@@ -162,8 +170,16 @@ $known = array_keys(jump_jammed_known_systems());
 $who = ['id' => CHAR_A, 'name' => 'Filler'];
 for ($i = 0; $i < MAP_TARGETS_MAX_PER_MASK; $i++) map_targets_add($mysql, MASK_A, $known[$i], '', time() + 3600, $who, time());
 check('cap: one more is refused', call('POST', ['mode' => 'add', 'systemID' => $known[MAP_TARGETS_MAX_PER_MASK]])[0], 409);
+check('cap: the storage function says full', map_targets_add($mysql, MASK_A, $known[MAP_TARGETS_MAX_PER_MASK], '', time() + 3600, $who, time()), 'full');
+check('cap: nothing left in a transaction', $mysql->inTransaction(), false);
 check('cap: changing a target is fine', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'x'])[0], 200);
 check('cap: order numbers 0..24', array_map(function ($t) { return $t['ord']; }, map_targets_list($mysql, MASK_A, time())), range(0, MAP_TARGETS_MAX_PER_MASK - 1));
+$mysql->exec('UPDATE fork_map_targets SET expires = ' . (time() - 5) . ' WHERE maskID = ' . MASK_A . ' AND systemID = ' . $known[3]);
+check('cap: an expired target frees its place', map_targets_add($mysql, MASK_A, $known[MAP_TARGETS_MAX_PER_MASK], '', null, $who, time()), 'add');
+$new = map_targets_get($mysql, MASK_A, $known[MAP_TARGETS_MAX_PER_MASK]);
+check('cap: the new one goes last, default 6 h', [(int)$new['ord'], (int)$new['expires'] - time() > 6 * 3600 - 10], [MAP_TARGETS_MAX_PER_MASK, true]);
+check('cap: the expired one was purged', map_targets_get($mysql, MASK_A, $known[3]), null);
+check('add on an existing row inside the function: update, expiry kept with null', [map_targets_add($mysql, MASK_A, $known[0], 'y', null, $who, time()), (int)map_targets_get($mysql, MASK_A, $known[0])['expires'] > time()], ['update', true]);
 
 cleanup($mysql);
 echo "$count checks, $failures failures\n";
