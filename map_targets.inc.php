@@ -119,11 +119,20 @@ function map_targets_count($mysql, $mask) {
 	@return 'add', 'update', 'full' (a new target and the mask has $max already) or 'busy' (the lock wasn't free in time) */
 function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, $max = MAP_TARGETS_MAX_PER_MASK) {
 	$name = 'map_targets:' . $mask;
+	map_targets_drop_leaked_lock($mysql, $name);
 	$lock = $mysql->prepare('SELECT GET_LOCK(:name, :wait)');
 	if ($lock) { $lock->bindValue(':name', $name); $lock->bindValue(':wait', MAP_TARGETS_LOCK_WAIT, PDO::PARAM_INT); }
 	$got = map_targets_exec($lock, 'lock map targets')->fetchColumn();
 	$lock->closeCursor();
 	if ((int)$got !== 1) return 'busy';
+	// A fatal error (time limit, memory) skips `finally`; the connection may be persistent and outlive the request, so
+	// release at shutdown too (once: the flag says whether it is still held)
+	$held = true;
+	register_shutdown_function(function () use ($mysql, $name, &$held) {
+		if (!$held) return;
+		$held = false;
+		try { map_targets_release_lock($mysql, $name); } catch (Throwable $e) { error_log('map_targets: release at shutdown failed: ' . $e->getMessage()); }
+	});
 	try {
 		$stmt = $mysql->prepare('SELECT systemID, ord, expires FROM fork_map_targets WHERE maskID = :mask');
 		if ($stmt) $stmt->bindValue(':mask', $mask);
@@ -158,8 +167,27 @@ function map_targets_add($mysql, $mask, $systemID, $note, $expires, $who, $now, 
 		map_targets_exec($stmt, 'add to fork_map_targets');
 		return $exists ? 'update' : 'add';
 	} finally {
-		$release = $mysql->prepare('SELECT RELEASE_LOCK(:name)');
-		if ($release) { $release->bindValue(':name', $name); $release->execute(); $release->closeCursor(); }
+		if ($held) { $held = false; map_targets_release_lock($mysql, $name); }
+	}
+}
+
+function map_targets_release_lock($mysql, $name) {
+	$release = $mysql->prepare('SELECT RELEASE_LOCK(:name)');
+	if ($release) { $release->bindValue(':name', $name); $release->execute(); $release->closeCursor(); }
+}
+
+/** Named locks nest per MySQL session: a persistent connection that inherited the lock from a request that died before
+	releasing it would hold it forever. Release it (every level, at most 20) while this session is the holder. */
+function map_targets_drop_leaked_lock($mysql, $name) {
+	for ($i = 0; $i < 20; $i++) {
+		$stmt = $mysql->prepare('SELECT IS_USED_LOCK(:name) = CONNECTION_ID()');
+		if (!$stmt) return;
+		$stmt->bindValue(':name', $name);
+		if (!$stmt->execute()) return;
+		$mine = (int)$stmt->fetchColumn();
+		$stmt->closeCursor();
+		if ($mine !== 1) return;
+		map_targets_release_lock($mysql, $name);
 	}
 }
 

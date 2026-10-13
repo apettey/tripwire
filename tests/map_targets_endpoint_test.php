@@ -215,6 +215,13 @@ $mysql->query("SELECT GET_LOCK('map_targets:" . MASK_A . "', 1)")->fetchColumn()
 check('lock held elsewhere: 503', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'z'])[0], 503);
 $mysql->query("SELECT RELEASE_LOCK('map_targets:" . MASK_A . "')")->fetchColumn();
 check('lock released: the change goes through', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'z'])[0], 200);
+// A reused (persistent) connection that still holds the lock, twice (a request died before releasing it): the next add on
+// that connection drops the leaked lock, works, and leaves the lock free for everyone
+$mysql->query("SELECT GET_LOCK('map_targets:" . MASK_A . "', 1)")->fetchColumn();
+$mysql->query("SELECT GET_LOCK('map_targets:" . MASK_A . "', 1)")->fetchColumn();
+check('leaked lock on this connection: add works', map_targets_add($mysql, MASK_A, $known[0], 'leak', null, $who, time()), 'update');
+check('leaked lock on this connection: free afterwards', (int)$mysql->query("SELECT IS_FREE_LOCK('map_targets:" . MASK_A . "')")->fetchColumn(), 1);
+check('leaked lock: other connections can add again', call('POST', ['mode' => 'add', 'systemID' => $known[0], 'note' => 'after'])[0], 200);
 
 cleanup($mysql);
 echo "$count checks, $failures failures\n";
