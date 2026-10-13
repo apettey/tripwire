@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-13 | [Home region marker](2026-10-13-home-region-marker/README.md) | Region tag (R09) on home and chain map systems in the same wormhole region, hover highlights the group; toggle and colour in Settings > Map Markers, mask default via Mask Admin; fixes mask defaults not applying after a reload |
 | 2026-10-13 | [Life states: no EOL text on the map](2026-10-13-life-states-quiet-map/README.md) | The "EOL" tag on the chain map is gone; EOL holes are a sparse-dotted line (<4h dashed, <1h dotted); no new toggle |
 | 2026-10-13 | [gulp test: same results as the mocha CLI](2026-10-13-gulp-test-order/README.md) | `npx gulp test` no longer fails 71 tests: the test helpers load the game data (`appData` + generic system types) once and share it, the fake DOM stops leaking `document`, and the gulp task reports failures with exit 1 instead of crashing |
 | 2026-10-13 | [Wormhole life states](2026-10-13-wormhole-life-states/README.md) | Life buttons Stable / <4h / <1h / EOL (the game's states since Catalyst) instead of Stable / EOL, in the sig dialog, sig list Life cell and Ctrl+K; distinct chain map lines (dashed / dotted / dotted + EOL tag) and <4h / <1h / EOL in bookmark names; no schema change (critical + the signature timer); undo restores the timer; Settings > Signatures toggle |
