@@ -13,12 +13,11 @@ const S = saved => skyhooksPanel.settings(saved);
 
 describe('Skyhooks panel', () => {
 	describe('settings', () => {
-		it('defaults', () => assert.deepEqual(S(undefined), { enabled: true, clickOpen: true, maxJumps: 10, low: true, null: true, lava: true, ice: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
-		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, clickOpen: false, maxJumps: 5, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }),
-			{ enabled: false, clickOpen: false, maxJumps: 5, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }));
-		it('0 means any distance', () => assert.equal(S({ maxJumps: 0 }).maxJumps, 0));
-		it('rejects nonsense', () => assert.deepEqual(S({ maxJumps: -3, window: 'x', soonHours: 'abc', sort: 5 }), S({})));
-		it('string numbers from a select', () => assert.equal(S({ maxJumps: '15' }).maxJumps, 15));
+		it('defaults (the name click is off)', () => assert.deepEqual(S(undefined), { enabled: true, clickOpen: false, low: true, null: true, lava: true, ice: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
+		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, clickOpen: true, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }),
+			{ enabled: false, clickOpen: true, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }));
+		it('the retired box keys are ignored', () => assert.deepEqual(S({ maxJumps: 5, position: { col: 1 } }), S({})));
+		it('rejects nonsense', () => assert.deepEqual(S({ window: 'x', soonHours: 'abc', sort: 5, clickOpen: 'yes' }), S({})));
 		it('garbage options', () => assert.deepEqual(S('x'), S({})));
 	});
 
@@ -82,33 +81,23 @@ describe('Skyhooks panel', () => {
 		});
 	});
 
-	describe('rows', () => {
-		const near = { 1: { jumps: 3, exitID: 100 }, 2: { jumps: 4, exitID: 200 }, 3: { jumps: 1, exitID: 100 }, 4: { jumps: 2, exitID: 200 } };
-		const nearestFn = id => near[id];
-		const list = [sh(1, -60, 3600), sh(2, 600, 7800), sh(4, 100, 7300), sh(3, 0, 100), sh(1, 7200, 14400, 999)];
-		const rows = saved => skyhooksPanel.rows(list, systemFor, nearestFn, T, S(saved));
+	describe('prefilter and sort', () => {
+		const near = { 1: { jumps: 3 }, 2: { jumps: 4 }, 3: { jumps: 1 }, 4: { jumps: 2 } };
+		const list = [sh(1, -60, 3600), sh(2, 600, 7800), sh(4, 100, 7300), sh(3, 0, 100), sh(1, 7200, 14400, 999), sh(2, 9000, 12000, 998)];
+		const rows = (saved) => skyhooksPanel.sort(skyhooksPanel.prefilter(list, systemFor, T, S(saved)).map(s => ({ skyhook: s, nearest: near[s.systemID] || null })), S(saved).sort);
 
-		it('filters by window, security and jumps, sorted by jumps', () => {
-			// system 3 is high-sec but open and 1 jump away: shown; planet 999 opens in 2 h: shown
-			const r = rows({ maxJumps: 10 });
-			assert.deepEqual(r.map(x => x.skyhook.systemID), [3, 4, 1, 1, 2]);
-			assert.deepEqual(r.map(x => x.nearest.jumps), [1, 2, 3, 3, 4]);
-			assert.deepEqual(r[0].nearest.exit, { systemID: 100 });
-		});
-		it('max jumps', () => assert.deepEqual(rows({ maxJumps: 3 }).map(x => x.skyhook.systemID), [3, 4, 1, 1]));
-		it('any distance', () => {
-			const far = [sh(2, 0, 100)];
-			assert.equal(skyhooksPanel.rows(far, systemFor, () => ({ jumps: 40, exitID: 1 }), T, S({ maxJumps: 0 })).length, 1);
-			assert.equal(skyhooksPanel.rows(far, systemFor, () => ({ jumps: 40, exitID: 1 }), T, S({ maxJumps: 10 })).length, 0);
-		});
-		it('unreachable systems are left out', () => {
-			assert.deepEqual(skyhooksPanel.rows([sh(1, 0, 100), sh(5, 0, 100)], systemFor, id => id === 1 ? near[1] : null, T, S({})).map(x => x.skyhook.systemID), [1]);
+		it('filters by window and security, sorted by jumps', () => {
+			// system 3 is high-sec but open: shown; planet 999 opens in 2 h: shown; 998 opens in 2.5 h: not
+			assert.deepEqual(rows({}).map(x => x.skyhook.systemID), [3, 4, 1, 1, 2]);
 		});
 		it('security checkboxes', () => assert.deepEqual(rows({ low: false }).map(x => x.skyhook.systemID), [3, 4, 2]));
 		it('window now', () => assert.deepEqual(rows({ window: 'now' }).map(x => x.skyhook.systemID), [3, 1]));
 		it('sort by window start, then jumps', () => assert.deepEqual(rows({ sort: 'start' }).map(x => x.skyhook.start - T), [-60, 0, 100, 600, 7200]));
-		it('no exits: nothing', () => assert.deepEqual(skyhooksPanel.rows(list, systemFor, () => undefined, T, S({})), []));
-		it('garbage input', () => assert.deepEqual(skyhooksPanel.rows(null, systemFor, nearestFn, T, S({})), []));
+		it('unknown jumps sort last', () => {
+			const r = skyhooksPanel.sort([{ skyhook: sh(1, 0, 10), nearest: null }, { skyhook: sh(2, 0, 10), nearest: { jumps: 9 } }], 'jumps');
+			assert.deepEqual(r.map(x => x.skyhook.systemID), [2, 1]);
+		});
+		it('garbage input', () => assert.deepEqual(skyhooksPanel.prefilter(null, systemFor, T, S({})), []));
 		it('does not mutate its input', () => {
 			const copy = JSON.stringify(list);
 			rows({ sort: 'start' });
@@ -219,15 +208,6 @@ describe('Skyhooks panel', () => {
 		});
 	});
 
-	describe('unavailable data', () => {
-		it('is not "no raidable skyhooks"', () => {
-			const e = skyhooksPanel.emptyState(0, [{}], S({}), true);
-			assert.equal(e.kind, 'unavailable');
-			assert.ok(/unavailable/.test(e.text));
-		});
-		it('without the flag, an empty list is "none"', () => assert.equal(skyhooksPanel.emptyState(0, [{}], S({}), false).kind, 'none'));
-	});
-
 	describe('chain map icon', () => {
 		const sys = { 10: { name: 'Tama', security: 0.28, regionID: 10000033 }, 11: { name: 'Jita', security: 0.95, regionID: 10000002 },
 			12: { name: 'Null', security: -0.4, regionID: 10000012 }, 13: { name: 'J123', security: -0.99, regionID: 11000001, class: [3] },
@@ -265,35 +245,6 @@ describe('Skyhooks panel', () => {
 			assert.deepEqual(skyhooksPanel.decorate(null, sys), []);
 			assert.deepEqual(skyhooksPanel.decorate({ map: { rows: [null, {}, { c: [] }] } }, sys), []);
 		});
-	});
-
-	describe('default placement', () => {
-		const W = (col, row, x, y) => ({ col: col, row: row, size_x: x, size_y: y });
-		const size = skyhooksPanel.DEFAULT_SIZE;
-		it('right of the existing widgets when it fits', () => {
-			assert.deepEqual(skyhooksPanel.defaultPlacement([W(1, 1, 7, 6), W(8, 1, 7, 6)], 40), { col: 15, row: 1, size_x: size.x, size_y: size.y });
-		});
-		it('below them when it does not fit', () => {
-			assert.deepEqual(skyhooksPanel.defaultPlacement([W(1, 1, 7, 6), W(8, 7, 14, 8)], 24), { col: 1, row: 15, size_x: size.x, size_y: size.y });
-		});
-		it('empty layout, unknown width', () => assert.deepEqual(skyhooksPanel.defaultPlacement([], undefined), { col: 1, row: 1, size_x: size.x, size_y: size.y }));
-	});
-
-	describe('empty state', () => {
-		it('nothing from the server', () => assert.equal(skyhooksPanel.emptyState(0, [{}], S({})).kind, 'none'));
-		it('no exits', () => assert.equal(skyhooksPanel.emptyState(50, [], S({})).kind, 'noexits'));
-		it('filtered by the planet filter says so', () => {
-			assert.ok(skyhooksPanel.emptyState(3, [{}], S({ lava: false }), false).text.indexOf('ice only') > 0);
-			assert.ok(skyhooksPanel.emptyState(3, [{}], S({ ice: false }), false).text.indexOf('lava only') > 0);
-			assert.ok(skyhooksPanel.emptyState(3, [{}], S({ lava: false, ice: false }), false).text.indexOf('no planet type') > 0);
-			assert.equal(skyhooksPanel.emptyState(3, [{}], S({}), false).text.indexOf('Planet filter'), -1);
-		});
-		it('filtered out', () => {
-			const e = skyhooksPanel.emptyState(50, [{}], S({ maxJumps: 5 }));
-			assert.equal(e.kind, 'filtered');
-			assert.ok(e.text.indexOf('within 5 jumps') >= 0);
-		});
-		it('filtered, any distance', () => assert.ok(skyhooksPanel.emptyState(50, [{}], S({ maxJumps: 0 })).text.indexOf('any distance') >= 0));
 	});
 
 	it('escapes', () => assert.equal(skyhooksPanel.escape('<a href="x">&\'</a>'), '&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;'));
@@ -370,29 +321,21 @@ describe('Skyhooks panel', () => {
 			assert.equal(skyhooksPanel.formatIsk('x'), '0');
 		});
 
-		describe('rows', () => {
-			const near = { 1: { jumps: 3, exitID: 100 }, 2: { jumps: 1, exitID: 100 }, 4: { jumps: 2, exitID: 100 } };
+		describe('prefilter by planet, sort by value', () => {
+			const near = { 1: { jumps: 3 }, 2: { jumps: 1 }, 4: { jumps: 2 } };
 			const list = [sh(1, 0, 3600, 100), sh(2, 0, 3600, 101), sh(4, 0, 3600, 102), sh(1, 0, 3600, 999)];
 			const sys = id => Object.assign({ name: 'S' + id }, systems[id]);
-			const rows = (saved, p) => skyhooksPanel.rows(list, sys, id => near[id], T, S(saved), p === undefined ? planets : p);
+			const rows = (saved, p) => skyhooksPanel.sort(skyhooksPanel.prefilter(list, sys, T, S(saved), p === undefined ? planets : p).map(s => ({
+				skyhook: s, nearest: near[s.systemID], planet: skyhooksPanel.planetInfo(p === undefined ? planets : p, s.planetID, sys(s.systemID).name)
+			})), S(saved).sort);
 
 			it('default: lava, ice and planets the list does not know', () => {
 				assert.deepEqual(rows({}).map(r => r.skyhook.planetID), [101, 102, 100, 999]);
 			});
-			it('rows carry the planet', () => {
-				const r = rows({})[2];
-				assert.equal(r.planet.kind, 'lava');
-				assert.equal(r.planet.name, 'S1 IV');
-				assert.equal(r.planet.number, 'IV');
-			});
 			it('lava off (unknown planets stay)', () => assert.deepEqual(rows({ lava: false }).map(r => r.skyhook.planetID), [101, 999]));
 			it('ice off', () => assert.deepEqual(rows({ ice: false }).map(r => r.skyhook.planetID), [102, 100, 999]));
 			it('both off: only unknown planets are left', () => assert.deepEqual(rows({ lava: false, ice: false }).map(r => r.skyhook.planetID), [999]));
-			it('planet data not loaded: no planet filter', () => {
-				const r = rows({ lava: false, ice: false }, null);
-				assert.equal(r.length, 4);
-				assert.equal(r[0].planet.kind, 'unknown');
-			});
+			it('planet data not loaded: no planet filter', () => assert.equal(rows({ lava: false, ice: false }, null).length, 4));
 			it('sort by value: highest ISK first, then jumps', () => {
 				assert.deepEqual(rows({ sort: 'value' }).map(r => r.skyhook.planetID), [100, 102, 101, 999]);
 			});

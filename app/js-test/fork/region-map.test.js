@@ -269,6 +269,17 @@ describe('regionMap settings', function() {
 		assert.strictEqual(regionMap.withSetting(o, { heat: 'bogus' }).heat, 'jumps');
 		assert.strictEqual(regionMap.withSetting(o, { overlay: { name: '__proto__', on: true } }).overlays.__proto__, Object.prototype);
 	});
+	it('skyhooks overlay: on by default, can be turned off', function() {
+		assert.strictEqual(regionMap.settings({}).overlays.skyhooks, true);
+		assert.strictEqual(regionMap.withSetting({}, { overlay: { name: 'skyhooks', on: false } }).overlays.skyhooks, false);
+	});
+	it('side lists: open by default, collapsed state kept when something else changes', function() {
+		assert.deepStrictEqual(regionMap.settings({}).collapsed, { targets: false, skyhooks: false });
+		const c = regionMap.withSetting({}, { collapsed: { name: 'skyhooks', on: true } });
+		assert.strictEqual(c.collapsed.skyhooks, true);
+		assert.strictEqual(regionMap.withSetting({ regionMap: c }, { heat: 'npc' }).collapsed.skyhooks, true);
+		assert.strictEqual(regionMap.withSetting({}, { collapsed: { name: 'bogus', on: true } }).collapsed.bogus, undefined);
+	});
 });
 
 describe('regionMap command arguments', function() {
