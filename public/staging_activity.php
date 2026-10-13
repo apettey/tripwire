@@ -3,8 +3,10 @@
 //
 // GET staging_activity.php -> the last 24 hours of upstream's hourly system_activity table (written by
 // system_activity.cron.php from ESI), summed per system:
-//   {"hours": 24, "generated": <unix time>, "systems": {"<systemID>": [shipJumps, shipKills, podKills, npcKills, activeHours], ...}}
-// activeHours = hours with any ship jumps. Only systems with some activity are listed.
+//   {"hours": <hours of history in the window, 0-24>, "latest": <unix time of the newest row or null>, "generated": <unix time>,
+//    "systems": {"<systemID>": [shipJumps, shipKills, podKills, npcKills, activeHours], ...}}
+// activeHours = hours with any ship jumps. Only systems with some activity are listed. `hours` is less than 24 on a fresh
+// install or after a cron outage: the client scales its thresholds to it.
 // No ESI or third-party calls. One GROUP BY per hour and cron run (file cache in cache/), and browsers may reuse the answer until
 // the next full hour (the client adds ?h=<UTC hour> so a new hour asks again).
 
@@ -29,23 +31,23 @@ const STAGING_ACTIVITY_HOURS = 24;
 
 $now = time();
 $hourKey = gmdate('YmdH', $now);
-// Until a few minutes into the next hour: the cron writes at :00
-$maxAge = max(60, 3600 - ($now % 3600) + 120);
-header('Cache-Control: private, max-age=' . $maxAge);
-header('Expires: ' . gmdate('D, d M Y H:i:s', $now + $maxAge) . ' GMT');
 
 require_once('../config.php');
 require_once('../db.inc.php');
 
 // The cache is for this hour and the newest cron row (the cron writes at :00, maybe after the first request of the hour)
 try {
-	$latest = (string) $mysql->query('SELECT MAX(time) FROM system_activity')->fetchColumn();
+	$latest = (int) $mysql->query('SELECT UNIX_TIMESTAMP(MAX(time)) FROM system_activity')->fetchColumn();
 } catch (PDOException $e) {
-	$latest = '';
+	$latest = 0;
 }
+// Browsers may keep it until a few minutes into the next hour; while this hour's cron row is missing, only 5 minutes
+$maxAge = $latest >= $now - ($now % 3600) ? max(60, 3600 - ($now % 3600) + 120) : 300;
+header('Cache-Control: private, max-age=' . $maxAge);
+header('Expires: ' . gmdate('D, d M Y H:i:s', $now + $maxAge) . ' GMT');
 $cacheKey = $hourKey . '|' . $latest;
 $cacheDir = dirname(dirname(__FILE__)) . '/cache';
-$cacheFile = $cacheDir . '/staging-activity.json';
+$cacheFile = $cacheDir . '/staging-activity-v2.json';
 
 if (is_readable($cacheFile)) {
 	$cached = @file_get_contents($cacheFile);
@@ -62,7 +64,9 @@ $query = 'SELECT systemID, SUM(shipJumps) AS j, SUM(shipKills) AS sk, SUM(podKil
 	WHERE time > NOW() - INTERVAL ' . STAGING_ACTIVITY_HOURS . ' HOUR
 	GROUP BY systemID';
 $systems = array();
+$hours = 0;
 try {
+	$hours = (int) $mysql->query('SELECT COUNT(DISTINCT time) FROM system_activity WHERE time > NOW() - INTERVAL ' . STAGING_ACTIVITY_HOURS . ' HOUR')->fetchColumn();
 	$stmt = $mysql->prepare($query);
 	$stmt->execute();
 	while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
@@ -79,7 +83,8 @@ try {
 }
 
 $body = json_encode(array(
-	'hours' => STAGING_ACTIVITY_HOURS,
+	'hours' => min(STAGING_ACTIVITY_HOURS, $hours),
+	'latest' => $latest > 0 ? $latest : null,
 	'generated' => $now,
 	'systems' => $systems ? $systems : new stdClass()
 ));
