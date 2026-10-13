@@ -152,14 +152,15 @@ describe('Command registrations of the fork features', () => {
 		sigInline.statesOn = on;
 		assert.deepEqual(get('hole.setMass').args[1].choices().map(c => c.title), ['Stable', 'Destab', 'Critical']);
 	});
-	it('life choices are Stable / <4h / <1h / Expired with life states, typed as eol / 4h / 1h / expired', () => {
+	it('life choices are Stable / <4h / <1h / EOL with life states, typed as 4h / 1h / eol or expired', () => {
 		const on = sigInline.statesOn;
 		sigInline.statesOn = () => true;
 		const choices = get('hole.setLife').args[1].choices();
 		sigInline.statesOn = on;
-		assert.deepEqual(choices.map(c => c.title), ['Stable', '<4h', '<1h', 'Expired']);
+		assert.deepEqual(choices.map(c => c.title), ['Stable', '<4h', '<1h', 'EOL']);
 		assert.deepEqual(choices.map(c => c.value), ['stable', 'lt4h', 'lt1h', 'expired']);
-		assert.ok(choices[1].keys.includes('eol') && choices[1].keys.includes('4h'));
+		assert.ok(choices[1].keys.includes('4h') && choices[1].keys.includes('critical'));
+		assert.ok(choices[3].keys.includes('eol'));
 		assert.ok(choices[2].keys.includes('1h'));
 		assert.ok(choices[3].keys.includes('expired'));
 	});

@@ -55,7 +55,16 @@ describe('Bookmark templates', () => {
 			assert.equal(bookmarkTemplate.render('{name} {name}', v), 'ABCDEFGHIJKLMNOP ABCDEFGHIJKLMNOP');
 		});
 		it('Output is cut at 50 characters', () => assert.equal(bookmarkTemplate.render('{system}', { system: 'x'.repeat(80) }).length, 50));
-		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC EOL'));
+		it('Sample values for the preview', () => assert.equal(bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.sampleValues('hole')), '=AB C5 ABC <1h'));
+		it('{life} is the life state (<4h, <1h, EOL), with < kept; without it eol gives EOL', () => {
+			const hole = v => bookmarkTemplate.render(bookmarkTemplate.DEFAULTS.hole, bookmarkTemplate.values(Object.assign({ name: 'A', classText: 'C5', sigAlpha: 'ABC' }, v)));
+			assert.equal(hole({ life: '<1h', eol: true }), '=A C5 ABC <1h');
+			assert.equal(hole({ life: '<4h' }), '=A C5 ABC <4h');
+			assert.equal(hole({ life: 'EOL' }), '=A C5 ABC EOL');
+			assert.equal(hole({ life: '', eol: true }), '=A C5 ABC');
+			assert.equal(hole({ eol: true }), '=A C5 ABC EOL');
+			assert.equal(hole({ life: "<b>'x\"" }), '=A C5 ABC <bx');	// only letters, digits and < survive
+		});
 		it('Sample return value', () => assert.equal(bookmarkTemplate.render('!{name} {dir}', bookmarkTemplate.sampleValues('back')), '!AB in'));
 	});
 

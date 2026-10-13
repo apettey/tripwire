@@ -4,7 +4,7 @@ const sigInline = {
 	// Double-click still opens the dialog. Only the changed field is sent (the dialog sends everything), and the
 	// change is pushed on the same undo stack as the dialog's, so Ctrl+Z restores it.
 	// sigInline.setWormhole(wormholeID, {life|mass: value}) is the save path; the command palette reuses it.
-	// Life offers Stable / <4h / <1h / Expired when the life states setting is on (life-states.js), else Stable / EOL.
+	// Life offers Stable / <4h / <1h / EOL when the life states setting is on (life-states.js), else Stable / EOL.
 	// Setting: options.sigInline.enabled (missing = on). Keep `const sigInline` on the first line: the test helper
 	// strips it to define a global.
 
@@ -62,7 +62,7 @@ const sigInline = {
 	},
 
 	/** Text of the table cell for a value: what upstream renders (life: Stable / EOL, mass: the raw value);
-	a life state shows its label (<4h, <1h, Expired) */
+	a life state shows its label (<4h, <1h, EOL) */
 	cellText: function(field, value) {
 		if (field === "life") {
 			const state = typeof lifeStates !== "undefined" ? lifeStates.state(value) : null;

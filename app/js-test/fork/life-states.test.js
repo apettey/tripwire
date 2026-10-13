@@ -206,8 +206,90 @@ describe('Wormhole life states', () => {
 		});
 	});
 
+	it('typed keys: eol / expired / closing pick EOL, 4h / critical pick <4h, 1h picks <1h', () => {
+		const by = k => lifeStates.STATES.filter(s => s.keys.includes(k)).map(s => s.key);
+		assert.deepStrictEqual(by('eol'), ['expired']);
+		assert.deepStrictEqual(by('expired'), ['expired']);
+		assert.deepStrictEqual(by('closing'), ['expired']);
+		assert.deepStrictEqual(by('4h'), ['lt4h']);
+		assert.deepStrictEqual(by('critical'), ['lt4h']);
+		assert.deepStrictEqual(by('1h'), ['lt1h']);
+	});
+
+	describe('bookmark names ({life})', () => {
+		it('the state of a critical hole, empty for a stable one', () => {
+			assert.equal(lifeStates.bookmarkLife(wh('stable'), [sig('11', now + 2 * H)], now, true), '');
+			assert.equal(lifeStates.bookmarkLife(wh('critical'), [sig('11', now + 2 * H)], now, true), '<4h');
+			assert.equal(lifeStates.bookmarkLife(wh('critical'), [sig('11', now + 20 * M)], now, true), '<1h');
+			assert.equal(lifeStates.bookmarkLife(wh('critical'), [sig('11', now - M)], now, true), 'EOL');
+		});
+		it('setting off: EOL for any critical hole, as before', () => {
+			assert.equal(lifeStates.bookmarkLife(wh('critical'), [sig('11', now + 2 * H)], now, false), 'EOL');
+			assert.equal(lifeStates.bookmarkLife(wh('stable'), [], now, false), '');
+		});
+		it('a dialog entry uses the timer it is about to save', () => {
+			const entry = { wormhole: { life: 'critical' }, signatures: [{ id: '11', lifeLength: '57600', lifeLeft: at(now + H) }, { id: '12', lifeLength: '57600', lifeLeft: at(now + H) }] };
+			assert.equal(lifeStates.entryLife(entry, [sig('11', now + 3 * H)], now, true), '<1h');
+			assert.equal(lifeStates.entryLife({ wormhole: { life: 'critical' }, signatures: [{ id: '11' }] }, [sig('11', now + 3 * H)], now, true), '<4h');
+			assert.equal(lifeStates.entryLife(entry, [], now, false), 'EOL');
+			assert.equal(lifeStates.entryLife({ wormhole: { life: 'stable' }, signatures: [] }, [], now, true), '');
+		});
+	});
+
+	describe('chain map', () => {
+		const node = (v, cls) => ({ v: v, f: "<div id='node" + v + "' data-nodeid='31000001' class='node " + cls + "'><div class='nodeIcons'></div></div>" });
+		const make = () => ({
+			lines: [['2', '1', ['eol'], 11], ['3', '2', ['critical', 'eol-chain'], 12], ['4', '1', ['eol', 'destab'], 13], ['5', '4', [], 14], ['6', '1', [], 15]],
+			rows: [{ c: [node('1', 'top'), { v: null }] }, { c: [node('2', 'eol'), { v: '1' }] }, { c: [node('3', 'critical'), { v: '2' }] },
+				{ c: [node('4', 'eol destab'), { v: '1' }] }, { c: [node('5', ''), { v: '4' }] }, { c: [node('6', ''), { v: '1' }] }]
+		});
+		const states = { 11: 'lt1h', 13: 'expired' };
+		it("adds the state class to each critical hole line, and -chain to the lines beyond it", () => {
+			const m = make();
+			assert.deepStrictEqual(lifeStates.decorateMap(m.lines, m.rows, id => states[id]), { 11: 'lt1h', 13: 'expired' });
+			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-lt1h']);
+			assert.deepStrictEqual(m.lines[1][2], ['critical', 'eol-chain', 'life-lt1h-chain']);
+			assert.deepStrictEqual(m.lines[2][2], ['eol', 'destab', 'life-eol']);
+			assert.deepStrictEqual(m.lines[3][2], ['life-eol-chain']);
+			assert.deepStrictEqual(m.lines[4][2], []);
+		});
+		it('<4h (or unknown) keeps the dashed line and gets life-lt4h', () => {
+			const m = make();
+			lifeStates.decorateMap(m.lines, m.rows, () => null);
+			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-lt4h']);
+		});
+		it('tags only the node behind an EOL hole, once', () => {
+			const m = make();
+			lifeStates.decorateMap(m.lines, m.rows, id => states[id]);
+			lifeStates.decorateMap(m.lines, m.rows, id => states[id]);
+			assert.ok(/class='node life-tagged eol destab'><span class='life-map-tag'[^>]*>EOL<\/span><div class='nodeIcons'>/.test(m.rows[3].c[0].f), m.rows[3].c[0].f);
+			assert.equal((m.rows[3].c[0].f.match(/life-map-tag/g) || []).length, 1);
+			[0, 1, 2, 4, 5].forEach(i => assert.ok(m.rows[i].c[0].f.indexOf('life-map-tag') < 0, i));
+		});
+		it('leaves markup it does not recognise alone', () => assert.equal(lifeStates.tagNode('<span>x</span>'), '<span>x</span>'));
+		it('copes with no lines', () => assert.deepStrictEqual(lifeStates.decorateMap(undefined, undefined, () => null), {}));
+	});
+
+	describe('map legend', () => {
+		const upstream = "<table id='guide'>\n<tr><td><div class='guide stable'></td><td>Stable</td><th>Auras</th></tr>\n"
+			+ "<tr><td><div class='guide eol'></div></td><td>End of Life</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr>\n"
+			+ "<tr><td><div class='guide destab'></div></td><td>Mass Destabbed</td></tr></table>";
+		it('adds the <1h and EOL lines after End of Life (<4h)', () => {
+			const on = lifeStates.legend(upstream, true);
+			assert.ok(on.indexOf("<td>&lt;4h (End of Life)</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr><tr class='life-states-legend'>") > 0);
+			assert.ok(on.indexOf("<div class='guide eol life-lt1h'></div>") > 0 && on.indexOf("<div class='guide eol life-eol'></div>") > 0);
+			assert.ok(on.indexOf('Mass Destabbed') > on.indexOf('life-eol'));
+		});
+		it('is idempotent and goes back to upstream\'s legend when off', () => {
+			const on = lifeStates.legend(upstream, true);
+			assert.equal(lifeStates.legend(on, true), on);
+			assert.equal(lifeStates.legend(on, false), upstream);
+			assert.equal(lifeStates.legend(upstream, false), upstream);
+		});
+	});
+
 	it('labels', () => {
-		assert.deepStrictEqual(lifeStates.STATES.map(s => lifeStates.label(s.key)), ['Stable', '<4h', '<1h', 'Expired']);
+		assert.deepStrictEqual(lifeStates.STATES.map(s => lifeStates.label(s.key)), ['Stable', '<4h', '<1h', 'EOL']);
 		assert.deepStrictEqual(lifeStates.STATES.map(s => s.life), ['stable', 'critical', 'critical', 'critical']);
 	});
 });

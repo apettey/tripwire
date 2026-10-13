@@ -3,12 +3,16 @@
     {
       "pr": 104,
       "date": "2026-10-13",
-      "title": "Wormhole life: Stable, <4h, <1h, Expired",
-      "description": "A hole's life now has the same four states the game shows: Stable, <4h, <1h and Expired (closure imminent), instead of just Stable and EOL. Set them in the signature dialog, by clicking the Life cell in the signature list, or with Ctrl+K Set life. The state moves on by itself as time passes, so a <4h hole becomes <1h and then Expired.\n\nPrefer the old Stable / EOL buttons? Turn it off in Settings > Signatures.",
+      "title": "Wormhole life: Stable, <4h, <1h, EOL",
+      "description": "A hole's life now has four states, like the game shows: Stable, <4h, <1h and EOL (the game's \"Expired\": closure imminent), instead of just Stable and EOL. Set them in the signature dialog, by clicking the Life cell in the signature list, or with Ctrl+K Set life. The state moves on by itself as time passes, so a <4h hole becomes <1h and then EOL.\n\nThe chain map shows the difference too: a <4h hole keeps the dashed line, a <1h hole is dotted and an EOL hole is a thin dotted line with an EOL tag. Bookmark names say <4h, <1h or EOL.\n\nPrefer the old Stable / EOL buttons? Turn it off in Settings > Signatures.",
       "images": [
         {
           "src": "whats-new/img/pr-104-life-states.png",
           "caption": "The four life buttons and the Life column"
+        },
+        {
+          "src": "whats-new/img/pr-104-life-states-map.png",
+          "caption": "On the chain map: <4h dashed, <1h dotted, EOL thin dotted with a tag"
         }
       ]
     },

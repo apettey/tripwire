@@ -1,7 +1,7 @@
 const lifeStates = {
-	// Wormhole life states (fork-owned): Stable | <4h | <1h | Expired instead of just Stable | EOL, like the game's
+	// Wormhole life states (fork-owned): Stable | <4h | <1h | EOL instead of just Stable | EOL, like the game's
 	// Wormhole Information since the Catalyst update ("Reliable lifetime", "less than 4 hours", "less than 1 hour",
-	// "Expired"). No schema change: wormholes.life stays 'stable' | 'critical' and the three critical states live in
+	// "Expired"; the last one is labelled EOL here, its internal key is "expired"). No schema change: wormholes.life stays 'stable' | 'critical' and the three critical states live in
 	// the holes' signature timer (lifeLeft), which upstream already counts down for EOL holes:
 	//   stable  - life 'stable' (the timer is upstream's)
 	//   lt4h    - life 'critical', 1 h < time left <= 4 h (also: critical with more time left, or no timer known)
@@ -17,9 +17,9 @@ const lifeStates = {
 
 	STATES: [
 		{ key: "stable", label: "Stable", life: "stable", cls: "stable", keys: ["stable", "reliable"] },
-		{ key: "lt4h", label: "<4h", life: "critical", cls: "critical life-lt4h", top: 4, keys: ["eol", "4h", "lt4h", "critical"] },
+		{ key: "lt4h", label: "<4h", life: "critical", cls: "critical life-lt4h", top: 4, keys: ["4h", "lt4h", "critical"] },
 		{ key: "lt1h", label: "<1h", life: "critical", cls: "critical life-lt1h", top: 1, keys: ["1h", "lt1h"] },
-		{ key: "expired", label: "Expired", life: "critical", cls: "critical life-expired", top: 0, keys: ["expired", "closing"] }
+		{ key: "expired", label: "EOL", life: "critical", cls: "critical life-expired", top: 0, keys: ["eol", "expired", "closing"] }
 	],
 
 	CLASSES: "life-lt4h life-lt1h life-expired",
@@ -191,6 +191,90 @@ const lifeStates = {
 		return s ? s.label : key;
 	},
 
+	/** The {life} of a bookmark name: "" for a stable hole, else the state's label (<4h, <1h, EOL); with the
+	setting off (on false) "EOL" for any critical hole, as before */
+	bookmarkLife: function(wormhole, sigs, now, on) {
+		if (!wormhole || wormhole.life !== "critical") { return ""; }
+		if (!on) { return "EOL"; }
+		return lifeStates.label(lifeStates.deriveHole(wormhole, sigs, now));
+	},
+
+	/** The hole's current signatures for a payload entry (by the entry's signature ids) */
+	entryCurrent: function(entry) {
+		const sigs = (typeof tripwire !== "undefined" && tripwire.client && tripwire.client.signatures) || {};
+		return ((entry && entry.signatures) || []).map(function(s) { return s && s.id ? sigs[s.id] : null; }).filter(Boolean);
+	},
+
+	/** The {life} for a dialog payload entry ({wormhole, signatures}) about to be saved: the timer the dialog put on
+	its signatures (dialogPayload runs first), else the hole's current signatures (current) */
+	entryLife: function(entry, current, now, on) {
+		if (!entry || !entry.wormhole || entry.wormhole.life !== "critical") { return ""; }
+		if (!on) { return "EOL"; }
+		const sent = (entry.signatures || []).map(function(s) { return s ? lifeStates.parseTime(s.lifeLeft) : NaN; }).filter(function(t) { return !isNaN(t); });
+		const remaining = sent.length ? Math.min.apply(null, sent) - now : lifeStates.holeRemaining(current, now);
+		return lifeStates.label(lifeStates.derive("critical", remaining));
+	},
+
+	// Chain map: <4h keeps upstream's dashed line ("eol"); <1h is dotted; EOL is dotted with a small EOL tag on the node
+	MAP_CLASSES: { lt4h: "life-lt4h", lt1h: "life-lt1h", expired: "life-eol" },
+
+	/** Add the life classes to chain.nodes() output, in place. lines: [childNode, parentNode, modifiers, wormholeID];
+	rows: the map rows ({c: [{v, f}, {v}]}); stateOf(wormholeID): the hole's state. Each line of a critical hole ('eol')
+	gets its class; lines further out get "<class>-chain" like upstream's inherited modifiers; the node behind an EOL
+	hole gets the tag. Returns {wormholeID: state} of the critical holes. */
+	decorateMap: function(lines, rows, stateOf) {
+		const states = {}, byChild = {};
+		(lines || []).forEach(function(line) {
+			if (!line || !Array.isArray(line[2])) { return; }
+			byChild[line[0]] = line;
+			if (line[2].indexOf("eol") < 0) { return; }
+			const key = stateOf(line[3]) || "lt4h";
+			states[line[3]] = key;
+			const cls = lifeStates.MAP_CLASSES[key] || lifeStates.MAP_CLASSES.lt4h;
+			if (line[2].indexOf(cls) < 0) { line[2].push(cls); }
+		});
+		const own = function(line) {
+			return line[2].filter(function(m) { return /^life-(lt4h|lt1h|eol)$/.test(m); });
+		};
+		(lines || []).forEach(function(line) {
+			if (!line || !Array.isArray(line[2])) { return; }
+			const seen = {};
+			let up = byChild[line[1]];
+			while (up && !seen[up[0]]) {
+				seen[up[0]] = true;
+				own(up).forEach(function(m) { if (line[2].indexOf(m + "-chain") < 0) { line[2].push(m + "-chain"); } });
+				up = byChild[up[1]];
+			}
+		});
+		(rows || []).forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			const line = node && byChild[node.v];
+			if (!line || line[2].indexOf("life-eol") < 0 || typeof node.f !== "string" || node.f.indexOf("life-map-tag") >= 0) { return; }
+			node.f = lifeStates.tagNode(node.f);
+		});
+		return states;
+	},
+
+	/** Node markup with the EOL tag: a class on the node div and the tag inside it (fixed text only) */
+	tagNode: function(markup) {
+		const m = /<div([^>]*class='node)([^']*')([^>]*)>/.exec(markup);
+		if (!m) { return markup; }
+		const open = "<div" + m[1] + " life-tagged" + m[2] + m[3] + ">";
+		return markup.substring(0, m.index) + open + "<span class='life-map-tag' title='EOL: closure imminent'>EOL</span>" + markup.substring(m.index + m[0].length);
+	},
+
+	/** The chain map legend (an HTML string in a tooltip): the <4h / <1h / EOL lines next to upstream's End of Life row,
+	or upstream's row back when off */
+	legend: function(html, on) {
+		let out = String(html || "").replace(/<tr class='life-states-legend'>.*?<\/tr>/g, "").replace("<td>&lt;4h (End of Life)</td>", "<td>End of Life</td>");
+		if (!on) { return out; }
+		const row = /(<tr><td><div class='guide eol'><\/div><\/td><td>)End of Life(<\/td>.*?<\/tr>)/.exec(out);
+		if (!row) { return out; }
+		const extra = "<tr class='life-states-legend'><td><div class='guide eol life-lt1h'></div></td><td>&lt;1h</td></tr>"
+			+ "<tr class='life-states-legend'><td><div class='guide eol life-eol'></div></td><td>EOL <span class='life-map-tag'>EOL</span></td></tr>";
+		return out.substring(0, row.index) + row[1] + "&lt;4h (End of Life)" + row[2] + extra + out.substring(row.index + row[0].length);
+	},
+
 	// ---- Page ----
 
 	/** Server-corrected now (the sig list's countdowns use the server clock) */
@@ -311,7 +395,7 @@ const lifeStates = {
 		// Settings > Signatures row; takes effect on Save (Reset = on)
 		forkSettings.register({
 			section: "signatures", order: 35, id: "lifeStates-enabled", type: "checkbox", key: "lifeStates",
-			label: "Wormhole life states:", text: "Stable, <4h, <1h and Expired, as in game (off: Stable and EOL only)",
+			label: "Wormhole life states:", text: "Stable, <4h, <1h and EOL (the game's Expired), with matching map lines and bookmark names (off: Stable and EOL only)",
 			get: function(o) { return lifeStates.enabled(o); },
 			set: function(o, on) { o.lifeStates = { enabled: on }; }
 		});
@@ -321,6 +405,7 @@ const lifeStates = {
 			options.apply = function() {
 				const result = apply.apply(this, arguments);
 				lifeStates.syncDialog();
+				lifeStates.syncLegend();
 				lifeStates.refreshCells();
 				return result;
 			};
@@ -355,8 +440,52 @@ const lifeStates = {
 		if (tbody && typeof MutationObserver !== "undefined") {
 			new MutationObserver(function() { lifeStates.refreshCells(); }).observe(tbody, { childList: true });
 		}
-		setInterval(lifeStates.refreshCells, 15000);
+		lifeStates.hookMap();
+		lifeStates.syncLegend();
+		setInterval(function() { lifeStates.refreshCells(); lifeStates.checkMap(); }, 15000);
 		lifeStates.refreshCells();
+	},
+
+	mapStates: {},	// {wormholeID: state} of the critical holes as the chain map was last drawn
+
+	/** Chain map lines and EOL tags (all renderers draw from chain.nodes() output) */
+	hookMap: function() {
+		if (typeof chain === "undefined" || !chain || typeof chain.nodes !== "function" || chain.nodes.lifeStatesWrapped) { return; }
+		const previous = chain.nodes;
+		const wrapped = function() {
+			const result = previous.apply(this, arguments);
+			try {
+				if (result && lifeStates.isOn()) {
+					const wormholes = (typeof tripwire !== "undefined" && tripwire.client && tripwire.client.wormholes) || {};
+					lifeStates.mapStates = lifeStates.decorateMap(result.lines, result.map && result.map.rows, function(id) {
+						return wormholes[id] ? lifeStates.current(wormholes[id]) : null;
+					});
+				} else { lifeStates.mapStates = {}; }
+			} catch (e) { if (typeof console !== "undefined") { console.warn("life-states: map", e); } }
+			return result;
+		};
+		Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
+		wrapped.lifeStatesWrapped = true;
+		chain.nodes = wrapped;
+	},
+
+	/** Redraw the chain map when a hole's state moved on with time (nothing else redraws it) */
+	checkMap: function() {
+		if (!lifeStates.isOn() || typeof chain === "undefined" || !chain || !chain.data || !chain.data.rawMap || chain.drawing) { return; }
+		const wormholes = (typeof tripwire !== "undefined" && tripwire.client && tripwire.client.wormholes) || {};
+		const moved = Object.keys(lifeStates.mapStates).some(function(id) {
+			return wormholes[id] && wormholes[id].life === "critical" && lifeStates.current(wormholes[id]) !== lifeStates.mapStates[id];
+		});
+		if (moved) { chain.redraw(); }
+	},
+
+	/** The chain map legend (Chain map > ? icon) */
+	syncLegend: function() {
+		const el = document.getElementById("show-chainLegend");
+		const tip = el && el.getAttribute("data-tooltip");
+		if (!tip) { return; }
+		const next = lifeStates.legend(tip, lifeStates.isOn());
+		if (next !== tip) { el.setAttribute("data-tooltip", next); }
 	}
 };
 

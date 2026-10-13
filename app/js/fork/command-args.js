@@ -59,7 +59,7 @@ const paletteArgs = {
 			const childName = sysName(child), parentName = sysName(parent);
 			const sigID = last.signatureID ? String(last.signatureID).toUpperCase() : "";
 			const flags = [];
-			if (wh && wh.life === "critical") { flags.push(env.lifeLabel ? env.lifeLabel(wh) : "EOL"); }	// <4h / <1h / Expired with life states
+			if (wh && wh.life === "critical") { flags.push(env.lifeLabel ? env.lifeLabel(wh) : "EOL"); }	// <4h / <1h / EOL with life states
 			if (wh && wh.mass === "critical") { flags.push("critical"); } else if (wh && wh.mass === "destab") { flags.push("destab"); }
 			const here = child === viewing || parent === viewing;
 			out.push({

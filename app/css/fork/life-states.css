@@ -5,3 +5,32 @@ body .critical.life-lt4h { color: #FFC94D; }
 body .critical.life-lt1h { color: #FF4747; }
 body .critical.life-expired { color: #F052D8; font-weight: bold; }
 
+
+/* Chain map: <4h keeps upstream's dashed line (.eol); <1h and EOL are dotted (the canvas map draws dotted as short
+   dashes); the node behind an EOL hole has a small EOL tag. Also in the map legend. */
+/* the plain selectors are for the canvas renderers, which read the style of an off-map element */
+.eol.life-lt1h, #chainMap .eol.life-lt1h, #guide .eol.life-lt1h,
+.eol.life-eol, #chainMap .eol.life-eol, #guide .eol.life-eol { border-style: dotted; }
+/* EOL draws thinner on the canvas maps (their off-map style probe has the class 'temp') */
+.temp.eol.life-eol { border-width: 1px; }
+
+#chainMap div.node.life-tagged { position: relative; }
+
+.life-map-tag {
+	display: inline-block;
+	padding: 0 3px;
+	border: 1px solid #F052D8;
+	border-radius: 3px;
+	background: #2a0b26;
+	color: #F052D8;
+	font: bold 9px/11px verdana, sans-serif;
+	pointer-events: none;
+}
+
+#chainMap .life-map-tag {
+	position: absolute;
+	top: -13px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 2;
+}

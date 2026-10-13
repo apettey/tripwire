@@ -12,7 +12,7 @@ describe('Inline life / mass edits', () => {
 	before(() => { statesOn = sigInline.statesOn; sigInline.statesOn = () => false; });
 	after(() => { sigInline.statesOn = statesOn; });
 
-	describe('with life states (Stable / <4h / <1h / Expired)', () => {
+	describe('with life states (Stable / <4h / <1h / EOL)', () => {
 		const H = 3600000, now = Date.UTC(2026, 9, 13, 12, 0, 0);
 		const at = ms => lifeStates.formatTime(ms);
 		const sig = (id, left) => ({ id: id, lifeTime: '2026-10-13 00:00:00', lifeLength: '57600', lifeLeft: at(left) });
@@ -20,9 +20,9 @@ describe('Inline life / mass edits', () => {
 		afterEach(() => { sigInline.statesOn = () => false; });
 		it('offers the four states on keys 1-4, with EOL as a typed key of <4h', () => {
 			assert.deepStrictEqual(sigInline.choices('life').map(c => c.value), ['stable', 'lt4h', 'lt1h', 'expired']);
-			assert.deepStrictEqual(sigInline.choices('life').map(c => c.label), ['Stable', '<4h', '<1h', 'Expired']);
+			assert.deepStrictEqual(sigInline.choices('life').map(c => c.label), ['Stable', '<4h', '<1h', 'EOL']);
 			assert.deepStrictEqual(sigInline.choiceForKey('life', '3'), sigInline.choices('life')[2]);
-			assert.ok(sigInline.choices('life')[1].keys.includes('eol'));
+			assert.ok(sigInline.choices('life')[3].keys.includes('eol'));
 			assert.deepStrictEqual(sigInline.choices('mass').map(c => c.value), ['stable', 'destab', 'critical']);
 		});
 		it('number keys pick a state in the life popover', () => {
@@ -38,7 +38,7 @@ describe('Inline life / mass edits', () => {
 		});
 		it('cell text and colour of a state', () => {
 			assert.equal(sigInline.cellText('life', 'lt1h'), '<1h');
-			assert.equal(sigInline.cellText('life', 'expired'), 'Expired');
+			assert.equal(sigInline.cellText('life', 'expired'), 'EOL');
 			assert.equal(sigInline.cellClass('life', 'expired'), 'critical life-expired');
 			assert.equal(sigInline.cellClass('mass', 'destab'), 'destab');
 		});
