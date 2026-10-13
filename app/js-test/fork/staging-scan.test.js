@@ -66,13 +66,82 @@ describe('stagingScan', () => {
 	describe('parseDay', () => {
 		it('reads the compact rows', () => {
 			const d = stagingScan.parseDay({ hours: 24, generated: 1, systems: { "30000001": [100, 2, 1, 30, 20], "x": [1, 1, 1, 1, 1], "30000002": "bad" } });
-			assert.deepStrictEqual(d, { hours: 24, systems: { "30000001": { jumps: 100, shipKills: 2, podKills: 1, npcKills: 30, activeHours: 20 } } });
+			assert.deepStrictEqual(d, { hours: 24, latest: null, systems: { "30000001": { jumps: 100, shipKills: 2, podKills: 1, npcKills: 30, activeHours: 20 } } });
+		});
+		it('keeps the covered hours (clamped to 0-24) and the newest row time', () => {
+			const sys = { "30000001": [1, 0, 0, 0, 1] };
+			assert.strictEqual(stagingScan.parseDay({ hours: 6, latest: 1791900000, systems: sys }).hours, 6);
+			assert.strictEqual(stagingScan.parseDay({ hours: 6, latest: 1791900000, systems: sys }).latest, 1791900000);
+			assert.strictEqual(stagingScan.parseDay({ hours: 99, systems: sys }).hours, 24);
+			assert.strictEqual(stagingScan.parseDay({ systems: sys }).hours, 24, 'an answer without hours is a full day');
+			assert.strictEqual(stagingScan.parseDay({ hours: 0, systems: sys }), null, 'no hours covered: last hour only');
 		});
 		it('gives null when there is no data (cron not run yet, bad answer)', () => {
 			assert.strictEqual(stagingScan.parseDay({ hours: 24, systems: {} }), null);
 			assert.strictEqual(stagingScan.parseDay({ hours: 24, systems: [] }), null);
 			assert.strictEqual(stagingScan.parseDay(null), null);
 			assert.strictEqual(stagingScan.parseDay("oops"), null);
+		});
+	});
+
+	describe('isCurrent', () => {
+		const NOW = Date.parse('2026-10-13T16:20:00Z');
+		it('is true when the newest row is from this UTC hour', () => {
+			assert.strictEqual(stagingScan.isCurrent(Date.parse('2026-10-13T16:00:00Z') / 1000, NOW), true);
+			assert.strictEqual(stagingScan.isCurrent(Date.parse('2026-10-13T15:00:00Z') / 1000, NOW), false);
+			assert.strictEqual(stagingScan.isCurrent(null, NOW), false);
+		});
+	});
+
+	describe('coverage', () => {
+		it('keeps the thresholds from 20 hours of history', () => {
+			assert.deepStrictEqual(stagingScan.coverage(24), { activeHours: 16, quiet: 20, partial: false, canFlag: true, label: '24h' });
+			assert.deepStrictEqual(stagingScan.coverage(20), { activeHours: 16, quiet: 20, partial: false, canFlag: true, label: '24h' });
+		});
+		it('scales busy hours and quiet to shorter history', () => {
+			assert.deepStrictEqual(stagingScan.coverage(6), { activeHours: 4, quiet: 5, partial: true, canFlag: true, label: '6h' });
+		});
+		it('never flags staging with less than 6 hours of history', () => {
+			assert.strictEqual(stagingScan.coverage(5).canFlag, false);
+			assert.strictEqual(stagingScan.coverage(1).canFlag, false);
+			assert.strictEqual(stagingScan.coverage(1).label, '1h');
+		});
+	});
+
+	describe('analyse (partial history)', () => {
+		const list = [1, 2, 3, 4, 5, 6].map(n => ({ id: S(n), jumps: n - 1 }));
+		const day = { hours: 6, systems: {
+			[S(1)]: { jumps: 600, shipKills: 0, podKills: 0, npcKills: 10, activeHours: 6 },
+			[S(2)]: { jumps: 30, shipKills: 0, podKills: 0, npcKills: 0, activeHours: 3 },
+			[S(3)]: { jumps: 4, shipKills: 0, podKills: 0, npcKills: 0, activeHours: 2 }
+		} };
+		const scan = stagingScan.analyse(list, {}, day);
+		const row = (n) => scan.rows.find(r => r.id === S(n));
+		it('can still flag a likely staging with 6 hours of history', () => {
+			assert.strictEqual(scan.partial, true);
+			assert.strictEqual(scan.label, '6h');
+			assert.strictEqual(scan.hours, 6);
+			assert.deepStrictEqual(stagingScan.stagingIDs(scan), [S(1)]);
+		});
+		it('scales Quiet to the covered hours', () => {
+			assert.deepStrictEqual(row(2).tags, []);
+			assert.deepStrictEqual(row(3).tags, ['Quiet']);
+		});
+		[1, 2].forEach(h => {
+			it(h + ' h of history: no likely staging, the top system is "Busy now"', () => {
+				const short = stagingScan.analyse(list, {}, Object.assign({}, day, { hours: h }));
+				assert.strictEqual(short.partial, true);
+				assert.strictEqual(short.label, h + 'h');
+				assert.deepStrictEqual(stagingScan.stagingIDs(short), []);
+				assert.deepStrictEqual(short.rows.find(r => r.id === S(1)).tags.slice(0, 1), ['Busy now']);
+				assert.ok(short.rows.find(r => r.id === S(1)).day, 'still shows the N-hour sums');
+			});
+		});
+		it('full history is not partial', () => {
+			const full = stagingScan.analyse(list, {}, Object.assign({}, day, { hours: 24 }));
+			assert.strictEqual(full.partial, false);
+			assert.strictEqual(full.label, '24h');
+			assert.deepStrictEqual(stagingScan.stagingIDs(full), [], '6 busy hours of 24 is not all day');
 		});
 	});
 
@@ -122,6 +191,15 @@ describe('stagingScan', () => {
 			assert.deepStrictEqual(row(6).tags, ['Ratting']);
 			assert.deepStrictEqual(row(1).tags, ['Quiet']);
 			assert.deepStrictEqual(row(5).tags, []);
+		});
+		it('tags Ratting from 1000 NPC kills in 24 h', () => {
+			const two = [{ id: S(1), jumps: 0 }, { id: S(2), jumps: 1 }];
+			const out = stagingScan.analyse(two, {}, { hours: 24, systems: {
+				[S(1)]: { jumps: 5000, shipKills: 0, podKills: 0, npcKills: 999, activeHours: 24 },
+				[S(2)]: { jumps: 5000, shipKills: 0, podKills: 0, npcKills: 1000, activeHours: 24 }
+			} });
+			assert.ok(out.rows.find(r => r.id === S(1)).tags.indexOf('Ratting') < 0);
+			assert.ok(out.rows.find(r => r.id === S(2)).tags.indexOf('Ratting') >= 0);
 		});
 		it('flags nothing when the top systems are not well above the median', () => {
 			const flat = stagingScan.analyse(list.slice(0, 4), {}, { hours: 24, systems: {
