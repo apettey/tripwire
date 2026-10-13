@@ -8,7 +8,8 @@ const regionMap = {
 	BOX_W: 74, BOX_H: 22,	// a system's box
 	STUB_LEN: 54,			// length of a gate leaving the region, from the edge of the box
 	MIN_ZOOM: 0.2, MAX_ZOOM: 6,
-	OVERLAYS: ["exits", "pilots", "fight", "route", "constellations"],	// toggles in the panel header; all on by default
+	OVERLAYS: ["exits", "pilots", "fight", "route", "constellations", "skyhooks", "targets"],	// toggles in the panel header; all on by default
+	SIDE_LISTS: ["targets", "skyhooks"],	// collapsible lists in the side panel (options.regionMap.collapsed[name]; missing = open)
 	HEAT: {
 		none: { label: "No heat" },
 		npc: { label: "NPC kills", key: "npcKills", floor: 60, colour: "#ff9a1f" },
@@ -25,25 +26,29 @@ const regionMap = {
 
 	// ---- Settings (options.regionMap) ----
 
-	/** {enabled, overlays: {exits, pilots, fight, route, constellations}, heat}; a missing key means the default (on / none) */
+	/** {enabled, overlays: {exits, pilots, fight, route, constellations, skyhooks, targets}, heat, collapsed: {targets, skyhooks}}; a missing key
+	means the default (on / none / open) */
 	settings: function(opts) {
 		const o = (opts && opts.regionMap && typeof opts.regionMap === "object") ? opts.regionMap : {};
 		const overlays = {};
 		regionMap.OVERLAYS.forEach(function(name) { overlays[name] = !(o.overlays && o.overlays[name] === false); });
-		return { enabled: o.enabled !== false, overlays: overlays, heat: regionMap.validHeat(o.heat) ? o.heat : "none" };
+		const collapsed = {};
+		regionMap.SIDE_LISTS.forEach(function(name) { collapsed[name] = !!(o.collapsed && o.collapsed[name] === true); });
+		return { enabled: o.enabled !== false, overlays: overlays, heat: regionMap.validHeat(o.heat) ? o.heat : "none", collapsed: collapsed };
 	},
 
 	validHeat: function(kind) { return typeof kind === "string" && Object.prototype.hasOwnProperty.call(regionMap.HEAT, kind); },
 
 	/** options.regionMap after changing one part; the rest of the user's choices are kept */
 	withSetting: function(opts, change) {
-		const cur = regionMap.settings(opts), next = { enabled: cur.enabled, overlays: Object.assign({}, cur.overlays), heat: cur.heat };
+		const cur = regionMap.settings(opts), next = { enabled: cur.enabled, overlays: Object.assign({}, cur.overlays), heat: cur.heat, collapsed: Object.assign({}, cur.collapsed) };
 		if (change.enabled !== undefined) { next.enabled = !!change.enabled; }
 		if (change.heat !== undefined && regionMap.validHeat(change.heat)) { next.heat = change.heat; }
 		// The jump overlay's ship, JDC level and origin (regionMapJumps.withJump builds it); kept as it is when something else changes
 		const jump = change.jump !== undefined ? change.jump : (opts && opts.regionMap && opts.regionMap.jump);
 		if (jump && typeof jump === "object") { next.jump = jump; }
 		if (change.overlay && regionMap.OVERLAYS.indexOf(change.overlay.name) >= 0) { next.overlays[change.overlay.name] = !!change.overlay.on; }
+		if (change.collapsed && regionMap.SIDE_LISTS.indexOf(change.collapsed.name) >= 0) { next.collapsed[change.collapsed.name] = !!change.collapsed.on; }
 		return next;
 	},
 

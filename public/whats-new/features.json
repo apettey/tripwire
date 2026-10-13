@@ -1,6 +1,30 @@
 {
   "features": [
     {
+      "pr": 107,
+      "date": "2026-10-13",
+      "title": "Targets and waypoints for your mask",
+      "description": "Mark systems as targets for everyone on your mask: Shift+click a system on the region map, or use Mark as target in its card, and add a short note. Targets are numbered on the region map and on your chain map, and expire when the system's skyhook window ends (or after the time you pick).\n\nIn the Targets list beside the map, put them in order (or click Shortest order), then Send waypoints to set them as waypoints for the characters you pick. Turn the chain map badges off in Settings > Map Markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-107-region-map-targets.png",
+          "caption": "Targets on the region map, with the Targets list"
+        }
+      ]
+    },
+    {
+      "pr": 106,
+      "date": "2026-10-13",
+      "title": "Skyhooks on the region map",
+      "description": "Raidable skyhooks are now on the region map. Tick Skyhooks in the map's header to mark every system with a raidable skyhook: bright when it is vulnerable now, dim when its window opens later, with its value from $ to $$$$$. Click a system for its planets and countdowns, or use the Skyhooks list beside the map, sorted by jumps, window or value.\n\nThe separate skyhooks box is gone: the skyhook icon on low-sec and null-sec systems in your chain now opens the region map on that system. Turn the icon off in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-106-region-map-skyhooks.png",
+          "caption": "Skyhooks in Catch, with the system card of GMLH-K"
+        }
+      ]
+    },
+    {
       "pr": 105,
       "date": "2026-10-13",
       "title": "Staging scan in null-sec",

@@ -77,3 +77,71 @@
 .dialog-regionMap .rm-card-jump.rm-j-in { color: #8dffa0; }
 .dialog-regionMap .rm-card-jump.rm-j-out { color: #ffc27a; }
 .dialog-regionMap .rm-card-jump.rm-j-bad { color: #aab; }
+
+/* Skyhooks overlay (region-map-skyhooks.js): gold pill above the box, bright when vulnerable now, dim when it opens later */
+.dialog-regionMap .rm-sbar { flex: 0 0 auto; padding: 4px 8px; background: #17140c; border-bottom: 1px solid #4a3b1c; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: #dcc9a0; }
+.dialog-regionMap .rm-sbar select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; }
+.dialog-regionMap .rm-sbar label { color: #cbb98f; white-space: nowrap; cursor: pointer; }
+.dialog-regionMap .rm-slabel { color: #f0b34a; font-weight: bold; }
+.dialog-regionMap .rm-sinfo { color: #a99a78; }
+.dialog-regionMap .rm-layer-tags .rm-sky { pointer-events: auto; cursor: help; }
+.dialog-regionMap .rm-sky rect { stroke: #f0b34a; stroke-width: 1.2; }
+.dialog-regionMap .rm-sky text { font-size: 11px; font-weight: bold; }
+.dialog-regionMap .rm-sky .rm-sky-glyph { font-size: 12px; }
+.dialog-regionMap .rm-sky-open rect { fill: #f0b34a; }
+.dialog-regionMap .rm-sky-open text { fill: #2a1a00; }
+.dialog-regionMap .rm-sky-soon rect { fill: #2b220f; stroke-dasharray: 3 2; }
+.dialog-regionMap .rm-sky-soon text { fill: #c9a253; }
+.dialog-regionMap .rm-sky-soon { opacity: 0.85; }
+
+/* Side panel: collapsible lists over the top-left of the map */
+.dialog-regionMap .rm-side { position: absolute; left: 8px; top: 8px; width: 350px; max-height: calc(100% - 44px); overflow-y: auto; background: rgba(16, 18, 24, 0.94); border: 1px solid #4a5568; border-radius: 4px; color: #ccc; font-size: 12px; }
+.dialog-regionMap .rm-side.hidden { display: none; }
+.dialog-regionMap .rm-side-sec + .rm-side-sec { border-top: 1px solid #333; }
+.dialog-regionMap .rm-side-head { padding: 5px 8px; color: #fff; display: flex; align-items: center; gap: 4px; }
+.dialog-regionMap .rm-side-head select { margin-left: auto; background: #0d0d0d; color: #ddd; border: 1px solid #444; font-size: 11px; padding: 1px 2px; }
+.dialog-regionMap .rm-side-toggle { color: #aaa; text-decoration: none; width: 12px; display: inline-block; }
+.dialog-regionMap .rm-side-note { padding: 3px 8px 6px; }
+.dialog-regionMap .rm-side-note a, .dialog-regionMap .rm-side a.rm-snb { color: #9fc3ff; }
+.dialog-regionMap .rm-slist { list-style: none; margin: 0; padding: 0 0 4px; }
+.dialog-regionMap .rm-srow { display: flex; gap: 6px; align-items: center; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+.dialog-regionMap .rm-srow:hover { background: rgba(255, 255, 255, 0.07); }
+.dialog-regionMap .rm-s-sys { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #eee; }
+.dialog-regionMap .rm-s-kind { flex: 0 0 26px; font-size: 10px; font-weight: bold; text-align: center; border-radius: 3px; color: #111; }
+.dialog-regionMap .rm-s-kind.rm-s-lava { background: #e8743d; }
+.dialog-regionMap .rm-s-kind.rm-s-ice { background: #7fd0ee; }
+.dialog-regionMap .rm-s-val { flex: 0 0 40px; font-size: 10px; letter-spacing: -0.5px; }
+.dialog-regionMap .rm-s-time { flex: 0 0 96px; text-align: right; }
+.dialog-regionMap .rm-s-jumps { flex: 0 0 34px; text-align: right; color: #aaa; }
+.dialog-regionMap .rm-srow.rm-s-open .rm-s-time { color: #ff7a6b; font-weight: bold; }
+.dialog-regionMap .rm-srow.rm-s-soon .rm-s-time { color: #e8a33d; }
+.dialog-regionMap .rm-card-sky { margin-top: 6px; padding-top: 4px; border-top: 1px solid #333; }
+.dialog-regionMap .rm-card-sky-head { color: #f0b34a; font-weight: bold; }
+.dialog-regionMap .rm-card-sky .rm-s-open { color: #ffb0a6; }
+
+/* Targets (map-targets.js): magenta ring and a numbered disc on the box's left edge; the "Targets" side list */
+.dialog-regionMap .rm-target { stroke: #ff2bd6; stroke-dasharray: 2 2; }
+.dialog-regionMap .rm-layer-tags .rm-tnum { pointer-events: auto; cursor: help; }
+.dialog-regionMap .rm-tnum circle { fill: #d8199e; stroke: #fff; stroke-width: 1.5; }
+.dialog-regionMap .rm-tnum text { fill: #fff; font-size: 11px; font-weight: bold; }
+.dialog-regionMap .rm-thint { margin-left: auto; font-size: 10px; }
+.dialog-regionMap .rm-tlist { list-style: none; margin: 0; padding: 0 0 4px; }
+.dialog-regionMap .rm-trow { display: flex; gap: 5px; align-items: center; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+.dialog-regionMap .rm-trow:hover { background: rgba(255, 255, 255, 0.07); }
+.dialog-regionMap .rm-trow.rm-tdrop { box-shadow: inset 0 2px 0 #ff2bd6; }
+.dialog-regionMap .rm-t-n { flex: 0 0 18px; height: 16px; line-height: 16px; border-radius: 8px; background: #d8199e; color: #fff; font-weight: bold; font-size: 10px; text-align: center; }
+.dialog-regionMap .rm-t-sys { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #eee; }
+.dialog-regionMap .rm-t-note { display: block; color: #f3a6e4; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.dialog-regionMap .rm-t-by { flex: 0 1 60px; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.dialog-regionMap .rm-t-exp { flex: 0 0 40px; text-align: right; font-size: 11px; }
+.dialog-regionMap .rm-t-jumps { flex: 0 0 30px; text-align: right; color: #aaa; }
+.dialog-regionMap .rm-t-btns { flex: 0 0 auto; }
+.dialog-regionMap .rm-t-btns a { color: #888; text-decoration: none; padding: 0 2px; font-size: 11px; }
+.dialog-regionMap .rm-t-btns a:hover { color: #fff; }
+.dialog-regionMap .rm-tbuttons button, .dialog-regionMap .rm-side-note button { background: #222; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; }
+.dialog-regionMap .rm-tbuttons button:hover, .dialog-regionMap .rm-side-note button:hover { background: #333; border-color: #888; }
+.dialog-regionMap .rm-tbuttons .rm-tclear { color: #ff9b9b; }
+.dialog-regionMap .rm-card-target { margin-top: 6px; padding-top: 4px; border-top: 1px solid #333; }
+.dialog-regionMap .rm-card-target .rm-tline { color: #f3a6e4; }
+.dialog-regionMap .rm-card-target input.rm-tnote { width: 120px; background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 1px 4px; font-size: 12px; }
+.dialog-regionMap .rm-card-target select { background: #0d0d0d; color: #ddd; border: 1px solid #444; font-size: 11px; max-width: 120px; }

@@ -7,7 +7,7 @@ const lootBuyers = {
 	// Keep `const lootBuyers` on the first line: the test helper strips it to define a global.
 	DATA_URL: "loot-buyers/stations.json",
 	COUNT: 3,             // buyers shown
-	MAX_SEARCH_JUMPS: 60, // the routing search stops here, as the skyhook panel's "any distance"
+	MAX_SEARCH_JUMPS: 60, // the routing search stops here, as skyhooksPanel.MAX_SEARCH_JUMPS
 
 	escape: function(text) {
 		return String(text === undefined || text === null ? "" : text)
