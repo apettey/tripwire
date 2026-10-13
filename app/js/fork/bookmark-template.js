@@ -121,6 +121,8 @@ const bookmarkTemplate = {
 		const first = template.trim().charAt(0);
 		if (kind === "back" && "!<".indexOf(first) < 0) { return "A return bookmark has to start with ! or <"; }
 		if (kind === "hole" && "!<".indexOf(first) >= 0) { return "A hole bookmark can't start with ! or < (that marks a return bookmark)"; }
+		// {life} can be <4h / <1h: first in a hole bookmark (only optional tokens before it) it would look like a return bookmark
+		if (kind === "hole" && /^\s*(?:\{(?!name\})[a-z]*\}\s*)*\{life\}/i.test(template)) { return "A hole bookmark can't start with {life} (<4h / <1h would mark a return bookmark)"; }
 		const worst = {};
 		t.TOKENS.forEach(function(tok) { worst[tok.token] = tok.worst; });
 		if (t.expand(template, worst).length > t.MAX_OUTPUT) { return "Too long: with the longest values it would be over " + t.MAX_OUTPUT + " characters"; }

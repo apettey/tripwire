@@ -181,7 +181,8 @@ const holeNaming = {
 		const token = holeNaming.leadingToken(args && args.name);
 		if (!token) { return null; }
 		const values = bookmarkTemplate.values(Object.assign({}, args, { name: token, dir: "out" }));
-		return bookmarkTemplate.render(args.template || bookmarkTemplate.active("hole"), values) || null;
+		// A hole bookmark never starts with < (the return bookmark mark), e.g. from an old template that starts with {life}
+		return bookmarkTemplate.render(args.template || bookmarkTemplate.active("hole"), values).replace(/^<+\s*/, "") || null;
 	},
 
 	/** Settings > Signatures "Suggest hole names" (a missing key means on) */

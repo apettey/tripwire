@@ -216,7 +216,7 @@ const lifeStates = {
 	},
 
 	// Chain map: <4h keeps upstream's dashed line ("eol"); <1h is dotted; EOL is dotted with a small EOL tag on the node
-	MAP_CLASSES: { lt4h: "life-lt4h", lt1h: "life-lt1h", expired: "life-eol" },
+	MAP_CLASSES: { lt4h: "life-map-lt4h", lt1h: "life-map-lt1h", expired: "life-map-eol" },	// not the sig list's classes: those set a text colour, which the canvas map reads as the aura colour
 
 	/** Add the life classes to chain.nodes() output, in place. lines: [childNode, parentNode, modifiers, wormholeID];
 	rows: the map rows ({c: [{v, f}, {v}]}); stateOf(wormholeID): the hole's state. Each line of a critical hole ('eol')
@@ -234,7 +234,7 @@ const lifeStates = {
 			if (line[2].indexOf(cls) < 0) { line[2].push(cls); }
 		});
 		const own = function(line) {
-			return line[2].filter(function(m) { return /^life-(lt4h|lt1h|eol)$/.test(m); });
+			return line[2].filter(function(m) { return /^life-map-(lt4h|lt1h|eol)$/.test(m); });
 		};
 		(lines || []).forEach(function(line) {
 			if (!line || !Array.isArray(line[2])) { return; }
@@ -249,7 +249,7 @@ const lifeStates = {
 		(rows || []).forEach(function(row) {
 			const node = row && row.c && row.c[0];
 			const line = node && byChild[node.v];
-			if (!line || line[2].indexOf("life-eol") < 0 || typeof node.f !== "string" || node.f.indexOf("life-map-tag") >= 0) { return; }
+			if (!line || line[2].indexOf("life-map-eol") < 0 || typeof node.f !== "string" || node.f.indexOf("life-map-tag") >= 0) { return; }
 			node.f = lifeStates.tagNode(node.f);
 		});
 		return states;
@@ -270,8 +270,8 @@ const lifeStates = {
 		if (!on) { return out; }
 		const row = /(<tr><td><div class='guide eol'><\/div><\/td><td>)End of Life(<\/td>.*?<\/tr>)/.exec(out);
 		if (!row) { return out; }
-		const extra = "<tr class='life-states-legend'><td><div class='guide eol life-lt1h'></div></td><td>&lt;1h</td></tr>"
-			+ "<tr class='life-states-legend'><td><div class='guide eol life-eol'></div></td><td>EOL <span class='life-map-tag'>EOL</span></td></tr>";
+		const extra = "<tr class='life-states-legend'><td><div class='guide eol life-map-lt1h'></div></td><td>&lt;1h</td></tr>"
+			+ "<tr class='life-states-legend'><td><div class='guide eol life-map-eol'></div></td><td>EOL <span class='life-map-tag'>EOL</span></td></tr>";
 		return out.substring(0, row.index) + row[1] + "&lt;4h (End of Life)" + row[2] + extra + out.substring(row.index + row[0].length);
 	},
 

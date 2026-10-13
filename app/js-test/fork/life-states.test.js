@@ -247,16 +247,16 @@ describe('Wormhole life states', () => {
 		it("adds the state class to each critical hole line, and -chain to the lines beyond it", () => {
 			const m = make();
 			assert.deepStrictEqual(lifeStates.decorateMap(m.lines, m.rows, id => states[id]), { 11: 'lt1h', 13: 'expired' });
-			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-lt1h']);
-			assert.deepStrictEqual(m.lines[1][2], ['critical', 'eol-chain', 'life-lt1h-chain']);
-			assert.deepStrictEqual(m.lines[2][2], ['eol', 'destab', 'life-eol']);
-			assert.deepStrictEqual(m.lines[3][2], ['life-eol-chain']);
+			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-map-lt1h']);
+			assert.deepStrictEqual(m.lines[1][2], ['critical', 'eol-chain', 'life-map-lt1h-chain']);
+			assert.deepStrictEqual(m.lines[2][2], ['eol', 'destab', 'life-map-eol']);
+			assert.deepStrictEqual(m.lines[3][2], ['life-map-eol-chain']);
 			assert.deepStrictEqual(m.lines[4][2], []);
 		});
-		it('<4h (or unknown) keeps the dashed line and gets life-lt4h', () => {
+		it('<4h (or unknown) keeps the dashed line and gets life-map-lt4h', () => {
 			const m = make();
 			lifeStates.decorateMap(m.lines, m.rows, () => null);
-			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-lt4h']);
+			assert.deepStrictEqual(m.lines[0][2], ['eol', 'life-map-lt4h']);
 		});
 		it('tags only the node behind an EOL hole, once', () => {
 			const m = make();
@@ -277,8 +277,8 @@ describe('Wormhole life states', () => {
 		it('adds the <1h and EOL lines after End of Life (<4h)', () => {
 			const on = lifeStates.legend(upstream, true);
 			assert.ok(on.indexOf("<td>&lt;4h (End of Life)</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr><tr class='life-states-legend'>") > 0);
-			assert.ok(on.indexOf("<div class='guide eol life-lt1h'></div>") > 0 && on.indexOf("<div class='guide eol life-eol'></div>") > 0);
-			assert.ok(on.indexOf('Mass Destabbed') > on.indexOf('life-eol'));
+			assert.ok(on.indexOf("<div class='guide eol life-map-lt1h'></div>") > 0 && on.indexOf("<div class='guide eol life-map-eol'></div>") > 0);
+			assert.ok(on.indexOf('Mass Destabbed') > on.indexOf('life-map-eol'));
 		});
 		it('is idempotent and goes back to upstream\'s legend when off', () => {
 			const on = lifeStates.legend(upstream, true);
