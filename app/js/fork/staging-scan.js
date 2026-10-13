@@ -19,7 +19,7 @@ const stagingScan = {
 		medianFactor: 2,	// ...with at least 2x the radius median of jumps...
 		activeHours: 16,	// ...busy (any jumps) in at least 16 of the 24 hours, and NPC kills not outnumbering jumps
 		pvpKills: 10,		// 24 h ship + pod kills for "PvP"
-		ratting: 200,		// 24 h NPC kills for "Ratting"
+		ratting: 1000,		// 24 h NPC kills for "Ratting"
 		quiet: 20,			// fewer 24 h jumps than this: "Quiet"
 		ratterPenalty: 0.5,	// score factor when NPC kills outnumber jumps (a ratting system, not a staging)
 		// Last hour only (no 24 h data yet): same idea, hourly numbers
@@ -242,6 +242,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function regionName(regionID) {
 			return typeof appData !== "undefined" && appData.regions && appData.regions[regionID] ? appData.regions[regionID].name : "";
 		}
+		/** The region map (PR #95) when it is loaded and switched on (Settings > Routes & Navigation > Region map) */
+		function regionMapOn() {
+			try {
+				return typeof regionMap !== "undefined" && typeof regionMap.open === "function" && typeof regionMap.settings === "function"
+					&& !!regionMap.settings(opts()).enabled;
+			} catch (e) { return false; }
+		}
+		const RMAP_ICON = "<svg width='11' height='10' viewBox='0 0 11 10' aria-hidden='true'><path d='M0.5 1.5 L3.8 0.5 L7.2 1.5 L10.5 0.5 V8.5 L7.2 9.5 L3.8 8.5 L0.5 9.5 Z M3.8 0.5 V8.5 M7.2 1.5 V9.5' fill='none' stroke='currentColor' stroke-width='1'></path></svg>";
 		function viewing() { return typeof viewingSystemID !== "undefined" ? parseInt(viewingSystemID, 10) : null; }
 		function inNull(id) { return ss.isNullSec(id, sys(id)); }
 		function settings() {
@@ -342,6 +350,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					e.preventDefault();
 					const id = parseInt(this.getAttribute("data-system"), 10);
 					if (id && id !== viewing() && typeof tripwire !== "undefined") { tripwire.systemChange(id); }
+				});
+				$p.on("click", ".ss-rmap[data-system]", function(e) {
+					e.preventDefault();
+					if (regionMapOn()) { regionMap.open({ kind: "system", id: parseInt(this.getAttribute("data-system"), 10) }); }
 				});
 				$p.on("click", "th[data-sort]", function() {
 					const key = this.getAttribute("data-sort");
@@ -444,6 +456,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!collapsed) {
 				const rows = ss.sortRows(scan.rows, state.sort.key, state.sort.dir, info);
 				const dayCol = scan.mode === "24h";
+				const rmap = regionMapOn();
 				html += "<div class='ss-body'><table class='ss-table'><thead><tr>"
 					+ header("name", "System") + header("jumps", "Jumps", "Stargate jumps from " + originInfo.name)
 					+ "<th>Region</th>" + header("sec", "Sec")
@@ -459,7 +472,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					const region = i.regionID !== originInfo.regionID ? regionName(i.regionID) : "";
 					const base = row.day || row.now;
 					html += "<tr class='" + (row.staging ? "ss-staging" : "") + (row.id === origin ? " ss-origin" : "") + "'>"
-						+ "<td><a href='.?system=" + encodeURIComponent(i.name) + "' class='ss-sys' data-system='" + row.id + "'>" + ss.escape(i.name) + "</a></td>"
+						+ "<td><a href='.?system=" + encodeURIComponent(i.name) + "' class='ss-sys' data-system='" + row.id + "'>" + ss.escape(i.name) + "</a>"
+						+ (rmap ? " <a href='#' class='ss-rmap' data-system='" + row.id + "' title='Open on the region map' aria-label='Open "
+							+ ss.escape(i.name) + " on the region map'>" + RMAP_ICON + "</a>" : "") + "</td>"
 						+ "<td class='ss-num'>" + row.jumps + "</td>"
 						+ "<td class='ss-region'>" + ss.escape(region) + "</td>"
 						+ "<td class='ss-num " + ss.escape(s.systemTypeClass || "") + "'>" + ss.secText(i.security) + "</td>"

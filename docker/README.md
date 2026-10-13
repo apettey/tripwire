@@ -909,7 +909,8 @@ reach. The range maths is a separate pure engine, `app/js/fork/jump-range.js` (t
 Viewing a k-space null-sec system (not Pochven, Zarzakh or wormhole space) opens a panel over the chain map
 (`app/js/fork/staging-scan.js`) listing every system within 5 / 10 / 15 stargate jumps (plain hop count over
 `tripwire.map.shortest`, no wormholes) with its traffic and kills, and puts an STG badge on chain nodes that are likely
-staging systems. "Staging" in the chain map header (and Settings > Map Markers) turns it off: `options.stagingScan`
+staging systems. A small map icon next to each system opens it on the region map (only while the region map is on).
+"Staging" in the chain map header (and Settings > Map Markers) turns it off: `options.stagingScan`
 (`enabled`, `radius`, `collapsed`). No new external calls. EVE has no public docked-player counts, so ship jumps
 (traffic) and NPC kills (ratters undocked) stand in.
 
@@ -923,7 +924,7 @@ staging systems. "Staging" in the chain map header (and Settings > Map Markers) 
   hour only and says so; it then tags "Busy now" instead of "Likely staging".
 - Thresholds (`stagingScan.T`): **Likely staging** = among the top 3 of the radius by 24 h jumps, at least 2x the radius
   median, jumps in at least 16 of the 24 hours, and NPC kills not outnumbering jumps. Tags: **PvP** 24 h ship + pod
-  kills >= 10, **Ratting** 24 h NPC kills >= 200, **Quiet** 24 h jumps < 20 (last hour only: 3 / 30 / 2, "Busy now" at
+  kills >= 10, **Ratting** 24 h NPC kills >= 1000, **Quiet** 24 h jumps < 20 (last hour only: 3 / 30 / 2, "Busy now" at
   >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
   outnumber jumps.
 

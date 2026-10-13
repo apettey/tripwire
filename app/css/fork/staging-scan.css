@@ -85,6 +85,9 @@
 .staging-scan .ss-hours { color: #777; font-size: 9px; }
 .staging-scan .ss-sys { color: #CCC; }
 .staging-scan tr.ss-origin .ss-sys { font-weight: bold; }
+.staging-scan .ss-rmap { color: #666; margin-left: 2px; vertical-align: -1px; }
+.staging-scan .ss-rmap:hover { color: #FFF; }
+.staging-scan .ss-rmap svg { display: inline-block; }
 
 /* Likely staging rows stand out */
 .staging-scan tr.ss-staging td { background: rgba(255, 140, 0, 0.13); }

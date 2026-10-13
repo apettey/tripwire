@@ -6,7 +6,8 @@
 
 When you view a null-sec system (for example by clicking it on the chain map), a panel over the chain map lists the
 systems within 5 / 10 / 15 gate jumps with their jumps, kills and NPC kills (last hour and last 24 hours) and flags the
-likely staging systems; those also get an STG badge on the chain map. EVE has no public docked-player counts, so traffic
+likely staging systems; those also get an STG badge on the chain map. A small map icon next to each system opens it
+on the region map (shown only while the region map is on). EVE has no public docked-player counts, so traffic
 (ship jumps) and NPC kills (ratters undocked) stand in, and the panel says so.
 
 ## Before / After
@@ -33,6 +34,7 @@ Toggle: the "Staging" button in the chain map header, and Settings > Map Markers
 - `app/js/fork/staging-scan.js`, `app/css/fork/staging-scan.css`: gate BFS, scoring and tags (pure, tested in
   `app/js-test/fork/staging-scan.test.js`), the panel, the header button and the chain node badge. Hooks
   `tripwire.systemChange`, `chain.nodes` and `chain.activity` by wrapping them.
+- Tags: PvP (24 h ship + pod kills >= 10), Ratting (24 h NPC kills >= 1000), Quiet (24 h jumps < 20).
 - `public/staging_activity.php` (new): 24 h sums per system from upstream's `system_activity` table (no new external
   calls, file cache per hour). Thresholds and the endpoint are documented in docker/README.md#staging-scan.
 - `app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`: `stagingScan` in the mask defaults allow-list.

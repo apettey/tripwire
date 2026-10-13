@@ -123,6 +123,15 @@ describe('stagingScan', () => {
 			assert.deepStrictEqual(row(1).tags, ['Quiet']);
 			assert.deepStrictEqual(row(5).tags, []);
 		});
+		it('tags Ratting from 1000 NPC kills in 24 h', () => {
+			const two = [{ id: S(1), jumps: 0 }, { id: S(2), jumps: 1 }];
+			const out = stagingScan.analyse(two, {}, { hours: 24, systems: {
+				[S(1)]: { jumps: 5000, shipKills: 0, podKills: 0, npcKills: 999, activeHours: 24 },
+				[S(2)]: { jumps: 5000, shipKills: 0, podKills: 0, npcKills: 1000, activeHours: 24 }
+			} });
+			assert.ok(out.rows.find(r => r.id === S(1)).tags.indexOf('Ratting') < 0);
+			assert.ok(out.rows.find(r => r.id === S(2)).tags.indexOf('Ratting') >= 0);
+		});
 		it('flags nothing when the top systems are not well above the median', () => {
 			const flat = stagingScan.analyse(list.slice(0, 4), {}, { hours: 24, systems: {
 				[S(1)]: { jumps: 500, shipKills: 0, podKills: 0, npcKills: 0, activeHours: 24 },
