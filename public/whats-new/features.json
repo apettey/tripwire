@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 107,
+      "date": "2026-10-13",
+      "title": "Targets and waypoints for your mask",
+      "description": "Mark systems as targets for everyone on your mask: Shift+click a system on the region map, or use Mark as target in its card, and add a short note. Targets are numbered on the region map and on your chain map, and expire when the system's skyhook window ends (or after the time you pick).\n\nIn the Targets list beside the map, put them in order (or click Shortest order), then Send waypoints to set them as waypoints for the characters you pick. Turn the chain map badges off in Settings > Map Markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-107-region-map-targets.png",
+          "caption": "Targets on the region map, with the Targets list"
+        }
+      ]
+    },
+    {
       "pr": 106,
       "date": "2026-10-13",
       "title": "Skyhooks on the region map",
