@@ -211,14 +211,32 @@ network; `esi/tests/` is not in the image) and `app/js-test/fork/esi-limits.test
 
 ### Raidable skyhooks
 
-The Raidable skyhooks box (opened from the skyhook icon on low-sec / null-sec chain systems) reads `public/skyhooks.php`, which serves one server-wide copy of ESI's public
+Raidable skyhooks are shown on the region map (its "Skyhooks" overlay, opened from the skyhook icon on low-sec /
+null-sec chain systems or Ctrl+K "Skyhooks") and as a tag in the staging scan; the floating Raidable skyhooks box was
+retired on 2026-10-13 (its saved layout entry is dropped on load). All of them share one browser-side loader
+(`skyhooksPanel.store`, at most one request per 5 minutes, only while something shows skyhooks) of `public/skyhooks.php`, which serves one server-wide copy of ESI's public
 `GET /skyhooks/raidable` (`skyhooks.inc.php`, cache in `cache/skyhooks.json`). Browsers never call ESI for it: the
 route's rate-limit group allows only 30 requests per 15 minutes per IP. The server asks ESI at most once per 5
 minutes (exclusive `flock`, so concurrent requests don't stampede; after an error not again for 60 s), sends
 `X-Compatibility-Date: 2026-10-01` for this one call (the pinned date answers 404), respects the pauses of
 `esi/esi.inc.php`, and serves the old list when ESI fails. No env vars. Tests:
-`docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network) and
-`app/js-test/fork/skyhooks-panel.test.js`.
+`docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network),
+`app/js-test/fork/skyhooks-panel.test.js` and `app/js-test/fork/region-map-skyhooks.test.js`.
+
+### Region map targets
+
+Any member of a mask can mark up to 25 k-space systems as targets on the region map (Shift+click, or the system card),
+with an optional note (plain text, at most 60 characters) and an expiry (1 / 3 / 6 / 24 h, or by default the end of the
+system's latest raidable skyhook window, else 6 h). Everyone on the mask sees them (region map, a numbered badge on the
+chain map) and can send them to their own characters as in-game waypoints in list order (ESI
+`/ui/autopilot/waypoint/` from the browser with each character's own token, one call at a time; the first clears the
+character's route). Storage: table `fork_map_targets` (`map_targets.inc.php`, reference DDL `docker/sql/map-targets.sql`,
+created on first use, no migration), endpoint `public/map_targets.php` (GET list, POST mode=add / remove / clear / reorder;
+session with a mask, `X-Requested-With` on changes like `rally.php`; expired rows are deleted on every request). Add,
+change, remove and clear are written to the audit log (entity `target`). The browser polls every 30 s while the region
+map is open, otherwise every 5 minutes (chain badges); there is no push. No env vars. Tests:
+`docker compose -f docker-compose.dev.yml exec -T app php tests/map_targets_endpoint_test.php` and
+`app/js-test/fork/map-targets.test.js`.
 
 ### zKillboard integration
 
@@ -903,6 +921,33 @@ reach. The range maths is a separate pure engine, `app/js/fork/jump-range.js` (t
   only systems in `systems.json`, at most 500 per mask. Tests, against the dev database:
   `docker compose -f docker-compose.dev.yml exec -T app php jumprange/tests/jammed_endpoint_test.php`
   (`jumprange/tests/` and `jumprange/tools/` are not in the image).
+
+### Staging scan
+
+Viewing a k-space null-sec system (not Pochven, Zarzakh or wormhole space) opens a panel over the chain map
+(`app/js/fork/staging-scan.js`) listing every system within 5 / 10 / 15 stargate jumps (plain hop count over
+`tripwire.map.shortest`, no wormholes) with its traffic and kills, and puts an STG badge on chain nodes that are likely
+staging systems. A small map icon next to each system opens it on the region map (only while the region map is on).
+"Staging" in the chain map header (and Settings > Map Markers) turns it off: `options.stagingScan`
+(`enabled`, `radius`, `collapsed`). No new external calls. EVE has no public docked-player counts, so ship jumps
+(traffic) and NPC kills (ratters undocked) stand in.
+
+- Last hour: `chain.data.activity` (the chain map's own ESI jumps/kills request).
+- Last 24 hours: `public/staging_activity.php` (`GET`, logged-in session) sums upstream's hourly `system_activity` table
+  (written by `system_activity.cron.php`, see the crontab above) per system: `{"hours":<hours of history in the window>,
+  "latest":<unix time of the newest row>,"generated":..,"systems":{"<id>":[shipJumps, shipKills, podKills, npcKills,
+  activeHours]}}`, `activeHours` = hours with any jumps; only systems with activity. One `GROUP BY` on the `time` index,
+  cached in `cache/staging-activity-v2.json` for the hour and newest cron row; browsers may reuse it until a few minutes past
+  the next full hour, or 5 minutes while this hour's cron row is missing (the client then asks again after 10 minutes,
+  otherwise once per UTC hour, only while the feature is on and a null-sec system is viewed). With less than 20 hours of
+  history (fresh install, cron outage) the busy-hours and Quiet thresholds are scaled by hours / 24 and the panel says
+  "last N h only"; below 6 hours (`T.minHours`) nothing is "Likely staging" (no STG badge), the top systems are tagged
+  "Busy now" (20 jumps per covered hour) while the N-hour sums are still shown; with none, it uses the last hour only and says so, tagging "Busy now" instead of "Likely staging".
+- Thresholds (`stagingScan.T`): **Likely staging** = among the top 3 of the radius by 24 h jumps, at least 2x the radius
+  median, jumps in at least 16 of the 24 hours, and NPC kills not outnumbering jumps. Tags: **PvP** 24 h ship + pod
+  kills >= 10, **Ratting** 24 h NPC kills >= 1000, **Quiet** 24 h jumps < 20 (last hour only: 3 / 30 / 2, "Busy now" at
+  >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
+  outnumber jumps.
 
 ### Versions
 

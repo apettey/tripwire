@@ -1,26 +1,21 @@
 const skyhooksPanel = {
-	// Raidable skyhooks box (fork-owned), opened like the Jump planner: low-sec / null-sec systems on the chain map get a
-	// small skyhook icon (and clicking such a system's name opens it too, when that is on). It opens a movable box,
-	// "Raidable skyhooks near <system>", listing the skyhooks whose theft window is open or opens soon within a number of
-	// gate jumps of THAT system, with a close button. The list comes from public/skyhooks.php, which keeps one
-	// server-wide copy of ESI's /skyhooks/raidable (the browser never calls ESI: that route allows 30 requests per
-	// 15 minutes per IP). Jumps use guidance's costs (the user's route security preference and avoid list). Saved per user in
-	// options.skyhooksPanel = {enabled (the icon), clickOpen, maxJumps, low, null, window, soonHours, sort, position}; a
-	// missing key means the default (icon on, opens on click, 10 jumps, low-sec and null-sec, opens within 2 h, by jumps).
-	// Also {lava, ice} (planet filter; both on) and sort "value": planet type, name and yield come from the static
-	// public/skyhooks-data/planets.json (SDE), see planetInfo.
+	// Raidable skyhooks (fork-owned): the data and the pure logic behind the region map's Skyhooks overlay (region-map-view.js,
+	// region-map-skyhooks.js) and the staging scan's skyhook tag. Low-sec / null-sec systems on the chain map get a small
+	// skyhook icon; clicking it (or, when that is on, the system's name) opens the region map on that system with Skyhooks on.
+	// (Until 2026-10-13 this opened a floating "Raidable skyhooks" box; it was retired in favour of the region map.)
+	// The list comes from public/skyhooks.php, which keeps one server-wide copy of ESI's /skyhooks/raidable (the browser
+	// never calls ESI: that route allows 30 requests per 15 minutes per IP); `skyhooksPanel.store` is the one loader every
+	// user of the data shares (every 5 minutes at most, only while something shows skyhooks). Saved per user in
+	// options.skyhooksPanel = {enabled (the icon), clickOpen, low, null, lava, ice, window, soonHours, sort}; a missing key means
+	// the default (icon on, name click off, low-sec and null-sec, lava and ice, opens within 2 h, by jumps).
+	// Planet type, name and yield come from the static public/skyhooks-data/planets.json (SDE), see planetInfo.
 	// Keep `const skyhooksPanel` on the first line: the test helper strips it to define a global.
-	WIDGET_ID: "skyhooksWidget",
 	URL: "skyhooks.php",
 	REFRESH_MS: 5 * 60 * 1000,
+	RETRY_MS: 60 * 1000,          // after a failed request
 	NEAR_TTL_MS: 5 * 60 * 1000,   // how long a routing search is kept
-	TICK_MS: 5000,
-	REDRAW_MS: 30000,
-	DEFAULT_SIZE: { x: 12, y: 8 },
-	MIN_SIZE: { x: 5, y: 3 },
-	DEFAULTS: { enabled: true, clickOpen: true, maxJumps: 10, low: true, null: true, lava: true, ice: true, window: "soon", soonHours: 2, sort: "jumps" },
-	MAX_JUMPS_CHOICES: [3, 5, 10, 15, 20, 30],
-	MAX_SEARCH_JUMPS: 60,       // "any distance" still stops here
+	DEFAULTS: { enabled: true, clickOpen: false, low: true, null: true, lava: true, ice: true, window: "soon", soonHours: 2, sort: "jumps" },
+	MAX_SEARCH_JUMPS: 60,       // jump counts stop here
 	WINDOWS: ["now", "soon", "all"],
 	SOON_HOURS_CHOICES: [1, 2, 4, 8, 24],
 	SORTS: ["jumps", "start", "value"],
@@ -34,17 +29,14 @@ const skyhooksPanel = {
 
 	// ---- Settings (pure) ----
 
-	/** The effective settings from options.skyhooksPanel: every value valid, missing ones at their default.
-	maxJumps 0 means "any distance". */
+	/** The effective settings from options.skyhooksPanel: every value valid, missing ones at their default */
 	settings: function(saved) {
 		const d = skyhooksPanel.DEFAULTS;
 		const s = saved && typeof saved === "object" ? saved : {};
-		const maxJumps = Number(s.maxJumps);
 		const soonHours = Number(s.soonHours);
 		return {
 			enabled: s.enabled !== false,
-			clickOpen: s.clickOpen !== false,
-			maxJumps: s.maxJumps !== undefined && s.maxJumps !== null && s.maxJumps !== "" && Number.isInteger(maxJumps) && maxJumps >= 0 && maxJumps <= 200 ? maxJumps : d.maxJumps,
+			clickOpen: s.clickOpen === true,
 			low: s.low !== false,
 			null: s.null !== false,
 			lava: s.lava !== false,
@@ -262,36 +254,8 @@ const skyhooksPanel = {
 		return result;
 	},
 
-	/** The rows to show: [{skyhook, nearest: {exit: {systemID}, jumps}}] within maxJumps (0 = any), sorted
-	@param nearestFn (systemID) => {jumps, exitID} or null/undefined (see distances) */
-	rows: function(skyhooks, systemFor, nearestFn, now, settings, planets) {
-		const limit = settings.maxJumps > 0 ? settings.maxJumps : skyhooksPanel.MAX_SEARCH_JUMPS;
-		const rows = skyhooksPanel.prefilter(skyhooks, systemFor, now, settings, planets).map(function(s) {
-			const n = nearestFn(s.systemID);
-			const sys = systemFor(s.systemID) || {};
-			return { skyhook: s, planet: skyhooksPanel.planetInfo(planets, s.planetID, sys.name), nearest: n ? { exit: { systemID: n.exitID }, jumps: n.jumps } : null };
-		}).filter(function(r) { return r.nearest && r.nearest.jumps <= limit; });
-		return skyhooksPanel.sort(rows, settings.sort);
-	},
-
-	/** Where to put the widget when there's no saved position: right of the existing widgets, from row 1, if that fits
-	in the window; otherwise below them, at the left (as the Favourites panel does).
-	widgets: [{col, row, size_x, size_y}]; availableCols: grid columns that fit in the window (optional) */
-	defaultPlacement: function(widgets, availableCols) {
-		let maxCol = 0, maxRow = 0;
-		(widgets || []).forEach(function(w) {
-			if (!w) { return; }
-			maxCol = Math.max(maxCol, (Number(w.col) || 1) + (Number(w.size_x) || 1) - 1);
-			maxRow = Math.max(maxRow, (Number(w.row) || 1) + (Number(w.size_y) || 1) - 1);
-		});
-		const size = skyhooksPanel.DEFAULT_SIZE;
-		if (availableCols && maxCol && maxCol + size.x > availableCols) {
-			return { col: 1, row: maxRow + 1, size_x: size.x, size_y: size.y };
-		}
-		return { col: maxCol + 1, row: 1, size_x: size.x, size_y: size.y };
-	},
-
-	/** Sorted copy: "jumps" (then window start), "start" (then jumps) or "value" (estimated ISK per hour, highest first, then jumps) */
+	/** Sorted copy of rows [{skyhook: {start, systemID}, nearest: {jumps} or null, planet: {isk}}]: "jumps" (then window start),
+	"start" (then jumps) or "value" (estimated ISK per hour, highest first, then jumps) */
 	sort: function(rows, by) {
 		const jumps = function(r) { return r.nearest ? r.nearest.jumps : Infinity; };
 		const isk = function(r) { return r.planet ? r.planet.isk : 0; };
@@ -323,7 +287,7 @@ const skyhooksPanel = {
 
 	iconHtml: function(systemID, name) {
 		return "<span class='sky-icon' data-sky-system='" + (parseInt(systemID, 10) || 0) + "' title='"
-			+ skyhooksPanel.escape("Raidable skyhooks near " + (name || "this system")) + "'>"
+			+ skyhooksPanel.escape("Raidable skyhooks: open the region map on " + (name || "this system")) + "'>"
 			+ "<svg width='10' height='10' viewBox='0 0 10 10' aria-hidden='true'><circle cx='5' cy='2.2' r='1.4' fill='none' stroke='currentColor' stroke-width='1.2'></circle>"
 			+ "<path d='M5 3.6 V9 M2 6.2 Q5 10 8 6.2' fill='none' stroke='currentColor' stroke-width='1.2' stroke-linecap='round'></path></svg></span>";
 	},
@@ -349,40 +313,63 @@ const skyhooksPanel = {
 			if (ids.indexOf(id) < 0) { ids.push(id); }
 		});
 		return ids;
-	},
-
-	/** Text for an empty list: {kind, text}. `count` is the number of skyhooks the server knows, `exits` the chain's exits. */
-	emptyState: function(count, exits, settings, unavailable) {
-		if (unavailable) { return { kind: "unavailable", text: "Skyhook data unavailable." }; }
-		if (!count) { return { kind: "none", text: "No raidable skyhooks right now." }; }
-		if (!exits || !exits.length) { return { kind: "noexits", text: "No k-space exit on your chain yet: jumps are counted from the chain's k-space systems." }; }
-		return { kind: "filtered", text: "No raidable skyhook matches your options (" + (settings.maxJumps > 0 ? "within " + settings.maxJumps + " jumps" : "any distance") + (!settings.lava || !settings.ice ? ", " + (!settings.lava && !settings.ice ? "no planet type" : settings.lava ? "lava only" : "ice only") + " (Planet filter)" : "") + "). Widen them above." };
 	}
 };
 
-if (typeof window !== "undefined" && typeof document !== "undefined" && typeof jQuery !== "undefined" && typeof forkSettings !== "undefined") {
+
+if (typeof window !== "undefined" && typeof document !== "undefined" && typeof jQuery !== "undefined") {
 	(function() {
 		const sp = skyhooksPanel;
-		let planets = null;       // public/skyhooks-data/planets.json once loaded
-		let planetsLoading = false;
-		let planetsFailed = false;
-		let data = null;          // last answer of skyhooks.php: {skyhooks, fetched, stale, error}
-		let loadError = null;     // text when the last request failed
-		let skew = 0;             // server time - browser time, seconds
-		let loading = false;
-		let origin = null;        // the system the box is open for
-		let lastRender = 0;
 
-		function opts() { return sp.settings(options.skyhooksPanel); }
+		function opts() { return sp.settings(typeof options !== "undefined" ? options.skyhooksPanel : null); }
 		function isOn() { return opts().enabled; }
-		function now() { return Date.now() / 1000 + skew; }
 		function systemFor(id) { return (typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(id) : null) || appData.systems[id] || null; }
 		function systems() { return (typeof tripwire !== "undefined" && tripwire && tripwire.systems) || appData.systems; }
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
-		// One search from the box's system per (system, limit, route preferences, gate map), kept until one of them changes.
-		// The route itself is only worked out when "Set route in game" is clicked.
+
+		// ---- The shared loader: skyhooks.php (every 5 minutes at most) and planets.json (once) ----
+
+		const store = {
+			data: null,			// last answer of skyhooks.php: {skyhooks, fetched, stale, unavailable, error}
+			planets: null,		// planets.json once loaded
+			error: null,		// text when the last request failed
+			planetsFailed: false,
+			loading: false, planetsLoading: false, loadedAt: 0, failedAt: 0, skew: 0, listeners: []
+		};
+
+		function changed() {
+			store.listeners.forEach(function(fn) { try { fn(); } catch (e) { console.error("Skyhooks: listener failed", e); } });
+		}
+
+		function loadPlanets() {
+			if (store.planets || store.planetsLoading || store.planetsFailed) { return; }
+			store.planetsLoading = true;
+			$.ajax({ url: sp.PLANETS_URL, dataType: "json", cache: true }).done(function(d) {
+				if (d && d.planets && typeof d.planets === "object") { store.planets = d; } else { store.planetsFailed = true; }
+			}).fail(function() { store.planetsFailed = true; }).always(function() { store.planetsLoading = false; changed(); });
+		}
+
+		/** Load the list when it is older than 5 minutes (after a failure: a minute later). Users call it on every paint. */
+		function ensure() {
+			loadPlanets();
+			const now = Date.now();
+			if (store.loading || now - store.loadedAt < sp.REFRESH_MS || now - store.failedAt < sp.RETRY_MS) { return; }
+			store.loading = true;
+			$.ajax({ url: sp.URL, dataType: "json", cache: false }).done(function(d) {
+				if (!d || !Array.isArray(d.skyhooks)) { store.error = "Unexpected answer from the server."; store.failedAt = Date.now(); return; }
+				store.data = d;
+				store.error = null;
+				store.loadedAt = Date.now();
+				if (d.now) { store.skew = d.now - Date.now() / 1000; }
+			}).fail(function(xhr) {
+				store.error = xhr && xhr.status === 403 ? "Not signed in." : "Could not load the skyhook list.";
+				store.failedAt = Date.now();
+			}).always(function() { store.loading = false; changed(); });
+		}
+
+		// Jumps from a set of systems (you, or the chain's exits) to every system: one multi-source search with guidance's
+		// costs (the user's route security preference and avoid list), kept per (origins, preferences, gate map) for 5 min
 		let nearCache = { key: null, map: null, value: null, at: 0 };
-		// Gate changes (faction warfare) reach the map through guidance.clearCache: forget the search then too, and after 5 min
 		if (typeof guidance !== "undefined" && typeof guidance.clearCache === "function" && !guidance.clearCache.skyhooksWrapped) {
 			const clear = guidance.clearCache;
 			guidance.clearCache = function() { nearCache = { key: null, map: null, value: null, at: 0 }; return clear.apply(this, arguments); };
@@ -392,233 +379,58 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const c = options.chain || {}, r = c.routeIgnore || {};
 			return (c.routeSecurity || "") + "|" + (r.enabled ? (r.systems || []).join(",") : "");
 		}
-		function nearest(limit) {
-			const map = routeDestinations.routeMap();
-			const key = origin + "|" + limit + "|" + prefsKey();
+		function jumpsFrom(originIDs) {
+			const ids = (originIDs || []).map(Number).filter(Boolean).sort();
+			if (!ids.length) { return {}; }
+			const map = typeof routeDestinations !== "undefined" && routeDestinations.routeMap ? routeDestinations.routeMap() : ((tripwire.map && tripwire.map.shortest) || appData.map.shortest);
+			const key = ids.join(",") + "|" + prefsKey();
 			if (nearCache.key !== key || nearCache.map !== map || Date.now() - nearCache.at > sp.NEAR_TTL_MS) {
 				const mods = (typeof guidance !== "undefined" && guidance.jumpCostModifiers) || [];
 				const costFn = function(from, to, mapCost) {
 					const base = mapCost + sp.entryPenalty(typeof systemAnalysis !== "undefined" ? systemAnalysis.analyse(30000000 + to) : null, options.chain);
 					return mods.reduce(function(c, m) { return c > 0 ? m(from, to, c) : c; }, base) > 0 ? base : 0;
 				};
-				nearCache = { key: key, map: map, value: sp.distances(map, [origin], limit, costFn), at: Date.now() };
+				nearCache = { key: key, map: map, value: sp.distances(map, ids, sp.MAX_SEARCH_JUMPS, costFn), at: Date.now() };
 			}
 			return nearCache.value;
 		}
-		function save(patch) {
-			options.skyhooksPanel = Object.assign({}, options.skyhooksPanel || {}, patch);
-			options.save();
-		}
 
-		// ---- Data ----
+		sp.store = {
+			/** The current state (and a refresh when the list is old): {data, planets, error, planetsFailed, loading} */
+			get: function() {
+				ensure();
+				return { data: store.data, planets: store.planets, error: store.error, planetsFailed: store.planetsFailed, loading: store.loading };
+			},
+			/** Server time, seconds */
+			now: function() { return Date.now() / 1000 + store.skew; },
+			/** fn() runs whenever new data (or an error) arrives */
+			onChange: function(fn) { if (typeof fn === "function") { store.listeners.push(fn); } },
+			jumpsFrom: jumpsFrom,
+			systemFor: systemFor
+		};
 
-		/** The static planet list (lava / ice, reagent per hour): once; on failure the rows just have no planet details */
-		function loadPlanets() {
-			if (planets || planetsLoading) { return; }
-			planetsLoading = true;
-			$.ajax({ url: sp.PLANETS_URL, dataType: "json", cache: true }).done(function(d) {
-				if (d && d.planets && typeof d.planets === "object") { planets = d; planetsFailed = false; } else { planetsFailed = true; }
-			}).fail(function() {
-				planetsFailed = true;
-			}).always(function() {
-				planetsLoading = false;
-				render();
-			});
-		}
+		// ---- Opening the region map ----
 
-		function load() {
-			if (loading || !isOn() || !$("#" + sp.WIDGET_ID).length) { return; }
-			loading = true;
-			loadPlanets();
-			$.ajax({ url: sp.URL, dataType: "json", cache: false }).done(function(d) {
-				if (!d || !Array.isArray(d.skyhooks)) { loadError = "Unexpected answer from the server."; return; }
-				data = d;
-				loadError = null;
-				if (d.now) { skew = d.now - Date.now() / 1000; }
-			}).fail(function(xhr) {
-				loadError = xhr && xhr.status === 403 ? "Not signed in." : "Could not load the skyhook list.";
-			}).always(function() {
-				loading = false;
-				render();
-			});
-		}
-
-		// ---- Widget ----
-
-		function selectHtml(cls, choices, value) {
-			return "<select class='" + cls + "'>" + choices.map(function(c) {
-				return "<option value='" + sp.escape(c[0]) + "'" + (String(c[0]) === String(value) ? " selected" : "") + ">" + sp.escape(c[1]) + "</option>";
-			}).join("") + "</select>";
-		}
-
-		function optionsHtml(s) {
-			const jumpChoices = sp.MAX_JUMPS_CHOICES.map(function(n) { return [n, n + " jumps"]; }).concat([[0, "Any distance"]]);
-			const windowChoices = [["now", "Vulnerable now"], ["soon", "Opens within..."], ["all", "All windows"]];
-			return "<div class='sky-options'>"
-				+ "<label title='Gate jumps from this system'>Within " + selectHtml("sky-max", jumpChoices, s.maxJumps) + "</label>"
-				+ "<label><input type='checkbox' class='sky-low'" + (s.low ? " checked" : "") + " /> Low-sec</label>"
-				+ "<label><input type='checkbox' class='sky-null'" + (s.null ? " checked" : "") + " /> Null-sec</label>"
-				+ "<span class='sky-planets' title='Lava planets give Magmatic Gas, ice planets Superionic Ice'>Planet:"
-				+ " <label><input type='checkbox' class='sky-lava'" + (s.lava ? " checked" : "") + " /> Lava</label>"
-				+ " <label><input type='checkbox' class='sky-ice'" + (s.ice ? " checked" : "") + " /> Ice</label>"
-				+ "</span>"
-				+ "<label>Window " + selectHtml("sky-window", windowChoices, s.window)
-				+ (s.window === "soon" ? " " + selectHtml("sky-hours", sp.SOON_HOURS_CHOICES.map(function(h) { return [h, h + " h"]; }), s.soonHours) : "") + "</label>"
-				+ "<label>Sort " + selectHtml("sky-sort", [["jumps", "Jumps"], ["start", "Window start"], ["value", "Value"]], s.sort) + "</label>"
-				+ "</div>";
-		}
-
-		function widgetHtml() {
-			return "<li id='" + sp.WIDGET_ID + "' class='gridWidget'>"
-				+ "<div class='controls'><span class='sky-title'><i data-icon='anchor'></i> <span class='sky-title-text'>Raidable skyhooks</span> <span class='sky-count'></span></span>"
-				+ "<i class='sky-close' data-icon='times' title='Close the Raidable skyhooks box'></i>"
-				+ "<span class='sky-time' title='Times are EVE time (UTC)'>EVE time</span></div>"
-				+ "<div class='content'><div class='sky-opts'></div><div class='sky-status'></div><ul class='sky-list'></ul></div>"
-				+ "</li>";
-		}
-
-		function rowHtml(r, t) {
-			const esc = sp.escape;
-			const sys = systemFor(r.skyhook.systemID) || {};
-			const regions = (typeof appData !== "undefined" && appData.regions) || {};
-			const region = (regions[sys.regionID] || {}).name || "";
-			const st = sp.status(r.skyhook.start, r.skyhook.end, t);
-			const sec = sp.securityClass(sys);
-			const originName = (systemFor(origin) || {}).name || origin;
-			const secText = isFinite(Number(sys.security)) ? (Math.round(Number(sys.security) * 10) / 10 || 0).toFixed(1) : "";
-			const pl = r.planet || { kind: "unknown" };
-			const planetName = pl.number;	// the system's name is in the first column already; the full name is the tooltip
-			const badge = pl.kind === "lava" || pl.kind === "ice"
-				? "<span class='sky-planet sky-planet-" + pl.kind + "' title='" + esc((pl.kind === "lava" ? "Lava" : "Ice") + " planet: " + pl.reagent + ", " + pl.perHour.toLocaleString("en-US") + " units/hour. About half of it sits in the raidable surplus bay.") + "'>" + (pl.kind === "lava" ? "Lava" : "Ice") + "</span>"
-				: "";
-			const rating = sp.valueRating(pl);
-			const value = rating > 0
-				? "<span class='sky-value' aria-label='Value " + rating + " of 5' title='" + esc("Value " + rating + "/5 \u2014 ~" + sp.formatIsk(pl.isk / 2) + " ISK/h raidable (estimate: CCP average price, SDE yield). " + pl.reagent + ": " + pl.perHour.toLocaleString("en-US") + " units/hour at about " + sp.formatIsk(pl.isk / pl.perHour) + " ISK each; the whole planet makes about " + sp.formatIsk(pl.isk) + " ISK/h and half of it goes to the raidable surplus bay.") + "'>" + sp.ratingHtml(rating) + "</span>"
-				: "<span class='sky-value'></span>";
-			return "<li class='sky-row sky-" + st.state + "' data-systemid='" + esc(r.skyhook.systemID) + "' data-planet='" + esc(r.skyhook.planetID) + "'>"
-				+ "<span class='sky-system'><a class='" + esc(sys.systemTypeClass) + "' href='.?system=" + esc(encodeURIComponent(sys.name)) + "' title='View " + esc(sys.name) + "'>" + esc(sys.name || r.skyhook.systemID) + "</a>"
-				+ " <span class='sky-sec sky-sec-" + esc(sec) + "'>" + esc(secText) + "</span></span>"
-				+ "<span class='sky-planetcell'" + (pl.name ? " title='" + esc("Planet " + pl.name) + "'" : "") + ">" + badge + (planetName ? " <span class='sky-planetname'>" + esc(planetName) + "</span>" : "") + "</span>"
-				+ value
-				+ "<span class='sky-region' title='" + esc(region) + "'>" + esc(region) + "</span>"
-				+ "<span class='sky-exit' title='Gate jumps from " + esc(originName) + "'>" + (r.nearest.jumps === 0 ? "this system" : r.nearest.jumps + (r.nearest.jumps === 1 ? " jump" : " jumps")) + "</span>"
-				+ "<span class='sky-window' title='" + esc(sp.windowText(r.skyhook.start, r.skyhook.end, t)) + " EVE time'>" + esc(sp.windowText(r.skyhook.start, r.skyhook.end, t)) + "</span>"
-				+ "<span class='sky-countdown'>" + esc(sp.countdown(r.skyhook.start, r.skyhook.end, t)) + "</span>"
-				+ (r.nearest.jumps > 0 && typeof autopilotRoute !== "undefined" && typeof autopilotRoute.push === "function"
-					? "<i class='sky-route' data-icon='auto' title='Set destination in game: " + esc(sys.name) + " as your in-game destination (gate route from " + esc(originName) + ")'></i>" : "<i class='sky-route-none'></i>")
-				+ "</li>";
-		}
-
-		function render() {
-			lastRender = Date.now();
-			const $w = $("#" + sp.WIDGET_ID);
-			if (!$w.length) { return; }
-			const s = opts();
-			const $opts = $w.find(".sky-opts");
-			if (!$opts.find(".sky-options").length || $opts.data("rendered") !== JSON.stringify(s)) {
-				// Don't rebuild a control while it is being used
-				if (!$opts.find(":focus").length) { $opts.html(optionsHtml(s)).data("rendered", JSON.stringify(s)); }
-			}
-			const $status = $w.find(".sky-status"), $list = $w.find(".sky-list");
-			$w.find(".sky-title-text").text("Raidable skyhooks near " + ((systemFor(origin) || {}).name || ""));
-			if (!data) {
-				$list.empty();
-				$w.find(".sky-count").text("");
-				$status.text(loadError || "Loading...").toggleClass("sky-error", !!loadError);
-				return;
-			}
-			const t = now();
-			let rows = [];
-			try {
-				const near = nearest(s.maxJumps > 0 ? s.maxJumps : sp.MAX_SEARCH_JUMPS);
-				rows = sp.rows(data.skyhooks, systemFor, function(id) { return near[id]; }, t, s, planets);
-			} catch (err) { console.error("Skyhooks panel: routing failed", err); }
-			$w.find(".sky-count").text(rows.length ? "(" + rows.length + ")" : "");
-			const notes = [];
-			if (loadError) { notes.push(loadError + " Showing the last list."); }
-			else if (data.error && data.stale && !data.unavailable) { notes.push("ESI is not answering: this list is from " + sp.duration(t - data.fetched) + " ago."); }
-			else if (data.unavailable && data.error) { notes.push(data.error); }
-			if (planetsFailed && !planets) { notes.push("Planet details (lava / ice, value) could not be loaded."); }
-			if (!rows.length) { const empty = sp.emptyState(data.skyhooks.length, [{}], s, data.unavailable); notes.push(empty.text); }
-			$status.html(notes.map(sp.escape).join("<br/>")).toggleClass("sky-error", !!(loadError || data.unavailable || (data.error && data.stale)));
-			$list.html(rows.map(function(r) { return rowHtml(r, t); }).join(""));
-		}
-
-		// ---- Layout ----
-
-		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
-
-		/** Grid columns that fit in the window (widget_base_dimensions + margins), as the Favourites panel does */
-		function availableCols(api) {
-			const o = api.options || {};
-			const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
-			const zoom = parseFloat($("body").css("zoom")) || 1;	// Settings > UI Scale
-			return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
-		}
-
-		/** The saved position, else right of the existing widgets (below them when that doesn't fit) */
-		function placement(api) {
-			const fp = typeof favouritesPanel !== "undefined" ? favouritesPanel : null;
-			const saved = (fp && fp.gridEntry(options.grid, sp.WIDGET_ID)) || (options.skyhooksPanel && options.skyhooksPanel.position) || null;
-			if (saved && Number(saved.col) >= 1 && Number(saved.row) >= 1) {
-				return { col: Number(saved.col), row: Number(saved.row), size_x: Math.max(sp.MIN_SIZE.x, Number(saved.size_x) || 0), size_y: Math.max(sp.MIN_SIZE.y, Number(saved.size_y) || 0) };
-			}
-			return sp.defaultPlacement(api.serialize(), availableCols(api));
-		}
-
-		function addWidget() {
-			const api = gridApi();
-			if (!api) { return; }
-			const $existing = $("#" + sp.WIDGET_ID);
-			if ($existing.length) {
-				if (api.$widgets.is($existing)) { return; }
-				$existing.stop(true, true).remove();
-			}
-			const p = placement(api);
-			const $widget = api.add_widget(widgetHtml(), p.size_x, p.size_y, p.col, p.row, null, [sp.MIN_SIZE.x, sp.MIN_SIZE.y]);
-			$widget.stop(true, true);
-			$widget.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-		}
-
-		function removeWidget() {
-			const api = gridApi();
-			const $widget = $("#" + sp.WIDGET_ID);
-			if (!api || !$widget.length) { return; }
-			// Remember where it was, so opening it again puts it back there
-			const entry = typeof favouritesPanel !== "undefined" ? favouritesPanel.gridEntry(api.serialize($widget), sp.WIDGET_ID) : null;
-			if (entry) {
-				options.skyhooksPanel = Object.assign({}, options.skyhooksPanel || {}, { position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y } });
-				options.save();
-			}
-			$widget.attr("id", sp.WIDGET_ID + "-removed");
-			api.remove_widget($widget, true);
-			$widget.stop(true, true);
-		}
-
-		/** Open the box for a system (switches it when already open) */
-		function open(systemID) {
+		function openMap(systemID) {
 			const id = parseInt(systemID, 10);
-			if (!isOn() || !id) { return; }
-			origin = id;
-			const wasOpen = !!$("#" + sp.WIDGET_ID).length;
-			addWidget();
-			const $w = $("#" + sp.WIDGET_ID);
-			if ($w.length && !wasOpen && $w[0].scrollIntoView) { setTimeout(function() { $w[0].scrollIntoView({ block: "nearest", behavior: "smooth" }); }, 50); }
-			render();
-			load();
+			if (!id) { return; }
+			if (typeof regionMap === "undefined" || typeof regionMap.openSkyhooks !== "function") { console.warn("Skyhooks: the region map is not loaded"); return; }
+			regionMap.openSkyhooks(id);
 		}
 
-		function close() {
-			removeWidget();
-			origin = null;
+		// ---- The retired box: drop its saved layout entry and position ----
+
+		function cleanOptions() {
+			try {
+				if (typeof regionMapSkyhooks !== "undefined" && typeof options !== "undefined") { regionMapSkyhooks.cleanOptions(options); }
+			} catch (e) { console.error("Skyhooks: could not clean the old box's options", e); }
 		}
 
-		/** Settings turned the icon off (Save, Reset): the box goes, and the chain is redrawn without the icons */
+		/** Settings turned the icon off or on (Save, Reset): the chain is redrawn with or without the icons */
 		let lastOn = null;
 		function applySettings() {
 			const on = isOn();
-			if (!on) { close(); }
-			if (lastOn !== null && on !== lastOn) { redrawChain(); }	// only when the icons appear or go
+			if (lastOn !== null && on !== lastOn) { redrawChain(); }
 			lastOn = on;
 		}
 
@@ -642,94 +454,73 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		// ---- Settings > Routes & Navigation ----
 
 		function setupSettings() {
-			// Take effect on Save; Reset deletes options.skyhooksPanel (back to the defaults)
+			if (typeof forkSettings === "undefined") { return; }
+			// Take effect on Save; Reset deletes options.skyhooksPanel (back to the defaults, filters included)
 			forkSettings.register({
 				section: "routes", order: 62, id: "skyhooksPanel-enabled", type: "checkbox", key: "skyhooksPanel",
 				label: "Skyhook icon:", text: "Show a skyhook icon on low-sec and null-sec systems on the chain map",
+				hint: "Clicking it opens the region map on that system with the Skyhooks overlay on.",
 				get: function() { return isOn(); },
 				set: function(o, on) { o.skyhooksPanel = Object.assign({}, o.skyhooksPanel || {}, { enabled: on }); }
 			});
 			forkSettings.register({
 				section: "routes", order: 63, id: "skyhooksPanel-click", type: "checkbox",
-				label: "Raidable skyhooks:", text: "Also open it when I click a low-sec or null-sec system's name",
+				label: "Raidable skyhooks:", text: "Also open the region map when I click a low-sec or null-sec system's name",
 				get: function() { return opts().clickOpen; },
 				set: function(o, on) { o.skyhooksPanel = Object.assign({}, o.skyhooksPanel || {}, { clickOpen: on }); },
 				reset: function(o) { if (o.skyhooksPanel) { delete o.skyhooksPanel.clickOpen; } }
 			});
-			forkSettings.register({
-				section: "routes", order: 64, id: "skyhooksPanel-maxJumps", type: "select",
-				label: "Skyhooks within:",
-				choices: sp.MAX_JUMPS_CHOICES.map(function(n) { return [String(n), n + " jumps"]; }).concat([["0", "Any distance"]]),
-				get: function() { return String(opts().maxJumps); },
-				set: function(o, v) { o.skyhooksPanel = Object.assign({}, o.skyhooksPanel || {}, { maxJumps: Number(v) }); },
-				reset: function(o) { if (o.skyhooksPanel) { delete o.skyhooksPanel.maxJumps; } }
-			});
-			if (!options.apply.skyhooksPanelWrapped) {
-				const apply = options.apply;
-				options.apply = function() {
-					const result = apply.apply(this, arguments);
-					try { applySettings(); } catch (err) { console.error("Skyhooks: apply failed", err); }
-					return result;
-				};
-				options.apply.skyhooksPanelWrapped = true;
-			}
+		}
+
+		cleanOptions();
+		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.skyhooksPanelWrapped) {
+			// options.apply() puts back the page-load copy of the layout (localStorage): drop the old box's entry again
+			const apply = options.apply;
+			options.apply = function() {
+				const result = apply.apply(this, arguments);
+				cleanOptions();
+				try { applySettings(); } catch (err) { console.error("Skyhooks: apply failed", err); }
+				return result;
+			};
+			options.apply.skyhooksPanelWrapped = true;
 		}
 
 		$(function() {
 			installHook();
 			setupSettings();
+			cleanOptions();
 			lastOn = isOn();
 			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 				forkCommands.register({
-					id: "skyhooks.open", title: "Open Skyhooks", group: "Routes", icon: "anchor", keywords: ["skyhook", "planet", "sov", "low-sec", "null-sec", "exit"],
-					enabled: function() { return isOn() ? true : "The Skyhooks panel is switched off in Settings"; },
-					args: [{ name: "exit", label: "exit", type: "chainSystem", default: function(ctx) { return ctx.viewingSystemID; },
-						filter: function(id) { const s = appData.systems[id]; return !!s && !s.class; } }],
-					run: function(args) { open(args.exit); }
+					id: "skyhooks.map", title: "Skyhooks", group: "Routes", icon: "anchor",
+					keywords: ["skyhook", "raid", "planet", "sov", "low-sec", "null-sec", "region map"],
+					args: [{ name: "system", label: "system", type: "system",
+						default: function(ctx) { return sp.isLowNull(ctx.viewingSystemID, appData.systems[ctx.viewingSystemID]) ? ctx.viewingSystemID : undefined; } }],
+					run: function(args) {
+						const s = appData.systems[args.system];
+						if (!s || s.class || (Number(s.regionID) || 0) >= 11000000) { throw new Error("Pick a k-space system"); }
+						openMap(args.system);
+					}
 				});
-				forkCommands.panelToggle({ id: "panel.skyhooks", title: "Toggle Skyhooks panel", key: "skyhooksPanel", icon: "anchor", keywords: ["skyhook"] });
+				forkCommands.panelToggle({ id: "panel.skyhooks", title: "Toggle skyhook icon", key: "skyhooksPanel", icon: "anchor", keywords: ["skyhook", "icon", "chain map"] });
 			}
 
-			const sel = "#" + sp.WIDGET_ID;
 			const $doc = $(document);
-			// The icon: open the box for that system (and don't let the click reach the node)
+			// The icon: open the region map on that system (and don't let the click reach the node)
 			$doc.on("click", "#chainMap .sky-icon", function(e) {
 				e.preventDefault();
 				e.stopPropagation();
-				open($(this).attr("data-sky-system"));
+				openMap($(this).attr("data-sky-system"));
 			});
 			$doc.on("mousedown", "#chainMap .sky-icon", function(e) { e.stopPropagation(); });
-			// Clicking a low-sec / null-sec system's name (which also views it, upstream) opens it when that is on
+			// Clicking a low-sec / null-sec system's name (which also views it, upstream) opens the map when that is on.
 			// Capture phase: viewing the system redraws the chain, which would detach the link before a delegated handler ran.
 			document.addEventListener("click", function(e) {
 				const link = e.target && e.target.closest ? e.target.closest("#chainMap .nodeSystem a") : null;
 				if (!link || !isOn() || !opts().clickOpen) { return; }
 				const id = $(link).closest("[data-nodeid]").find(".sky-icon").first().attr("data-sky-system");
-				if (id) { open(id); }
+				if (id) { setTimeout(function() { openMap(id); }, 0); }
 			}, true);
-			$doc.on("click", sel + " .sky-close", function(e) { e.preventDefault(); close(); });
-			$doc.on("change", sel + " .sky-max", function() { save({ maxJumps: Number($(this).val()) }); render(); });
-			$doc.on("change", sel + " .sky-low", function() { save({ low: this.checked }); render(); });
-			$doc.on("change", sel + " .sky-null", function() { save({ null: this.checked }); render(); });
-			$doc.on("change", sel + " .sky-lava", function() { save({ lava: this.checked }); render(); });
-			$doc.on("change", sel + " .sky-ice", function() { save({ ice: this.checked }); render(); });
-			$doc.on("change", sel + " .sky-window", function() { save({ window: $(this).val() }); render(); });
-			$doc.on("change", sel + " .sky-hours", function() { save({ soonHours: Number($(this).val()) }); render(); });
-			$doc.on("change", sel + " .sky-sort", function() { save({ sort: $(this).val() }); render(); });
-			$doc.on("click", sel + " .sky-route", function(e) {
-				e.preventDefault();
-				const to = Number($(this).closest(".sky-row").data("systemid"));
-				const route = origin ? routeDestinations.route(origin, to) : null;
-				if (!route) { return; }
-				const name = function(id) { return (systemFor(id) || {}).name || id; };
-				autopilotRoute.push(route.path, name(origin) + " \u2192 " + name(to) + " (skyhook)");
-			});
-
-			// The list comes from our server every 5 minutes while the box is open; countdowns redraw every 30 s
-			setInterval(function() { if ($(sel).length) { load(); } }, sp.REFRESH_MS);
-			setInterval(function() {
-				if ($(sel).length && Date.now() - lastRender >= sp.REDRAW_MS) { render(); }
-			}, sp.TICK_MS);
 		});
 	})();
 }
