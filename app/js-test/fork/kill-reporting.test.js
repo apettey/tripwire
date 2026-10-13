@@ -189,9 +189,106 @@ describe('Kill reporting', () => {
 			assert.ok(html.indexOf('kill-toast-gank') >= 0);
 		});
 		it('ignores non-numeric ids', () => {
-			const html = kr().toastHtml({ killID: "1'><script>", victimShipTypeID: 'x' }, 'loss', 'J1');
+			const html = kr().toastHtml({ killID: "1'><script>", victimShipTypeID: 'x', systemID: "31000001'>" }, 'loss', 'J1');
 			assert.ok(html.indexOf('<script>') < 0);
 			assert.ok(html.indexOf('kill-toast-ship') < 0);
+			assert.ok(html.indexOf('data-systemid') < 0);
+		});
+		it('shows the hole label, system and class as on the chain map', () => {
+			const html = kr().toastHtml({ killID: 1, systemID: 31000001 }, 'neutral', { label: 'A6', name: 'J123456', type: 'C3' });
+			assert.ok(html.indexOf("<span class='kill-toast-label'>A6</span> J123456 <span class='kill-toast-type'>C3</span>") >= 0);
+			assert.ok(html.indexOf("data-systemid='31000001'") >= 0, 'clickable to find the node');
+		});
+		it('escapes the label and class', () => {
+			const html = kr().toastHtml({ killID: 1 }, 'neutral', { label: '<i>A</i>', name: 'J1', type: '<b>' });
+			assert.ok(html.indexOf('<i>') < 0 && html.indexOf('<b>') < 0);
+			assert.ok(html.indexOf('&lt;i&gt;A&lt;/i&gt;') >= 0);
+		});
+		it('leaves out a missing label', () => {
+			const html = kr().toastHtml({ killID: 1 }, 'neutral', { name: 'Amarr', type: 'HS' });
+			assert.ok(html.indexOf('kill-toast-label') < 0);
+			assert.ok(html.indexOf("Amarr <span class='kill-toast-type'>HS</span>") >= 0);
+		});
+	});
+
+	describe('chainLabel', () => {
+		const row = (id, pathHome, extra) => Object.assign({ c: [{ v: String(id), systemID: id, f: "<div class='node'></div>" }], pathHome: pathHome }, extra || {});
+		it('uses the hole name, else the first 3 letters of the signature', () => {
+			const rows = [
+				row(30000142, []),
+				row(31000001, [{ name: 'A6', signatureID: 'abc123' }]),
+				row(31000002, [{ name: '', signatureID: 'xyz789' }])
+			];
+			assert.equal(kr().chainLabel(rows, 31000001), 'A6');
+			assert.equal(kr().chainLabel(rows, '31000002'), 'XYZ');
+			assert.equal(kr().chainLabel(rows, 30000142), '', 'home has no hole');
+			assert.equal(kr().chainLabel(rows, 31000009), '', 'not on the map');
+		});
+		it('lists every label of a system on the map twice, once each', () => {
+			const rows = [
+				row(31000001, [{ name: 'A6' }]),
+				row(31000001, [{ name: 'B2' }]),
+				row(31000001, [{ name: 'A6' }])
+			];
+			assert.equal(kr().chainLabel(rows, 31000001), 'A6, B2');
+		});
+		it('skips route nodes and tolerates garbage', () => {
+			assert.equal(kr().chainLabel([row(31000001, [{ name: 'A6', path: [1] }])], 31000001), '');
+			assert.equal(kr().chainLabel(null, 31000001), '');
+			assert.equal(kr().chainLabel([null, {}, { c: [] }], 31000001), '');
+		});
+	});
+
+	describe('placeText and notificationText', () => {
+		it('formats the place', () => {
+			assert.equal(kr().placeText({ label: 'A6', name: 'J123456', type: 'C3' }), 'A6 · J123456 (C3)');
+			assert.equal(kr().placeText({ name: 'Amarr', type: 'HS' }), 'Amarr (HS)');
+			assert.equal(kr().placeText('Jita'), 'Jita');
+			assert.equal(kr().placeText(null), '');
+		});
+		it('builds a plain-text notification', () => {
+			const n = kr().notificationText({ attackerCharacterCount: 1, totalValue: 2500000000 }, 'loss', { label: 'B2', name: 'J1', type: 'C5' });
+			assert.equal(n.title, 'Friendly loss in B2 · J1 (C5)');
+			assert.equal(n.body, '1 pilot — 2.50B ISK');
+			assert.equal(kr().notificationText({}, 'gank', null).title, 'Large gank in the chain');
+		});
+	});
+
+	describe('mark', () => {
+		const MARK = () => kr().MARK_MS;
+		it('marks a system and restarts the timer on every kill', () => {
+			const marks = {};
+			kr().mark(marks, 31000001, 'neutral', 1000);
+			assert.deepEqual(marks[31000001], { category: 'neutral', until: 1000 + MARK() });
+			kr().mark(marks, 31000001, 'neutral', 5000);
+			assert.equal(marks[31000001].until, 5000 + MARK());
+		});
+		it('keeps the higher-priority category while it lasts', () => {
+			const marks = {};
+			kr().mark(marks, 31000001, 'loss', 0);
+			kr().mark(marks, 31000001, 'neutral', 10);
+			assert.equal(marks[31000001].category, 'loss');
+			kr().mark(marks, 31000001, 'neutral', MARK() + 11);
+			assert.equal(marks[31000001].category, 'neutral', 'expired loss mark is replaced');
+			kr().mark(marks, 31000001, 'gank', MARK() + 12);
+			assert.equal(marks[31000001].category, 'gank');
+		});
+		it('expires old marks', () => {
+			const marks = {};
+			kr().mark(marks, 1, 'kill', 0);
+			kr().mark(marks, 2, 'kill', 100);
+			kr().expireMarks(marks, MARK() + 50);
+			assert.deepEqual(Object.keys(marks), ['2']);
+		});
+	});
+
+	describe('new settings', () => {
+		it('desktop alerts and map markers are on unless switched off', () => {
+			assert.equal(kr().settings({}).desktop, true);
+			assert.equal(kr().settings({}).marker, true);
+			const s = kr().settings({ killReporting: { desktop: false, marker: false } });
+			assert.equal(s.desktop, false);
+			assert.equal(s.marker, false);
 		});
 	});
 
