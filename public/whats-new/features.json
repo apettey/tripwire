@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 112,
+      "date": "2026-10-13",
+      "title": "Kill pop-ups show where in the chain",
+      "description": "Kill pop-ups now name the system the way the chain map does: the hole label, then the system and its class. Click a pop-up to jump to that system on the map, which also gets a pulsing ring for 10 minutes. Pop-ups now wait while you're in the game instead of fading out unseen.\n\nWhile Tripwire is in the background you can also get desktop notifications: click the link on a kill pop-up to allow them. Turn them off in Settings > Kill Reporting, and the map ring in Settings > Map Markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-112-kill-notifications.png",
+          "caption": "Each pop-up names the hole and system; the systems get a ring on the map"
+        }
+      ]
+    },
+    {
       "pr": 111,
       "date": "2026-10-13",
       "title": "Home region marker",
