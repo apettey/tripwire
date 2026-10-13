@@ -304,15 +304,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 		}
 
-		/** Ask which characters get the destination. onSend([character]) runs only on Send, with at least one character. */
-		function pickCharacters(label, jumps, safe, onSend) {
+		const DEFAULT_HINT = "Sets each character's in-game destination, replacing its current route. EVE's autopilot picks the way there, using your in-game route settings.";
+
+		/** Ask which characters get the destination. onSend([character]) runs only on Send, with at least one character.
+		texts (optional, for other users of the picker such as the region map's targets): {title, hint} */
+		function pickCharacters(label, jumps, safe, onSend, texts) {
 			const list = ap.characters(options, tripwire.esi && tripwire.esi.characters);
 			const error = ap.noCharacterError(list);
 			if (error) { notify(ap.escape(error), "red", 8000); return; }
 			const $dialog = ensureDialog();
 			pending = { list: list, onSend: onSend };
+			$dialog.dialog("option", "title", (texts && texts.title) || "Set destination in game");
+			$dialog.find(".autopilot-chars-hint").first().text((texts && texts.hint) || DEFAULT_HINT);
 			$dialog.find(".autopilot-chars-route").html(ap.escape(label)
-				+ (jumps === null ? "" : ", " + jumps + " jump" + (jumps === 1 ? "" : "s")) + ". Set destination for:");
+				+ (jumps === null ? "" : ", " + jumps + " jump" + (jumps === 1 ? "" : "s")) + (texts && texts.title ? ". Send to:" : ". Set destination for:"));
 			$dialog.find(".autopilot-chars-safe").toggle(!!safe);
 			$dialog.find(".autopilot-chars-list").html(list.map(function(c) {
 				return "<li class='autopilot-chars-row" + (c.usable ? "" : " disabled") + "'><label>"
@@ -358,6 +363,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 		}
 		ap.push = push;
+		ap.pickCharacters = pickCharacters;
 
 		// ---- Favourites panel: a button next to each favourite's route button ----
 
@@ -515,7 +521,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<p class='autopilot-chars-route'></p>"
 				+ "<div class='autopilot-chars-tools'><label><input type='checkbox' class='autopilot-chars-all' /> Select all</label></div>"
 				+ "<ul class='autopilot-chars-list'></ul>"
-				+ "<p class='autopilot-chars-hint'>Sets each character's in-game destination, replacing its current route. EVE's autopilot picks the way there, using your in-game route settings.</p>"
+				+ "<p class='autopilot-chars-hint'>" + ap.escape(DEFAULT_HINT) + "</p>"
 				+ "<p class='autopilot-chars-hint autopilot-chars-safe'>For the high-sec only way, set your autopilot to Prefer safer in game.</p>"
 				+ "</div>");
 			$("#" + DIALOG_ID).on("change", ".autopilot-chars-all", function() {

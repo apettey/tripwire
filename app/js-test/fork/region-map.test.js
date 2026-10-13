@@ -274,7 +274,7 @@ describe('regionMap settings', function() {
 		assert.strictEqual(regionMap.withSetting({}, { overlay: { name: 'skyhooks', on: false } }).overlays.skyhooks, false);
 	});
 	it('side lists: open by default, collapsed state kept when something else changes', function() {
-		assert.deepStrictEqual(regionMap.settings({}).collapsed, { skyhooks: false });
+		assert.deepStrictEqual(regionMap.settings({}).collapsed, { targets: false, skyhooks: false });
 		const c = regionMap.withSetting({}, { collapsed: { name: 'skyhooks', on: true } });
 		assert.strictEqual(c.collapsed.skyhooks, true);
 		assert.strictEqual(regionMap.withSetting({ regionMap: c }, { heat: 'npc' }).collapsed.skyhooks, true);

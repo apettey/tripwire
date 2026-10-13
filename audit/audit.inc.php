@@ -42,8 +42,9 @@ const AUDIT_VALUE_MAX = 60;
 const AUDIT_DETAIL_MAX = 1000;
 const AUDIT_SIGNATURE_FIELDS = ['signatureID', 'systemID', 'type', 'name', 'bookmark', 'lifeLength'];
 const AUDIT_WORMHOLE_FIELDS = ['type', 'parent', 'life', 'mass'];
-const AUDIT_ENTITIES = ['signature', 'wormhole', 'mask'];
+const AUDIT_ENTITIES = ['signature', 'wormhole', 'target', 'mask'];
 const AUDIT_ACTIONS = ['add', 'update', 'delete'];
+const AUDIT_TARGET_ACTIONS = ['add', 'update', 'delete', 'clear'];   // region map targets (map_targets.inc.php)
 const AUDIT_MASK_ACTIONS = ['grant', 'revoke', 'block', 'unblock', 'remove', 'defaults', 'token-create', 'token-revoke'];
 
 /** Retention in days from AUDIT_LOG_DAYS (constant or environment): 0 = off, otherwise 1..3650, default 60 */
@@ -115,13 +116,13 @@ function audit_prune(PDO $db, $days = null) {
 
 /**
  * Write one entry. $who = ['id', 'name'] (the session's character). Never throws. Returns the row id or 0.
- * $entity: signature | wormhole; $action: add | update | delete.
+ * $entity: signature | wormhole | target; $action: add | update | delete (target: also clear).
  */
 function audit_record(PDO $db, $mask, array $who, $entity, $action, $systemID, $toSystemID, $subject, array $detail) {
     try {
         if (audit_days() < 1) return 0;
         if (!is_string($mask) || preg_match('/^[0-9]{1,10}\.[0-3]$/', $mask) !== 1) return 0;
-        if (!in_array($entity, ['signature', 'wormhole'], true) || !in_array($action, AUDIT_ACTIONS, true)) return 0;
+        if (!in_array($entity, ['signature', 'wormhole', 'target'], true) || !in_array($action, $entity === 'target' ? AUDIT_TARGET_ACTIONS : AUDIT_ACTIONS, true)) return 0;
         $id = audit_run($db, function () use ($db, $mask, $who, $entity, $action, $systemID, $toSystemID, $subject, $detail) {
             $stmt = $db->prepare('INSERT INTO fork_audit_log (maskID, at, characterID, characterName, entity, action, systemID, toSystemID, subject, detail)
                 VALUES (?, UTC_TIMESTAMP(), ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -320,7 +321,7 @@ function audit_filters(array $in) {
     $kind = isset($in['kind']) && is_string($in['kind']) ? $in['kind'] : '';
     $parts = explode('.', $kind, 2);
     $entity = in_array($parts[0], AUDIT_ENTITIES, true) ? $parts[0] : '';
-    $action = $entity && isset($parts[1]) && in_array($parts[1], array_merge(AUDIT_ACTIONS, AUDIT_MASK_ACTIONS), true) ? $parts[1] : '';
+    $action = $entity && isset($parts[1]) && in_array($parts[1], array_merge(AUDIT_TARGET_ACTIONS, AUDIT_MASK_ACTIONS), true) ? $parts[1] : '';
     $system = isset($in['system']) && is_scalar($in['system']) && ctype_digit((string) $in['system']) && strlen((string) $in['system']) <= 10 ? (int) $in['system'] : 0;
     $character = isset($in['character']) && is_string($in['character']) ? mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $in['character']) ?? ''), 0, 50, 'UTF-8') : '';
     $page = isset($in['page']) && is_scalar($in['page']) && ctype_digit((string) $in['page']) ? max(1, min(AUDIT_MAX_PAGE, (int) $in['page'])) : 1;

@@ -1,0 +1,22 @@
+/* Region map targets on the chain map (fork-owned, see app/js/fork/map-targets.js): a numbered magenta badge on the
+   node's left edge (the corners are taken: threat badge top-left, skyhook icon / jump ring top-right, intel dot
+   bottom-right, STG badge bottom-left) */
+#chainMap .target-badge {
+	position: absolute;	/* [data-nodeid] is position: relative */
+	z-index: 2;
+	left: -8px;
+	top: calc(50% - 7px);
+	box-sizing: border-box;
+	min-width: 14px;
+	height: 14px;
+	padding: 0 2px;
+	border: 1px solid #fff;
+	border-radius: 7px;
+	background: #d8199e;
+	color: #fff;
+	font-size: 9px;
+	font-weight: bold;
+	line-height: 12px;
+	text-align: center;
+	cursor: default;
+}

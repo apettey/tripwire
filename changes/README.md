@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-13 | [Region map: targets and waypoints](2026-10-13-region-map-targets/README.md) | Mask-wide targets (up to 25 k-space systems, note, expiry) on the region map and as chain map badges, reorder / shortest order, send them as in-game waypoints to picked characters; `public/map_targets.php`, table `fork_map_targets`, audit log; Settings > Map Markers > Target badges |
 | 2026-10-13 | [Region map: skyhooks](2026-10-13-region-map-skyhooks/README.md) | Raidable skyhooks on the region map (Skyhooks overlay: markers, card block, side list, filters) and as staging scan tags; the floating skyhooks box is retired, the chain map's skyhook icon opens the region map; one shared 5-min loader |
 | 2026-10-12 | [Staging scan](2026-10-12-staging-scan/README.md) | In null-sec, a chain map panel lists systems within 5/10/15 jumps with jumps and kills (last hour, 24 h) and flags likely staging systems; STG badge on the map; `staging_activity.php` |
 | 2026-10-12 | [API password login off by default](2026-10-12-api-password-auth-off/README.md) | `TRIPWIRE_API_PASSWORD_AUTH` defaults to `false`: the old HTTP Basic API login (account password, no rate limit) answers 401; use personal API tokens (#96); set it to `true` temporarily for old scripts |
