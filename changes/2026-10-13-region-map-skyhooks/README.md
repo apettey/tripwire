@@ -14,7 +14,7 @@ systems with "⚓2 now" / "⚓1 soon".
 
 | Before | After |
 | --- | --- |
-| ![before](before.jpg) | ![after](after.jpg) |
+| ![before](before.jpg) | ![after](after.png) |
 
 Before: Catch on the region map, no skyhook information (they were only in the separate floating box). After: Skyhooks
 overlay on: gold pills on systems with a raidable skyhook (count and value), the filters row under the header, the

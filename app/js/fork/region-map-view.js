@@ -458,14 +458,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($sec.find(":focus").is("select")) { return; }
 			const e = rm.escape, sp = skyhooksPanel, collapsed = ctx.cfg.collapsed.skyhooks;
 			const rows = sky.loading ? [] : rs.regionRows(sky.bySys, sky.ids, skyJumps(sky), sky.cfg.sort);
-			let html = "<div class='rm-side-head'><a href='#' class='rm-side-toggle' data-list='skyhooks' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
+			let head = "<a href='#' class='rm-side-toggle' data-list='skyhooks' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
 				+ "<b>Skyhooks in " + e(state.layout.name) + "</b> <span class='rm-muted'>(" + rows.length + ")</span>";
 			if (!collapsed) {
-				html += " <select class='rm-ssort' title='Sort the list'>" + [["jumps", "by jumps"], ["start", "by window"], ["value", "by value"]].map(function(o) {
+				head += " <select class='rm-ssort' title='Sort the list'>" + [["jumps", "by jumps"], ["start", "by window"], ["value", "by value"]].map(function(o) {
 					return "<option value='" + o[0] + "'" + (o[0] === sky.cfg.sort ? " selected" : "") + ">" + o[1] + "</option>";
 				}).join("") + "</select>";
 			}
-			html += "</div>";
+			let html = "";
 			if (!collapsed) {
 				if (sky.loading) { html += "<div class='rm-muted rm-side-note'>" + e(sky.error || "Loading\u2026") + "</div>"; }
 				else if (!rows.length) { html += "<div class='rm-muted rm-side-note'>No raidable skyhook here matches the filters.</div>"; }
@@ -493,7 +493,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					}
 				}
 			}
-			if ($sec.attr("data-html") !== html) { $sec.html(html).attr("data-html", html); }
+			setSection($sec, head, html);
+		}
+
+		/** A side list section: its header (left alone while one of its controls has the focus, so an open dropdown stays
+		open) and its body are replaced separately, and only when they changed */
+		function setSection($sec, head, body) {
+			let $h = $sec.children(".rm-side-head"), $b = $sec.children(".rm-side-body");
+			if (!$h.length || !$b.length) {
+				$sec.empty();
+				$h = $("<div class='rm-side-head'></div>").appendTo($sec);
+				$b = $("<div class='rm-side-body'></div>").appendTo($sec);
+			}
+			if ($h.attr("data-html") !== head && !$h.find(":focus").length) { $h.html(head).attr("data-html", head); }
+			if ($b.attr("data-html") !== body) { $b.html(body).attr("data-html", body); }
 		}
 
 		/** The card's "Skyhooks" block for the selected system: the ones passing the filters, and how many the filters hide */
@@ -510,19 +523,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}).join("") + (hidden > 0 ? "<div class='rm-card-row rm-muted'>" + hidden + " more hidden by the Skyhooks filters</div>" : "") + "</div>";
 		}
 
-		function drawSky(L, layout, sky, fight) {
+		/** The skyhook pill above the box; a row higher on a chain exit (its hole pill takes the first row on the right) */
+		function drawSky(L, layout, sky, fight, exits) {
 			if (!sky || sky.loading) { return; }
+			const exitIDs = (exits || []).map(function(x) { return x.systemID; });
 			layout.systems.forEach(function(s) {
 				const m = rs.marker(sky.bySys[s.id]);
 				if (!m) { return; }
-				const w = 17 + m.text.length * 7;
-				const g = el("g", { "class": "rm-sky rm-sky-" + m.state, transform: "translate(" + (s.x - rm.BOX_W / 2).toFixed(1) + " " + (s.y - rm.BOX_H / 2 - 17).toFixed(1) + ")" }, L.tags);
+				const w = 17 + m.text.length * 7, row = exitIDs.indexOf(s.id) >= 0 ? 2 : 1;
+				const g = el("g", { "class": "rm-sky rm-sky-" + m.state, "data-id": s.id, transform: "translate(" + (s.x - rm.BOX_W / 2).toFixed(1) + " " + (s.y - rm.BOX_H / 2 - 17 * row).toFixed(1) + ")" }, L.tags);
 				el("rect", { width: w, height: 15, rx: 7 }, g);
 				el("text", { x: 3, y: 12, "class": "rm-sky-glyph" }, g, "\u2693");
 				if (m.text) { el("text", { x: 15, y: 11 }, g, m.text); }
 				state.nodes[s.id].sky = el("title", null, g);
 				state.nodes[s.id].sky.textContent = rs.tooltip(sky.bySys[s.id], sky.now).join("\n");
-				if (fight === s.id) { $(L.tags).find(".rm-flag").attr("transform", "translate(0 -17)"); }
+				if (fight === s.id) { $(L.tags).find(".rm-flag").attr("transform", "translate(0 " + (-17 * row) + ")"); }
 			});
 		}
 
@@ -630,7 +645,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				}
 			});
 			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; });
-			drawSky(L, layout, sky, ctx.fight);
+			drawSky(L, layout, sky, ctx.fight, ctx.exits);
 			drawTargets(L, layout, ctx.targets);
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
 
@@ -973,7 +988,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (moved) { return; }
 				show(Number($(this).attr("data-region")), Number($(this).attr("data-system")));
 			});
-			$d.on("click", ".rm-svg", function(e) { if (!moved && !$(e.target).closest(".rm-sys, .rm-stub").length) { select(null); } });
+			$d.on("click", ".rm-sky[data-id]", function(e) { if (moved) { return; } e.stopPropagation(); select($(this).attr("data-id")); });
+			$d.on("click", ".rm-svg", function(e) { if (!moved && !$(e.target).closest(".rm-sys, .rm-stub, .rm-sky").length) { select(null); } });
 
 			// Pan (drag) and zoom (wheel)
 			let drag = null;
