@@ -36,6 +36,11 @@ describe('auditLogTab', () => {
 			assert.strictEqual(auditLogTab.describe({ entity: 'mask', action: 'block', subject: 'Mallory', detail: 'spying' }, sysName), 'blocked Mallory (spying)');
 			assert.strictEqual(auditLogTab.describe({ entity: 'mask', action: 'defaults', subject: '', detail: '' }, sysName), 'changed the mask defaults');
 		});
+		it('describes region map targets', () => {
+			assert.strictEqual(auditLogTab.describe({ entity: 'target', action: 'add', subject: 'hit it', detail: { expires: '18:20' } }, sysName), 'marked a region map target "hit it" (until 18:20 EVE time)');
+			assert.strictEqual(auditLogTab.describe({ entity: 'target', action: 'delete', subject: '', detail: {} }, sysName), 'removed a region map target');
+			assert.strictEqual(auditLogTab.describe({ entity: 'target', action: 'clear', subject: '', detail: { count: 3 } }, sysName), 'cleared all region map targets (3)');
+		});
 		it('survives missing detail', () => {
 			assert.strictEqual(typeof auditLogTab.describe({ entity: 'wormhole', action: 'delete', detail: null }, sysName), 'string');
 			assert.strictEqual(typeof auditLogTab.describe({ entity: 'signature', action: 'update' }, sysName), 'string');

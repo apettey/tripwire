@@ -223,6 +223,21 @@ minutes (exclusive `flock`, so concurrent requests don't stampede; after an erro
 `docker compose -f docker-compose.dev.yml exec -T app php tests/skyhooks_test.php` (fake ESI, no network),
 `app/js-test/fork/skyhooks-panel.test.js` and `app/js-test/fork/region-map-skyhooks.test.js`.
 
+### Region map targets
+
+Any member of a mask can mark up to 25 k-space systems as targets on the region map (Shift+click, or the system card),
+with an optional note (plain text, at most 60 characters) and an expiry (1 / 3 / 6 / 24 h, or by default the end of the
+system's latest raidable skyhook window, else 6 h). Everyone on the mask sees them (region map, a numbered badge on the
+chain map) and can send them to their own characters as in-game waypoints in list order (ESI
+`/ui/autopilot/waypoint/` from the browser with each character's own token, one call at a time; the first clears the
+character's route). Storage: table `fork_map_targets` (`map_targets.inc.php`, reference DDL `docker/sql/map-targets.sql`,
+created on first use, no migration), endpoint `public/map_targets.php` (GET list, POST mode=add / remove / clear / reorder;
+session with a mask, `X-Requested-With` on changes like `rally.php`; expired rows are deleted on every request). Add,
+change, remove and clear are written to the audit log (entity `target`). The browser polls every 30 s while the region
+map is open, otherwise every 5 minutes (chain badges); there is no push. No env vars. Tests:
+`docker compose -f docker-compose.dev.yml exec -T app php tests/map_targets_endpoint_test.php` and
+`app/js-test/fork/map-targets.test.js`.
+
 ### zKillboard integration
 
 All zKillboard and ESI access of the fork's features goes through one module, `zkill/` (fork-owned), and only one process

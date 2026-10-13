@@ -256,7 +256,140 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (cfg.overlays.route && state.sel) { ctx.route = routeTo(state.sel); }
 			ctx.jump = jumpContext(layout);
 			ctx.sky = skyContext(layout, ctx.me);
+			ctx.targets = targetsContext();
 			return ctx;
+		}
+
+		// ---- Targets (mask-wide, map-targets.js keeps the list: public/map_targets.php, polled every 30 s while this paints) ----
+
+		function tStore() { return typeof mapTargets !== "undefined" && mapTargets.store ? mapTargets.store : null; }
+
+		/** null when the overlay is off, else {list, numbers, loaded, error, now} */
+		function targetsContext() {
+			const store = tStore();
+			if (!rm.settings(options).overlays.targets || !store) { return null; }
+			const st = store.get();
+			return { list: st.list, numbers: mapTargets.numbers(st.list), loaded: st.loaded, error: st.error, now: st.now,
+				sig: mapTargets.badgeKey(st.list) + "#" + st.list.map(function(t) { return t.createdBy.name + "@" + t.expires; }).join(",") };
+		}
+
+		function targetLine(t, n, now) {
+			return "Target " + n + (t.note ? ": " + t.note : "") + " (marked by " + (t.createdBy.name || "?") + ", expires in " + mapTargets.duration(t.expires - now) + ")";
+		}
+
+		function drawTargets(L, layout, tc) {
+			if (!tc) { return; }
+			tc.list.forEach(function(t, i) {
+				const s = layout.byId[t.systemID];
+				if (!s) { return; }
+				outline(L.tags, s, "rm-target", 3);
+				const g = el("g", { "class": "rm-tnum", "data-id": s.id, transform: "translate(" + (s.x - rm.BOX_W / 2 - 3).toFixed(1) + " " + s.y.toFixed(1) + ")" }, L.tags);
+				el("circle", { r: 9 }, g);
+				el("text", { y: 4, "text-anchor": "middle" }, g, String(i + 1));
+				state.nodes[s.id].tnum = el("title", null, g);
+				state.nodes[s.id].tnum.textContent = targetLine(t, i + 1, tc.now);
+			});
+		}
+
+		/** Mark / remove from the card or with Shift+click */
+		function toggleTarget(id) {
+			const store = tStore();
+			if (!store) { return; }
+			if (!mapTargets.canTarget(appData.systems[id])) { notify("Targets: only k-space systems can be targets.", "yellow", 4000); return; }
+			const xhr = store.toggle(id);
+			if (xhr) { xhr.always(function() { paint(true); }); }
+		}
+
+		function targetCardHtml(tc, id) {
+			if (!tc || !mapTargets.canTarget(appData.systems[id])) { return ""; }
+			const e = rm.escape, hit = tc.numbers[id];
+			const end = tStore().skyhookEnd(id), def = mapTargets.defaultExpiry(end, tc.now);
+			// An existing target keeps its expiry unless another one is picked (saving only a note must not reset it)
+			const choices = (hit ? [["keep", "keep (expires in " + mapTargets.duration(hit.target.expires - tc.now) + ")"]] : [])
+				.concat(def.until ? [["skyhook", "until its skyhook window ends"]] : []).concat(mapTargets.HOURS.map(function(h) { return [String(h), h + " h"]; }));
+			const sel = hit ? "keep" : def.until ? "skyhook" : String(def.hours);
+			const expiry = "<select class='rm-texpiry' title='When the target goes away by itself'>" + choices.map(function(c) {
+				return "<option value='" + c[0] + "'" + (c[0] === sel ? " selected" : "") + ">" + e(c[1]) + "</option>";
+			}).join("") + "</select>";
+			const note = "<input type='text' class='rm-tnote' maxlength='" + mapTargets.NOTE_MAX + "' placeholder='Note (optional)' value='" + e(hit ? hit.target.note : "") + "' />";
+			if (hit) {
+				return "<div class='rm-card-target'><div class='rm-card-row rm-tline'>" + e(targetLine(hit.target, hit.n, tc.now)) + "</div>"
+					+ "<div class='rm-card-row'>" + note + " " + expiry + " <button class='rm-tsave' title='Change the note and expiry'>Save</button> "
+					+ "<button class='rm-tremove' title='Remove this target for the whole mask (Shift+click on the map does it too)'>Remove target</button></div></div>";
+			}
+			return "<div class='rm-card-target'><div class='rm-card-row'>" + note + " " + expiry + " "
+				+ "<button class='rm-tadd' title='Mark this system for the whole mask (Shift+click on the map does it too)'>Mark as target</button></div></div>";
+		}
+
+		/** The "Targets (N)" list of the side panel: every target of the mask, in any region */
+		function renderTargets(ctx) {
+			const $side = $("#" + DIALOG_ID + " .rm-side");
+			const tc = ctx.targets;
+			if (!tc) { $side.find(".rm-side-targets").remove(); return; }
+			let $sec = $side.find(".rm-side-targets");
+			if (!$sec.length) { $sec = $("<div class='rm-side-sec rm-side-targets'></div>").prependTo($side); }
+			const e = rm.escape, collapsed = ctx.cfg.collapsed.targets;
+			const origins = skyOrigins(ctx.me);
+			let jumps = {};
+			if (!collapsed && tc.list.length && origins.ids.length && skyStore()) { try { jumps = skyStore().jumpsFrom(origins.ids); } catch (err) { jumps = {}; } }
+			const from = origins.from === "you" ? "from you" : origins.from === "exit" ? "from the nearest chain exit" : "";
+			const head = "<a href='#' class='rm-side-toggle' data-list='targets' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
+				+ "<b>Targets</b> <span class='rm-muted'>(" + tc.list.length + "/" + mapTargets.MAX + ")</span><span class='rm-thint rm-muted' title='Shift+click a system on the map to mark or remove it'>shift+click</span>";
+			let html = "";
+			if (!collapsed) {
+				if (!tc.loaded) { html += "<div class='rm-muted rm-side-note'>" + e(tc.error || "Loading\u2026") + "</div>"; }
+				else if (!tc.list.length) { html += "<div class='rm-muted rm-side-note'>No targets. Select a system and click \u201cMark as target\u201d, or Shift+click it. The whole mask sees them.</div>"; }
+				html += "<ul class='rm-tlist'>" + tc.list.map(function(t, i) {
+					const sys = appData.systems[t.systemID] || {}, here = state.layout.byId[t.systemID];
+					const j = jumps[t.systemID];
+					const tip = targetLine(t, i + 1, tc.now) + (j ? " \u00b7 " + j.jumps + " jumps " + from : "") + (here ? "" : " \u00b7 click to open " + regionName(sys.regionID));
+					return "<li class='rm-trow' draggable='true' data-id='" + t.systemID + "' title='" + e(tip) + "'>"
+						+ "<span class='rm-t-n'>" + (i + 1) + "</span>"
+						+ "<span class='rm-t-sys'>" + e(sysName(t.systemID)) + (here ? "" : " <span class='rm-muted'>" + e(regionName(sys.regionID)) + "</span>")
+						+ (t.note ? "<span class='rm-t-note'>" + e(t.note) + "</span>" : "") + "</span>"
+						+ "<span class='rm-t-by rm-muted'>" + e(t.createdBy.name) + "</span>"
+						+ "<span class='rm-t-exp rm-muted'>" + e(mapTargets.duration(t.expires - tc.now)) + "</span>"
+						+ "<span class='rm-t-jumps'>" + (j ? j.jumps + " j" : "\u2013") + "</span>"
+						+ "<span class='rm-t-btns'><a href='#' class='rm-tup' title='Move up'>&#9650;</a><a href='#' class='rm-tdown' title='Move down'>&#9660;</a><a href='#' class='rm-tdel' title='Remove'>&times;</a></span></li>";
+				}).join("") + "</ul>";
+				if (tc.list.length) {
+					html += "<div class='rm-side-note rm-tbuttons'><button class='rm-tsend' title='Send the targets to your characters as in-game waypoints, in this order'>Send waypoints</button> "
+						+ "<button class='rm-tshort' title='Reorder the list: always the nearest next target by gate jumps, starting " + e(from || "nowhere (no location)") + "'>Shortest order</button> "
+						+ "<button class='rm-tclear' title='Remove every target of the mask'>Clear all</button> <span class='rm-tsend-status rm-muted'></span></div>";
+				}
+			}
+			// keep the sending progress line while the list is redrawn
+			const status = $sec.find(".rm-tsend-status").text();
+			setSection($sec, head, html);
+			if (status) { $sec.find(".rm-tsend-status").text(status); }
+		}
+
+		function targetIDs() { const tc = state.lastTargets; return tc ? tc.list.map(function(t) { return t.systemID; }) : []; }
+
+		function shortestOrder() {
+			const ids = targetIDs();
+			if (ids.length < 2) { return; }
+			const origins = skyOrigins(myLocation());
+			if (!origins.ids.length) { notify("Shortest order needs your location in k-space or a k-space exit on the chain.", "yellow", 6000); return; }
+			let order;
+			try { order = mapTargets.shortestOrder(origins.ids, ids, function(from) { return skyStore().jumpsFrom(from); }); } catch (e) { console.error("Targets: shortest order failed", e); return; }
+			tStore().reorder(order).always(function() { paint(true); });
+		}
+
+		/** "Mark all listed skyhooks as targets": the systems of the region's filtered list, as many as fit */
+		function markSkyhookTargets() {
+			const sky = state.lastSky, tc = state.lastTargets;
+			if (!sky || sky.loading || !tc || !tStore()) { return; }
+			const ids = [];
+			rs.regionRows(sky.bySys, sky.ids, skyJumps(sky), sky.cfg.sort).forEach(function(r) {
+				if (ids.indexOf(r.skyhook.systemID) < 0 && !tc.numbers[r.skyhook.systemID]) { ids.push(r.skyhook.systemID); }
+			});
+			const room = Math.max(0, mapTargets.MAX - tc.list.length), take = ids.slice(0, room);
+			if (!take.length) { notify(ids.length ? "The target list is full (" + mapTargets.MAX + ")." : "Every listed skyhook system is a target already.", "yellow", 5000); return; }
+			if (!window.confirm("Mark " + take.length + " system" + (take.length === 1 ? "" : "s") + " with listed skyhooks as targets for the whole mask?" + (take.length < ids.length ? " (" + (ids.length - take.length) + " more don't fit in the list of " + mapTargets.MAX + ".)" : ""))) { return; }
+			let chain = $.Deferred().resolve().promise();
+			take.forEach(function(id) { chain = chain.then(function() { return tStore().add(id, "", "skyhook") || $.Deferred().resolve().promise(); }); });
+			chain.always(function() { paint(true); });
 		}
 
 		// ---- Skyhooks overlay (the data comes from skyhooks-panel.js's shared loader, skyhooks.php: never ESI from here) ----
@@ -325,10 +458,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function renderSide(ctx) {
 			const $side = $("#" + DIALOG_ID + " .rm-side");
 			const sky = ctx.sky;
-			if (!sky) { $side.find(".rm-side-sky").remove(); $side.toggleClass("hidden", !$side.children().length); return; }
+			if (!sky) { $side.find(".rm-side-sky").remove(); return; }
 			let $sec = $side.find(".rm-side-sky");
 			if (!$sec.length) { $sec = $("<div class='rm-side-sec rm-side-sky'></div>").appendTo($side); }
-			$side.removeClass("hidden");
 			const e = rm.escape, sp = skyhooksPanel, collapsed = ctx.cfg.collapsed.skyhooks;
 			const rows = sky.loading ? [] : rs.regionRows(sky.bySys, sky.ids, skyJumps(sky), sky.cfg.sort);
 			let head = "<a href='#' class='rm-side-toggle' data-list='skyhooks' title='" + (collapsed ? "Show the list" : "Hide the list") + "'>" + (collapsed ? "&#9656;" : "&#9662;") + "</a> "
@@ -356,6 +488,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (!sky.loading) {
 					const nb = rs.neighbours(sky.bySys, state.layout.stubs.map(function(st) { return st.toRegionID; }), appData.systems);
 					const total = nb.reduce(function(n, x) { return n + x.count; }, 0);
+					if (rows.length && ctx.targets) {
+						html += "<div class='rm-side-note'><button class='rm-smark' title='Mark the systems of this list (as filtered) as targets for the whole mask'>Mark all listed as targets</button></div>";
+					}
 					if (total) {
 						html += "<div class='rm-side-note'>" + total + " more in neighbouring regions: " + nb.map(function(x) {
 							return "<a href='#' class='rm-snb' data-region='" + x.regionID + "'>" + e(regionName(x.regionID)) + " (" + x.count + ")</a>";
@@ -434,11 +569,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const sky = ctx.sky;
 			const sig = JSON.stringify([ctx.cfg, ctx.exits, ctx.pilots, ctx.fight, ctx.heat.values, ctx.route && ctx.route.path, state.sel,
 				ctx.jump && [ctx.jump.loading, ctx.jump.failed, ctx.jump.error, ctx.jump.originID, ctx.jump.cfg, ctx.jump.res && ctx.jump.res.rows],
-				sky && [sky.loading, sky.error, sky.cfg, sky.sig, sky.origins, !!sky.planets, sky.data && sky.data.fetched]]);
-			const tick = sky ? Math.floor(sky.now / SKY_TICK_S) : 0;
+				sky && [sky.loading, sky.error, sky.cfg, sky.sig, sky.origins, !!sky.planets, sky.data && sky.data.fetched],
+				ctx.targets && [ctx.targets.loaded, ctx.targets.error, ctx.targets.sig]]);
+			state.lastSky = sky;
+			state.lastTargets = ctx.targets;
+			// Countdowns (skyhook windows, target expiries) tick every 30 s
+			const tick = sky || ctx.targets ? Math.floor((sky ? sky.now : ctx.targets.now) / SKY_TICK_S) : 0;
 			if (!force && sig === state.signature) {
 				// Only the countdowns changed: rewrite the texts (tooltips, card, list), keep the drawing
-				if (sky && tick !== state.skyTick) { state.skyTick = tick; texts(ctx); }
+				if (tick && tick !== state.skyTick) { state.skyTick = tick; texts(ctx); }
 				return;
 			}
 			state.skyTick = tick;
@@ -511,8 +650,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					el("title", null, g).textContent = others + " tracked pilot" + (others === 1 ? "" : "s") + " in " + s.name;
 				}
 			});
-			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; });
+			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; state.nodes[s.id].tnum = null; });
 			drawSky(L, layout, sky, ctx.fight, ctx.exits);
+			drawTargets(L, layout, ctx.targets);
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
 
 			// Jump range: in range ringed, the rest dimmed, the origin marked
@@ -545,10 +685,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					parts = parts.concat(tip);
 					if (state.nodes[s.id].sky) { state.nodes[s.id].sky.textContent = tip.join("\n"); }
 				}
+				const hit = ctx.targets && ctx.targets.numbers[s.id];
+				if (hit) {
+					parts.push(targetLine(hit.target, hit.n, ctx.targets.now));
+					if (state.nodes[s.id].tnum) { state.nodes[s.id].tnum.textContent = targetLine(hit.target, hit.n, ctx.targets.now); }
+				}
 				state.nodes[s.id].title.textContent = parts.join("\n");
 			});
 			renderCard(ctx);
 			renderSide(ctx);
+			renderTargets(ctx);
+			const $side = $("#" + DIALOG_ID + " .rm-side");
+			$side.toggleClass("hidden", !$side.children().length);
 		}
 
 		function outline(parent, s, cls, width) {
@@ -590,7 +738,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				lines.push("<div class='rm-card-row'>" + ctx.route.jumps + " jump" + (ctx.route.jumps === 1 ? "" : "s") + " from you</div>");
 			}
 			lines.push(skyCardHtml(ctx.sky, id));
-			$card.removeClass("hidden").html(
+			lines.push(targetCardHtml(ctx.targets, id));
+			// Don't rebuild the card while its note or expiry is being edited
+			if ($card.attr("data-id") === String(id) && $card.find("input:focus, select:focus").length) { return; }
+			$card.attr("data-id", String(id)).removeClass("hidden").html(
 				"<div class='rm-card-head'><b>" + e(sys.name) + "</b> <span class='rm-sec' style='color:" + rm.secColour(sys.security) + "'>" + rm.secText(sys.security) + "</span>"
 				+ "<button class='rm-card-close' title='Close' aria-label='Close'>&times;</button></div>" + lines.join("")
 				+ "<div class='rm-card-buttons'><button class='rm-dest' title='Set as the in-game destination (clears other waypoints)'>Set destination</button> "
@@ -783,6 +934,48 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				centreOnSystem(id, Math.max(1, state.t.k));
 			});
 			$d.on("click", ".rm-snb", function(e) { e.preventDefault(); show(Number($(this).attr("data-region")), null); });
+			$d.on("click", ".rm-smark", function(e) { e.preventDefault(); markSkyhookTargets(); });
+
+			// Targets
+			const cardNote = function() { return mapTargets.cleanNote(card().find(".rm-tnote").val()); };
+			const cardExpiry = function() { return card().find(".rm-texpiry").val(); };
+			$d.on("click", ".rm-tadd, .rm-tsave", function() {
+				if (!state.sel || !tStore()) { return; }
+				const xhr = tStore().add(state.sel, cardNote(), cardExpiry());
+				$(this).blur();
+				if (xhr) { xhr.always(function() { paint(true); }); }
+			});
+			$d.on("keydown", ".rm-tnote", function(e) { if (e.which === 13) { e.preventDefault(); card().find(".rm-tadd, .rm-tsave").first().click(); } });
+			$d.on("click", ".rm-tremove", function() { if (state.sel && tStore()) { $(this).blur(); tStore().remove(state.sel).always(function() { paint(true); }); } });
+			$d.on("click", ".rm-trow", function(e) {
+				if ($(e.target).closest(".rm-t-btns").length) { return; }
+				const id = Number($(this).attr("data-id")), sys = appData.systems[id];
+				if (state.layout.byId[id]) { select(id); centreOnSystem(id, Math.max(1, state.t.k)); } else if (sys) { show(Number(sys.regionID), id); }
+			});
+			const moveTarget = function(el, dir) {
+				const order = mapTargets.move(targetIDs(), Number($(el).closest(".rm-trow").attr("data-id")), dir);
+				if (order) { tStore().reorder(order).always(function() { paint(true); }); }
+			};
+			$d.on("click", ".rm-tup", function(e) { e.preventDefault(); moveTarget(this, -1); });
+			$d.on("click", ".rm-tdown", function(e) { e.preventDefault(); moveTarget(this, 1); });
+			$d.on("click", ".rm-tdel", function(e) { e.preventDefault(); tStore().remove(Number($(this).closest(".rm-trow").attr("data-id"))).always(function() { paint(true); }); });
+			$d.on("click", ".rm-tclear", function() {
+				if (window.confirm("Remove all " + targetIDs().length + " targets for everyone on the mask?")) { tStore().clear().always(function() { paint(true); }); }
+			});
+			$d.on("click", ".rm-tsend", function() { tStore().sendWaypoints(targetIDs()); });
+			$d.on("click", ".rm-tshort", function() { shortestOrder(); });
+			let dragID = null;
+			$d.on("dragstart", ".rm-trow", function(e) { dragID = Number($(this).attr("data-id")); if (e.originalEvent.dataTransfer) { e.originalEvent.dataTransfer.effectAllowed = "move"; e.originalEvent.dataTransfer.setData("text/plain", String(dragID)); } });
+			$d.on("dragover", ".rm-trow", function(e) { if (dragID) { e.preventDefault(); $(this).addClass("rm-tdrop"); } });
+			$d.on("dragleave", ".rm-trow", function() { $(this).removeClass("rm-tdrop"); });
+			$d.on("drop", ".rm-trow", function(e) {
+				e.preventDefault();
+				$(this).removeClass("rm-tdrop");
+				const order = dragID ? mapTargets.moveBefore(targetIDs(), dragID, Number($(this).attr("data-id"))) : null;
+				dragID = null;
+				if (order && order.join() !== targetIDs().join()) { tStore().reorder(order).always(function() { paint(true); }); }
+			});
+			$d.on("dragend", ".rm-trow", function() { dragID = null; });
 			$d.on("wheel pointerdown", ".rm-side", function(e) { e.stopPropagation(); });
 
 			// Card
@@ -793,7 +986,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 			// Systems and stubs
 			let moved = false;
-			$d.on("click", ".rm-sys", function(e) { if (moved) { return; } e.stopPropagation(); select($(this).attr("data-id")); });
+			$d.on("click", ".rm-sys", function(e) {
+				if (moved) { return; }
+				e.stopPropagation();
+				if (e.shiftKey && rm.settings(options).overlays.targets) { toggleTarget(Number($(this).attr("data-id"))); return; }
+				select($(this).attr("data-id"));
+			});
 			$d.on("dblclick", ".rm-sys", function(e) { e.preventDefault(); viewSystem($(this).attr("data-id")); });
 			$d.on("click", ".rm-stub", function() {
 				if (moved) { return; }
@@ -841,7 +1039,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function buildDialog() {
-			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"], ["skyhooks", "Skyhooks"]];
+			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"], ["skyhooks", "Skyhooks"], ["targets", "Targets"]];
 			$("body").append(
 				"<div id='" + DIALOG_ID + "' class='hidden'><div class='rm-wrap'>"
 				+ "<div class='rm-bar'>"
@@ -869,7 +1067,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<label><input type='checkbox' data-sky='null' /> Null-sec</label> <span class='rm-sinfo'></span>"
 				+ "</div>"
 				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-side hidden'></div><div class='rm-card hidden'></div>"
-				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"
+				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · Shift+click marks a target · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"
 				+ "</div></div>");
 		}
 
@@ -987,6 +1185,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				rs = typeof regionMapSkyhooks !== "undefined" ? regionMapSkyhooks : null;
 				rm.openJumps = openJumps;
 				rm.openSkyhooks = openSkyhooks;
+				if (tStore()) {
+					tStore().onChange(function() {
+						const $d = $("#" + DIALOG_ID);
+						if (state.layout && $d.hasClass("ui-dialog-content") && $d.dialog("isOpen")) { paint(false); }
+					});
+				}
 				if (skyStore()) {
 					skyStore().onChange(function() {
 						const $d = $("#" + DIALOG_ID);

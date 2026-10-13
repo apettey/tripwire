@@ -12,7 +12,7 @@ const auditLogTab = {
 
 	KINDS: [
 		["", "Everything"], ["signature", "Signatures"], ["signature.add", "Signature added"], ["signature.update", "Signature changed"], ["signature.delete", "Signature deleted"],
-		["wormhole", "Wormholes"], ["wormhole.add", "Wormhole mapped"], ["wormhole.update", "Wormhole changed"], ["wormhole.delete", "Wormhole deleted"], ["mask", "Mask admin actions"]
+		["wormhole", "Wormholes"], ["wormhole.add", "Wormhole mapped"], ["wormhole.update", "Wormhole changed"], ["wormhole.delete", "Wormhole deleted"], ["target", "Region map targets"], ["mask", "Mask admin actions"]
 	],
 
 	FIELDS: { signatureID: "ID", systemID: "system", type: "type", name: "name", bookmark: "bookmark", lifeLength: "life", life: "life", mass: "mass", parent: "parent" },
@@ -82,6 +82,13 @@ const auditLogTab = {
 			if (row.action === "delete") { return "deleted " + hole + ends; }
 			if (d.from === undefined && d.to === undefined) { return "changed wormhole signature " + (d.id || row.subject || "?") + ": " + t.changesText(d.changes, sysName); }
 			return "changed " + hole + ends + ": " + t.changesText(d.changes, sysName);
+		}
+		if (row.entity === "target") {
+			const note = row.subject ? " \"" + row.subject + "\"" : "";
+			if (row.action === "add") { return "marked a region map target" + note + (d.expires ? " (until " + d.expires + " EVE time)" : ""); }
+			if (row.action === "update") { return "changed a region map target" + note + (d.expires ? " (until " + d.expires + " EVE time)" : ""); }
+			if (row.action === "delete") { return "removed a region map target"; }
+			if (row.action === "clear") { return "cleared all region map targets" + (d.count ? " (" + d.count + ")" : ""); }
 		}
 		return row.action + " " + (row.subject || "");
 	},
