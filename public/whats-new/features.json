@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 106,
+      "date": "2026-10-13",
+      "title": "Skyhooks on the region map",
+      "description": "Raidable skyhooks are now on the region map. Tick Skyhooks in the map's header to mark every system with a raidable skyhook: bright when it is vulnerable now, dim when its window opens later, with its value from $ to $$$$$. Click a system for its planets and countdowns, or use the Skyhooks list beside the map, sorted by jumps, window or value.\n\nThe separate skyhooks box is gone: the skyhook icon on low-sec and null-sec systems in your chain now opens the region map on that system. Turn the icon off in Settings > Routes & Navigation.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-106-region-map-skyhooks.png",
+          "caption": "Skyhooks in Catch, with the system card of GMLH-K"
+        }
+      ]
+    },
+    {
       "pr": 105,
       "date": "2026-10-13",
       "title": "Staging scan in null-sec",
