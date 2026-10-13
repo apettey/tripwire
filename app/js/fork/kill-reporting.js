@@ -6,10 +6,13 @@ const killReporting = {
 	URL: "kills.php",
 	SOUND_PATH: "sounds/kill-reporting/",
 	POLL_MS: 15000,
-	TOAST_MS: 12000,
+	TOAST_MS: 20000,	// counted only while the page is visible, so a kill reported while you're in the game waits for you
+	MARK_MS: 10 * 60 * 1000,	// how long the chain map marks a system after a kill
+	FLASH_MS: 2500,
 	MAX_TOASTS: 4,
 	MAX_SYSTEMS: 1000,
 	MAX_QUEUE: 8,
+	MAX_NOTIFY: 2,	// desktop notifications per poll before the rest are summed up in one
 
 	/** Categories, highest priority first */
 	categories: ["loss", "kill", "gank", "neutral"],
@@ -56,6 +59,8 @@ const killReporting = {
 	defaults: {
 		enabled: true,
 		popup: true,
+		desktop: true,
+		marker: true,
 		threshold: 5,
 		sounds: {
 			neutral: { sound: "neutral-bot", volume: 80 },
@@ -105,6 +110,8 @@ const killReporting = {
 		const result = {
 			enabled: raw.enabled !== false,
 			popup: raw.popup !== false,
+			desktop: raw.desktop !== false,
+			marker: raw.marker !== false,
 			threshold: killReporting.clampInt(raw.threshold, 1, 50, d.threshold),
 			sounds: {}
 		};
@@ -167,6 +174,93 @@ const killReporting = {
 		return Object.keys(seen).map(Number).sort(function(a, b) { return a - b; });
 	},
 
+	/** Short label of the hole leading to a chain row's system: its name, else the first 3 letters of the signature.
+	 *  Same as chainKillFeed.holeLabel (chain-killfeed.js): keep the two identical. */
+	holeLabel: function(row) {
+		const last = row && Array.isArray(row.pathHome) && row.pathHome.length ? row.pathHome[row.pathHome.length - 1] : null;
+		if (!last) { return ""; }
+		if (last.name) { return String(last.name).substring(0, 24); }
+		return last.signatureID ? String(last.signatureID).substring(0, 3).toUpperCase() : "";
+	},
+
+	/** Hole label(s) of a system on the chain map, as the map shows them ("A6", or "A6, B2" when it's on the map twice) */
+	chainLabel: function(rows, systemID) {
+		const labels = [];
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			if (!node || typeof node !== "object" || String(node.systemID) !== String(systemID) || killReporting.isExtraNode(row, node)) { return; }
+			const label = killReporting.holeLabel(row);
+			if (label && labels.indexOf(label) < 0) { labels.push(label); }
+		});
+		return labels.join(", ");
+	},
+
+	/** Where a kill happened, as shown on the chain map: { label: hole label, name: system name, type: "C3"/"HS"/... }.
+	@param place a { label, name, type } object, or just the system name */
+	place: function(place) {
+		if (!place || typeof place !== "object") { place = { name: place }; }
+		const text = function(v) { return v === undefined || v === null ? "" : String(v); };
+		return { label: text(place.label), name: text(place.name), type: text(place.type) };
+	},
+
+	/** Plain-text place: "A6 · J123456 (C3)" */
+	placeText: function(place) {
+		const p = killReporting.place(place);
+		const name = p.name + (p.type ? (p.name ? " (" + p.type + ")" : p.type) : "");
+		return [p.label, name].filter(function(s) { return s; }).join(" · ");
+	},
+
+	/** Desktop notification for a kill: { title, body } (plain text) */
+	notificationText: function(kill, category, place) {
+		const pilots = parseInt(kill && kill.attackerCharacterCount, 10) || 0;
+		const isk = killReporting.formatISK(kill && kill.totalValue);
+		return {
+			title: (killReporting.labels[category] || category) + " in " + (killReporting.placeText(place) || "the chain"),
+			body: pilots + (pilots === 1 ? " pilot" : " pilots") + (isk ? " — " + isk + " ISK" : "")
+		};
+	},
+
+	/** Desktop notifications for one poll's kills: the first MAX_NOTIFY (highest priority first), then one summary
+	 *  for the rest, so a brawl doesn't flood the desktop. items: [{ kill, category, place }]
+	@return [{ title, body, tag, kill }] (kill is missing on the summary) */
+	notifications: function(items) {
+		const rank = function(c) { const i = killReporting.categories.indexOf(c); return i < 0 ? 99 : i; };
+		const sorted = (Array.isArray(items) ? items : []).filter(function(item) { return item; })
+			.map(function(item, i) { return { item: item, i: i }; })
+			.sort(function(a, b) { return rank(a.item.category) - rank(b.item.category) || a.i - b.i; })
+			.map(function(x) { return x.item; });
+		const shown = sorted.slice(0, killReporting.MAX_NOTIFY).map(function(item) {
+			const text = killReporting.notificationText(item.kill, item.category, item.place);
+			return { title: text.title, body: text.body, tag: "tripwire-kill-" + (parseInt(item.kill && item.kill.killID, 10) || 0), kill: item.kill };
+		});
+		const rest = sorted.slice(killReporting.MAX_NOTIFY);
+		if (rest.length) {
+			const places = [];
+			rest.forEach(function(item) {
+				const text = killReporting.placeText(item.place);
+				if (text && places.indexOf(text) < 0) { places.push(text); }
+			});
+			shown.push({ title: rest.length + " more " + (rest.length === 1 ? "kill" : "kills") + " in the chain", body: places.join(", "), tag: "tripwire-kill-more" });
+		}
+		return shown;
+	},
+
+	/** Remember a kill for the chain map marker: marks = { systemID: { category, until } }. A higher-priority
+	 *  category replaces a lower one; every kill restarts the timer. Returns marks. */
+	mark: function(marks, systemID, category, now) {
+		const rank = function(c) { const i = killReporting.categories.indexOf(c); return i < 0 ? 99 : i; };
+		const old = marks[systemID];
+		const keep = old && old.until > now && rank(old.category) < rank(category);
+		marks[systemID] = { category: keep ? old.category : category, until: now + killReporting.MARK_MS };
+		return marks;
+	},
+
+	/** Drop expired marks; returns marks */
+	expireMarks: function(marks, now) {
+		Object.keys(marks).forEach(function(id) { if (!(marks[id].until > now)) { delete marks[id]; } });
+		return marks;
+	},
+
 	/** Work out what to report for the kills of one poll.
 	@return { reports: [{ kill, category }] in arrival order, sounds: [category] at most one per category, highest priority first } */
 	plan: function(kills, systemIDs, threshold) {
@@ -202,19 +296,28 @@ const killReporting = {
 			.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 	},
 
-	/** Pop-up markup for a kill */
-	toastHtml: function(kill, category, systemName) {
+	/** Pop-up markup for a kill.
+	@param place { label, name, type } (see place()), or just the system name */
+	toastHtml: function(kill, category, place) {
 		const esc = killReporting.escape;
+		const p = killReporting.place(place);
 		const killID = parseInt(kill && kill.killID, 10) || 0;
+		const systemID = killReporting.isRealSystemID(kill && kill.systemID) ? Number(kill.systemID) : 0;
 		const shipID = parseInt(kill && kill.victimShipTypeID, 10) || 0;
 		const pilots = parseInt(kill && kill.attackerCharacterCount, 10) || 0;
 		const isk = killReporting.formatISK(kill && kill.totalValue);
-		return "<div class='kill-toast kill-toast-" + esc(category) + "' data-killid='" + killID + "'>"
+		return "<div class='kill-toast kill-toast-" + esc(category) + "' data-killid='" + killID + "'"
+			+ (systemID ? " data-systemid='" + systemID + "' title='Show on the chain map'" : "") + ">"
 			+ "<span class='kill-toast-close' title='Dismiss'>&#10005;</span>"
 			+ (shipID ? "<img class='kill-toast-ship' src='https://image.eveonline.com/Type/" + shipID + "_32.png' alt='' />" : "")
 			+ "<div class='kill-toast-text'>"
-			+ "<strong>" + esc(killReporting.labels[category] || category) + "</strong> in " + esc(systemName)
-			+ "<br/>" + pilots + (pilots === 1 ? " pilot" : " pilots") + (isk ? " — " + esc(isk) + " ISK" : "")
+			+ "<strong>" + esc(killReporting.labels[category] || category) + "</strong>"
+			+ "<span class='kill-toast-place'>"
+			+ (p.label ? "<span class='kill-toast-label'>" + esc(p.label) + "</span> " : "")
+			+ esc(p.name)
+			+ (p.type ? " <span class='kill-toast-type'>" + esc(p.type) + "</span>" : "")
+			+ "</span>"
+			+ pilots + (pilots === 1 ? " pilot" : " pilots") + (isk ? " — " + esc(isk) + " ISK" : "")
 			+ (killID ? " · <a href='https://zkillboard.com/kill/" + killID + "/' target='_blank' rel='noopener noreferrer'>zKillboard</a>" : "")
 			+ "</div></div>";
 	},
@@ -312,27 +415,153 @@ const killReporting = {
 		});
 	},
 
-	toast: function(kill, category) {
+	chainRows: function() {
+		return typeof chain !== "undefined" && chain && chain.data && chain.data.map ? chain.data.map.rows : [];
+	},
+
+	/** Where a system is, as the chain map shows it: { label, name, type } */
+	placeFor: function(systemID) {
+		let type = "";
+		try {
+			if (typeof systemAnalysis !== "undefined") { type = systemAnalysis.analyse(systemID).systemTypeName || ""; }
+		} catch (e) { /* unknown system: no class */ }
+		return { label: killReporting.chainLabel(killReporting.chainRows(), systemID), name: killReporting.systemName(systemID), type: type };
+	},
+
+	$nodes: function(systemID) {
+		return $("#chainMap [data-nodeid='" + (parseInt(systemID, 10) || 0) + "']");
+	},
+
+	/** Scroll the system's node into view and flash it */
+	focusNode: function(systemID) {
+		const $node = killReporting.$nodes(systemID);
+		if (!$node.length) { return; }
+		$node[0].scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+		$node.removeClass("kill-reporting-flash");
+		void $node[0].offsetWidth;	// restart the animation
+		$node.addClass("kill-reporting-flash");
+		setTimeout(function() { $node.removeClass("kill-reporting-flash"); }, killReporting.FLASH_MS);
+	},
+
+	marks: {},	// systemID => { category, until }: systems marked on the chain map after a kill
+
+	/** Put the kill markers on the chain map's nodes (after each redraw and when marks change) */
+	applyMarks: function() {
+		const marks = killReporting.expireMarks(killReporting.marks, Date.now());
+		const on = killReporting.current().marker;
+		const classes = killReporting.categories.map(function(c) { return "kill-reporting-mark-" + c; }).join(" ");
+		$("#chainMap .kill-reporting-mark").removeClass("kill-reporting-mark " + classes);
+		if (!on) { return; }
+		Object.keys(marks).forEach(function(id) {
+			killReporting.$nodes(id).addClass("kill-reporting-mark kill-reporting-mark-" + marks[id].category);
+		});
+	},
+
+	/** Ask for desktop notification permission (must run from a click) */
+	requestDesktop: function() {
+		if (typeof Notification === "undefined" || Notification.permission !== "default") { return; }
+		try {
+			const p = Notification.requestPermission();
+			if (p && typeof p.then === "function") { p.then(killReporting.updateDesktopHint); }
+		} catch (e) { /* old browsers */ }
+	},
+
+	/** Desktop notifications, only while Tripwire isn't the page you're looking at. items: [{ kill, category, place }] */
+	notify: function(items) {
+		if (typeof Notification === "undefined" || Notification.permission !== "granted" || !document.hidden) { return; }
+		killReporting.notifications(items).forEach(function(note) {
+			try {
+				const shipID = parseInt(note.kill && note.kill.victimShipTypeID, 10) || 0;
+				const n = new Notification(note.title, {
+					body: note.body,
+					tag: note.tag,
+					icon: shipID ? "https://image.eveonline.com/Type/" + shipID + "_64.png" : undefined
+				});
+				n.onclick = function() {
+					window.focus();
+					if (note.kill) { killReporting.focusNode(note.kill.systemID); }
+					n.close();
+				};
+			} catch (e) {
+				console.warn("Kill Reporting: could not show a desktop notification", e);
+			}
+		});
+	},
+
+	/** Fade the pop-up out after TOAST_MS of the page being visible (not hovered) */
+	armDismiss: function($toast) {
+		let left = killReporting.TOAST_MS;
+		let started = null;
+		let timer = null;
+		const stop = function() {
+			if (timer) { clearTimeout(timer); timer = null; left -= Date.now() - started; }
+		};
+		// Self-cleaning: however the toast went (close button, trimmed, another feature), its handler goes with it
+		const gone = function() {
+			if ($toast.closest("body").length) { return false; }
+			stop();
+			$(document).off("visibilitychange", onVisibility);
+			return true;
+		};
+		const start = function() {
+			if (gone() || timer || document.hidden || $toast.is(":hover")) { return; }
+			started = Date.now();
+			timer = setTimeout(function() {
+				timer = null;
+				$(document).off("visibilitychange", onVisibility);
+				$toast.fadeOut(400, function() { $toast.remove(); });
+			}, Math.max(0, left));
+		};
+		const onVisibility = function() { if (gone()) { return; } if (document.hidden) { stop(); } else { start(); } };
+		$(document).on("visibilitychange", onVisibility);
+		$toast.on("mouseenter", stop).on("mouseleave", start);
+		start();
+	},
+
+	toast: function(kill, category, place) {
 		let $box = $("#kill-reporting-toasts");
 		if (!$box.length) {
 			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo("body");
-			$box.on("click", ".kill-toast-close", function() { $(this).closest(".kill-toast").remove(); });
 		}
-		const $toast = $(killReporting.toastHtml(kill, category, killReporting.systemName(kill.systemID)));
+		if (!$box.data("killReportingBound")) {
+			// Also when structure-timers.js created the box first
+			$box.data("killReportingBound", true);
+			$box.on("click", ".kill-toast-close", function() { $(this).closest(".kill-toast").remove(); });
+			$box.on("click", ".kill-toast[data-systemid]", function(e) {
+				if ($(e.target).closest("a, .kill-toast-close, .kill-toast-desktop").length) { return; }
+				killReporting.focusNode($(this).attr("data-systemid"));
+			});
+			$box.on("click", ".kill-toast-desktop", function(e) {
+				e.preventDefault();
+				killReporting.requestDesktop();
+				$box.find(".kill-toast-desktop").remove();
+			});
+		}
+		const $toast = $(killReporting.toastHtml(kill, category, place));
 		$toast.find(".kill-toast-ship").on("error", function() { $(this).remove(); });
+		if (killReporting.current().desktop && typeof Notification !== "undefined" && Notification.permission === "default" &&
+			!$box.find(".kill-toast-desktop").length) {
+			$toast.find(".kill-toast-text").append("<br/><a href='#' class='kill-toast-desktop'>Also alert me when Tripwire is in the background</a>");
+		}
 		$box.append($toast);
 		while ($box.children(".kill-toast").length > killReporting.MAX_TOASTS) {
 			$box.children(".kill-toast").first().remove();
 		}
-		setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, killReporting.TOAST_MS);
+		killReporting.armDismiss($toast);
 	},
 
 	report: function(kills) {
 		const settings = killReporting.current();
 		const result = killReporting.plan(kills, killReporting.chainSystemIDs(), settings.threshold);
-		if (settings.popup) {
-			result.reports.forEach(function(r) { killReporting.toast(r.kill, r.category); });
-		}
+		const now = Date.now();
+		const items = result.reports.map(function(r) {
+			const place = killReporting.placeFor(r.kill.systemID);
+			if (settings.popup) { killReporting.toast(r.kill, r.category, place); }
+			killReporting.mark(killReporting.marks, Number(r.kill.systemID), r.category, now);
+			return { kill: r.kill, category: r.category, place: place };
+		});
+		if (settings.desktop && items.length) { killReporting.notify(items); }
+		if (items.length) { killReporting.applyMarks(); }
 		if (settings.enabled) {
 			result.sounds.forEach(function(c) { killReporting.enqueue(c, settings); });
 		}
@@ -341,7 +570,8 @@ const killReporting = {
 	poll: function() {
 		if (killReporting.inFlight) { return; }	// don't stack requests
 		const settings = killReporting.current();
-		if (!settings.enabled && !settings.popup) {
+		killReporting.applyMarks();	// expire old marks
+		if (!settings.enabled && !settings.popup && !settings.desktop && !settings.marker) {
 			killReporting.cursor = null;	// start fresh (no replay) when switched back on
 			return;
 		}
@@ -388,6 +618,8 @@ const killReporting = {
 		return {
 			rows: "<tr><th>Kill sounds:</th><td><label><input type='checkbox' id='killReporting-enabled' /> Play kill sounds for kills in the chain</label></td></tr>"
 				+ "<tr><th>Pop-ups:</th><td><label><input type='checkbox' id='killReporting-popup' /> Show a pop-up for each kill</label></td></tr>"
+				+ "<tr><th>Desktop alerts:</th><td><label><input type='checkbox' id='killReporting-desktop' /> Show a desktop notification when Tripwire is in the background</label>"
+				+ "<div class='kill-reporting-hint' id='killReporting-desktop-hint'></div></td></tr>"
 				+ "<tr><th>Gank size:</th><td><label>Gank = more than <input type='number' id='killReporting-threshold' min='1' max='50' step='1' /> pilots</label></td></tr>",
 			sounds: "<table class='kill-reporting-sounds' width='100%' cellpadding='1' cellspacing='0'>"
 				+ "<tr><th>Event</th><th>Sound</th><th>Volume</th><th></th></tr>"
@@ -395,6 +627,21 @@ const killReporting = {
 				+ "</table>"
 				+ "<p class='kill-reporting-note'>Kills come from zKillboard and can arrive a minute or more after they happen.</p>"
 		};
+	},
+
+	/** What the browser allows, under the Desktop alerts checkbox */
+	updateDesktopHint: function() {
+		const $hint = $("#killReporting-desktop-hint");
+		if (!$hint.length) { return; }
+		const permission = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+		$hint.text({
+			unsupported: "This browser can't show desktop notifications.",
+			denied: "Blocked by the browser: allow notifications for this site in the browser's site settings.",
+			granted: "",
+			"default": !$("#killReporting-desktop").prop("checked") ? "" : killReporting.desktopWasOn
+				? "Not allowed yet: click \"Also alert me\" on a kill pop-up to let the browser ask."
+				: "The browser asks for permission when you click Save."
+		}[permission] || "");
 	},
 
 	updateDescriptions: function() {
@@ -408,7 +655,9 @@ const killReporting = {
 	fillForm: function(settings) {
 		$("#killReporting-enabled").prop("checked", settings.enabled);
 		$("#killReporting-popup").prop("checked", settings.popup);
+		$("#killReporting-desktop").prop("checked", settings.desktop);
 		$("#killReporting-threshold").val(settings.threshold);
+		killReporting.updateDesktopHint();
 		killReporting.categories.forEach(function(c) {
 			const $row = $("#killReporting-section tr[data-category='" + c + "']");
 			$row.find(".kill-reporting-sound").val(settings.sounds[c].sound);
@@ -423,6 +672,7 @@ const killReporting = {
 		const raw = {
 			enabled: $("#killReporting-enabled").prop("checked"),
 			popup: $("#killReporting-popup").prop("checked"),
+			desktop: $("#killReporting-desktop").prop("checked"),
 			threshold: $("#killReporting-threshold").val(),
 			sounds: {}
 		};
@@ -442,10 +692,28 @@ const killReporting = {
 		forkSettings.register({
 			section: "killReporting", id: "killReporting", type: "custom", rows: html.rows, key: "killReporting",
 			keywords: "sound volume pop-up gank",
-			load: function() { killReporting.fillForm(killReporting.current()); },
-			save: function(o) { o.killReporting = killReporting.readForm(); }
+			load: function() {
+				killReporting.desktopWasOn = killReporting.current().desktop;
+				killReporting.fillForm(killReporting.current());
+			},
+			save: function(o) {
+				o.killReporting = killReporting.readForm();
+				// Ask only when it was just switched on (Save is a click, so the browser may ask). When it's on by
+				// default the first pop-up has a link that asks, so an unrelated Save never brings up a prompt.
+				if (o.killReporting.desktop && !killReporting.desktopWasOn) { killReporting.requestDesktop(); }
+				killReporting.desktopWasOn = o.killReporting.desktop;
+			}
+		});
+		// Drawn on the map, so Map Markers. Registered after the row above: its Save runs later and keeps this value.
+		forkSettings.register({
+			section: "markers", order: 70, id: "killReporting-marker", type: "checkbox", key: "killReporting",
+			label: "Kill markers:", text: "Mark a chain system with a pulsing ring for 10 minutes after a reported kill (Kill Reporting)",
+			keywords: "kill reporting zkillboard",
+			get: function(o) { return killReporting.settings(o).marker; },
+			set: function(o, on) { o.killReporting = Object.assign({}, o.killReporting || {}, { marker: on }); }
 		});
 		if ($section) { $section.append(html.sounds); }
+		$(document).on("change", "#killReporting-desktop", killReporting.updateDesktopHint);
 
 		$(document).on("input change", "#killReporting-section .kill-reporting-vol", function() {
 			$(this).siblings(".kill-reporting-vol-label").text($(this).val() + "%");
@@ -486,6 +754,16 @@ const killReporting = {
 			const id = settings.sounds[c].sound;
 			if (id !== "speech" && id !== "none") { killReporting.audio(id); }
 		});
+		// Redraws replace the nodes: put the kill markers back
+		if (typeof chain !== "undefined" && chain && typeof chain.draw === "function" && !chain.draw.killReportingWrapped) {
+			const draw = chain.draw;
+			chain.draw = function() {
+				const result = draw.apply(this, arguments);
+				try { killReporting.applyMarks(); } catch (e) { console.warn("Kill Reporting: could not mark the chain", e); }
+				return result;
+			};
+			chain.draw.killReportingWrapped = true;
+		}
 		killReporting.poll();
 		setInterval(killReporting.poll, killReporting.POLL_MS);
 	}

@@ -111,7 +111,8 @@
 	cursor: pointer;
 }
 
-#killReporting-section .kill-reporting-desc {
+#killReporting-section .kill-reporting-desc,
+#killReporting-section .kill-reporting-hint {
 	font-weight: normal;
 	font-size: 85%;
 	color: #999;
@@ -136,3 +137,70 @@
 .kill-reporting-dot-loss { background: #e0413a; }
 .kill-reporting-dot-kill { background: #3fbf3f; }
 .kill-reporting-dot-gank { background: #f08c1a; }
+
+/* Where the kill was: hole label as on the chain map, system name, class */
+.kill-toast[data-systemid] {
+	cursor: pointer;
+}
+
+.kill-toast-place {
+	display: block;
+	margin: 1px 0;
+	font-size: 13px;
+	color: #fff;
+	white-space: nowrap;
+}
+
+.kill-toast-label {
+	display: inline-block;
+	padding: 0 4px;
+	border-radius: 2px;
+	background: #ddd;
+	color: #111;
+	font-weight: bold;
+}
+
+.kill-toast-type {
+	color: #aaa;
+}
+
+.kill-toast-desktop {
+	font-size: 90%;
+}
+
+/* Chain map: systems with a recent kill (Settings > Map Markers > Kill markers). `div.node` beats upstream's
+   `#chainMap div.node { box-shadow }` so the ring shows without the animation too (reduced motion). */
+#chainMap div.node.kill-reporting-mark {
+	--kill-mark: 210, 210, 210;
+	box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9), 0 0 6px 3px rgba(var(--kill-mark), 0.4);
+	animation: kill-reporting-pulse 1.6s ease-in-out infinite;
+}
+
+#chainMap div.node.kill-reporting-mark-loss { --kill-mark: 224, 65, 58; }
+#chainMap div.node.kill-reporting-mark-kill { --kill-mark: 63, 191, 63; }
+#chainMap div.node.kill-reporting-mark-gank { --kill-mark: 240, 140, 26; }
+#chainMap div.node.kill-reporting-mark-neutral { --kill-mark: 210, 210, 210; }
+
+@keyframes kill-reporting-pulse {
+	0%, 100% { box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9), 0 0 4px 2px rgba(var(--kill-mark), 0.5); }
+	50% { box-shadow: 0 0 0 2px rgba(var(--kill-mark), 0.9), 0 0 12px 6px rgba(var(--kill-mark), 0.25); }
+}
+
+/* Clicked pop-up: flash the node */
+#chainMap div.node.kill-reporting-flash {
+	outline: 3px solid #fff;
+	outline-offset: 3px;
+	animation: kill-reporting-flash 0.5s ease-in-out 5 alternate;
+}
+
+@keyframes kill-reporting-flash {
+	from { outline-color: rgba(255, 255, 255, 1); }
+	to { outline-color: rgba(255, 255, 255, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#chainMap div.node.kill-reporting-mark,
+	#chainMap div.node.kill-reporting-flash {
+		animation: none;
+	}
+}
