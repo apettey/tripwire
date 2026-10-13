@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 109,
+      "date": "2026-10-13",
+      "title": "Quieter EOL on the chain map",
+      "description": "The magenta EOL tag above systems on the chain map is gone. A hole's life now shows only in its line: <4h is dashed, <1h dotted and EOL a sparse-dotted line (a thin double line on the org chart maps).",
+      "images": [
+        {
+          "src": "whats-new/img/pr-109-life-states-map.png",
+          "caption": "<4h dashed (B), <1h dotted (C) and EOL sparse dots (D), no tag"
+        }
+      ]
+    },
+    {
       "pr": 104,
       "date": "2026-10-13",
       "title": "Wormhole life: Stable, <4h, <1h, EOL",
