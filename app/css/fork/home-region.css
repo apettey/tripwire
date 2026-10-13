@@ -1,0 +1,34 @@
+/* House mark after the system name on chain map nodes in home's region (fork feature: home-region).
+   The other node corners and edges are taken (threat badge top-left, pilots top-right, targets left, statics and
+   watchlist bottom-left, scans and environment tags bottom-right, size/mass markers on the connections), and the
+   class and hole type lines share their space with the effect, pilot and activity icons, so the mark goes on the
+   name line. It is small and inline, so it adds only a few pixels to the node's width. The renderers lay nodes
+   out from their size measured in #temp-div-node-width (chain-map-renderer-base.js), so the rules apply there too. */
+#chainMap .nodeSystem .home-region-mark,
+#temp-div-node-width .nodeSystem .home-region-mark {
+	display: inline-block;
+	margin-left: 2px;
+	color: #7fa6bd;
+	opacity: 0.8;
+	line-height: 0;
+	vertical-align: baseline;
+	cursor: help;
+}
+#chainMap .nodeSystem .home-region-icon,
+#temp-div-node-width .nodeSystem .home-region-icon {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	fill: currentColor;
+}
+
+/* Tooltip text for screen readers */
+#chainMap .nodeSystem .home-region-sr,
+#temp-div-node-width .nodeSystem .home-region-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
