@@ -123,6 +123,9 @@ game patches; the source of truth for numbers in this repo is `public/js/combine
   - Each hole in the chain gets a hierarchical name; one character per depth, concatenated:
     `A`..`Z` for large holes, `1`-`5` for small (frigate) holes, `6`-`9` for medium holes.
     Example: home → `A` → `AB` → `AB6`.
+  - A size digit is added only once along a path: past a medium hole, medium and large holes get
+    letters (`AB6` → `AB6A`) and only a small hole gets a digit again (`AB61`); past a small hole
+    everything is letters.
   - In-game bookmark on the hole leading out (outbound side): `=A C2 XYZ [EOL]` (name, destination
     class, signature letters, optional `EOL` flag). On the far side, pointing back home: `!A` (older
     bookmarks and sig names use `<A`; Tripwire still recognises both, `holeNaming.isReturnBookmark`).
