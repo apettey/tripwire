@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 111,
+      "date": "2026-10-13",
+      "title": "Home region marker",
+      "description": "Wormhole systems on the chain map that are in the same region as your home now show a small house mark after their name. Hover it to see the region. Home is the system your chain tab starts from.\n\nDon’t want it? Turn it off in Settings > Map Markers.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-111-home-region.png",
+          "caption": "ABC and GHI share home’s region; DEF is in another region"
+        }
+      ]
+    },
+    {
       "pr": 109,
       "date": "2026-10-13",
       "title": "Quieter EOL on the chain map",
