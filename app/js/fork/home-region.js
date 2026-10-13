@@ -223,6 +223,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (typeof Tooltips !== 'undefined' && Tooltips.attach && $(this).is("[data-tooltip]") && !(homeRegion.tipEls && homeRegion.tipEls.is(this))) {
 				Tooltips.attach($(this));
 				homeRegion.tipEls = homeRegion.tipEls ? homeRegion.tipEls.add(this) : $(this);
+				$(this).trigger("mouseenter.jBox-attach-" + Tooltips.id);	// jBox's own handler missed this hover: open it now
 			}
 		});
 		$(document).on("mouseleave", "#chainMap ." + homeRegion.CLASS, function() { $("#chainMap").removeClass(homeRegion.HOVER_CLASS); });
