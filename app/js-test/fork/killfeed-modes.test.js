@@ -128,6 +128,15 @@ describe('Kill panel display modes', () => {
 			assert.ok(g.left >= 0 && g.left + g.width + 6 <= 1280 / 1.4, JSON.stringify(g));
 			assert.ok(g.top >= 0 && g.top + g.height <= 800 / 1.4, JSON.stringify(g));
 		});
+		it('never reaches past a fractional viewport (UI scale), so the page cannot scroll', () => {
+			// 1024x768 at UI scale 1.4: 731.43 x 548.57 CSS pixels
+			const vw = 1024 / 1.4, vh = 768 / 1.4;
+			const g = km().clampFloat({ left: 0, top: 0, width: 3000, height: 3000 }, vw, vh, 0, 6);
+			assert.deepEqual(g, { left: 0, top: 0, width: 725, height: 548 });
+			assert.ok(g.left + g.width + 6 <= vw && g.top + g.height <= vh);
+			const h = km().clampFloat({ left: 5000, top: 5000, width: 300, height: 200 }, vw, vh, 0, 6.5);
+			assert.ok(h.left + h.width + 6.5 <= vw && h.top + h.height <= vh, JSON.stringify(h));
+		});
 		it('rounds to whole pixels', () => {
 			assert.deepEqual(km().clampFloat({ left: 10.4, top: 20.6, width: 300.2, height: 200.7 }, 1280, 800, 0), { left: 10, top: 21, width: 300, height: 201 });
 		});

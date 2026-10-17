@@ -98,8 +98,9 @@ const killfeedModes = {
 	clampFloat: function(geom, viewportWidth, viewportHeight, index, chrome) {
 		const f = killfeedModes.FLOAT;
 		const extra = Math.max(0, Number(chrome) || 0);
-		const vw = Math.max(0, (Number(viewportWidth) || 0) - extra);	// room for the CSS width
-		const vh = Math.max(0, Number(viewportHeight) || 0);
+		// Whole pixels, rounded down: a window even a fraction of a pixel too big makes the page scroll
+		const vw = Math.max(0, Math.floor((Number(viewportWidth) || 0) - extra));	// room for the CSS width
+		const vh = Math.max(0, Math.floor(Number(viewportHeight) || 0));
 		const def = killfeedModes.defaultFloat(index, vw + extra, vh, extra);
 		const g = geom && typeof geom === "object" ? geom : {};
 		const num = function(v, fallback) { const n = Number(v); return v !== null && v !== "" && isFinite(n) ? n : fallback; };
@@ -153,7 +154,9 @@ const killfeedModes = {
 	/** Viewport size and scroll in CSS pixels of the zoomed page */
 	viewport: function() {
 		const z = killfeedModes.zoom();
-		return { width: $(window).width() / z, height: $(window).height() / z, left: $(window).scrollLeft() / z, top: $(window).scrollTop() / z };
+		// clientWidth/Height: without scrollbars (the html element is not zoomed)
+		const root = document.documentElement;
+		return { width: (root.clientWidth || $(window).width()) / z, height: (root.clientHeight || $(window).height()) / z, left: $(window).scrollLeft() / z, top: $(window).scrollTop() / z };
 	},
 
 	/** A dialog's border + padding (CSS pixels): {w, h} */
