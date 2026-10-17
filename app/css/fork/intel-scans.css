@@ -30,6 +30,7 @@
 #intelScansWidget .controls { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #intelScansWidget .intel-title { color: #888; }
 #intelScansWidget .intel-system { color: #CCC; font-weight: bold; }
+#intelScansWidget .intel-link { font-size: 0.9em; font-weight: normal; text-decoration: underline; margin-left: 4px; }
 #intelScansWidget .intel-status { color: #777; font-size: 0.9em; }
 #intelScansWidget .content { overflow-x: hidden; overflow-y: auto; }
 .intel-body {

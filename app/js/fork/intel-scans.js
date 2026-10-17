@@ -66,6 +66,22 @@ const intelScans = {
 		return !(opts && opts.intelScans && opts.intelScans.pasteDetect === false);
 	},
 
+	/** zKillboard and Anoik.is links next to the system name in the panel header; missing = on */
+	showLinks: function(opts) {
+		return !(opts && opts.intelScans && opts.intelScans.links === false);
+	},
+
+	/** Header links for a system: [{label, title, url}]; zKillboard always, Anoik.is for wormhole space (31xxxxxx) only */
+	systemLinks: function(systemID, name) {
+		const id = parseInt(systemID, 10);
+		if (!intelScans.isSystem(id)) { return []; }
+		const links = [{ label: "zKill", title: "Open the system on zKillboard", url: "https://zkillboard.com/system/" + id + "/" }];
+		if (id >= 31000000 && id < 32000000 && name) {
+			links.push({ label: "Anoik", title: "Open the system on Anoik.is", url: "https://anoik.is/systems/" + encodeURIComponent(name) });
+		}
+		return links;
+	},
+
 	/** Minutes a scan counts as fresh (chips and map markers); 1-1440 */
 	freshMinutes: function(opts) {
 		const v = parseInt(opts && opts.intelScans ? opts.intelScans.freshMinutes : NaN, 10);
@@ -757,10 +773,18 @@ const intelScans = {
 		return html;
 	},
 
+	/** The header links, escaped */
+	linksHtml: function(systemID, name) {
+		const esc = intelScans.escape;
+		return intelScans.systemLinks(systemID, name).map(function(l) {
+			return " <a class='intel-link' href='" + esc(l.url) + "' target='_blank' rel='noopener noreferrer' title='" + esc(l.title) + "'>" + esc(l.label) + "</a>";
+		}).join("");
+	},
+
 	widgetHtml: function() {
 		return "<li id='" + intelScans.WIDGET_ID + "' class='gridWidget'>"
 			+ "<div class='controls'>"
-			+ "<span class='intel-title'>Intel</span> <span class='intel-system'></span>"
+			+ "<span class='intel-title'>Intel</span> <span class='intel-system'></span><span class='intel-links'></span>"
 			+ "<div style='float: right;'><span class='intel-status'></span></div>"
 			+ "</div>"
 			+ "<div class='content'><div class='intel-body'></div></div>"
@@ -852,6 +876,7 @@ const intelScans = {
 		// Type data: d-scan summaries, and cyno-capable hulls among the ships of looked-up pilots
 		if (scans.some(function(s) { return s.kind === "dscan"; }) || intelScans.pilotsView) { intelScans.loadTypes(); }
 		$w.find(".intel-system").text(id ? "— " + intelScans.systemName(id) : "");
+		$w.find(".intel-links").html(id && intelScans.showLinks(opts) ? intelScans.linksHtml(id, intelScans.systemName(id)) : "");
 		$w.find(".intel-status").text(scans.length ? intelScans.plural(scans.length, "scan", "scans") : "");
 		const $content = $w.find(".content");
 		const scroll = $content.scrollTop();
@@ -1025,6 +1050,7 @@ const intelScans = {
 			section: "intel", order: 40, id: "intelScans", type: "custom", key: "intelScans", label: "D-scan & local intel:",
 			keywords: "dscan paste",
 			html: "<label><input type='checkbox' id='intelScans-enabled' /> Show the Intel panel, the map dots and the paste entry</label><br/>"
+				+ "<label><input type='checkbox' id='intelScans-links' /> Show zKillboard and Anoik.is links next to the system name in the Intel panel</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-pasteDetect' /> Open the d-scan dialog when you paste a d-scan anywhere (Ctrl+V)</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-affiliation' /> Group local scans by alliance and corporation</label><br/>"
 				+ "<label><input type='checkbox' id='intelScans-threat' /> Show zKillboard threat of pilots in local scans</label><br/>"
@@ -1034,6 +1060,7 @@ const intelScans = {
 				const opts = intelScans.opts();
 				$("#intelScans-enabled").prop("checked", intelScans.enabled(opts));
 				$("#intelScans-pasteDetect").prop("checked", intelScans.pasteDetect(opts));
+				$("#intelScans-links").prop("checked", intelScans.showLinks(opts));
 				$("#intelScans-affiliation").prop("checked", typeof intelPilots === "undefined" || intelPilots.affiliation(opts));
 				$("#intelScans-threat").prop("checked", typeof intelPilots === "undefined" || intelPilots.threat(opts));
 				$("#intelScans-fresh").val(intelScans.freshMinutes(opts));
@@ -1041,6 +1068,7 @@ const intelScans = {
 			},
 			save: function(o) {
 				const settings = { enabled: $("#intelScans-enabled").prop("checked"), pasteDetect: $("#intelScans-pasteDetect").prop("checked"),
+					links: $("#intelScans-links").prop("checked"),
 					affiliation: $("#intelScans-affiliation").prop("checked"), threat: $("#intelScans-threat").prop("checked") };
 				if (o.intelScans && o.intelScans.position) { settings.position = o.intelScans.position; }
 				const fresh = parseInt($("#intelScans-fresh").val(), 10);
@@ -1056,6 +1084,7 @@ const intelScans = {
 			const wrappedApply = function() {
 				const result = apply.apply(this, arguments);
 				intelScans.sync();
+				intelScans.renderPanel();	// header links follow their checkbox
 				intelScans.patchChain();
 				return result;
 			};
