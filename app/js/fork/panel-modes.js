@@ -437,19 +437,53 @@ const panelModes = {
 	 * once the panel is in its new place the editor starts again with that text (resumeEditors). Returns [{name, data, html}].
 	 */
 	suspendEditors: function($w) {
-		if (typeof CKEDITOR === "undefined" || !CKEDITOR.instances) { return []; }
 		const out = [];
-		Object.keys(CKEDITOR.instances).forEach(function(name) {
-			const inst = CKEDITOR.instances[name];
-			const el = inst && inst.element ? inst.element.$ : null;
-			if (el && $w[0] && $.contains($w[0], el)) {
-				const html = el.innerHTML;	// the note as saved: the editor writes into it only on Save
-				out.push({ name: name, data: inst.getData(), html: html });
+		panelModes.editorsIn($w).forEach(function(inst) {
+			const name = inst.name;
+			const el = inst.element.$;
+			// One restarted by resumeEditors and not ready yet holds its texts in _phPending (its element has the unsaved one)
+			const pending = inst._phPending;
+			const html = pending ? pending.html : el.innerHTML;	// the note as saved: the editor writes into it only on Save
+			let data = pending ? pending.data : "";
+			try {
+				if (!pending) { data = inst.getData(); }
 				inst.destroy(true);	// true: don't write the unsaved text into the element
-				el.innerHTML = html;
+			} catch (err) {
+				// Not ready (CKEditor can't destroy it yet): drop it by hand
+				console.warn("Panel modes: removing a note editor that wasn't ready", err);
+				try { CKEDITOR.remove(inst); } catch (e) { delete CKEDITOR.instances[name]; }
+				$(document.getElementById("cke_" + name)).remove();
+				// It keeps loading: once it would be ready, its box goes and no instanceReady handler sees it
+				inst._phDead = true;
+				panelModes.hookDeadEditors();
+				el.style.display = "";
+				el.style.visibility = "";
 			}
+			el.innerHTML = html;
+			out.push({ name: name, data: data, html: html });
 		});
 		return out;
+	},
+
+	/** Once: an editor dropped while starting (suspendEditors) is removed when it gets ready, before anyone else sees it */
+	hookDeadEditors: function() {
+		if (panelModes.deadHooked || typeof CKEDITOR === "undefined" || typeof CKEDITOR.on !== "function") { return; }
+		panelModes.deadHooked = true;
+		CKEDITOR.on("instanceReady", function(evt) {
+			const inst = evt.editor;
+			if (!inst || !inst._phDead) { return; }
+			evt.stop();	// app/js/ckeditor.js's handler (focus, cursor) must not run for it
+			if (inst.container) { inst.container.remove(); }
+		}, null, null, 1);
+	},
+
+	/** The note editors (CKEditor instances) inside the panel's element */
+	editorsIn: function($w) {
+		if (typeof CKEDITOR === "undefined" || !CKEDITOR.instances || !$w[0]) { return []; }
+		return Object.keys(CKEDITOR.instances).map(function(name) { return CKEDITOR.instances[name]; }).filter(function(inst) {
+			const el = inst && inst.element ? inst.element.$ : null;
+			return el && $.contains($w[0], el);
+		});
 	},
 
 	resumeEditors: function(editors) {
@@ -461,7 +495,8 @@ const panelModes = {
 			// before that handler runs, the element gets the saved note back for Cancel.
 			el.innerHTML = e.data;
 			const inst = CKEDITOR.replace(e.name, typeof CKConfig !== "undefined" ? CKConfig : {});
-			inst.on("instanceReady", function() { el.innerHTML = e.html; });
+			inst._phPending = { data: e.data, html: e.html };
+			inst.on("instanceReady", function() { el.innerHTML = e.html; delete inst._phPending; });
 		});
 	},
 
@@ -473,19 +508,50 @@ const panelModes = {
 		}, 50);
 	},
 
-	/** Switch the shown panel to `mode` (it must be in the page). Returns whether anything changed. */
-	show: function(def, mode) {
+	/**
+	 * Switch the shown panel to `mode` (it must be in the page). Returns whether anything changed.
+	 * @param now true: don't wait for a note editor that is still starting
+	 */
+	show: function(def, mode, now) {
 		const $w = panelModes.$el(def.id);
 		const from = panelModes.shownMode(def.id);
 		if (!from || from === mode) { return false; }
-		const editors = panelModes.suspendEditors($w);
+		// A note editor still starting (restarted by the move just before): move once it is ready, to the mode the
+		// options say by then (a few seconds at most; then it is moved anyway)
+		const starting = panelModes.editorsIn($w).filter(function(inst) { return inst.status !== "ready"; })[0];
+		if (starting && !now && !panelModes.waiting[def.id]) {
+			const again = function() {
+				if (!panelModes.waiting[def.id]) { return; }
+				clearTimeout(panelModes.waiting[def.id]);
+				delete panelModes.waiting[def.id];
+				setTimeout(function() { panelModes.catchUp(def.id); }, 0);	// after upstream's instanceReady handler
+			};
+			panelModes.waiting[def.id] = setTimeout(again, 5000);
+			starting.once("instanceReady", again);
+			return false;
+		}
+		if (!now && panelModes.waiting[def.id]) { return false; }	// catchUp moves it
+		// Editors are best effort: the panel always gets to its mode (shown mode = options, no window left behind)
+		let editors = [];
+		try { editors = panelModes.suspendEditors($w); } catch (err) { console.error("Panel modes: could not keep the note editor", err); }
 		if (from === "fixed") { panelModes.undock(def, $w); } else { panelModes.unfloat(def, $w); }
 		if (mode === "fixed") { panelModes.dock(def, $w); } else { panelModes.float(def, $w, mode); }
-		panelModes.resumeEditors(editors);
+		try { panelModes.resumeEditors(editors); } catch (err) { console.error("Panel modes: could not restart the note editor", err); }
 		panelModes.decorate(def, $w, mode);
 		if (mode !== "minimized") { panelModes.resized(def); }
 		if (typeof def.afterMove === "function") { def.afterMove(mode); }
 		return true;
+	},
+
+	waiting: {},	// panel id -> timer: a move waits for a note editor to be ready (show)
+
+	/** Show the panel in the mode the options say (after a move had to wait) */
+	catchUp: function(id) {
+		const def = panelModes.defOf(id);
+		if (!def || !panelModes.isShown(id)) { return; }
+		if (panelModes.waiting[id]) { clearTimeout(panelModes.waiting[id]); delete panelModes.waiting[id]; }
+		panelModes.show(def, panelModes.modeFor(id), true);	// now, whether the editor got ready or not
+		panelModes.updateBadge();
 	},
 
 	/** The user picked a mode (button, Panels menu, command): store it, show it, save. "restore" = restoreMode. */
