@@ -8,14 +8,16 @@ const jumpPlanner = {
 	// which systems they jump through is chosen by jumpRange.routePlan (NPC stations from public/jumprange/stations.json,
 	// kills in the last hour from the chain map's ESI system_kills data, Sansha incursions from ESI /incursions/, the
 	// user's avoided systems), and a midpoint can be swapped for another in range of both its neighbours.
-	// The planner is a floating window (a jQuery UI dialog like the Region map), not a layout panel; its place and size
-	// are remembered in options.jumpRange.window.
+	// The planner opens on demand and is a panel like the others (panel-modes.js): popped out (a window) by default, or
+	// docked in the layout, small or minimized; its window's place is in options.panelPlaces (options.jumpRange.window,
+	// from before, and the Dock side setting give the first one).
 	// Settings: options.jumpRange (a missing key means the default).
 	// Pure HTML builders and helpers first (tested), browser code at the bottom.
 	// Keep `const jumpPlanner` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "jumpPlannerWidget",
 	// The floating window (CSS px): default and smallest size, the gap to the window's edges, where it first opens below the header
 	WINDOW: { width: 480, height: 720, minWidth: 380, minHeight: 360, margin: 8, top: 60 },
+	SIZE: { x: 8, y: 12, minX: 6, minY: 6 },	// docked in the layout: gridster cells
 	DATA_VERSION: 3586130,	// meta.version of public/jumprange/*.json (SDE build): busts the browser cache
 	SHIPS_REV: 2,			// bump when ships.json changes without a new SDE build (2: jump fuel fields)
 	STATIONS_REV: 1,		// the same for stations.json (1: first version)
@@ -1369,8 +1371,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function name(id) { return (systems()[id] || appData.systems[id] || {}).name || String(id); }
 		function notify(html, color, ms) { if (typeof Notify !== "undefined") { Notify.trigger(html, color, ms); } }
 		function $widget() { return $("#" + jp.WIDGET_ID); }
-		/** Whether the window is open (the element stays in the page, closed, once it was first shown) */
-		function isShown() { const $d = $widget(); return $d.hasClass("ui-dialog-content") && $d.dialog("isOpen"); }
+		/** Whether the planner is open (its element is in the page only while it is, in any mode) */
+		function isShown() { return $widget().length > 0; }
 		function viewing() { return typeof viewingSystemID !== "undefined" ? viewingSystemID : null; }
 
 		/** Save some keys of options.jumpRange (keeping the rest) */
@@ -1378,9 +1380,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			options.jumpRange = Object.assign({}, options.jumpRange || {}, changes);
 			if (save) { options.save(); }
 		}
-
-		// Settings > Reset happened in this page and the window hasn't been placed since: it opens at the default place
-		let resetPending = false;
 
 		// ---- Data ----
 
@@ -1547,108 +1546,77 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
 
-		// ---- The window ----
+		// ---- The panel ----
 
-		/** The window's element, added to the page once (a jQuery UI dialog once first shown) */
-		function panelElement() {
-			let $d = $widget();
-			if (!$d.length) {
-				$d = $("<div id='" + jp.WIDGET_ID + "' class='hidden'><div class='jp-wrap'>"
-					+ "<div class='jp-head'></div><div class='jp-fuelbar'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div>"
-					+ "</div></div>").appendTo("body");
-				bindPanel($d);
-			}
-			return $d;
+		/**
+		 * The planner's element: a layout panel or a window, by its mode (panel-modes.js: popped out by default, as the
+		 * planner was a window before; docked, small or minimized from its buttons). Added when it opens, removed when it
+		 * closes. Its own close icon closes it in every mode; the cog opens its Settings section.
+		 */
+		function widgetHtml() {
+			return "<li id='" + jp.WIDGET_ID + "' class='gridWidget jp-panel'>"
+				+ "<div class='controls'><span class='jp-title ph-heading'>Jump planner</span>"
+				+ "<div style='float: right;'><i class='jp-settings' data-icon='settings' data-tooltip='Jump planner settings'></i>"
+				+ "<i class='jp-close' data-icon='times' data-tooltip='Close the Jump planner'></i></div></div>"
+				+ "<div class='content'><div class='jp-wrap'>"
+				+ "<div class='jp-head'></div><div class='jp-fuelbar'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div>"
+				+ "</div></div></li>";
 		}
 
-		/** Set when close() / sync() close the window themselves: the dialog's close event (which takes it) then doesn't store open: false */
-		let closingQuietly = false;
-
-		function ensureDialog() {
-			const $d = panelElement();
-			if ($d.hasClass("ui-dialog-content")) { return $d; }
-			const W = jp.WINDOW;
-			$d.dialog({
-				autoOpen: false, title: "Jump planner", modal: false, resizable: true, width: W.width, height: W.height, minWidth: W.minWidth, minHeight: W.minHeight,
-				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-floating dialog-jumpPlanner",
-				// The dialog's own X / Escape: like the old close icon (stays closed, also after a reload, until opened again)
-				close: function() {
-					const quiet = closingQuietly;
-					closingQuietly = false;
-					stopPanel();
-					if (!quiet) { store({ open: false }, true); }
-				},
-				dragStop: function() { rememberWindow(); },
-				resizeStop: function() {
-					rememberWindow();
-					// The mini-map scales with the window: put the shown tooltip back next to its point
-					const id = state.pinnedID || state.search.id;
-					const info = id ? tipInfo(id) : null;
-					if (info && info.point) { showTip(id); }
-				}
-			});
-			const $wrap = $d.dialog("widget");
-			$wrap.find(".ui-dialog-titlebar").append("<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i>")
-				.on("click", ".jp-settings", function(e) { e.preventDefault(); openSettings(); });
-			// A click on the cog is not the start of a drag
-			if ($wrap.is(":data(ui-draggable)")) { $wrap.draggable("option", "cancel", ".ui-dialog-content, .ui-dialog-titlebar-close, .jp-settings"); }
-			return $d;
-		}
-
-		/** The page's visible area in the dialog's CSS px (Settings > UI Scale zooms body, and the dialog's px with it) */
+		/** The page's visible area in CSS px (Settings > UI Scale zooms body) */
 		function viewport() {
 			const v = panelHost.viewport();
 			return { width: v.width, height: v.height, x: v.left, y: v.top };
 		}
 
-		/** Remember where the window is and its size (options.jumpRange.window: the outer box, CSS px) */
-		function rememberWindow() {
-			if (!isShown() || resetPending) { return; }
-			const $wrap = $widget().dialog("widget");
-			const r = function(v) { return Math.round(Number(v) || 0); };
-			store({ window: { left: r(parseFloat($wrap.css("left"))), top: r(parseFloat($wrap.css("top"))), width: r($wrap.outerWidth()), height: r($wrap.outerHeight()) } }, true);
-		}
+		/** The planner as panelHost and panelModes take it */
+		const panel = {
+			id: jp.WIDGET_ID, title: "Jump planner", key: "jumpRange", size: jp.SIZE, defaultMode: "floating",
+			minSize: { minWidth: jp.WINDOW.minWidth, minHeight: jp.WINDOW.minHeight },
+			// Escape in its window closes it, as before it was a panel
+			onEscape: function() { close(); },
+			offReason: "Not open: open it from an exit's range ring on the chain map",
+			// The first window place: the one remembered before panel modes (options.jumpRange.window), else by the Dock side setting
+			floatDefault: function(view) {
+				const p = jp.windowPlacement(current().window, { width: view.width, height: view.height, x: 0, y: 0 }, current().dock);
+				return { left: p.left, top: p.top, width: p.width, height: p.height };
+			},
+			// The mini-map scales with the panel: put the shown tooltip back next to its point
+			onResize: function() {
+				const id = state.pinnedID || state.search.id;
+				const info = id ? tipInfo(id) : null;
+				if (info && info.point) { showTip(id); }
+			}
+		};
 
-		/** Size and place the open window (p: windowPlacement() output) */
-		function placeWindow($d, p) {
-			// A size change makes jQuery UI place it again by its position option: left / top go last
-			const minWidth = Math.min(jp.WINDOW.minWidth, p.width);
-			$d.dialog("option", { minWidth: minWidth, minHeight: Math.min(jp.WINDOW.minHeight, p.height), width: p.width, height: p.height });
-			const $wrap = $d.dialog("widget");
-			// The width options are the CSS width (the height option is the outer height): take off the padding and border
-			const extra = Math.round($wrap.outerWidth() - p.width);
-			if (extra) { $d.dialog("option", { minWidth: Math.max(1, minWidth - extra), width: Math.max(1, p.width - extra) }); }
-			$wrap.css({ left: p.left, top: p.top });
-		}
-
-		/** Show the window (at its saved place, or the default one), or bring it to the front when it is open */
+		/** Show the planner (in its mode), or bring its window to the front when it is open */
 		function addWidget() {
 			if (!$("body").length) { return null; }
-			const $d = ensureDialog();
-			if (isShown()) { $d.dialog("moveToTop"); return $d; }
-			const s = current();
-			// After Settings > Reset the remembered place is gone: place it by the Dock side setting
-			const p = jp.windowPlacement(resetPending ? null : s.window, viewport(), s.dock);
-			resetPending = false;
-			$d.dialog("open");
-			placeWindow($d, p);
+			let $w = $widget();
+			if ($w.length) {
+				const $host = $w.closest(".ph-float-host");
+				if ($host.hasClass("ui-dialog-content")) { $host.dialog("moveToTop"); }
+				return $w;
+			}
+			$w = panelHost.addGridWidget(panel, widgetHtml(), { transition: false });
+			if (!$w) { return null; }
+			bindPanel($w);
+			if (typeof Tooltips !== "undefined") { Tooltips.attach($w.find(".controls .jp-settings, .controls .jp-close")); }
 			loadJammed();
 			loadIncursions();
 			clearInterval(state.liveTimer);
 			state.liveTimer = setInterval(checkLive, jp.LIVE_CHECK_MS);
-			return $d;
+			return $w;
 		}
 
-		/** The window was closed: stop its timers, forget the search, and empty it (it is rendered again when it opens) */
+		/** The planner closed: stop its timers and forget the search (it is rendered again when it opens) */
 		function stopPanel() {
 			clearTimeout(state.jammedTimer);
 			clearInterval(state.liveTimer);
 			clearTimeout(state.renderTimer);
 			clearTimeout(state.hideTip);
-			resetSearch();	// the search lasts while the window is open
+			resetSearch();	// the search lasts while the planner is open
 			if (state.$from) { state.$from.detach(); }
-			// Nothing focusable left inside, so opening it again focuses the title bar, not an old input
-			$widget().find(".jp-head, .jp-fuelbar, .jp-modebar, .jp-tabs, .jp-body").empty();
 		}
 
 		/**
@@ -1695,11 +1663,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 		}
 
-		/** Close the window without changing options.jumpRange.open */
+		/** Close the planner without changing options.jumpRange.open */
 		function removeWidget() {
 			if (!isShown()) { return; }
-			closingQuietly = true;
-			$widget().dialog("close");
+			stopPanel();
+			panelHost.removeGridWidget(panel, $widget(), { finishFade: true });
 		}
 
 		/** Open the window on an exit's tab (fromRing: the exit's ring icon, which always shows From exit) */
@@ -1711,6 +1679,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			state.pinnedID = null;
 			state.error = "";
 			addWidget();
+			// Opened again while minimized: it comes back (in the window it had)
+			if (isShown() && typeof panelModes !== "undefined" && panelModes.modeFor(jp.WIDGET_ID) === "minimized") { panelModes.setMode(jp.WIDGET_ID, "restore"); }
 			if (!current().open) { store({ open: true }, true); }
 			render();
 		}
@@ -2305,7 +2275,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				// Settings > Reset: back to defaults (a missing key means defaults)
 				reset: function(o) {
 					delete o.jumpRange;
-					resetPending = true;
+					// and its window's place: it opens by the Dock side setting again
+					if (o.panelPlaces && typeof o.panelPlaces === "object" && o.panelPlaces[jp.WIDGET_ID]) {
+						o.panelPlaces = Object.assign({}, o.panelPlaces);
+						delete o.panelPlaces[jp.WIDGET_ID];
+					}
 					state.start = null;		// Get home's start goes with options.jumpRange.origin
 				}
 			});
@@ -2380,17 +2354,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (typeof options.apply === "function" && !options.apply.jumpPlannerWrapped) {
 				const apply = options.apply;
 				options.apply = function() {
-					// Upstream restores options.grid from the page-load copy and sizes every element named in it: an entry
-					// left from when the planner was a layout panel (same id) must not size the window
-					const el = document.getElementById(jp.WIDGET_ID);
-					const kept = el ? { width: el.style.width, height: el.style.height } : null;
 					const result = apply.apply(this, arguments);
-					this.grid = panelHost.withoutEntry(this.grid, jp.WIDGET_ID);
-					if (el && kept) {
-						el.style.width = kept.width;
-						el.style.height = kept.height;
-						$(el).removeAttr("data-col data-row data-sizex data-sizey");
-					}
 					try { state.counts = {}; sync(); } catch (err) { console.error("Jump planner: apply failed", err); }
 					return result;
 				};
@@ -2398,23 +2362,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			}
 		}
 
-		/** The planner was a layout panel before: drop its entry from the saved layout and its old grid place, once (one save) */
+		/**
+		 * The planner was a layout panel before #114: drop its old grid place, once (one save). Its entry in the saved
+		 * layout stays: it is where the planner goes when it is docked (panel-modes.js).
+		 */
 		function migrateLayout() {
-			const hasEntry = panelHost.hasEntry(options.grid, jp.WIDGET_ID);
 			const hasPosition = !!(options.jumpRange && typeof options.jumpRange === "object" && options.jumpRange.position !== undefined);
-			if (!hasEntry && !hasPosition) { return; }
-			if (hasEntry) { options.grid = panelHost.withoutEntry(options.grid, jp.WIDGET_ID); }
-			if (hasPosition) {
-				options.jumpRange = Object.assign({}, options.jumpRange);
-				delete options.jumpRange.position;
-			}
+			if (!hasPosition) { return; }
+			options.jumpRange = Object.assign({}, options.jumpRange);
+			delete options.jumpRange.position;
 			try { options.save(); } catch (err) { console.error("Jump planner: could not save the layout", err); }
 		}
 
 		installHook();
 
 		$(function() {
-			panelHost.register({ id: jp.WIDGET_ID, title: "Jump planner", key: "jumpRange", floating: true });
+			panelHost.register(panel);
 			installHook();
 			hookPreserveMass();	// preserve-mass.js loads after this file: wrap it once everything is there
 			setupSettings();
@@ -2439,6 +2402,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				open($(this).attr("data-jp-exit"), true);
 			});
 			$doc.on("mousedown", "#chainMap .jp-ring", function(e) { e.stopPropagation(); });
+			// The panel's own controls: its Settings section, and close (in every mode)
+			$doc.on("click", sel + " .controls .jp-settings", function(e) { e.preventDefault(); openSettings(); });
+			$doc.on("click", sel + " .controls .jp-close", function(e) {
+				e.preventDefault();
+				if (typeof Tooltips !== "undefined" && Tooltips.close) { Tooltips.close(); }
+				close();
+			});
 			// Clicking an exit's name (which also views it, upstream) opens the planner on it when that is switched on
 			$doc.on("click", "#chainMap .nodeSystem a", function() {
 				const s = current();

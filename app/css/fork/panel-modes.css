@@ -1,0 +1,156 @@
+/* Panel display modes (fork-owned, see app/js/fork/panel-modes.js): docked, popped out, small view, minimized */
+
+/* Mode buttons: the top right corner of a docked panel, the right of a popped-out window's title bar */
+.controls > .ph-buttons {
+	float: right;
+	/* in a flex header (Structures) float does nothing: last, pushed to the right */
+	order: 99;
+	margin-left: auto;
+	padding-left: 4px;
+	white-space: nowrap;
+}
+
+.ph-buttons .ph-btn {
+	color: #888;
+	cursor: pointer;
+	font-style: normal;
+	padding: 0 2px;
+}
+
+.ph-buttons .ph-btn:hover {
+	color: #fff;
+}
+
+.ph-dialog .ui-dialog-titlebar-close {
+	display: none;	/* the mode buttons replace it: Dock instead of close */
+}
+
+.ph-dialog .ui-dialog-titlebar .ph-title-buttons {
+	position: absolute;
+	top: 50%;
+	right: 6px;
+	transform: translateY(-50%);
+	line-height: 1;
+	font-size: 1.1em;
+}
+
+.ph-dialog .ui-dialog-title {
+	margin-right: 70px;	/* room for the buttons */
+}
+
+.ph-dialog.ph-minimized {
+	display: none !important;
+}
+
+/* The window: a jQuery UI dialog (.ph-float-host) holding the panel's own element. options.apply() writes saved layout
+   sizes onto the element with the panel's id, and gridster's stylesheet places elements by their data-col / -row /
+   -sizex / -sizey attributes, so its place and size are fixed here. */
+.ui-dialog .ph-float-host.ui-dialog-content {
+	padding: 0;
+	overflow: visible;	/* the panel scrolls its own content; its drop-downs (Favorites) may reach out */
+	background: rgba(0, 0, 0, 0.85);
+}
+
+.ph-floating {
+	position: absolute !important;
+	top: 0 !important;
+	right: 0 !important;
+	bottom: 0 !important;
+	left: 0 !important;
+	width: auto !important;
+	height: auto !important;
+	margin: 0 !important;
+	list-style: none;
+	display: block;
+}
+
+/* What gridster's CSS does for a layout panel (.gridster li ...) */
+.ph-floating > .content {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	bottom: 5px;
+	left: 5px;
+	overflow: auto;
+}
+
+.ph-floating > .controls + .content {
+	top: 18px;
+}
+
+.ph-floating > .grid-resize {
+	display: none !important;
+}
+
+/* The window title says what the panel is */
+.ph-floating .ph-heading {
+	display: none;
+}
+
+/* Panels menu, in the top bar next to Customize layout */
+#ph-menu-link {
+	position: relative;
+	font-size: 1.7em;
+	cursor: pointer;
+	margin-right: 2px;
+}
+
+#ph-menu-link .ph-badge {
+	position: absolute;
+	top: -3px;
+	right: -6px;
+	min-width: 13px;
+	padding: 0 2px;
+	box-sizing: border-box;
+	border-radius: 7px;
+	background: #c0392b;
+	color: #fff;
+	font: bold 9px/13px Arial, sans-serif;
+	text-align: center;
+}
+
+#ph-menu-link .ph-badge.hidden {
+	display: none;
+}
+
+#ph-menu {
+	z-index: 10000;	/* above the windows (jQuery UI dialogs count up from 100) */
+	min-width: 300px;
+	text-align: left;
+}
+
+#ph-menu h4 {
+	margin: 2px 4px 4px;
+}
+
+#ph-menu .ph-menu-table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+#ph-menu .ph-menu-table td {
+	padding: 2px 6px;
+	white-space: nowrap;
+}
+
+#ph-menu .ph-state {
+	color: #888;
+}
+
+#ph-menu .ph-mode-minimized .ph-name,
+#ph-menu .ph-mode-minimized .ph-state {
+	color: #f0b030;
+}
+
+#ph-menu .ph-acts {
+	text-align: right;
+}
+
+#ph-menu .ph-act {
+	margin-left: 6px;
+}
+
+#ph-menu .ph-menu-empty {
+	padding: 4px 6px;
+	color: #888;
+}

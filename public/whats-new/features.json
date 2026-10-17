@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 117,
+      "date": "2026-10-17",
+      "title": "Pop out, shrink or hide any panel",
+      "description": "Every panel except the chain map can now be popped out of the layout into a window you can drag and resize anywhere on the page, then docked back into its old spot. Use the buttons at the top right of the panel.\n\nThe kill panels also have a small view that shows just the newest kills, and any popped-out panel can be minimized out of sight. The new Panels menu next to Customize layout lists every panel and brings minimized ones back; its badge counts how many are hidden.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-117-panel-modes.png",
+          "caption": "Signatures popped out, System kills in its small view and the Panels menu open"
+        }
+      ]
+    },
+    {
       "pr": 115,
       "date": "2026-10-17",
       "title": "Kill panels: fixed, minimized or floating",

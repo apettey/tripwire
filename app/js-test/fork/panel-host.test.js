@@ -116,9 +116,28 @@ describe('Panel host', () => {
 	});
 
 	describe('floating geometry', () => {
-		it('defaults to the right side under the top bar, the second panel under the first', () => {
+		it('defaults to the right side under the top bar, each next panel a step down and left (cascade)', () => {
 			assert.deepEqual(ph().defaultFloat(0, 1600, 900), { left: 1600 - 420 - 16, top: 60, width: 420, height: 360 });
-			assert.deepEqual(ph().defaultFloat(1, 1600, 900), { left: 1600 - 420 - 16, top: 60 + 370, width: 420, height: 360 });
+			assert.deepEqual(ph().defaultFloat(1, 1600, 900), { left: 1600 - 420 - 16 - 28, top: 60 + 28, width: 420, height: 360 });
+			assert.deepEqual(ph().defaultFloat(3, 1600, 900, 6), { left: 1600 - 420 - 6 - 16 - 84, top: 60 + 84, width: 420, height: 360 });
+		});
+		it('the small view: its own default size and minimum', () => {
+			const S = ph().SMALL;
+			assert.deepEqual(ph().defaultFloat(0, 1600, 900, 0, S), { left: 1600 - S.width - 16, top: 60, width: S.width, height: S.height });
+			assert.deepEqual(ph().clampFloat(undefined, 1600, 900, 1, 0, S), { left: 1600 - S.width - 16 - 28, top: 88, width: S.width, height: S.height });
+			assert.deepEqual(ph().clampFloat({ left: 10, top: 10, width: 50, height: 20 }, 1600, 900, 0, 0, S), { left: 10, top: 10, width: S.minWidth, height: S.minHeight });
+			assert.ok(S.width < ph().FLOAT.width && S.height < ph().FLOAT.height);
+		});
+		it('a fallback place (e.g. the Jump planner\'s old window) fills in for missing values, then is clamped', () => {
+			assert.deepEqual(ph().clampFloat(undefined, 1600, 900, 0, 0, null, { left: 8, top: 60, width: 480, height: 720 }), { left: 8, top: 60, width: 480, height: 720 });
+			assert.deepEqual(ph().clampFloat({ left: 100 }, 1600, 900, 0, 0, null, { left: 8, top: 60, width: 480, height: 2000 }), { left: 100, top: 0, width: 480, height: 900 });
+			assert.deepEqual(ph().clampFloat({ left: 1, top: 2, width: 300, height: 200 }, 1600, 900, 0, 0, null, { left: 8, top: 60, width: 480, height: 720 }), { left: 1, top: 2, width: 300, height: 200 });
+		});
+		it('cascaded defaults of many panels still open on screen', () => {
+			for (let i = 0; i < 12; i++) {
+				const g = ph().clampFloat(undefined, 1024, 600, i, 6);
+				assert.ok(g.left >= 0 && g.left + g.width + 6 <= 1024 && g.top >= 0 && g.top + g.height <= 600, JSON.stringify(g));
+			}
 		});
 		it('uses the defaults for missing or invalid values', () => {
 			assert.deepEqual(ph().clampFloat(undefined, 1600, 900, 0), { left: 1164, top: 60, width: 420, height: 360 });
