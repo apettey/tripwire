@@ -162,7 +162,7 @@ const panelModes = {
 		const m = panelModes.normalize(mode, def);
 		if (to === "restore") { return m === "minimized" ? true : "It isn't minimized"; }
 		if (to === "small" && !(def && def.small)) { return "It has no small view"; }
-		if (to === m) { return "It is " + panelModes.LABELS[m].toLowerCase() + " now"; }
+		if (to === m) { return "Already " + { fixed: "docked", floating: "popped out", small: "in small view", minimized: "minimized" }[m]; }
 		return true;
 	},
 
@@ -291,7 +291,6 @@ const panelModes = {
 		const shape = mode === "minimized" ? panelModes.restoreMode(panelModes.opts(), def) : mode;
 		const size = shape === "small" ? panelHost.SMALL : panelHost.FLOAT;
 		let geom = panelModes.geometry(def, shape);
-		const editors = panelModes.suspendEditors($w);
 		// The dialog element is a host: jQuery UI sizes it, and options.apply() (which writes saved layout sizes onto the
 		// element with the panel's id) only reaches the panel inside it, whose size the CSS fixes
 		const $host = $("<div class='ph-float-host'></div>").attr("data-ph-for", def.id).appendTo("body");
@@ -314,7 +313,6 @@ const panelModes = {
 		$d.find(".ui-dialog-titlebar").append("<span class='ph-buttons ph-title-buttons'></span>");
 		if ($d.is(":data(ui-draggable)")) { $d.draggable("option", "cancel", ".ui-dialog-content, .ui-dialog-titlebar-close, .ph-buttons"); }
 		$d.toggleClass("ph-minimized", mode === "minimized");
-		panelModes.resumeEditors(editors);
 		return $w;
 	},
 
@@ -354,20 +352,18 @@ const panelModes = {
 		const size = def.size || { x: 7, y: 6, minX: 4, minY: 2 };
 		let pos = panelHost.savedPosition(opts ? opts.grid : null, def.id);
 		pos = pos ? panelHost.atLeastMinSize(pos, size) : panelHost.defaultPosition(panelHost.occupied(), panelHost.viewport().width, size);
-		const editors = panelModes.suspendEditors($w);
 		$w.css({ width: "", height: "" });	// options.apply()'s sizes: gridster sizes it by its data attributes
 		g.add_widget($w, pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
 		$w.stop(true, true).css({ opacity: "", display: "" });	// skip the fade-in (it never ends in a background tab)
 		// Same as layout.js: the resize handle only while customising the layout
 		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
 		$w.addClass("gridster-transition");
-		panelModes.resumeEditors(editors);
 		return $w;
 	},
 
 	/**
 	 * Notes being edited (CKEditor's iframe) don't survive a move in the page: write each editor back into its element
-	 * before, and start it again after. Returns the editors' names.
+	 * before the panel moves, and start it again once it is in its new place. Returns the editors' names.
 	 */
 	suspendEditors: function($w) {
 		if (typeof CKEDITOR === "undefined" || !CKEDITOR.instances) { return []; }
@@ -404,8 +400,10 @@ const panelModes = {
 		const $w = panelModes.$el(def.id);
 		const from = panelModes.shownMode(def.id);
 		if (!from || from === mode) { return false; }
+		const editors = panelModes.suspendEditors($w);
 		if (from === "fixed") { panelModes.undock(def, $w); } else { panelModes.unfloat(def, $w); }
 		if (mode === "fixed") { panelModes.dock(def, $w); } else { panelModes.float(def, $w, mode); }
+		panelModes.resumeEditors(editors);
 		panelModes.decorate(def, $w, mode);
 		if (mode !== "minimized") { panelModes.resized(def); }
 		if (typeof def.afterMove === "function") { def.afterMove(mode); }
@@ -562,8 +560,9 @@ const panelModes = {
 	installMenu: function() {
 		if ($("#ph-menu-link").length || !$("#layout").length) { return; }
 		$("<i id='ph-menu-link' data-icon='portrait' data-tooltip='Panels: pop out, dock, minimize, restore'><span class='ph-badge hidden'></span></i>").insertBefore("#layout");
+		// In body, not the top bar: above the popped-out windows (the top bar's stacking order is below them)
 		$("<div id='ph-menu' class='toggle-panel' style='display: none'><div class='triangle'></div><h4>Panels</h4><div class='ph-menu-body'></div></div>")
-			.insertAfter("#layout");
+			.appendTo("body");
 		if (typeof Tooltips !== "undefined") { Tooltips.attach($("#ph-menu-link")); }
 		$("#ph-menu-link").on("click", function(e) {
 			e.preventDefault();
@@ -587,7 +586,11 @@ const panelModes = {
 
 	openMenu: function() {
 		panelModes.renderMenu();
-		$("#ph-menu").show();
+		const $menu = $("#ph-menu").show();
+		// Under its icon, right edges lined up (CSS px of the zoomed page, like the icon's box)
+		const r = $("#ph-menu-link")[0].getBoundingClientRect();
+		const z = panelHost.zoom();
+		$menu.css({ left: Math.max(4, r.right + 8 - $menu.outerWidth()) + $(window).scrollLeft() / z, top: r.bottom + 8 + $(window).scrollTop() / z });
 		$("#ph-menu-link").addClass("active");
 	},
 

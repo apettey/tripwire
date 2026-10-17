@@ -110,9 +110,7 @@
 }
 
 #ph-menu {
-	right: 4px;
-	top: 34px;
-	z-index: 1000;
+	z-index: 10000;	/* above the windows (jQuery UI dialogs count up from 100) */
 	min-width: 300px;
 	text-align: left;
 }

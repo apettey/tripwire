@@ -145,12 +145,14 @@ describe('Panel display modes', () => {
 		});
 		it('a command is available unless the panel is off, already in that mode, or (Restore) not minimized', () => {
 			assert.equal(pm().commandState(plain, 'fixed', 'floating', true), true);
-			assert.equal(pm().commandState(plain, 'fixed', 'fixed', true), 'It is docked now');
-			assert.equal(pm().commandState(plain, 'floating', 'floating', true), 'It is popped out now');
+			assert.equal(pm().commandState(plain, 'fixed', 'fixed', true), 'Already docked');
+			assert.equal(pm().commandState(plain, 'floating', 'floating', true), 'Already popped out');
 			assert.equal(pm().commandState(plain, 'fixed', 'restore', true), "It isn't minimized");
 			assert.equal(pm().commandState(plain, 'minimized', 'restore', true), true);
 			assert.equal(pm().commandState(plain, 'fixed', 'small', true), 'It has no small view');
 			assert.equal(pm().commandState(kills, 'fixed', 'small', true), true);
+			assert.equal(pm().commandState(kills, 'small', 'small', true), 'Already in small view');
+			assert.equal(pm().commandState(kills, 'minimized', 'minimized', true), 'Already minimized');
 			assert.equal(pm().commandState(plain, 'fixed', 'floating', false), 'The panel is turned off');
 			assert.equal(pm().commandState({ id: 'p', offReason: 'Not open' }, 'fixed', 'floating', false), 'Not open');
 		});
