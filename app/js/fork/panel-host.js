@@ -1,13 +1,16 @@
 const panelHost = {
 	// Panel host (fork-owned): the gridster plumbing and floating-window geometry the fork's panels share, and a list of
 	// those panels. Each panel keeps its own content, timers, requests and settings; this file only places, adds and
-	// removes it. Panels: System kills, Chain kills (both through killfeed-modes.js), Intel, Structures, Watchlist,
-	// Favourites (layout panels) and the Jump planner (a window). The chain map and upstream's panels are not registered.
-	// Keep `const panelHost` on the first line: the test helper strips it to define a global. Several fork files that use
-	// this one sort (and so load) before it: they only call it at run time, never at the top level. It uses layoutGrid
-	// (layout-grid.js, loads first) to read layouts.
+	// removes it. Panels: System kills, Chain kills, Intel, Structures, Watchlist, Favourites and the Jump planner;
+	// panel-modes.js adds upstream's System info, Signatures and Notes. The chain map is not registered.
+	// Every registered panel can be docked (a layout panel), popped out, shown small or minimized: panel-modes.js.
+	// addGridWidget / removeGridWidget hand a popped-out panel to it, so a panel's own add / remove code is the same in
+	// every mode. Keep `const panelHost` on the first line: the test helper strips it to define a global. Several fork
+	// files that use this one sort (and so load) before it: they only call it at run time, never at the top level. It
+	// uses layoutGrid (layout-grid.js, loads first) to read layouts.
 	COL_PX: 60,	// gridster widget_base_dimensions 50 + 2 * margin 5
-	FLOAT: { width: 420, height: 360, minWidth: 260, minHeight: 140, top: 60, margin: 16, gap: 10 },
+	FLOAT: { width: 420, height: 360, minWidth: 260, minHeight: 140, top: 60, margin: 16, cascade: 28 },
+	SMALL: { width: 340, height: 130, minWidth: 220, minHeight: 80 },	// a popped-out panel's small view
 
 	// ---- Registry ----
 
@@ -15,8 +18,11 @@ const panelHost = {
 
 	/**
 	 * Add a panel to the list (again: replaces the one with the same id). Returns def.
-	 * @param def {id (element id), title, key (options key of its on/off setting), size {x, y, minX, minY} (layout
-	 * panels, gridster cells), floating (true: a window, not a layout panel)}
+	 * @param def {id (element id), title (its name in menus), key (options key of its on/off setting), size {x, y, minX,
+	 * minY} (gridster cells), and for panel-modes.js: small (true: has a small view), windowTitle() (the popped-out
+	 * window's title, default title), defaultMode (default "fixed"), floatDefault() (optional first window place
+	 * {left, top, width, height}), onResize() (after its size changed: moved, resized, docked), upstream (true: markup
+	 * from tripwire.php)}
 	 */
 	register: function(def) {
 		if (!def || !def.id) { return def; }
@@ -107,14 +113,17 @@ const panelHost = {
 	// ---- Floating geometry (pure) ----
 
 	/**
-	 * Default floating geometry: right side under the top bar; the second panel goes under the first.
+	 * Default floating geometry: right side under the top bar; each next panel (index) a step further down and left,
+	 * so several popped-out panels don't cover each other exactly.
 	 * @param chrome the dialog's border + padding width (`width` is its CSS width, `height` its outer height)
+	 * @param size optional {width, height} instead of FLOAT's (the small view: SMALL)
 	 */
-	defaultFloat: function(index, viewportWidth, viewportHeight, chrome) {
+	defaultFloat: function(index, viewportWidth, viewportHeight, chrome, size) {
 		const f = panelHost.FLOAT;
+		const s = size || f;
 		const i = Math.max(0, parseInt(index, 10) || 0);
-		return { left: Math.round((viewportWidth || 0) - f.width - (Number(chrome) || 0) - f.margin), top: f.top + i * (f.height + f.gap),
-			width: f.width, height: f.height };
+		return { left: Math.round((viewportWidth || 0) - s.width - (Number(chrome) || 0) - f.margin - i * f.cascade), top: f.top + i * f.cascade,
+			width: s.width, height: s.height };
 	},
 
 	/**
@@ -122,19 +131,21 @@ const panelHost = {
 	 * position clamped so the whole panel is on screen (as much as the viewport allows).
 	 * Viewport and geometry in CSS pixels of the (UI-scaled) page. `width` is the dialog's CSS width, which jQuery UI
 	 * takes without its border and padding (`chrome`), so the outer width (width + chrome) is what has to fit.
+	 * @param size optional {width, height, minWidth, minHeight} instead of FLOAT's (the small view: SMALL)
+	 * @param fallback optional geometry used instead of the default place for missing values (in the same pixels)
 	 */
-	clampFloat: function(geom, viewportWidth, viewportHeight, index, chrome) {
-		const f = panelHost.FLOAT;
+	clampFloat: function(geom, viewportWidth, viewportHeight, index, chrome, size, fallback) {
+		const f = size || panelHost.FLOAT;
 		const extra = Math.max(0, Number(chrome) || 0);
 		// Whole pixels, rounded down: a window even a fraction of a pixel too big makes the page scroll
 		const vw = Math.max(0, Math.floor((Number(viewportWidth) || 0) - extra));	// room for the CSS width
 		const vh = Math.max(0, Math.floor(Number(viewportHeight) || 0));
-		const def = panelHost.defaultFloat(index, vw + extra, vh, extra);
+		const def = Object.assign(panelHost.defaultFloat(index, vw + extra, vh, extra, f), fallback && typeof fallback === "object" ? fallback : {});
 		const g = geom && typeof geom === "object" ? geom : {};
 		const num = function(v, fallback) { const n = Number(v); return v !== null && v !== "" && isFinite(n) ? n : fallback; };
 		const clamp = function(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
-		const width = Math.round(clamp(num(g.width, def.width), Math.min(f.minWidth, vw), Math.max(Math.min(f.minWidth, vw), vw)));
-		const height = Math.round(clamp(num(g.height, def.height), Math.min(f.minHeight, vh), Math.max(Math.min(f.minHeight, vh), vh)));
+		const width = Math.round(clamp(num(g.width, num(def.width, f.width)), Math.min(f.minWidth, vw), Math.max(Math.min(f.minWidth, vw), vw)));
+		const height = Math.round(clamp(num(g.height, num(def.height, f.height)), Math.min(f.minHeight, vh), Math.max(Math.min(f.minHeight, vh), vh)));
 		const left = Math.round(clamp(num(g.left, def.left), 0, Math.max(0, vw - width)));
 		const top = Math.round(clamp(num(g.top, def.top), 0, Math.max(0, vh - height)));
 		return { left: left, top: top, width: width, height: height };
@@ -209,9 +220,12 @@ const panelHost = {
 		o = o || {};
 		const $old = $("#" + def.id);
 		if ($old.length) {
-			if (!$old.is("li.gridWidget") || g.$widgets.is($old)) { return null; }
+			if (!$old.is("li.gridWidget") || g.$widgets.is($old) || $old.hasClass("ph-floating")) { return null; }
 			$old.stop(true, true).remove();	// left over from a removal still fading out
 		}
+		// Popped out (panel-modes.js): a window instead of a layout panel
+		const $popped = typeof panelModes !== "undefined" ? panelModes.addPopped(def, html) : null;
+		if ($popped) { return $popped; }
 		const size = def.size;
 		const opts = panelHost.opts();
 		const others = panelHost.occupied();
@@ -230,6 +244,7 @@ const panelHost = {
 		// Same as layout.js does for the built-in widgets: resize handle only while customising the layout
 		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
 		if (o.transition !== false) { $w.addClass("gridster-transition"); }
+		if (typeof panelModes !== "undefined") { panelModes.added(def, $w); }	// header buttons, Panels menu
 		return $w;
 	},
 
@@ -241,6 +256,8 @@ const panelHost = {
 	removeGridWidget: function(def, $w, o) {
 		if (!$w || !$w.length) { return; }
 		o = o || {};
+		// A popped-out panel: close its window (panel-modes.js); its layout place stays in options.grid
+		if (typeof panelModes !== "undefined" && panelModes.removePopped(def, $w)) { return; }
 		const g = panelHost.gridster();
 		const opts = panelHost.opts();
 		panelHost.releaseTooltips($w);
@@ -254,5 +271,6 @@ const panelHost = {
 		if (!g) { $w.remove(); return; }
 		g.remove_widget($w, !o.closeGap);
 		if (o.finishFade) { $w.stop(true, true); }	// the fade-out's end removes the element
+		if (typeof panelModes !== "undefined") { panelModes.updateBadge(); }
 	}
 };

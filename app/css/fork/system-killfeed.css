@@ -188,3 +188,13 @@
 .skf-wide .skf-row { gap: 10px; padding: 3px 8px; }
 .skf-wide .skf-pilots { min-width: 44px; }
 .skf-wide .skf-fbname { display: inline; flex: 0 0 25%; max-width: 200px; }
+
+/* Small view of a kill panel (System kills, Chain kills) popped out by panel-modes.js: the header and the newest kills
+   that fit (the window's minimum height leaves room for one) */
+.skf-panel.ph-small .content {
+	overflow: hidden !important;	/* over the panel's own #...Widget .content */
+}
+
+.skf-panel.ph-small .skf-note {
+	display: none;
+}

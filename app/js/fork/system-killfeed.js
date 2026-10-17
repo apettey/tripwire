@@ -2,7 +2,7 @@ const systemKillFeed = {
 	// System Kill Feed (fork-owned): a layout panel listing the most recent kills in the viewed system.
 	// Reads public/system_kills.php, which serves kills stored by the pooled zKillboard integration (zkill/);
 	// the browser itself only loads images from images.evetech.net and links to zkillboard.com.
-	// Settings: options.systemKillFeed.enabled (missing = on), .mode (app/js/fork/killfeed-modes.js). Keep `const systemKillFeed` on the first line:
+	// Settings: options.systemKillFeed.enabled (missing = on); docked / popped out / small view / minimized: app/js/fork/panel-modes.js. Keep `const systemKillFeed` on the first line:
 	// the test helper strips it to define a global.
 	URL: "system_kills.php",
 	WIDGET_ID: "systemKillFeedWidget",
@@ -250,30 +250,75 @@ const systemKillFeed = {
 		return $("#" + systemKillFeed.WIDGET_ID);
 	},
 
-	// Display modes (fixed / minimized / floating): app/js/fork/killfeed-modes.js
-	MODE_KEY: "systemKillFeed",
-	FLOAT_INDEX: 0,
-
-	innerHtml: function() {
-		return "<div class='controls'>"
-			+ "<span class='skf-title skm-heading'>Kills in</span> <span class='skf-system skm-heading'></span>"
+	/**
+	 * The panel's element (a layout panel, or a window when popped out: panel-modes.js). The heading is hidden in a
+	 * window (its title says it); the small view (.ph-small, system-killfeed.css) shows the newest kills only.
+	 */
+	widgetHtml: function() {
+		return "<li id='" + systemKillFeed.WIDGET_ID + "' class='gridWidget skf-panel'>"
+			+ "<div class='controls'>"
+			+ "<span class='skf-title ph-heading'>Kills in</span> <span class='skf-system ph-heading'></span>"
 			+ "<div style='float: right;'>"
 			+ "<span class='skf-status'></span>"
 			+ "<a class='skf-zkill' href='#' target='_blank' rel='noopener noreferrer' data-tooltip='Open the system on zKillboard'>zKillboard</a>"
-			+ "<span class='skm-buttons'></span>"
 			+ "</div>"
 			+ "</div>"
-			+ "<div class='content'><div class='skf-body'></div></div>";
+			+ "<div class='content'><div class='skf-body'></div></div>"
+			+ "</li>";
 	},
 
-	/** Title of the floating window */
+	/** Title of the popped-out window */
 	title: function() {
 		const system = systemKillFeed.systemID && typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[systemKillFeed.systemID] : null;
 		return system && system.name ? "Kills in " + system.name : "System kills";
 	},
 
+	/** The panel as panelHost (panel-host.js) and panelModes take it */
+	panel: function() {
+		return { id: systemKillFeed.WIDGET_ID, title: "System kills", key: "systemKillFeed", size: systemKillFeed.SIZE, small: true,
+			windowTitle: systemKillFeed.title };
+	},
+
+	/** options.<key> with `patch` merged in (a new object; other fields such as `enabled` are kept). Never mutates. */
+	merge: function(current, patch) {
+		const base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+		return Object.assign({}, base, patch || {});
+	},
+
+	/**
+	 * What a kill panel (this one and Chain kills) needs once added: missing images, its own content handlers
+	 * (panel.setupContent), tooltips, width classes that follow its size (also when popped out or docked)
+	 */
+	setupPanel: function(panel, $w) {
+		const content = $w.find(".content")[0];
+		content.addEventListener("error", function(e) {
+			if (e.target && e.target.tagName === "IMG") { $(e.target).replaceWith("<span class='" + e.target.className + " skf-noimg'></span>"); }
+		}, true);
+		if (typeof panel.setupContent === "function") { panel.setupContent(content, $w); }
+		if (typeof Tooltips !== "undefined") { Tooltips.attach($w.find(".controls [data-tooltip]").not(".ph-btn")); }
+		const fit = function() {
+			$w.removeClass("skf-lt340 skf-lt280 skf-lt230 skf-wide").addClass(systemKillFeed.widthClasses(content.clientWidth).join(" "));
+		};
+		fit();
+		if (panel.observer) { panel.observer.disconnect(); }
+		panel.observer = null;
+		if (typeof ResizeObserver !== "undefined") {
+			panel.observer = new ResizeObserver(fit);
+			panel.observer.observe(content);
+		}
+	},
+
+	/** Remove a kill panel's element (layout panel or window); its timers and requests are the panel's own */
+	dropPanel: function(panel, $w) {
+		if (panel.observer) { panel.observer.disconnect(); panel.observer = null; }
+		if ($w.length) { panelHost.removeGridWidget(panel.panel(), $w, {}); }
+	},
+
 	addWidget: function() {
-		if (systemKillFeed.$widget().length || !killfeedModes.attach(systemKillFeed)) { return; }
+		if (systemKillFeed.$widget().length) { return; }
+		const $w = panelHost.addGridWidget(systemKillFeed.panel(), systemKillFeed.widgetHtml(), { fadeIn: true });
+		if (!$w) { return; }
+		systemKillFeed.setupPanel(systemKillFeed, $w);
 		systemKillFeed.load(typeof viewingSystemID !== "undefined" ? viewingSystemID : null);
 		clearInterval(systemKillFeed.tickTimer);
 		systemKillFeed.tickTimer = setInterval(systemKillFeed.tick, systemKillFeed.TICK_MS);
@@ -284,17 +329,12 @@ const systemKillFeed = {
 		clearInterval(systemKillFeed.tickTimer);
 		systemKillFeed.tickTimer = null;
 		if (!systemKillFeed.$widget().length) { return; }
-		killfeedModes.detach(systemKillFeed, false);
+		systemKillFeed.dropPanel(systemKillFeed, systemKillFeed.$widget());
 		systemKillFeed.systemID = null;
 		systemKillFeed.response = null;
 	},
 
-	/** The panel moved between the layout and a floating window: its header again (the body is re-rendered) */
-	afterSwap: function() {
-		systemKillFeed.showHeader();
-	},
-
-	/** Header: system name, zKillboard link, floating window title */
+	/** Header: system name, zKillboard link, popped-out window title */
 	showHeader: function() {
 		const id = systemKillFeed.systemID;
 		const $w = systemKillFeed.$widget();
@@ -302,12 +342,12 @@ const systemKillFeed = {
 		const system = typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[id] : null;
 		$w.find(".skf-system").text(system && system.name ? system.name : "");
 		$w.find(".skf-zkill").attr("href", "https://zkillboard.com/system/" + id + "/");
-		killfeedModes.updateTitle(systemKillFeed);
+		if (typeof panelModes !== "undefined") { panelModes.updateTitle(systemKillFeed.WIDGET_ID); }
 	},
 
 	/** Add or remove the panel to match the setting */
 	sync: function() {
-		killfeedModes.sync(systemKillFeed);
+		if (systemKillFeed.isOn()) { systemKillFeed.addWidget(); } else { systemKillFeed.removeWidget(); }
 	},
 
 	stop: function() {
@@ -411,10 +451,8 @@ const systemKillFeed = {
 			section: "intel", order: 10, id: "systemKillFeed-enabled", type: "checkbox", key: "systemKillFeed",
 			label: "System kill feed:", text: "Show the Kills panel for the viewed system",
 			get: function() { return systemKillFeed.isOn(); },
-			set: function(o, on) { o.systemKillFeed = killfeedModes.merge(o.systemKillFeed, { enabled: on }); }
+			set: function(o, on) { o.systemKillFeed = systemKillFeed.merge(o.systemKillFeed, { enabled: on }); }
 		});
-		killfeedModes.registerSetting(systemKillFeed, { order: 11, label: "System kills display:",
-			hint: "Minimized: the newest kill only. Floating: a window you can move and resize." });
 		// options.apply() runs on Save and Reset: add or remove the panel to match
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.systemKillFeedWrapped) {
 			const apply = options.apply;
@@ -428,11 +466,10 @@ const systemKillFeed = {
 	},
 
 	init: function() {
-		panelHost.register({ id: systemKillFeed.WIDGET_ID, title: "System kills", key: "systemKillFeed", size: systemKillFeed.SIZE });
+		panelHost.register(systemKillFeed.panel());
 		systemKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.systemKills", title: "Toggle system kills panel", key: "systemKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });
-			killfeedModes.registerCommands(systemKillFeed, { id: "panel.systemKills", name: "system kills panel", keywords: ["kills", "killboard", "feed"] });
 		}
 		// Follow the viewed system
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.systemKillFeedWrapped) {
