@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-17 | [Jump planner: floating window](2026-10-17-jump-planner-floating/README.md) | The Jump planner is a draggable, resizable floating window like the Region map, not a layout panel |
 | 2026-10-17 | [Intel panel: zKillboard and Anoik.is links](2026-10-17-intel-panel-links/README.md) | zKill and Anoik links next to the system name in the Intel panel header (Anoik for wormholes only); toggle in Kills & Intel |
 | 2026-10-13 | [Kill notifications: which system](2026-10-13-kill-notification-system/README.md) | Kill pop-ups show the hole label, system and class, wait while you're in game, find the node on click; pulsing kill marker on the map; desktop notifications |
 | 2026-10-13 | [Home region marker](2026-10-13-home-region-marker/README.md) | Small house mark on chain map systems in the same wormhole region as the chain tab's home; toggle in Settings > Map Markers |
