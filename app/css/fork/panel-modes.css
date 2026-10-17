@@ -3,7 +3,11 @@
 /* Mode buttons: the top right corner of a docked panel, the right of a popped-out window's title bar */
 .controls > .ph-buttons {
 	float: right;
-	margin-left: 4px;
+	/* in a flex header (Structures) float does nothing: last, pushed to the right */
+	order: 99;
+	margin-left: auto;
+	padding-left: 4px;
+	white-space: nowrap;
 }
 
 .ph-buttons .ph-btn {

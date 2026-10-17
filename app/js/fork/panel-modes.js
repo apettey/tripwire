@@ -31,7 +31,8 @@ const panelModes = {
 	],
 	// #115 kept the kill panels' mode in options.<key>.mode ("minimized" was: shrunk in the layout) and their window in
 	// options.killPanelPlaces.<key>.float
-	LEGACY: [{ key: "systemKillFeed", id: "systemKillFeedWidget" }, { key: "chainKillFeed", id: "chainKillFeedWidget" }],
+	// options.killPanelPlaces.<key>.fullSizeY: the height before minimizing (its layout entry kept the 2 rows it shrank to)
+	LEGACY: [{ key: "systemKillFeed", id: "systemKillFeedWidget", minY: 3 }, { key: "chainKillFeed", id: "chainKillFeedWidget", minY: 3 }],
 	LEGACY_PLACES_KEY: "killPanelPlaces",
 	LEGACY_MODES: { fixed: "fixed", minimized: "small", floating: "floating" },
 
@@ -90,6 +91,53 @@ const panelModes = {
 	restoreMode: function(opts, def) {
 		const r = panelModes.place(opts, def ? def.id : null).restore;
 		return r === "small" && def && def.small ? "small" : "floating";
+	},
+
+	/**
+	 * The window's size limits in a shape ("floating" or "small"): panelHost's FLOAT or SMALL ({width, height, minWidth,
+	 * minHeight}), with the panel's own def.minSize {minWidth, minHeight} for its normal window (the Jump planner's is bigger)
+	 */
+	sizeFor: function(def, shape, sizes) {
+		const base = Object.assign({}, shape === "small" ? sizes.SMALL : sizes.FLOAT);
+		const min = def && def.minSize;
+		if (shape !== "small" && min && typeof min === "object") {
+			["minWidth", "minHeight"].forEach(function(k) { const v = Number(min[k]); if (v > 0) { base[k] = v; } });
+			base.width = Math.max(base.width, base.minWidth);
+			base.height = Math.max(base.height, base.minHeight);
+		}
+		return base;
+	},
+
+	/**
+	 * The mode a panel keeps once it is turned off (or closed): a minimized one is not invisible when it comes back,
+	 * it takes its restore mode; any other mode stays.
+	 */
+	afterRemove: function(opts, def) {
+		const mode = panelModes.modeOf(opts, def);
+		return mode === "minimized" ? panelModes.restoreMode(opts, def) : mode;
+	},
+
+	/**
+	 * A layout (options.grid in any of its forms) with one panel's entry's size_y set, in the form it came in; null when
+	 * the layout has no such entry. Never mutates.
+	 */
+	withEntrySizeY: function(grid, id, sizeY) {
+		if (!grid || typeof grid !== "object") { return null; }
+		let found = false;
+		const fix = function(e) {
+			if (!e || typeof e !== "object" || e.id !== id) { return e; }
+			found = true;
+			return Object.assign({}, e, { size_y: sizeY });
+		};
+		const map = function(source) {
+			if (Array.isArray(source)) { return source.map(fix); }
+			const out = {};
+			Object.keys(source || {}).forEach(function(k) { out[k] = fix(source[k]); });
+			return out;
+		};
+		const usesOog = grid.oog && typeof grid.oog === "object" && !Array.isArray(grid) && Object.keys(grid.oog).length;
+		const out = usesOog ? Object.assign({}, grid, { oog: map(grid.oog) }) : map(grid);
+		return found ? out : null;
 	},
 
 	/**
@@ -175,6 +223,12 @@ const panelModes = {
 	migrate: function(opts) {
 		const out = { changed: false, set: {}, remove: [] };
 		if (!panelModes.isObject(opts)) { return out; }
+		const layoutGridEntry = function(grid, id) {
+			if (!grid || typeof grid !== "object") { return null; }
+			const source = grid.oog && typeof grid.oog === "object" && !Array.isArray(grid) && Object.keys(grid.oog).length ? grid.oog : grid;
+			const list = Array.isArray(source) ? source : Object.keys(source).map(function(k) { return source[k]; });
+			return list.filter(function(e) { return e && typeof e === "object" && e.id === id; })[0] || null;
+		};
 		let panels = panelModes.isObject(opts[panelModes.OPTIONS_KEY]) ? opts[panelModes.OPTIONS_KEY] : null;
 		let places = panelModes.isObject(opts[panelModes.PLACES_KEY]) ? opts[panelModes.PLACES_KEY] : null;
 		const old = panelModes.isObject(opts[panelModes.LEGACY_PLACES_KEY]) ? opts[panelModes.LEGACY_PLACES_KEY] : null;
@@ -192,6 +246,16 @@ const panelModes = {
 				delete rest.mode;
 				out.set[l.key] = rest;
 				out.changed = true;
+			}
+			// Minimized in the layout (#115) left its entry at 2 rows: give it back the height it had
+			const full = old && panelModes.isObject(old[l.key]) ? parseInt(old[l.key].fullSizeY, 10) : NaN;
+			if (full >= l.minY) {
+				const grid = out.set.grid || opts.grid;
+				const entry = layoutGridEntry(grid, l.id);
+				if (entry && !(parseInt(entry.size_y, 10) >= l.minY)) {
+					const fixed = panelModes.withEntrySizeY(grid, l.id, full);
+					if (fixed) { out.set.grid = fixed; out.changed = true; }
+				}
 			}
 			const geom = old && panelModes.isObject(old[l.key]) && panelModes.isObject(old[l.key].float) ? old[l.key].float : null;
 			const hasFloat = places && panelModes.isObject(places[l.id]) && places[l.id].float !== undefined;
@@ -278,7 +342,7 @@ const panelModes = {
 	/** {left, top, width, height} for the panel's window in `mode` (CSS px of the zoomed page, viewport-relative) */
 	geometry: function(def, mode, chrome) {
 		const small = mode === "small";
-		const size = small ? panelHost.SMALL : panelHost.FLOAT;
+		const size = panelModes.sizeFor(def, small ? "small" : "floating", panelHost);
 		const place = panelModes.place(panelModes.opts(), def.id);
 		const view = panelHost.viewport();
 		const index = Math.max(0, panelModes.defs().indexOf(def));
@@ -289,7 +353,7 @@ const panelModes = {
 	/** Pop the panel's element out into a window (minimized: a hidden one) */
 	float: function(def, $w, mode) {
 		const shape = mode === "minimized" ? panelModes.restoreMode(panelModes.opts(), def) : mode;
-		const size = shape === "small" ? panelHost.SMALL : panelHost.FLOAT;
+		const size = panelModes.sizeFor(def, shape === "small" ? "small" : "floating", panelHost);
 		let geom = panelModes.geometry(def, shape);
 		// The dialog element is a host: jQuery UI sizes it, and options.apply() (which writes saved layout sizes onto the
 		// element with the panel's id) only reaches the panel inside it, whose size the CSS fixes
@@ -313,6 +377,12 @@ const panelModes = {
 		$d.find(".ui-dialog-titlebar").append("<span class='ph-buttons ph-title-buttons'></span>");
 		if ($d.is(":data(ui-draggable)")) { $d.draggable("option", "cancel", ".ui-dialog-content, .ui-dialog-titlebar-close, .ph-buttons"); }
 		$d.toggleClass("ph-minimized", mode === "minimized");
+		// A panel that closes on Escape (the Jump planner): while its window has the focus
+		if (typeof def.onEscape === "function") {
+			$d.on("keydown", function(e) {
+				if (e.key === "Escape" && !e.isDefaultPrevented() && !$(e.target).closest(".ph-buttons").length) { e.preventDefault(); def.onEscape(); }
+			});
+		}
 		return $w;
 	},
 
@@ -362,28 +432,31 @@ const panelModes = {
 	},
 
 	/**
-	 * Notes being edited (CKEditor's iframe) don't survive a move in the page: write each editor back into its element
-	 * before the panel moves, and start it again once it is in its new place. Returns the editors' names.
+	 * Notes being edited (CKEditor's iframe) don't survive a move in the page. Before the panel moves, each editor's text
+	 * is taken and the editor removed without writing it into its element (which keeps the saved note, for Cancel);
+	 * once the panel is in its new place the editor starts again with that text. Returns [{name, data, html}].
 	 */
 	suspendEditors: function($w) {
 		if (typeof CKEDITOR === "undefined" || !CKEDITOR.instances) { return []; }
-		const names = [];
+		const out = [];
 		Object.keys(CKEDITOR.instances).forEach(function(name) {
 			const inst = CKEDITOR.instances[name];
 			const el = inst && inst.element ? inst.element.$ : null;
 			if (el && $w[0] && $.contains($w[0], el)) {
-				inst.destroy(false);	// false: its text goes back into the element
-				names.push(name);
+				const html = el.innerHTML;	// the note as saved: the editor writes into it only on Save
+				out.push({ name: name, data: inst.getData(), html: html });
+				inst.destroy(true);	// true: don't write the unsaved text into the element
+				el.innerHTML = html;
 			}
 		});
-		return names;
+		return out;
 	},
 
-	resumeEditors: function(names) {
-		(names || []).forEach(function(name) {
-			if (document.getElementById(name) && typeof CKEDITOR !== "undefined") {
-				CKEDITOR.replace(name, typeof CKConfig !== "undefined" ? CKConfig : {});
-			}
+	resumeEditors: function(editors) {
+		(editors || []).forEach(function(e) {
+			if (!document.getElementById(e.name) || typeof CKEDITOR === "undefined") { return; }
+			const inst = CKEDITOR.replace(e.name, typeof CKConfig !== "undefined" ? CKConfig : {});
+			inst.on("instanceReady", function() { inst.setData(e.data); });
 		});
 	},
 
@@ -479,11 +552,23 @@ const panelModes = {
 	/** panelHost.removeGridWidget: a popped-out panel's window closes. Returns whether it was one. */
 	removePopped: function(def, $w) {
 		if (!$w.hasClass("ph-floating")) { return false; }
+		const known = panelModes.defOf(def.id) || def;
+		const opts = panelModes.opts();
+		let changed = !!panelModes.saveTimers[def.id];
+		panelModes.flushSave(known);	// before the id goes: a move just before still counts
+		// Minimized: it comes back in its window when it is turned on (or opened) again, not invisible
+		if (opts && panelModes.modeFor(def.id) === "minimized") {
+			opts[panelModes.OPTIONS_KEY] = panelModes.withMode(opts, def.id, panelModes.afterRemove(opts, known));
+			changed = true;
+		}
 		panelHost.releaseTooltips($w);
 		$w.attr("id", def.id + "-removed");
-		panelModes.unfloat(def, $w);
+		panelModes.unfloat(known, $w);
 		$w.remove();
 		panelModes.updateBadge();
+		if (changed && opts) {
+			if (typeof opts.saveDelay === "function") { opts.saveDelay(500); } else if (typeof opts.save === "function") { opts.save(); }
+		}
 		return true;
 	},
 
@@ -538,7 +623,7 @@ const panelModes = {
 			const chrome = panelHost.chrome($d);
 			const now = { left: px("left") - view.left, top: px("top") - view.top, width: px("width"), height: px("height") + chrome.h };
 			const shape = $w.attr("data-ph-mode") === "small" ? "small" : "floating";
-			const fit = panelHost.clampFloat(now, view.width, view.height, 0, chrome.w, shape === "small" ? panelHost.SMALL : panelHost.FLOAT);
+			const fit = panelHost.clampFloat(now, view.width, view.height, 0, chrome.w, panelModes.sizeFor(def, shape, panelHost));
 			if (Math.round(now.width) !== fit.width || Math.round(now.height) !== fit.height) { $host.dialog("option", { width: fit.width, height: fit.height }); }
 			$d.css({ left: fit.left + view.left, top: fit.top + view.top });
 		});
@@ -587,10 +672,16 @@ const panelModes = {
 	openMenu: function() {
 		panelModes.renderMenu();
 		const $menu = $("#ph-menu").show();
-		// Under its icon, right edges lined up (CSS px of the zoomed page, like the icon's box)
+		// Under its icon, right edges lined up, inside the window. The icon's box is in screen px; the menu is placed in
+		// CSS px of the page zoomed by Settings > UI Scale.
 		const r = $("#ph-menu-link")[0].getBoundingClientRect();
 		const z = panelHost.zoom();
-		$menu.css({ left: Math.max(4, r.right + 8 - $menu.outerWidth()) + $(window).scrollLeft() / z, top: r.bottom + 8 + $(window).scrollTop() / z });
+		const view = panelHost.viewport();
+		const w = $menu.outerWidth();
+		const left = Math.max(4, Math.min(r.right / z + 8 - w, view.width - w - 4));
+		$menu.css({ left: Math.round(left + view.left), top: Math.round(r.bottom / z + 8 + view.top) });
+		// The triangle points at the icon
+		$menu.children(".triangle").css({ right: Math.max(6, Math.round(left + w - (r.left + r.right) / 2 / z - 5)) });
 		$("#ph-menu-link").addClass("active");
 	},
 

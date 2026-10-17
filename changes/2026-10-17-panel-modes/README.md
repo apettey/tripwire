@@ -37,10 +37,11 @@ Settings > Reset leaves the panel modes alone: forkSettings has no reset-only ho
 - The panel's own element moves (its id, children, data and event handlers): out of gridster into a non-modal jQuery UI
   dialog (`dialog-floating`) and back to its saved layout place, which stays in `options.grid` while it is popped out.
   Upstream's System info, Signatures and Notes work this way without edits; notes being edited (CKEditor) are written
-  back and restarted around a move; the activity graph redraws after a resize. Windows are UI-scale aware, clamped on
+  restarted around a move with their unsaved text (Cancel still gives back the saved note); the activity graph redraws after a resize. Windows are UI-scale aware, clamped on
   screen (also after a window resize or a UI scale change) and cascade so they don't cover each other exactly.
 - Minimized = the window is hidden, the panel keeps running; it comes back from the Panels menu (or, for the Jump
-  planner, by opening it again from the map) in the popped-out mode it had.
+  planner, by opening it again from the map) in the popped-out mode it had. A panel turned off (or the planner closed)
+  while minimized comes back in that mode, not invisible.
 - Controls: header buttons (Pop out / Small view / Minimize when docked; Small view or Normal size / Minimize / Dock in
   a window's title bar, replacing its X), the Panels menu (badge = minimized panels) and palette commands
   "Pop out / Dock / Minimize / Restore / Small view <panel>" (group Panels).
@@ -50,10 +51,13 @@ Settings > Reset leaves the panel modes alone: forkSettings has no reset-only ho
 - Kill panels: `killfeed-modes.js` / `.css` (and its tests) are gone; the panels use `panelHost` directly and show the
   small view under `.ph-small`. Migration (once, on load, idempotent): `options.<systemKillFeed|chainKillFeed>.mode`
   floating -> popped out, minimized -> small view, fixed -> docked; `options.killPanelPlaces.<key>.float` ->
-  `options.panelPlaces.<id>.float`; the old keys are deleted (the old minimized height is not carried over: docking
-  uses the saved layout size, raised to the panel's minimum).
+  `options.panelPlaces.<id>.float`; a layout entry left at 2 rows by #115's minimize gets its old full height
+  (`fullSizeY`) back; the old keys are deleted.
 - Jump planner: a panel like the others (docked while open, popped out by default, small view not offered); its own
   close and settings icons sit in its header; its old `options.jumpRange.window` and the Dock side setting give the
-  first window place; Settings > Reset also forgets its window place. Escape no longer closes it (windows don't close
-  on Escape).
+  first window place; its window keeps its old minimum size (380x360) and Escape in it still closes it (other panels'
+  windows don't close on Escape); Settings > Reset also forgets its window place.
+- `app/js/fork/floating-windows.js`: upstream's base-dialog.js decides the grey overlay under a second modal by
+  counting every visible dialog, so popped-out windows (and the Region map) threw it off; a fork handler running after
+  it sets the overlay again counting only dialogs that aren't floating.
 - Upstream files touched: none.

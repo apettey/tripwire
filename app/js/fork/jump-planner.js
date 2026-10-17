@@ -1572,6 +1572,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		/** The planner as panelHost and panelModes take it */
 		const panel = {
 			id: jp.WIDGET_ID, title: "Jump planner", key: "jumpRange", size: jp.SIZE, defaultMode: "floating",
+			minSize: { minWidth: jp.WINDOW.minWidth, minHeight: jp.WINDOW.minHeight },
+			// Escape in its window closes it, as before it was a panel
+			onEscape: function() { close(); },
 			offReason: "Not open: open it from an exit's range ring on the chain map",
 			// The first window place: the one remembered before panel modes (options.jumpRange.window), else by the Dock side setting
 			floatDefault: function(view) {

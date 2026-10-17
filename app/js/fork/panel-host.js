@@ -21,7 +21,8 @@ const panelHost = {
 	 * @param def {id (element id), title (its name in menus), key (options key of its on/off setting), size {x, y, minX,
 	 * minY} (gridster cells), and for panel-modes.js: small (true: has a small view), windowTitle() (the popped-out
 	 * window's title, default title), defaultMode (default "fixed"), floatDefault() (optional first window place
-	 * {left, top, width, height}), onResize() (after its size changed: moved, resized, docked), upstream (true: markup
+	 * {left, top, width, height}), minSize {minWidth, minHeight} (its window's, default FLOAT's), onEscape() (Escape
+	 * in its window), onResize() (after its size changed: moved, resized, docked), upstream (true: markup
 	 * from tripwire.php)}
 	 */
 	register: function(def) {

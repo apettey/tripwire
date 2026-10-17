@@ -227,10 +227,63 @@ describe('Panel display modes', () => {
 				assert.deepEqual(again, { changed: false, set: {}, remove: [] });
 			})));
 		});
+		it('a panel minimized in the layout (#115) gets its full height back in its layout entry', () => {
+			const grid = [{ id: 'infoWidget', col: 1, row: 1, size_x: 7, size_y: 6 }, { id: 'systemKillFeedWidget', col: 8, row: 15, size_x: 7, size_y: 2 }];
+			const opts = { grid: grid, systemKillFeed: { mode: 'minimized' }, killPanelPlaces: { systemKillFeed: { fullSizeY: 8 } } };
+			const out = apply(opts, run(opts));
+			assert.deepEqual(out.grid[1], { id: 'systemKillFeedWidget', col: 8, row: 15, size_x: 7, size_y: 8 });
+			assert.strictEqual(out.grid[0], grid[0]);
+			assert.equal(grid[1].size_y, 2);
+			assert.deepEqual(out.panels, { systemKillFeedWidget: { mode: 'small' } });
+			assert.deepEqual(run(out), { changed: false, set: {}, remove: [] });
+		});
+		it('the full height is only used when the entry is below the minimum, in every layout form', () => {
+			const at = (grid) => apply({ grid: grid, killPanelPlaces: { chainKillFeed: { fullSizeY: 9 } } }, run({ grid: grid, killPanelPlaces: { chainKillFeed: { fullSizeY: 9 } } })).grid;
+			assert.equal(at([{ id: 'chainKillFeedWidget', size_y: 5 }])[0].size_y, 5);
+			assert.equal(at([{ id: 'chainKillFeedWidget', size_y: 2 }])[0].size_y, 9);
+			assert.equal(at({ 0: { id: 'chainKillFeedWidget', size_y: '2' } })[0].size_y, 9);
+			assert.equal(at({ oog: { a: { id: 'chainKillFeedWidget', size_y: 1 } } }).oog.a.size_y, 9);
+			assert.deepEqual(at([{ id: 'other', size_y: 2 }]), [{ id: 'other', size_y: 2 }]);	// no entry: the layout is left as it was
+			assert.equal(apply({ grid: [{ id: 'chainKillFeedWidget', size_y: 2 }], killPanelPlaces: { chainKillFeed: { fullSizeY: 2 } } },
+				run({ grid: [{ id: 'chainKillFeedWidget', size_y: 2 }], killPanelPlaces: { chainKillFeed: { fullSizeY: 2 } } })).grid[0].size_y, 2);	// below the minimum: ignored
+		});
+		it('withEntrySizeY: null without the entry, never mutates', () => {
+			const g = [{ id: 'a', size_y: 1 }];
+			assert.equal(pm().withEntrySizeY(g, 'b', 5), null);
+			assert.equal(pm().withEntrySizeY(null, 'a', 5), null);
+			assert.deepEqual(pm().withEntrySizeY(g, 'a', 5), [{ id: 'a', size_y: 5 }]);
+			assert.deepEqual(g, [{ id: 'a', size_y: 1 }]);
+		});
 		it('nothing to do: unchanged; junk options are ignored', () => {
 			assert.deepEqual(run({ panels: { a: { mode: 'floating' } }, systemKillFeed: { enabled: true } }), { changed: false, set: {}, remove: [] });
 			assert.deepEqual(pm().migrate(null), { changed: false, set: {}, remove: [] });
 			assert.deepEqual(run({ systemKillFeed: 'floating', killPanelPlaces: undefined }), { changed: false, set: {}, remove: [] });
+		});
+	});
+
+	describe('window size limits', () => {
+		const sizes = { FLOAT: { width: 420, height: 360, minWidth: 260, minHeight: 140 }, SMALL: { width: 340, height: 130, minWidth: 220, minHeight: 80 } };
+		it('FLOAT for a window, SMALL for the small view (copies)', () => {
+			assert.deepEqual(pm().sizeFor(plain, 'floating', sizes), sizes.FLOAT);
+			assert.deepEqual(pm().sizeFor(kills, 'small', sizes), sizes.SMALL);
+			assert.notStrictEqual(pm().sizeFor(plain, 'floating', sizes), sizes.FLOAT);
+		});
+		it("the panel's own minimum (the Jump planner) raises the minimum and the default size", () => {
+			const jp = Object.assign({}, planner, { minSize: { minWidth: 380, minHeight: 360 } });
+			assert.deepEqual(pm().sizeFor(jp, 'floating', sizes), { width: 420, height: 360, minWidth: 380, minHeight: 360 });
+			assert.deepEqual(pm().sizeFor(Object.assign({}, jp, { minSize: { minWidth: 500, minHeight: 'x' } }), 'floating', sizes), { width: 500, height: 360, minWidth: 500, minHeight: 140 });
+			assert.deepEqual(pm().sizeFor(Object.assign({}, kills, { minSize: { minWidth: 500 } }), 'small', sizes), sizes.SMALL);
+			assert.deepEqual(sizes.FLOAT, { width: 420, height: 360, minWidth: 260, minHeight: 140 });
+		});
+	});
+
+	describe('turned off or closed', () => {
+		it('a minimized panel comes back in its restore mode; any other mode stays', () => {
+			assert.equal(pm().afterRemove({ panels: { notesWidget: { mode: 'minimized' } } }, plain), 'floating');
+			assert.equal(pm().afterRemove({ panels: { systemKillFeedWidget: { mode: 'minimized' } }, panelPlaces: { systemKillFeedWidget: { restore: 'small' } } }, kills), 'small');
+			assert.equal(pm().afterRemove({ panels: { notesWidget: { mode: 'fixed' } } }, plain), 'fixed');
+			assert.equal(pm().afterRemove({ panels: { systemKillFeedWidget: { mode: 'small' } } }, kills), 'small');
+			assert.equal(pm().afterRemove({}, planner), 'floating');
 		});
 	});
 
