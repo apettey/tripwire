@@ -4,9 +4,7 @@
       "pr": 114,
       "date": "2026-10-17",
       "title": "Jump planner in its own window",
-      "description": "The Jump planner now opens in its own floating window, like the Region map, instead of taking a spot in the page layout. Drag it anywhere, resize it from the corner, and it opens in the same place next time.
-
-The first time, it opens on the side picked in Settings > Jump Planner > Dock side. The cog in its title bar opens those settings.",
+      "description": "The Jump planner now opens in its own floating window, like the Region map, instead of taking a spot in the page layout. Drag it anywhere, resize it from the corner, and it opens in the same place next time.\n\nThe first time, it opens on the side picked in Settings > Jump Planner > Dock side. The cog in its title bar opens those settings.",
       "images": [
         {
           "src": "whats-new/img/pr-114-jump-planner-window.jpg",
