@@ -40,6 +40,35 @@ describe('Intel scans', () => {
 			assert.equal(intelScans.gridKm({ intelScans: { gridKm: 8000 } }), 8000);
 			assert.equal(intelScans.gridKm({ intelScans: { gridKm: -1 } }), 10000);
 		});
+		it('header links are on by default', () => {
+			assert.equal(intelScans.showLinks(undefined), true);
+			assert.equal(intelScans.showLinks({ intelScans: {} }), true);
+			assert.equal(intelScans.showLinks({ intelScans: { links: false } }), false);
+		});
+	});
+
+	describe('header links', () => {
+		it('zKillboard and Anoik.is for a wormhole system', () => {
+			assert.deepEqual(intelScans.systemLinks(31002012, 'J123450').map(l => l.url),
+				['https://zkillboard.com/system/31002012/', 'https://anoik.is/systems/J123450']);
+		});
+		it('Anoik.is takes Thera and Drifter names', () => {
+			assert.equal(intelScans.systemLinks(31000005, 'Thera')[1].url, 'https://anoik.is/systems/Thera');
+			assert.equal(intelScans.systemLinks(31000001, 'Sentinel MZ')[1].url, 'https://anoik.is/systems/Sentinel%20MZ');
+		});
+		it('only zKillboard for k-space', () => {
+			assert.deepEqual(intelScans.systemLinks(30000142, 'Jita').map(l => l.label), ['zKill']);
+		});
+		it('nothing for no system', () => {
+			assert.deepEqual(intelScans.systemLinks(null, ''), []);
+			assert.equal(intelScans.linksHtml(undefined, ''), '');
+		});
+		it('escapes and opens in a new tab', () => {
+			const html = intelScans.linksHtml(31002012, "J1'<b>");
+			assert.ok(html.indexOf("href='https://anoik.is/systems/J1&#39;%3Cb%3E'") >= 0, html);
+			assert.ok(html.indexOf("<b>") < 0);
+			assert.equal((html.match(/target='_blank' rel='noopener noreferrer'/g) || []).length, 2);
+		});
 	});
 
 	describe('parseDistanceKm', () => {
