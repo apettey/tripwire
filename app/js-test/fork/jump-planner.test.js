@@ -252,27 +252,59 @@ describe('jumpPlanner', () => {
 			const text = jumpPlanner.copyText([{ name: 'Auga', secText: '0.4', region: 'Heimatar', ly: 0.4312, gates: 1, jammed: false }, { name: 'Vard', secText: '0.4', region: 'Heimatar', ly: 0.8, gates: null, jammed: true }], 'Amamake', 'Carrier', 5, 7);
 			assert.strictEqual(text, 'Jump range from Amamake (Carrier, JDC V, 7.0 LY)\nAuga\t0.4\tHeimatar\t0.43 LY\t1 gates\nVard\t0.4\tHeimatar\t0.80 LY\t-\tjammed');
 		});
-		it('default placement: free spot against the right edge, else under everything; left: top left', () => {
-			const widgets = [{ col: 1, row: 1, size_x: 7, size_y: 6 }, { col: 8, row: 1, size_x: 21, size_y: 6 }, { col: 1, row: 7, size_x: 21, size_y: 8 }];
-			assert.deepStrictEqual(jumpPlanner.defaultPlacement(widgets, 32, 'right'), { col: 25, row: 7, size_x: 8, size_y: 12 });
-			assert.deepStrictEqual(jumpPlanner.defaultPlacement(widgets, 40, 'right'), { col: 33, row: 1, size_x: 8, size_y: 12 });
-			assert.deepStrictEqual(jumpPlanner.defaultPlacement([{ col: 1, row: 1, size_x: 30, size_y: 20 }], 30, 'right'), { col: 23, row: 21, size_x: 8, size_y: 12 });
-			assert.deepStrictEqual(jumpPlanner.defaultPlacement(widgets, 32, 'left'), { col: 1, row: 1, size_x: 8, size_y: 12 });
+		describe('window placement', () => {
+			const VP = { width: 1600, height: 900 };
+			it('a saved place inside the window stays as it is', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 200, top: 100, width: 500, height: 600 }, VP, 'right'), { left: 200, top: 100, width: 500, height: 600 });
+			});
+			it('a saved place off the window is moved back inside it', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 1500, top: 850, width: 500, height: 600 }, VP, 'right'), { left: 1100, top: 300, width: 500, height: 600 });
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: -300, top: -40, width: 500, height: 600 }, VP, 'left'), { left: 0, top: 0, width: 500, height: 600 });
+				// scrolled page: inside the visible part
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 0, top: 0, width: 500, height: 600 }, { width: 1600, height: 900, x: 0, y: 200 }, 'right'), { left: 0, top: 200, width: 500, height: 600 });
+			});
+			it('a saved size bigger than the window is shrunk to it; too small grows to the minimum', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 100, top: 100, width: 2000, height: 1200 }, VP, 'right'), { left: 0, top: 0, width: 1600, height: 900 });
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 100, top: 100, width: 50, height: 60 }, VP, 'right'), { left: 100, top: 100, width: 380, height: 360 });
+			});
+			it('without a saved place: against the right edge below the header, default size', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(null, VP, 'right'), { left: 1600 - 480 - 8, top: 60, width: 480, height: 720 });
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(undefined, { width: 1920, height: 1200 }, 'right'), { left: 1920 - 480 - 8, top: 60, width: 480, height: 720 });
+				// a short window: no taller than what is left below the header
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(null, { width: 1600, height: 600 }, 'right'), { left: 1112, top: 60, width: 480, height: 600 - 60 - 8 });
+			});
+			it('without a saved place, docked left: against the left edge', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(null, { width: 1920, height: 1200 }, 'left'), { left: 8, top: 60, width: 480, height: 720 });
+			});
+			it('a small window: the minimum size, never bigger than the window, all of it inside', () => {
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(null, { width: 800, height: 400 }, 'right'), { left: 800 - 480 - 8, top: 40, width: 480, height: 360 });
+				assert.deepStrictEqual(jumpPlanner.windowPlacement(null, { width: 300, height: 300 }, 'left'), { left: 0, top: 0, width: 300, height: 300 });
+				assert.deepStrictEqual(jumpPlanner.windowPlacement({ left: 50, top: 50, width: 480, height: 720 }, { width: 300, height: 300 }, 'right'), { left: 0, top: 0, width: 300, height: 300 });
+			});
+			it('settings() keeps a saved window only when every value is a number', () => {
+				assert.deepStrictEqual(jumpPlanner.settings({ jumpRange: { window: { left: 10, top: 20, width: 500, height: 600, extra: 1 } } }).window, { left: 10, top: 20, width: 500, height: 600 });
+				[{ left: '10', top: 20, width: 500, height: 600 }, { left: 10, top: 20, width: 500 }, { left: 10, top: NaN, width: 500, height: 600 },
+					{ left: 10, top: 20, width: 0, height: 600 }, 'x', null].forEach(win => {
+					assert.ok(!('window' in jumpPlanner.settings({ jumpRange: { window: win } })), JSON.stringify(win));
+				});
+				// the old grid place is ignored
+				assert.ok(!('position' in jumpPlanner.settings({ jumpRange: { position: { col: 3, row: 4 } } })));
+			});
 		});
-		it('saved placement', () => {
-			assert.deepStrictEqual(jumpPlanner.savedPlacement({ col: 3, row: 4, size_x: 2, size_y: 20 }), { col: 3, row: 4, size_x: 6, size_y: 20 });
-			assert.strictEqual(jumpPlanner.savedPlacement({ col: 0, row: 1 }), null);
-			assert.deepStrictEqual(jumpPlanner.gridEntry([{ id: 'x' }, { id: jumpPlanner.WIDGET_ID, col: 1 }], jumpPlanner.WIDGET_ID), { id: jumpPlanner.WIDGET_ID, col: 1 });
-		});
-		it('Reset drops the panel from the layout (array, object and old oog forms)', () => {
+		it('the old layout entry is dropped (array, object and old oog forms)', () => {
 			const id = jumpPlanner.WIDGET_ID;
 			const arr = [{ id: 'chainWidget', col: 1 }, { id: id, col: 25 }];
 			assert.deepStrictEqual(jumpPlanner.withoutGridEntry(arr, id), [{ id: 'chainWidget', col: 1 }]);
 			assert.strictEqual(arr.length, 2);
 			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ 0: { id: 'a' }, 1: { id: id } }, id), { 0: { id: 'a' } });
 			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ oog: { 0: { id: id }, 1: { id: 'b' } } }, id), { oog: { 1: { id: 'b' } } });
-			assert.strictEqual(jumpPlanner.gridEntry(jumpPlanner.withoutGridEntry(arr, id), id), null);
+			assert.deepStrictEqual(jumpPlanner.withoutGridEntry([{ id: id + '-removed' }, { id: 'b' }], id), [{ id: 'b' }]);
 			assert.strictEqual(jumpPlanner.withoutGridEntry(null, id), null);
+			assert.strictEqual(jumpPlanner.hasGridEntry(arr, id), true);
+			assert.strictEqual(jumpPlanner.hasGridEntry({ oog: { 0: { id: id } } }, id), true);
+			assert.strictEqual(jumpPlanner.hasGridEntry(jumpPlanner.withoutGridEntry(arr, id), id), false);
+			assert.strictEqual(jumpPlanner.hasGridEntry({}, id), false);
+			assert.strictEqual(jumpPlanner.hasGridEntry(undefined, id), false);
 		});
 		it('age text', () => {
 			assert.deepStrictEqual([30, 600, 7200, 200000].map(jumpPlanner.ageText), ['now', '10 min', '2 h', '2 d']);

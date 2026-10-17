@@ -1,5 +1,5 @@
 const jumpPlanner = {
-	// Jump planner (fork-owned): a small range-ring icon on the chain's low-sec / null-sec exits opens a layout panel
+	// Jump planner (fork-owned): a small range-ring icon on the chain's low-sec / null-sec exits opens a floating window
 	// with a top-down mini-map of the systems around that exit, the ones a jump ship can reach with one jump (by
 	// distance band), gate jumps, trade-hub reach and a destination button. The range maths is in jumpRange
 	// (app/js/fork/jump-range.js); static data in public/jumprange/ (jumprange/tools/generate-coords.js); cyno-jammed
@@ -8,13 +8,14 @@ const jumpPlanner = {
 	// which systems they jump through is chosen by jumpRange.routePlan (NPC stations from public/jumprange/stations.json,
 	// kills in the last hour from the chain map's ESI system_kills data, Sansha incursions from ESI /incursions/, the
 	// user's avoided systems), and a midpoint can be swapped for another in range of both its neighbours.
+	// The planner is a floating window (a jQuery UI dialog like the Region map), not a layout panel; its place and size
+	// are remembered in options.jumpRange.window.
 	// Settings: options.jumpRange (a missing key means the default).
 	// Pure HTML builders and helpers first (tested), browser code at the bottom.
 	// Keep `const jumpPlanner` on the first line: the test helper strips it to define a global.
 	WIDGET_ID: "jumpPlannerWidget",
-	SIZE: { x: 8, y: 12 },
-	MIN_SIZE: { x: 6, y: 8 },
-	COL_PX: 60,				// gridster widget_base_dimensions 50 + 2 * margin 5
+	// The floating window (CSS px): default and smallest size, the gap to the window's edges, where it first opens below the header
+	WINDOW: { width: 480, height: 720, minWidth: 380, minHeight: 360, margin: 8, top: 60 },
 	DATA_VERSION: 3586130,	// meta.version of public/jumprange/*.json (SDE build): busts the browser cache
 	SHIPS_REV: 2,			// bump when ships.json changes without a new SDE build (2: jump fuel fields)
 	STATIONS_REV: 1,		// the same for stations.json (1: first version)
@@ -85,7 +86,12 @@ const jumpPlanner = {
 			mode: pick(raw.mode, ["exit", "home"], "exit"),
 			origin: Number(raw.origin) > 0 && Number.isInteger(Number(raw.origin)) ? Number(raw.origin) : null
 		};
-		if (raw.position && typeof raw.position === "object") { s.position = raw.position; }
+		// Where the window was ({left, top, width, height}, CSS px), only when every value is a number
+		const win = raw.window;
+		if (win && typeof win === "object" && ["left", "top", "width", "height"].every(function(k) { return typeof win[k] === "number" && isFinite(win[k]); })
+			&& win.width > 0 && win.height > 0) {
+			s.window = { left: win.left, top: win.top, width: win.width, height: win.height };
+		}
 		return s;
 	},
 
@@ -1221,50 +1227,33 @@ const jumpPlanner = {
 	},
 
 	/**
-	 * Where the panel goes without a saved position (first open, after Settings > Reset).
-	 * "right": the highest free spot against the right edge of the window (the free space beside the chain map in the
-	 * usual layout), else under everything at the right; "left": the first column at the top (the widgets there
-	 * move down to make room).
-	 * @param widgets [{col, row, size_x, size_y}]; availableCols grid columns that fit in the window
+	 * Where the window opens: {left, top, width, height} in CSS px (page coordinates of the dialog's outer box).
+	 * A saved place keeps its size (no bigger than the window) and is moved inside the window; without one (first
+	 * open, after Settings > Reset) it goes against the dock side's edge, below the header, at the default size (no
+	 * taller than the window).
+	 * @param saved settings().window or nothing; viewport {width, height, x, y} (x / y: how far the page is scrolled); dock "right" | "left"
 	 */
-	defaultPlacement: function(widgets, availableCols, dock) {
-		const size = jumpPlanner.SIZE;
-		const list = (widgets || []).filter(function(w) { return w; }).map(function(w) {
-			const col = Number(w.col) || 1, row = Number(w.row) || 1;
-			return { c0: col, c1: col + (Number(w.size_x) || 1) - 1, r0: row, r1: row + (Number(w.size_y) || 1) - 1 };
-		});
-		const maxCol = list.reduce(function(m, w) { return Math.max(m, w.c1); }, 0);
-		const maxRow = list.reduce(function(m, w) { return Math.max(m, w.r1); }, 0);
-		const place = function(col, row) { return { col: col, row: row, size_x: size.x, size_y: size.y }; };
-		if (dock === "left") { return place(1, 1); }
-		const cols = Math.max(availableCols || 0, size.x);
-		const col = availableCols ? cols - size.x + 1 : maxCol + 1;
-		const free = function(row) {
-			return !list.some(function(w) { return w.c0 <= col + size.x - 1 && w.c1 >= col && w.r0 <= row + size.y - 1 && w.r1 >= row; });
-		};
-		for (let row = 1; row <= maxRow + 1; row++) {
-			if (free(row)) { return place(col, row); }
+	windowPlacement: function(saved, viewport, dock) {
+		const W = jumpPlanner.WINDOW;
+		const v = viewport || {};
+		const vw = Number(v.width) > 0 ? Number(v.width) : 1024, vh = Number(v.height) > 0 ? Number(v.height) : 768;
+		const vx = Number(v.x) || 0, vy = Number(v.y) || 0;
+		const clamp = function(value, lo, hi) { return Math.max(lo, Math.min(hi, value)); };
+		const size = function(value, fallback, min, room) { return Math.round(Math.max(0, Math.min(room, Math.max(min, Number(value) > 0 ? Number(value) : fallback)))); };
+		const ok = saved && typeof saved === "object" && typeof saved.left === "number" && typeof saved.top === "number" && isFinite(saved.left) && isFinite(saved.top);
+		let p;
+		if (ok) {
+			p = { left: saved.left, top: saved.top, width: size(saved.width, W.width, W.minWidth, vw), height: size(saved.height, W.height, W.minHeight, vh) };
+		} else {
+			// Short of room for the gaps: the smallest size still (or all of the window), moved up / over below
+			const width = Math.max(Math.min(W.minWidth, vw), size(W.width, W.width, W.minWidth, vw - 2 * W.margin));
+			const height = Math.max(Math.min(W.minHeight, vh), size(W.height, W.height, W.minHeight, vh - W.top - W.margin));
+			p = { left: dock === "left" ? vx + W.margin : vx + vw - width - W.margin, top: vy + W.top, width: width, height: height };
 		}
-		return place(col, maxRow + 1);
-	},
-
-	/** Placement from a saved entry ({col, row, size_x, size_y}), or null */
-	savedPlacement: function(entry) {
-		if (!entry || typeof entry !== "object") { return null; }
-		const p = {
-			col: Number(entry.col), row: Number(entry.row),
-			size_x: Math.max(jumpPlanner.MIN_SIZE.x, Number(entry.size_x) || 0),
-			size_y: Math.max(jumpPlanner.MIN_SIZE.y, Number(entry.size_y) || 0)
-		};
-		return p.col >= 1 && p.row >= 1 ? p : null;
-	},
-
-	/** The widget's entry in options.grid (array or object, old "oog" format) */
-	gridEntry: function(grid, id) {
-		if (!grid || typeof grid !== "object") { return null; }
-		const source = grid.oog && typeof grid.oog === "object" && Object.keys(grid.oog).length ? grid.oog : grid;
-		const entries = Array.isArray(source) ? source : Object.keys(source).map(function(k) { return source[k]; });
-		return entries.filter(function(e) { return e && e.id === id; })[0] || null;
+		// Inside the window (the size is never bigger than it, so all of it shows)
+		p.left = Math.round(clamp(p.left, vx, vx + vw - p.width));
+		p.top = Math.round(clamp(p.top, vy, vy + vh - p.height));
+		return p;
 	},
 
 	/** Options of the Settings ship select (a disabled "Loading ships…" one until ships.json is there) */
@@ -1276,17 +1265,26 @@ const jumpPlanner = {
 		}).join("");
 	},
 
-	/** A layout (options.grid: array, object, or the old {oog: ...} form) without the panel's entry. Never mutates grid. */
+	/**
+	 * A layout (options.grid: array, object, or the old {oog: ...} form) without the planner's entry (from when it was
+	 * a layout panel; also "<id>-removed"). Never mutates grid.
+	 */
 	withoutGridEntry: function(grid, id) {
 		if (!grid || typeof grid !== "object") { return grid; }
+		const gone = function(e) { return e && (e.id === id || e.id === id + "-removed"); };
 		const strip = function(source) {
-			if (Array.isArray(source)) { return source.filter(function(e) { return !(e && e.id === id); }); }
+			if (Array.isArray(source)) { return source.filter(function(e) { return !gone(e); }); }
 			const out = {};
-			Object.keys(source || {}).forEach(function(k) { if (!(source[k] && source[k].id === id)) { out[k] = source[k]; } });
+			Object.keys(source || {}).forEach(function(k) { if (!gone(source[k])) { out[k] = source[k]; } });
 			return out;
 		};
-		if (grid.oog && typeof grid.oog === "object") { return Object.assign(strip(grid), { oog: strip(grid.oog) }); }
+		if (grid.oog && typeof grid.oog === "object" && !Array.isArray(grid)) { return Object.assign(strip(grid), { oog: strip(grid.oog) }); }
 		return strip(grid);
+	},
+
+	/** Whether a layout still has the planner's old entry */
+	hasGridEntry: function(grid, id) {
+		return JSON.stringify(jumpPlanner.withoutGridEntry(grid, id)) !== JSON.stringify(grid);
 	},
 
 	/** Settings > Routes & Navigation row, next to the other panels' on/off rows (same key as "Enable jump planner") */
@@ -1336,7 +1334,7 @@ const jumpPlanner = {
 			+ "<tr><th>Distance bands:</th><td class='jp-bands'>" + swatch(0, "≤ 3.5") + swatch(1, "≤ 5.0") + swatch(2, "≤ max") + "</td></tr>"
 			+ "<tr><th>Cyno-jammed systems:</th><td><select id='jumpPlanner-jammed'><option value='mark'>Show, marked as jammed</option><option value='hide'>Hide</option><option value='ignore'>Treat as in range</option></select></td></tr>"
 			+ "<tr class='jp-sep'><td colspan='2'></td></tr>"
-			+ "<tr><th>Dock side:</th><td>" + radios("jumpPlanner-dock", [["right", "Right"], ["left", "Left"]]) + " <span class='jp-dim'>(where the panel first opens)</span></td></tr>"
+			+ "<tr><th>Dock side:</th><td>" + radios("jumpPlanner-dock", [["right", "Right"], ["left", "Left"]]) + " <span class='jp-dim'>(where the window first opens)</span></td></tr>"
 			+ "<tr><th>Open when I click an exit:</th><td>" + radios("jumpPlanner-click", [["1", "Yes"], ["0", "Only from ring icon"]]) + "</td></tr>"
 			+ "<tr><th>Mini-map shows:</th><td><span class='jp-dim'>out to</span> <input type='range' id='jumpPlanner-radius' min='7' max='15' step='1' /> <span id='jumpPlanner-radius-label'></span></td></tr>"
 			+ "<tr><th>Out-of-range systems:</th><td><label><input type='checkbox' id='jumpPlanner-showOut' /> Show greyed in mini-map</label></td></tr>"
@@ -1393,7 +1391,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function name(id) { return (systems()[id] || appData.systems[id] || {}).name || String(id); }
 		function notify(html, color, ms) { if (typeof Notify !== "undefined") { Notify.trigger(html, color, ms); } }
 		function $widget() { return $("#" + jp.WIDGET_ID); }
-		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
+		/** Whether the window is open (the element stays in the page, closed, once it was first shown) */
+		function isShown() { const $d = $widget(); return $d.hasClass("ui-dialog-content") && $d.dialog("isOpen"); }
 		function viewing() { return typeof viewingSystemID !== "undefined" ? viewingSystemID : null; }
 
 		/** Save some keys of options.jumpRange (keeping the rest) */
@@ -1402,8 +1401,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (save) { options.save(); }
 		}
 
-		// Settings > Reset happened in this page and the panel hasn't been placed since: forget its saved position
-		// (options.apply() restores options.grid from the browser's copy, so the layout entry is dropped there too)
+		// Settings > Reset happened in this page and the window hasn't been placed since: it opens at the default place
 		let resetPending = false;
 
 		// ---- Data ----
@@ -1472,7 +1470,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** Every LIVE_CHECK_MS while the panel is open: new incursions / kills redraw it */
 		function checkLive() {
-			if (!$widget().length) { return; }
+			if (!isShown()) { return; }
 			loadIncursions();
 			if (state.data && liveData().rev !== state.liveRev) { render(); }
 		}
@@ -1497,7 +1495,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function loadJammed() {
 			clearTimeout(state.jammedTimer);
-			if (!$widget().length) { return; }
+			if (!isShown()) { return; }
 			$.ajax({ url: jp.JAMMED_URL, type: "GET", dataType: "JSON", cache: false, timeout: 15000 }).done(absorbJammed).always(function() {
 				clearTimeout(state.jammedTimer);
 				state.jammedTimer = setTimeout(loadJammed, jp.JAMMED_REFRESH_MS);
@@ -1571,63 +1569,163 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
 
-		// ---- Widget ----
+		// ---- The window ----
 
-		function widgetHtml() {
-			return "<li id='" + jp.WIDGET_ID + "' class='gridWidget'>"
-				+ "<div class='controls'><span class='jp-title'>Jump planner</span>"
-				+ "<i class='jp-close' data-icon='times' title='Close the Jump planner'></i>"
-				+ "<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i></div>"
-				+ "<div class='content'><div class='jp-head'></div><div class='jp-fuelbar'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div></div>"
-				+ "</li>";
-		}
-
-		function availableCols(api) {
-			const o = api.options || {};
-			const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
-			const zoom = parseFloat($("body").css("zoom")) || 1;
-			return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
-		}
-
-		function addWidget() {
-			const api = gridApi();
-			if (!api) { return null; }
-			const $existing = $widget();
-			if ($existing.length) {
-				if (api.$widgets.is($existing)) { return $existing; }
-				$existing.stop(true, true).remove();
+		/** The window's element, added to the page once (a jQuery UI dialog once first shown) */
+		function panelElement() {
+			let $d = $widget();
+			if (!$d.length) {
+				$d = $("<div id='" + jp.WIDGET_ID + "' class='hidden'><div class='jp-wrap'>"
+					+ "<div class='jp-head'></div><div class='jp-fuelbar'></div><div class='jp-modebar'></div><div class='jp-tabs'></div><div class='jp-body'></div>"
+					+ "</div></div>").appendTo("body");
+				bindPanel($d);
 			}
+			return $d;
+		}
+
+		/** Set when close() / sync() close the window themselves: the dialog's close event (which takes it) then doesn't store open: false */
+		let closingQuietly = false;
+
+		function ensureDialog() {
+			const $d = panelElement();
+			if ($d.hasClass("ui-dialog-content")) { return $d; }
+			const W = jp.WINDOW;
+			$d.dialog({
+				autoOpen: false, title: "Jump planner", modal: false, resizable: true, width: W.width, height: W.height, minWidth: W.minWidth, minHeight: W.minHeight,
+				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-floating dialog-jumpPlanner",
+				// The dialog's own X / Escape: like the old close icon (stays closed, also after a reload, until opened again)
+				close: function() {
+					const quiet = closingQuietly;
+					closingQuietly = false;
+					stopPanel();
+					if (!quiet) { store({ open: false }, true); }
+				},
+				dragStop: function() { rememberWindow(); },
+				resizeStop: function() {
+					rememberWindow();
+					// The mini-map scales with the window: put the shown tooltip back next to its point
+					const id = state.pinnedID || state.search.id;
+					const info = id ? tipInfo(id) : null;
+					if (info && info.point) { showTip(id); }
+				}
+			});
+			const $wrap = $d.dialog("widget");
+			$wrap.find(".ui-dialog-titlebar").append("<i class='jp-settings' data-icon='settings' title='Jump planner settings'></i>")
+				.on("click", ".jp-settings", function(e) { e.preventDefault(); openSettings(); });
+			// A click on the cog is not the start of a drag
+			if ($wrap.is(":data(ui-draggable)")) { $wrap.draggable("option", "cancel", ".ui-dialog-content, .ui-dialog-titlebar-close, .jp-settings"); }
+			return $d;
+		}
+
+		/** The page's visible area in the dialog's CSS px (Settings > UI Scale zooms body, and the dialog's px with it) */
+		function viewport() {
+			const zoom = parseFloat($("body").css("zoom")) || 1;
+			const $win = $(window);
+			return { width: $win.width() / zoom, height: $win.height() / zoom, x: $win.scrollLeft() / zoom, y: $win.scrollTop() / zoom };
+		}
+
+		/** Remember where the window is and its size (options.jumpRange.window: the outer box, CSS px) */
+		function rememberWindow() {
+			if (!isShown() || resetPending) { return; }
+			const $wrap = $widget().dialog("widget");
+			const r = function(v) { return Math.round(Number(v) || 0); };
+			store({ window: { left: r(parseFloat($wrap.css("left"))), top: r(parseFloat($wrap.css("top"))), width: r($wrap.outerWidth()), height: r($wrap.outerHeight()) } }, true);
+		}
+
+		/** Size and place the open window (p: windowPlacement() output) */
+		function placeWindow($d, p) {
+			// A size change makes jQuery UI place it again by its position option: left / top go last
+			const minWidth = Math.min(jp.WINDOW.minWidth, p.width);
+			$d.dialog("option", { minWidth: minWidth, minHeight: Math.min(jp.WINDOW.minHeight, p.height), width: p.width, height: p.height });
+			const $wrap = $d.dialog("widget");
+			// The width options are the CSS width (the height option is the outer height): take off the padding and border
+			const extra = Math.round($wrap.outerWidth() - p.width);
+			if (extra) { $d.dialog("option", { minWidth: Math.max(1, minWidth - extra), width: Math.max(1, p.width - extra) }); }
+			$wrap.css({ left: p.left, top: p.top });
+		}
+
+		/** Show the window (at its saved place, or the default one), or bring it to the front when it is open */
+		function addWidget() {
+			if (!$("body").length) { return null; }
+			const $d = ensureDialog();
+			if (isShown()) { $d.dialog("moveToTop"); return $d; }
 			const s = current();
-			// After Settings > Reset the remembered position is gone: place it by the Dock side setting
-			const placement = (resetPending ? null : jp.savedPlacement(jp.gridEntry(options.grid, jp.WIDGET_ID)) || jp.savedPlacement(s.position))
-				|| jp.defaultPlacement(api.serialize(), availableCols(api), s.dock);
+			// After Settings > Reset the remembered place is gone: place it by the Dock side setting
+			const p = jp.windowPlacement(resetPending ? null : s.window, viewport(), s.dock);
 			resetPending = false;
-			const $w = api.add_widget(widgetHtml(), placement.size_x, placement.size_y, placement.col, placement.row, null, [jp.MIN_SIZE.x, jp.MIN_SIZE.y]);
-			$w.stop(true, true);
-			$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
+			$d.dialog("open");
+			placeWindow($d, p);
 			loadJammed();
 			loadIncursions();
 			clearInterval(state.liveTimer);
 			state.liveTimer = setInterval(checkLive, jp.LIVE_CHECK_MS);
-			return $w;
+			return $d;
 		}
 
-		function removeWidget() {
-			const api = gridApi();
-			const $w = $widget();
+		/** The window was closed: stop its timers, forget the search, and empty it (it is rendered again when it opens) */
+		function stopPanel() {
 			clearTimeout(state.jammedTimer);
 			clearInterval(state.liveTimer);
-			resetSearch();	// the search lasts while the panel is open
-			if (!api || !$w.length) { return; }
-			// Remember where it was, so opening it again puts it back there (not when Settings > Reset removes it)
-			const entry = jp.gridEntry(api.serialize($w), jp.WIDGET_ID);
-			if (entry && !resetPending) { store({ position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y } }); }
-			$w.attr("id", jp.WIDGET_ID + "-removed");
-			api.remove_widget($w, true);
-			$w.stop(true, true);
+			clearTimeout(state.renderTimer);
+			clearTimeout(state.hideTip);
+			resetSearch();	// the search lasts while the window is open
+			if (state.$from) { state.$from.detach(); }
+			// Nothing focusable left inside, so opening it again focuses the title bar, not an old input
+			$widget().find(".jp-head, .jp-fuelbar, .jp-modebar, .jp-tabs, .jp-body").empty();
 		}
 
-		/** Open the panel on an exit's tab (fromRing: the exit's ring icon, which always shows From exit) */
+		/**
+		 * Key handlers bound on the window's element itself (the others are delegated from document): jQuery UI closes
+		 * the dialog on an Escape keydown that reaches its wrapper, so the inputs' own Escape has to run first and stop it
+		 */
+		function bindPanel($d) {
+			// System search: arrows move, Enter picks, Escape closes the list, then clears
+			$d.on("keydown", ".jp-search-input", function(e) {
+				const s = state.search;
+				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+					e.preventDefault();
+					if (!s.matches.length) { searchInput($(this).val()); return; }
+					s.active = (s.active + (e.key === "ArrowDown" ? 1 : -1) + s.matches.length) % s.matches.length;
+					drawMenu();
+				} else if (e.key === "Enter") {
+					e.preventDefault();
+					const list = s.matches.length ? s.matches : jp.searchSystems($(this).val(), systems(), 1);
+					pick(list[Math.max(0, s.active)] || list[0]);
+				} else if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					if (s.matches.length) { closeMenu(); } else { clearSearch(); }
+				}
+			});
+			// Get home's start picker: the same keys
+			$d.on("keydown", ".jp-from-input", function(e) {
+				const f = state.from;
+				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+					e.preventDefault();
+					if (!f.matches.length) { fromInput($(this).val()); return; }
+					f.active = (f.active + (e.key === "ArrowDown" ? 1 : -1) + f.matches.length) % f.matches.length;
+					fromRow().find(".jp-from-menu").html(jp.searchMenuHtml(f.matches, f.active, systems(), regions()));
+				} else if (e.key === "Enter") {
+					e.preventDefault();
+					const list = f.matches.length ? f.matches : jp.searchSystems($(this).val(), systems(), 1);
+					pickStart(list[Math.max(0, f.active)] || list[0]);
+				} else if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					closeFromMenu();
+					$(this).val(state.start ? name(state.start) : "").blur();
+				}
+			});
+		}
+
+		/** Close the window without changing options.jumpRange.open */
+		function removeWidget() {
+			if (!isShown()) { return; }
+			closingQuietly = true;
+			$widget().dialog("close");
+		}
+
+		/** Open the window on an exit's tab (fromRing: the exit's ring icon, which always shows From exit) */
 		function open(systemID, fromRing) {
 			if (!isOn()) { return; }
 			const id = parseInt(systemID, 10);
@@ -1635,10 +1733,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (fromRing && current().mode === "home") { store({ mode: "exit" }, true); }
 			state.pinnedID = null;
 			state.error = "";
-			const wasOpen = !!$widget().length;
-			const $w = addWidget();
+			addWidget();
 			if (!current().open) { store({ open: true }, true); }
-			if ($w && !wasOpen && $w[0].scrollIntoView) { setTimeout(function() { $w[0].scrollIntoView({ block: "nearest", behavior: "smooth" }); }, 50); }
 			render();
 		}
 
@@ -1657,9 +1753,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			store({ open: false }, true);
 		}
 
-		/** Show or remove the panel to match the settings (Save, Reset, start) */
+		/** Show or close the window to match the settings (Save, Reset, start) */
 		function sync() {
-			if (isOn() && current().open) { addWidget(); render(); } else { removeWidget(); }
+			// (an open window stays where it is in the stack: Save runs this while Settings is still on top)
+			if (isOn() && current().open) { if (!isShown()) { addWidget(); } render(); } else { removeWidget(); }
 		}
 
 		// ---- Rendering ----
@@ -1686,8 +1783,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function render() {
+			if (!isShown()) { return; }
 			const $w = $widget();
-			if (!$w.length) { return; }
 			if (!state.data) {
 				$w.find(".jp-body").html("<div class='jp-state" + (state.error ? " jp-error" : "") + "'>" + jp.escape(state.error || "Loading jump range data…") + "</div>");
 				if (state.error) { return; }	// tried again when the planner is opened again (open() clears it)
@@ -2306,13 +2403,35 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (typeof options.apply === "function" && !options.apply.jumpPlannerWrapped) {
 				const apply = options.apply;
 				options.apply = function() {
+					// Upstream restores options.grid from the page-load copy and sizes every element named in it: an entry
+					// left from when the planner was a layout panel (same id) must not size the window
+					const el = document.getElementById(jp.WIDGET_ID);
+					const kept = el ? { width: el.style.width, height: el.style.height } : null;
 					const result = apply.apply(this, arguments);
-					if (resetPending) { this.grid = jp.withoutGridEntry(this.grid, jp.WIDGET_ID); }
+					this.grid = jp.withoutGridEntry(this.grid, jp.WIDGET_ID);
+					if (el && kept) {
+						el.style.width = kept.width;
+						el.style.height = kept.height;
+						$(el).removeAttr("data-col data-row data-sizex data-sizey");
+					}
 					try { state.counts = {}; sync(); } catch (err) { console.error("Jump planner: apply failed", err); }
 					return result;
 				};
 				options.apply.jumpPlannerWrapped = true;
 			}
+		}
+
+		/** The planner was a layout panel before: drop its entry from the saved layout and its old grid place, once (one save) */
+		function migrateLayout() {
+			const hasEntry = jp.hasGridEntry(options.grid, jp.WIDGET_ID);
+			const hasPosition = !!(options.jumpRange && typeof options.jumpRange === "object" && options.jumpRange.position !== undefined);
+			if (!hasEntry && !hasPosition) { return; }
+			if (hasEntry) { options.grid = jp.withoutGridEntry(options.grid, jp.WIDGET_ID); }
+			if (hasPosition) {
+				options.jumpRange = Object.assign({}, options.jumpRange);
+				delete options.jumpRange.position;
+			}
+			try { options.save(); } catch (err) { console.error("Jump planner: could not save the layout", err); }
 		}
 
 		installHook();
@@ -2321,6 +2440,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			installHook();
 			hookPreserveMass();	// preserve-mass.js loads after this file: wrap it once everything is there
 			setupSettings();
+			migrateLayout();
 			sync();
 			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 				forkCommands.register({
@@ -2348,8 +2468,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const id = parseInt($(this).closest("[data-nodeid]").attr("data-nodeid"), 10);
 				if (state.exits.indexOf(id) >= 0) { open(id, true); }	// like the ring: From exit, so the click shows something
 			});
-			$doc.on("click", sel + " .jp-close", function(e) { e.preventDefault(); close(); });
-			$doc.on("click", sel + " .jp-settings", function(e) { e.preventDefault(); openSettings(); });
 			$doc.on("click", sel + " .jp-tab", function() { state.selected = parseInt($(this).attr("data-jp-tab"), 10); state.pinnedID = null; state.hoverID = null; state.search.scroll = true; render(); });
 			$doc.on("change", sel + " .jp-ship", function() { store({ ship: $(this).val() }, true); state.counts = {}; state.search.scroll = true; render(); });
 			$doc.on("change", sel + " .jp-hull", function() { store({ hull: Number($(this).val()) }, true); state.search.scroll = true; render(); });
@@ -2376,23 +2494,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("blur", sel + " .jp-search-input", function() {
 				// Not when render() only moved it (it is focused again by then)
 				setTimeout(function() { if (!searchRow().find(".jp-search-input").is(":focus")) { closeMenu(); } }, 150);
-			});
-			$doc.on("keydown", sel + " .jp-search-input", function(e) {
-				const s = state.search;
-				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-					e.preventDefault();
-					if (!s.matches.length) { searchInput($(this).val()); return; }
-					s.active = (s.active + (e.key === "ArrowDown" ? 1 : -1) + s.matches.length) % s.matches.length;
-					drawMenu();
-				} else if (e.key === "Enter") {
-					e.preventDefault();
-					const list = s.matches.length ? s.matches : jp.searchSystems($(this).val(), systems(), 1);
-					pick(list[Math.max(0, s.active)] || list[0]);
-				} else if (e.key === "Escape") {
-					e.preventDefault();
-					e.stopPropagation();
-					if (s.matches.length) { closeMenu(); } else { clearSearch(); }
-				}
 			});
 			// mousedown, not click: it comes before the input's blur closes the list
 			$doc.on("mousedown", sel + " .jp-search-menu li[data-jp-find]", function(e) { e.preventDefault(); pick(parseInt($(this).attr("data-jp-find"), 10)); });
@@ -2437,24 +2538,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					if (!$.trim($input.val())) { $input.val(state.start ? name(state.start) : ""); }	// left empty: show the start again
 				}, 150);
 			});
-			$doc.on("keydown", sel + " .jp-from-input", function(e) {
-				const f = state.from;
-				if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-					e.preventDefault();
-					if (!f.matches.length) { fromInput($(this).val()); return; }
-					f.active = (f.active + (e.key === "ArrowDown" ? 1 : -1) + f.matches.length) % f.matches.length;
-					fromRow().find(".jp-from-menu").html(jp.searchMenuHtml(f.matches, f.active, systems(), regions()));
-				} else if (e.key === "Enter") {
-					e.preventDefault();
-					const list = f.matches.length ? f.matches : jp.searchSystems($(this).val(), systems(), 1);
-					pickStart(list[Math.max(0, f.active)] || list[0]);
-				} else if (e.key === "Escape") {
-					e.preventDefault();
-					e.stopPropagation();
-					closeFromMenu();
-					$(this).val(state.start ? name(state.start) : "").blur();
-				}
-			});
 			$doc.on("mousedown", sel + " .jp-from-menu li[data-jp-find]", function(e) { e.preventDefault(); pickStart(parseInt($(this).attr("data-jp-find"), 10)); });
 			// Get home: a midpoint's name opens the other systems to jump to; Use pins one for this route, Avoid keeps it out of every route
 			$doc.on("click", sel + " .jp-mid", function(e) {
@@ -2484,7 +2567,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (l.home) { copy(jp.homeCopyText(l.home, name(l.ctx.exitID), name, s.jdc), "The routes"); return; }
 				copy(jp.copyText(jp.sortRows(l.model.rows, state.sort.key, state.sort.dir), name(l.ctx.exitID), l.model.preset ? l.model.preset.label : "", s.jdc, l.model.range, l.model.fuel), "The list");
 			});
-			document.addEventListener("visibilitychange", function() { if (!document.hidden && $widget().length) { loadJammed(); } });
+			document.addEventListener("visibilitychange", function() { if (!document.hidden && isShown()) { loadJammed(); } });
 			// The chain was drawn before this ready handler on some loads: draw it again with the icons
 			if (isOn()) { setTimeout(redrawChain, 0); }
 		});
