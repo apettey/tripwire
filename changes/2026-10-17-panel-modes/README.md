@@ -36,7 +36,7 @@ Settings > Reset leaves the panel modes alone: forkSettings has no reset-only ho
   so mask defaults never carry them.
 - The panel's own element moves (its id, children, data and event handlers): out of gridster into a non-modal jQuery UI
   dialog (`dialog-floating`) and back to its saved layout place, which stays in `options.grid` while it is popped out.
-  Upstream's System info, Signatures and Notes work this way without edits; notes being edited (CKEditor) are written
+  Upstream's System info, Signatures and Notes work this way without edits; notes being edited (CKEditor) are
   restarted around a move with their unsaved text (Cancel still gives back the saved note); the activity graph redraws after a resize. Windows are UI-scale aware, clamped on
   screen (also after a window resize or a UI scale change) and cascade so they don't cover each other exactly.
 - Minimized = the window is hidden, the panel keeps running; it comes back from the Panels menu (or, for the Jump
