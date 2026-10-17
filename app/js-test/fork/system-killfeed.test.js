@@ -217,27 +217,6 @@ describe('System kill feed', () => {
 	});
 
 	describe('layout', () => {
-		it('reads a saved position from the serialized grid', () => {
-			const grid = [{ id: 'infoWidget', col: 1, row: 1, size_x: 7, size_y: 6 },
-				{ id: 'systemKillFeedWidget', col: '22', row: '1', size_x: '5', size_y: '8' }];
-			assert.deepEqual(skf().savedPosition(grid, 'systemKillFeedWidget'), { col: 22, row: 1, size_x: 5, size_y: 8 });
-			assert.deepEqual(skf().savedPosition({ 0: grid[1] }, 'systemKillFeedWidget'), { col: 22, row: 1, size_x: 5, size_y: 8 });
-		});
-		it('has no saved position in layouts that predate the panel', () => {
-			assert.equal(skf().savedPosition([{ id: 'infoWidget', col: 1, row: 1, size_x: 7, size_y: 6 }], 'systemKillFeedWidget'), null);
-			assert.equal(skf().savedPosition({}, 'systemKillFeedWidget'), null);
-			assert.equal(skf().savedPosition(null, 'systemKillFeedWidget'), null);
-			assert.equal(skf().savedPosition([{ id: 'systemKillFeedWidget', col: 0, row: 1, size_x: 7, size_y: 6 }], 'systemKillFeedWidget'), null);
-		});
-		const defaults = [{ col: 1, row: 1, size_x: 7, size_y: 6 }, { col: 8, row: 1, size_x: 7, size_y: 6 },
-			{ col: 15, row: 1, size_x: 7, size_y: 6 }, { col: 1, row: 7, size_x: 21, size_y: 8 }];
-		it('goes right of the top row on wide windows', () => {
-			assert.deepEqual(skf().defaultPosition(defaults, 1920), { col: 22, row: 1, size_x: 7, size_y: 6 });
-		});
-		it('goes under everything on narrow windows', () => {
-			assert.deepEqual(skf().defaultPosition(defaults, 1280), { col: 1, row: 15, size_x: 7, size_y: 6 });
-			assert.deepEqual(skf().defaultPosition([], 0), { col: 1, row: 1, size_x: 7, size_y: 6 });
-		});
 		it('drops secondary information as the panel narrows', () => {
 			assert.deepEqual(skf().widthClasses(400), []);
 			assert.deepEqual(skf().widthClasses(300), ['skf-lt340']);

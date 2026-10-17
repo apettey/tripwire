@@ -1,7 +1,6 @@
 const assert = require('assert');
 const { include, loadJSON } = require('../helpers/helpers');
 include('app/js/fork/intel-scans');
-include('app/js/fork/system-killfeed');	// layout helpers the Intel panel shares
 
 const types = loadJSON('public/intel/types');
 const AU = 149597870.7;
@@ -340,13 +339,6 @@ describe('Intel scans', () => {
 			assert.equal(html.indexOf('<b>B'), -1);
 			assert.equal(html.indexOf('<script>'), -1);
 			assert.ok(html.indexOf('&lt;script&gt;') >= 0);
-		});
-		it('remembers its position while turned off', () => {
-			assert.deepEqual(intelScans.rememberedPosition({ intelScans: { enabled: false, position: { col: 15, row: 7, size_x: 7, size_y: 9 } } }),
-				{ col: 15, row: 7, size_x: 7, size_y: 9 });
-			assert.strictEqual(intelScans.rememberedPosition({ intelScans: { enabled: true } }), null);
-			assert.strictEqual(intelScans.rememberedPosition({ intelScans: { position: { col: 0, row: 7 } } }), null);
-			assert.strictEqual(intelScans.rememberedPosition(undefined), null);
 		});
 		it('widget markup', () => {
 			const w = intelScans.widgetHtml();

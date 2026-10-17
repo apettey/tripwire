@@ -131,17 +131,10 @@ describe('Favourites panel', () => {
 			{ id: 'notesWidget', col: 15, row: 1, size_x: 7, size_y: 6 },
 			{ id: 'chainWidget', col: 1, row: 7, size_x: 21, size_y: 8 }
 		];
-		it('gridEntry from array', () => assert.equal(fp.gridEntry(widgets.concat([{ id: 'favouritesWidget', col: 3 }]), 'favouritesWidget').col, 3));
-		it('gridEntry from object', () => assert.equal(fp.gridEntry({ 0: { id: 'favouritesWidget', col: 4 } }, 'favouritesWidget').col, 4));
-		it('gridEntry from old oog format', () => assert.equal(fp.gridEntry({ oog: [{ id: 'favouritesWidget', col: 5 }] }, 'favouritesWidget').col, 5));
-		it('gridEntry: layout saved before the panel existed', () => assert.equal(fp.gridEntry(widgets, 'favouritesWidget'), null));
-		it('gridEntry: no layout', () => assert.equal(fp.gridEntry({}, 'favouritesWidget'), null));
 		it('defaultPlacement: right of the widgets, full height', () => assert.deepEqual(fp.defaultPlacement(widgets), { col: 22, row: 1, size_x: 5, size_y: 14 }));
 		it('defaultPlacement: fits in a wide window', () => assert.equal(fp.defaultPlacement(widgets, 30).col, 22));
 		it('defaultPlacement: narrow window goes below', () => assert.deepEqual(fp.defaultPlacement(widgets, 24), { col: 1, row: 15, size_x: 7, size_y: 8 }));
 		it('defaultPlacement: empty grid', () => assert.deepEqual(fp.defaultPlacement([]), { col: 1, row: 1, size_x: 5, size_y: 8 }));
-		it('savedPlacement enforces the minimum size', () => assert.deepEqual(fp.savedPlacement({ col: '2', row: '3', size_x: 1, size_y: 9 }), { col: 2, row: 3, size_x: 4, size_y: 9 }));
-		it('savedPlacement rejects junk', () => assert.equal(fp.savedPlacement({ col: 0, row: 1 }), null));
 	});
 
 	describe('route modes', () => {

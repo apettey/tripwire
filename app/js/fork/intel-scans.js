@@ -791,55 +791,23 @@ const intelScans = {
 			+ "</li>";
 	},
 
-	/** Position remembered when the panel was turned off (options.intelScans.position), or null */
-	rememberedPosition: function(opts) {
-		const p = opts && opts.intelScans ? opts.intelScans.position : null;
-		return p && typeof systemKillFeed !== "undefined" ? systemKillFeed.savedPosition([Object.assign({}, p, { id: intelScans.WIDGET_ID })], intelScans.WIDGET_ID) : null;
-	},
-
-	/** gridster, when the layout is there (placement helpers are shared with the Kills panel, system-killfeed.js) */
-	gridster: function() {
-		return typeof systemKillFeed !== "undefined" ? systemKillFeed.gridster() : null;
+	/** The panel as panelHost (panel-host.js) takes it */
+	panel: function() {
+		return { id: intelScans.WIDGET_ID, title: "Intel", key: "intelScans", size: intelScans.SIZE };
 	},
 
 	addWidget: function() {
-		const g = intelScans.gridster();
-		if (!g || intelScans.$widget().length) { return; }
-		const others = $(".gridster li.gridWidget").map(function() {
-			return { col: parseInt($(this).attr("data-col"), 10), row: parseInt($(this).attr("data-row"), 10),
-				size_x: parseInt($(this).attr("data-sizex"), 10), size_y: parseInt($(this).attr("data-sizey"), 10) };
-		}).get();
-		const size = intelScans.SIZE;
-		const opts = intelScans.opts();
-		// Where it was when it was last turned off (options.grid can be the page-load copy: options.apply() restores it
-		// from local storage), else the saved layout, else the first free place
-		const pos = intelScans.rememberedPosition(opts)
-			|| systemKillFeed.savedPosition(opts ? opts.grid : null, intelScans.WIDGET_ID)
-			|| systemKillFeed.defaultPosition(others, $(window).width(), size);
-		// From now on the layout (Customize layout) owns the position
-		if (opts && opts.intelScans && opts.intelScans.position) { delete opts.intelScans.position; }
-		const $w = g.add_widget(intelScans.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
-		$w.stop(true, true);	// skip the fade-in (it never finishes in a background tab)
-		// Same as layout.js does for the built-in widgets: resize handle only while customising the layout
-		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-		$w.addClass("gridster-transition");
-		intelScans.renderPanel();
+		if (intelScans.$widget().length) { return; }
+		// Where it was when it was last turned off, else the saved layout, else the first free place (measured by the
+		// window's width without the UI scale, as it always was)
+		const $w = panelHost.addGridWidget(intelScans.panel(), intelScans.widgetHtml(), { remember: "intelScans",
+			fallback: function(others) { return panelHost.defaultPosition(others, $(window).width(), intelScans.SIZE); } });
+		if ($w) { intelScans.renderPanel(); }
 	},
 
 	removeWidget: function() {
-		const $w = intelScans.$widget();
-		if (!$w.length) { return; }
-		const g = intelScans.gridster();
-		const opts = intelScans.opts();
-		// Remember where it was, so turning it back on puts it in the same place (like the Favourites panel)
-		if (g && opts) {
-			const entry = systemKillFeed.savedPosition(g.serialize($w), intelScans.WIDGET_ID);
-			if (entry) { opts.intelScans = Object.assign({}, opts.intelScans || {}, { position: entry }); }
-		}
-		// Drop the id first: gridster fades the widget out before removing it, and turning the setting back on
-		// meanwhile must add a new panel (see systemKillFeed.removeWidget)
-		$w.attr("id", intelScans.WIDGET_ID + "-removed");
-		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
+		// Remember where it was, so turning it back on puts it in the same place
+		panelHost.removeGridWidget(intelScans.panel(), intelScans.$widget(), { remember: "intelScans" });
 	},
 
 	/** Add or remove the panel to match the setting; when on, follow the viewed system */
@@ -1111,6 +1079,7 @@ const intelScans = {
 	},
 
 	init: function() {
+		panelHost.register(intelScans.panel());
 		intelScans.registerCommands();
 		intelScans.setupSettings();
 		intelScans.setupMenu();

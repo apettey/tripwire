@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-17 | [Shared panel host](2026-10-17-panel-host/README.md) | Internal: the fork panels' gridster plumbing (placing, adding, removing, floating geometry) moves into one file, `app/js/fork/panel-host.js`, with a panel registry; no visible change |
 | 2026-10-17 | [Kill panel display modes](2026-10-17-kill-panel-display-modes/README.md) | System kills and Chain kills panels can be Fixed, Fixed and minimized (header + newest kill) or Floating (movable, resizable window); header buttons, Settings > Kills & Intel selects, command palette |
 | 2026-10-17 | [Jump planner: floating window](2026-10-17-jump-planner-floating/README.md) | The Jump planner is a draggable, resizable floating window like the Region map, not a layout panel |
 | 2026-10-17 | [Intel panel: zKillboard and Anoik.is links](2026-10-17-intel-panel-links/README.md) | zKill and Anoik links next to the system name in the Intel panel header (Anoik for wormholes only); toggle in Kills & Intel |

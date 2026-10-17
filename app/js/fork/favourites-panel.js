@@ -212,14 +212,6 @@ const favouritesPanel = {
 
 	// ---- Layout (pure) ----
 
-	/** Saved gridster entry for the widget from options.grid (array or object, old "oog" format) */
-	gridEntry: function(grid, id) {
-		if (!grid || typeof grid !== "object") { return null; }
-		const source = grid.oog && typeof grid.oog === "object" && Object.keys(grid.oog).length ? grid.oog : grid;
-		const entries = Array.isArray(source) ? source : Object.keys(source).map(function(k) { return source[k]; });
-		return entries.filter(function(e) { return e && e.id === id; })[0] || null;
-	},
-
 	/** Where to put the widget when there's no saved position: right of the existing widgets, from row 1,
 	as tall as they are (within limits), if that fits in the window; otherwise below them, at the left.
 	widgets: [{col, row, size_x, size_y}]; availableCols: grid columns that fit in the window (optional) */
@@ -235,17 +227,6 @@ const favouritesPanel = {
 			return { col: 1, row: maxRow + 1, size_x: Math.max(size.x, 7), size_y: size.y };
 		}
 		return { col: maxCol + 1, row: 1, size_x: size.x, size_y: Math.max(size.y, Math.min(maxRow, 14)) };
-	},
-
-	/** Placement from a saved entry, or null if it isn't usable */
-	savedPlacement: function(entry) {
-		if (!entry) { return null; }
-		const p = {
-			col: Number(entry.col), row: Number(entry.row),
-			size_x: Math.max(favouritesPanel.MIN_SIZE.x, Number(entry.size_x) || 0),
-			size_y: Math.max(favouritesPanel.MIN_SIZE.y, Number(entry.size_y) || 0)
-		};
-		return p.col >= 1 && p.row >= 1 ? p : null;
 	},
 
 	// ---- Routes through the chain (pure) ----
@@ -746,33 +727,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "</li>";
 		}
 
-		/** Grid columns that fit in the window (widget_base_dimensions + margins) */
-		function availableCols(api) {
-			const o = api.options || {};
-			const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
-			const zoom = parseFloat($("body").css("zoom")) || 1;	// Settings > UI Scale
-			return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
-		}
-
-		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
+		/** The panel as panelHost (panel-host.js) takes it */
+		const panel = { id: fp.WIDGET_ID, title: "Favourites", key: "favoritesPanel",
+			size: { x: fp.DEFAULT_SIZE.x, y: fp.DEFAULT_SIZE.y, minX: fp.MIN_SIZE.x, minY: fp.MIN_SIZE.y } };
 
 		function addWidget() {
-			const api = gridApi();
-			if (!api) { return; }
-			const $existing = $("#" + fp.WIDGET_ID);
-			if ($existing.length) {
-				if (api.$widgets.is($existing)) { return; }
-				$existing.stop(true, true).remove();	// left over from a removal still fading out
-			}
-			const settings = current();
-			const placement = fp.savedPlacement(fp.gridEntry(options.grid, fp.WIDGET_ID))
-				|| fp.savedPlacement(settings.position)
-				|| fp.defaultPlacement(api.serialize(), availableCols(api));
-			const $widget = api.add_widget(widgetHtml(), placement.size_x, placement.size_y, placement.col, placement.row,
-				null, [fp.MIN_SIZE.x, fp.MIN_SIZE.y]);
-			$widget.stop(true, true);	// skip the fade-in (it never finishes in a background tab)
-			// Resize handle like the other widgets: only visible while customising the layout
-			$widget.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
+			// The saved layout, else where it was when it was turned off (kept), else the first free place
+			const $widget = panelHost.addGridWidget(panel, widgetHtml(), { transition: false, place: function(others, g) {
+				return panelHost.atLeastMinSize(panelHost.gridEntry(options.grid, fp.WIDGET_ID), panel.size)
+					|| panelHost.atLeastMinSize(current().position, panel.size)
+					|| fp.defaultPlacement(g.serialize(), panelHost.availableCols(g));
+			} });
+			if (!$widget) { return; }
 
 			const $list = $widget.find(".fav-list");
 			$list.sortable({
@@ -799,19 +765,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function removeWidget() {
-			const api = gridApi();
-			const $widget = $("#" + fp.WIDGET_ID);
 			closeTooltip();
-			if (!api || !$widget.length) { return; }
 			// Remember where it was, so turning it back on puts it in the same place
-			const entry = fp.gridEntry(api.serialize($widget), fp.WIDGET_ID);
-			if (entry) {
-				options.favoritesPanel = Object.assign({}, options.favoritesPanel || {}, {
-					position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y }
-				});
-			}
-			api.remove_widget($widget, true);
-			$widget.stop(true, true);	// finish the fade-out now, which removes the element
+			panelHost.removeGridWidget(panel, $("#" + fp.WIDGET_ID), { remember: "favoritesPanel", finishFade: true });
 		}
 
 		/** Show or hide the widget for the current setting (redraws the chain, as routes depend on it) */
@@ -844,6 +800,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		$(function() {
+			panelHost.register(panel);
 			setupSettings();
 			applyEnabled();
 			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)

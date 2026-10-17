@@ -291,21 +291,6 @@ describe('jumpPlanner', () => {
 				assert.ok(!('position' in jumpPlanner.settings({ jumpRange: { position: { col: 3, row: 4 } } })));
 			});
 		});
-		it('the old layout entry is dropped (array, object and old oog forms)', () => {
-			const id = jumpPlanner.WIDGET_ID;
-			const arr = [{ id: 'chainWidget', col: 1 }, { id: id, col: 25 }];
-			assert.deepStrictEqual(jumpPlanner.withoutGridEntry(arr, id), [{ id: 'chainWidget', col: 1 }]);
-			assert.strictEqual(arr.length, 2);
-			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ 0: { id: 'a' }, 1: { id: id } }, id), { 0: { id: 'a' } });
-			assert.deepStrictEqual(jumpPlanner.withoutGridEntry({ oog: { 0: { id: id }, 1: { id: 'b' } } }, id), { oog: { 1: { id: 'b' } } });
-			assert.deepStrictEqual(jumpPlanner.withoutGridEntry([{ id: id + '-removed' }, { id: 'b' }], id), [{ id: 'b' }]);
-			assert.strictEqual(jumpPlanner.withoutGridEntry(null, id), null);
-			assert.strictEqual(jumpPlanner.hasGridEntry(arr, id), true);
-			assert.strictEqual(jumpPlanner.hasGridEntry({ oog: { 0: { id: id } } }, id), true);
-			assert.strictEqual(jumpPlanner.hasGridEntry(jumpPlanner.withoutGridEntry(arr, id), id), false);
-			assert.strictEqual(jumpPlanner.hasGridEntry({}, id), false);
-			assert.strictEqual(jumpPlanner.hasGridEntry(undefined, id), false);
-		});
 		it('age text', () => {
 			assert.deepStrictEqual([30, 600, 7200, 200000].map(jumpPlanner.ageText), ['now', '10 min', '2 h', '2 d']);
 		});

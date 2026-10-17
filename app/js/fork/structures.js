@@ -963,7 +963,7 @@ const structures = {
 		});
 	},
 
-	// ---- Panel widget (placement helpers are shared with the Intel panel, system-killfeed.js) ----
+	// ---- Panel widget (placed, added and removed by panel-host.js) ----
 
 	widgetHtml: function() {
 		return "<li id='" + structures.WIDGET_ID + "' class='gridWidget'>"
@@ -974,39 +974,16 @@ const structures = {
 			+ "<div class='content'><div class='str-body'></div></div></li>";
 	},
 
-	rememberedPosition: function(opts) {
-		const p = opts && opts.structures ? opts.structures.position : null;
-		return p && typeof systemKillFeed !== "undefined" ? systemKillFeed.savedPosition([Object.assign({}, p, { id: structures.WIDGET_ID })], structures.WIDGET_ID) : null;
-	},
-
-	gridster: function() { return typeof systemKillFeed !== "undefined" ? systemKillFeed.gridster() : null; },
-
-	/** Grid columns that fit in the window (widget_base_dimensions + margins), as the Favourites panel does */
-	availableCols: function(g) {
-		const o = (g && g.options) || {};
-		const step = ((o.widget_base_dimensions || [50])[0]) + 2 * ((o.widget_margins || [5])[0]);
-		const zoom = parseFloat($("body").css("zoom")) || 1;
-		return Math.floor((window.innerWidth || $(window).width()) / zoom / step);
+	/** The panel as panelHost (panel-host.js) takes it */
+	panel: function() {
+		return { id: structures.WIDGET_ID, title: "Structures", key: "structures", size: structures.SIZE };
 	},
 
 	addWidget: function() {
-		const g = structures.gridster();
-		if (!g || structures.$widget().length) { return; }
-		const others = $(".gridster li.gridWidget").map(function() {
-			return { col: parseInt($(this).attr("data-col"), 10), row: parseInt($(this).attr("data-row"), 10),
-				size_x: parseInt($(this).attr("data-sizex"), 10), size_y: parseInt($(this).attr("data-sizey"), 10) };
-		}).get();
-		const size = structures.SIZE;
-		const opts = structures.opts();
-		const pos = structures.rememberedPosition(opts)
-			|| systemKillFeed.savedPosition(opts ? opts.grid : null, structures.WIDGET_ID)
-			|| structures.defaultPlacement(others, structures.availableCols(g));
-		if (opts && opts.structures && opts.structures.position) { delete opts.structures.position; }
-		const $w = g.add_widget(structures.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
-		$w.stop(true, true);
-		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-		$w.addClass("gridster-transition");
-		structures.renderPanel();
+		if (structures.$widget().length) { return; }
+		const $w = panelHost.addGridWidget(structures.panel(), structures.widgetHtml(), { remember: "structures",
+			fallback: function(others, g) { return structures.defaultPlacement(others, panelHost.availableCols(g)); } });
+		if ($w) { structures.renderPanel(); }
 	},
 
 	setView: function(view) {
@@ -1017,16 +994,7 @@ const structures = {
 	},
 
 	removeWidget: function() {
-		const $w = structures.$widget();
-		if (!$w.length) { return; }
-		const g = structures.gridster();
-		const opts = structures.opts();
-		if (g && opts) {
-			const entry = systemKillFeed.savedPosition(g.serialize($w), structures.WIDGET_ID);
-			if (entry) { opts.structures = Object.assign({}, opts.structures || {}, { position: entry }); }
-		}
-		$w.attr("id", structures.WIDGET_ID + "-removed");
-		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
+		panelHost.removeGridWidget(structures.panel(), structures.$widget(), { remember: "structures" });
 	},
 
 	sync: function() {
@@ -1209,6 +1177,7 @@ const structures = {
 	},
 
 	init: function() {
+		panelHost.register(structures.panel());
 		structures.setupSettings();
 		structures.wrapDialog();
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.structuresWrapped) {
