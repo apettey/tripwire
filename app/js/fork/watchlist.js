@@ -1074,15 +1074,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "</div>";
 		}
 
-		function gridApi() { return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null; }
-
-		/** Placement from a saved gridster entry or position, or null */
-		function savedPlacement(entry) {
-			if (!entry) { return null; }
-			const p = { col: Number(entry.col), row: Number(entry.row),
-				size_x: Math.max(wl.MIN_SIZE.x, Number(entry.size_x) || 0), size_y: Math.max(wl.MIN_SIZE.y, Number(entry.size_y) || 0) };
-			return p.col >= 1 && p.row >= 1 ? p : null;
-		}
+		/** The panel as panelHost (panel-host.js) takes it */
+		const panel = { id: wl.WIDGET_ID, title: "Watchlist", key: "watchlist",
+			size: { x: wl.DEFAULT_SIZE.x, y: wl.DEFAULT_SIZE.y, minX: wl.MIN_SIZE.x, minY: wl.MIN_SIZE.y } };
 
 		/** Default place: below the existing widgets, at the left */
 		function defaultPlacement(widgets) {
@@ -1091,44 +1085,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return { col: 1, row: maxRow + 1, size_x: wl.DEFAULT_SIZE.x, size_y: wl.DEFAULT_SIZE.y };
 		}
 
-		function gridEntry(gridOptions, id) {
-			if (typeof favouritesPanel !== "undefined" && favouritesPanel.gridEntry) { return favouritesPanel.gridEntry(gridOptions, id); }
-			const entries = Array.isArray(gridOptions) ? gridOptions : Object.keys(gridOptions || {}).map(function(k) { return gridOptions[k]; });
-			return entries.filter(function(e) { return e && e.id === id; })[0] || null;
-		}
-
 		function addWidget() {
-			const api = gridApi();
-			if (!api) { return; }
-			const $existing = $("#" + wl.WIDGET_ID);
-			if ($existing.length) {
-				if (api.$widgets.is($existing)) { return; }
-				$existing.stop(true, true).remove();	// left over from a removal still fading out
-			}
-			const placement = savedPlacement(gridEntry(options.grid, wl.WIDGET_ID))
-				|| savedPlacement(current().position)
-				|| defaultPlacement(api.serialize());
-			const $widget = api.add_widget(widgetHtml(), placement.size_x, placement.size_y, placement.col, placement.row,
-				null, [wl.MIN_SIZE.x, wl.MIN_SIZE.y]);
-			$widget.stop(true, true);	// skip the fade-in (it never finishes in a background tab)
-			// Resize handle like the other widgets: only visible while customising the layout
-			$widget.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-			render();
+			// The saved layout, else where it was when it was turned off (kept), else under everything
+			const $widget = panelHost.addGridWidget(panel, widgetHtml(), { transition: false, place: function(others, g) {
+				return panelHost.atLeastMinSize(panelHost.gridEntry(options.grid, wl.WIDGET_ID), panel.size)
+					|| panelHost.atLeastMinSize(current().position, panel.size)
+					|| defaultPlacement(g.serialize());
+			} });
+			if ($widget) { render(); }
 		}
 
 		function removeWidget() {
-			const api = gridApi();
-			const $widget = $("#" + wl.WIDGET_ID);
-			if (!api || !$widget.length) { return; }
 			// Remember where it was, so turning it back on puts it in the same place
-			const entry = gridEntry(api.serialize($widget), wl.WIDGET_ID);
-			if (entry) {
-				options.watchlist = Object.assign({}, options.watchlist || {}, {
-					position: { col: entry.col, row: entry.row, size_x: entry.size_x, size_y: entry.size_y }
-				});
-			}
-			api.remove_widget($widget, true);
-			$widget.stop(true, true);	// finish the fade-out now, which removes the element
+			panelHost.removeGridWidget(panel, $("#" + wl.WIDGET_ID), { remember: "watchlist", finishFade: true });
 		}
 
 		function applySettings() {
@@ -1350,6 +1319,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		$(function() {
+			panelHost.register(panel);
 			installHook();
 			setupSettings();
 			if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)

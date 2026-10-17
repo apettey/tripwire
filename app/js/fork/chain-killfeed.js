@@ -731,6 +731,7 @@ const chainKillFeed = {
 
 	init: function() {
 		if (typeof systemKillFeed === "undefined") { return; }
+		panelHost.register({ id: chainKillFeed.WIDGET_ID, title: "Chain kills", key: "chainKillFeed", size: chainKillFeed.SIZE });
 		chainKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.chainKills", title: "Toggle chain kills panel", key: "chainKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });

@@ -14,7 +14,6 @@ const systemKillFeed = {
 	MAX_PENDING_POLLS: 30,
 	TICK_MS: 30000,	// re-render "time ago"
 	SIZE: { x: 7, y: 6, minX: 4, minY: 3 },
-	COL_PX: 60,	// gridster widget_base_dimensions 50 + 2 * margin 5
 
 	/** Whether the panel is switched on in the given user options (on unless explicitly false) */
 	enabled: function(opts) {
@@ -228,36 +227,6 @@ const systemKillFeed = {
 		if (tooltips && typeof tooltips.detach === "function" && $elements && $elements.length) { tooltips.detach($elements); }
 	},
 
-	/** Saved layout entry for the panel in options.grid (array or object of {id, col, row, size_x, size_y}) */
-	savedPosition: function(grid, id) {
-		if (!grid || typeof grid !== "object") { return null; }
-		const list = Array.isArray(grid) ? grid : Object.keys(grid).map(function(k) { return grid[k]; });
-		const entry = list.filter(function(w) { return w && w.id === id; })[0];
-		if (!entry) { return null; }
-		const n = function(v) { const x = parseInt(v, 10); return x > 0 ? x : null; };
-		const pos = { col: n(entry.col), row: n(entry.row), size_x: n(entry.size_x), size_y: n(entry.size_y) };
-		return pos.col && pos.row && pos.size_x && pos.size_y ? pos : null;
-	},
-
-	/**
-	 * Where a panel without a saved position goes: right of the top widgets when the window has room for it,
-	 * otherwise under everything in the first column.
-	 * @param widgets [{col, row, size_x, size_y}] the other widgets
-	 * @param panelSize optional {x, y} (default: this panel's SIZE)
-	 */
-	defaultPosition: function(widgets, viewportWidth, panelSize) {
-		const size = panelSize || systemKillFeed.SIZE;
-		let maxCol = 0, maxRow = 0;
-		(widgets || []).forEach(function(w) {
-			maxCol = Math.max(maxCol, (w.col || 1) + (w.size_x || 1) - 1);
-			maxRow = Math.max(maxRow, (w.row || 1) + (w.size_y || 1) - 1);
-		});
-		if (maxCol && (maxCol + size.x) * systemKillFeed.COL_PX <= (viewportWidth || 0) - 40) {
-			return { col: maxCol + 1, row: 1, size_x: size.x, size_y: size.y };
-		}
-		return { col: 1, row: maxRow + 1, size_x: size.x, size_y: size.y };
-	},
-
 	// ---- Browser-only code below (not run under mocha) ----
 
 	systemID: null,
@@ -301,10 +270,6 @@ const systemKillFeed = {
 	title: function() {
 		const system = systemKillFeed.systemID && typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[systemKillFeed.systemID] : null;
 		return system && system.name ? "Kills in " + system.name : "System kills";
-	},
-
-	gridster: function() {
-		return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null;
 	},
 
 	addWidget: function() {
@@ -463,6 +428,7 @@ const systemKillFeed = {
 	},
 
 	init: function() {
+		panelHost.register({ id: systemKillFeed.WIDGET_ID, title: "System kills", key: "systemKillFeed", size: systemKillFeed.SIZE });
 		systemKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.systemKills", title: "Toggle system kills panel", key: "systemKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });

@@ -1265,28 +1265,6 @@ const jumpPlanner = {
 		}).join("");
 	},
 
-	/**
-	 * A layout (options.grid: array, object, or the old {oog: ...} form) without the planner's entry (from when it was
-	 * a layout panel; also "<id>-removed"). Never mutates grid.
-	 */
-	withoutGridEntry: function(grid, id) {
-		if (!grid || typeof grid !== "object") { return grid; }
-		const gone = function(e) { return e && (e.id === id || e.id === id + "-removed"); };
-		const strip = function(source) {
-			if (Array.isArray(source)) { return source.filter(function(e) { return !gone(e); }); }
-			const out = {};
-			Object.keys(source || {}).forEach(function(k) { if (!gone(source[k])) { out[k] = source[k]; } });
-			return out;
-		};
-		if (grid.oog && typeof grid.oog === "object" && !Array.isArray(grid)) { return Object.assign(strip(grid), { oog: strip(grid.oog) }); }
-		return strip(grid);
-	},
-
-	/** Whether a layout still has the planner's old entry */
-	hasGridEntry: function(grid, id) {
-		return JSON.stringify(jumpPlanner.withoutGridEntry(grid, id)) !== JSON.stringify(grid);
-	},
-
 	/** Settings > Routes & Navigation row, next to the other panels' on/off rows (same key as "Enable jump planner") */
 	generalRowHtml: function() {
 		return "<tr><th>Jump planner:</th><td><label><input type='checkbox' id='jumpPlanner-enabled-general' /> Show the Jump planner and its ring on low/null-sec exits</label></td></tr>";
@@ -1619,9 +1597,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** The page's visible area in the dialog's CSS px (Settings > UI Scale zooms body, and the dialog's px with it) */
 		function viewport() {
-			const zoom = parseFloat($("body").css("zoom")) || 1;
-			const $win = $(window);
-			return { width: $win.width() / zoom, height: $win.height() / zoom, x: $win.scrollLeft() / zoom, y: $win.scrollTop() / zoom };
+			const v = panelHost.viewport();
+			return { width: v.width, height: v.height, x: v.left, y: v.top };
 		}
 
 		/** Remember where the window is and its size (options.jumpRange.window: the outer box, CSS px) */
@@ -2408,7 +2385,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					const el = document.getElementById(jp.WIDGET_ID);
 					const kept = el ? { width: el.style.width, height: el.style.height } : null;
 					const result = apply.apply(this, arguments);
-					this.grid = jp.withoutGridEntry(this.grid, jp.WIDGET_ID);
+					this.grid = panelHost.withoutEntry(this.grid, jp.WIDGET_ID);
 					if (el && kept) {
 						el.style.width = kept.width;
 						el.style.height = kept.height;
@@ -2423,10 +2400,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** The planner was a layout panel before: drop its entry from the saved layout and its old grid place, once (one save) */
 		function migrateLayout() {
-			const hasEntry = jp.hasGridEntry(options.grid, jp.WIDGET_ID);
+			const hasEntry = panelHost.hasEntry(options.grid, jp.WIDGET_ID);
 			const hasPosition = !!(options.jumpRange && typeof options.jumpRange === "object" && options.jumpRange.position !== undefined);
 			if (!hasEntry && !hasPosition) { return; }
-			if (hasEntry) { options.grid = jp.withoutGridEntry(options.grid, jp.WIDGET_ID); }
+			if (hasEntry) { options.grid = panelHost.withoutEntry(options.grid, jp.WIDGET_ID); }
 			if (hasPosition) {
 				options.jumpRange = Object.assign({}, options.jumpRange);
 				delete options.jumpRange.position;
@@ -2437,6 +2414,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		installHook();
 
 		$(function() {
+			panelHost.register({ id: jp.WIDGET_ID, title: "Jump planner", key: "jumpRange", floating: true });
 			installHook();
 			hookPreserveMass();	// preserve-mass.js loads after this file: wrap it once everything is there
 			setupSettings();

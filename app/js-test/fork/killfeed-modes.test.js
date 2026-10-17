@@ -94,54 +94,6 @@ describe('Kill panel display modes', () => {
 		});
 	});
 
-	describe('floating geometry', () => {
-		it('defaults to the right side under the top bar, the second panel under the first', () => {
-			assert.deepEqual(km().defaultFloat(0, 1600, 900), { left: 1600 - 420 - 16, top: 60, width: 420, height: 360 });
-			assert.deepEqual(km().defaultFloat(1, 1600, 900), { left: 1600 - 420 - 16, top: 60 + 370, width: 420, height: 360 });
-		});
-		it('uses the defaults for missing or invalid values', () => {
-			assert.deepEqual(km().clampFloat(undefined, 1600, 900, 0), { left: 1164, top: 60, width: 420, height: 360 });
-			assert.deepEqual(km().clampFloat({ left: 'x', top: null, width: NaN }, 1600, 900, 0), { left: 1164, top: 60, width: 420, height: 360 });
-		});
-		it('keeps a saved place that fits', () => {
-			assert.deepEqual(km().clampFloat({ left: 100, top: 200, width: 500, height: 300 }, 1600, 900, 0), { left: 100, top: 200, width: 500, height: 300 });
-		});
-		it('moves a panel that is off screen back into the viewport', () => {
-			assert.deepEqual(km().clampFloat({ left: 1500, top: 850, width: 400, height: 300 }, 1280, 800, 0), { left: 880, top: 500, width: 400, height: 300 });
-			assert.deepEqual(km().clampFloat({ left: -50, top: -20, width: 400, height: 300 }, 1280, 800, 0), { left: 0, top: 0, width: 400, height: 300 });
-		});
-		it('shrinks a panel bigger than the viewport and keeps the minimum size', () => {
-			assert.deepEqual(km().clampFloat({ left: 0, top: 0, width: 3000, height: 2000 }, 1280, 800, 0), { left: 0, top: 0, width: 1280, height: 800 });
-			assert.deepEqual(km().clampFloat({ left: 10, top: 10, width: 50, height: 20 }, 1280, 800, 0), { left: 10, top: 10, width: 260, height: 140 });
-		});
-		it('copes with a viewport smaller than the minimum size', () => {
-			assert.deepEqual(km().clampFloat({ left: 10, top: 10, width: 400, height: 300 }, 200, 100, 0), { left: 0, top: 0, width: 200, height: 100 });
-		});
-		it('fits the outer width (CSS width + border and padding) into the viewport', () => {
-			assert.deepEqual(km().clampFloat({ left: 0, top: 0, width: 3000, height: 300 }, 1280, 800, 0, 6), { left: 0, top: 0, width: 1274, height: 300 });
-			assert.deepEqual(km().clampFloat({ left: 1200, top: 0, width: 400, height: 300 }, 1280, 800, 0, 6), { left: 874, top: 0, width: 400, height: 300 });
-			assert.deepEqual(km().clampFloat(undefined, 1600, 900, 0, 6), { left: 1600 - 420 - 6 - 16, top: 60, width: 420, height: 360 });
-		});
-		it('works in CSS pixels of a UI-scaled page (viewport divided by the zoom)', () => {
-			// 1280x800 window at UI scale 1.4: 914x571 CSS pixels; the default window must open fully on screen
-			const g = km().clampFloat(undefined, 1280 / 1.4, 800 / 1.4, 1, 6);
-			assert.ok(g.left >= 0 && g.left + g.width + 6 <= 1280 / 1.4, JSON.stringify(g));
-			assert.ok(g.top >= 0 && g.top + g.height <= 800 / 1.4, JSON.stringify(g));
-		});
-		it('never reaches past a fractional viewport (UI scale), so the page cannot scroll', () => {
-			// 1024x768 at UI scale 1.4: 731.43 x 548.57 CSS pixels
-			const vw = 1024 / 1.4, vh = 768 / 1.4;
-			const g = km().clampFloat({ left: 0, top: 0, width: 3000, height: 3000 }, vw, vh, 0, 6);
-			assert.deepEqual(g, { left: 0, top: 0, width: 725, height: 548 });
-			assert.ok(g.left + g.width + 6 <= vw && g.top + g.height <= vh);
-			const h = km().clampFloat({ left: 5000, top: 5000, width: 300, height: 200 }, vw, vh, 0, 6.5);
-			assert.ok(h.left + h.width + 6.5 <= vw && h.top + h.height <= vh, JSON.stringify(h));
-		});
-		it('rounds to whole pixels', () => {
-			assert.deepEqual(km().clampFloat({ left: 10.4, top: 20.6, width: 300.2, height: 200.7 }, 1280, 800, 0), { left: 10, top: 21, width: 300, height: 201 });
-		});
-	});
-
 	describe('header buttons', () => {
 		it('offers minimize and float in fixed mode', () => {
 			assert.deepEqual(km().buttons('fixed').map((b) => b.mode), ['minimized', 'floating']);

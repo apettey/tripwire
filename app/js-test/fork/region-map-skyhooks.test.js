@@ -1,6 +1,8 @@
 const assert = require('assert');
 const { include } = require('../helpers/helpers');
 include('app/js/fork/skyhooks-panel');
+include('app/js/fork/layout-grid');
+include('app/js/fork/panel-host');
 include('app/js/fork/region-map-skyhooks');
 
 const rs = regionMapSkyhooks;
@@ -121,19 +123,6 @@ describe('Region map skyhooks', () => {
 
 	describe('the retired box', () => {
 		const w = (id, col) => ({ id: id, col: col, row: 1, size_x: 2, size_y: 2 });
-		it('its layout entry is dropped (array, object and old oog form)', () => {
-			assert.deepEqual(rs.withoutOldWidget([w('chainWidget', 1), w('skyhooksWidget', 5)]), [w('chainWidget', 1)]);
-			assert.deepEqual(rs.withoutOldWidget({ 0: w('chainWidget', 1), 1: w('skyhooksWidget', 5) }), { 0: w('chainWidget', 1) });
-			assert.deepEqual(rs.withoutOldWidget({ oog: { a: w('skyhooksWidget', 5), b: w('x', 1) } }), { oog: { b: w('x', 1) } });
-			assert.deepEqual(rs.withoutOldWidget([w('skyhooksWidget-removed', 2)]), []);
-		});
-		it('never mutates, leaves other layouts alone', () => {
-			const g = [w('skyhooksWidget', 5)];
-			rs.withoutOldWidget(g);
-			assert.equal(g.length, 1);
-			assert.equal(rs.withoutOldWidget(null), null);
-			assert.equal(rs.hasOldWidget([w('chainWidget', 1)]), false);
-		});
 		it('cleanOptions drops the entry and the saved position, keeps the filters', () => {
 			const o = { grid: [w('chainWidget', 1), w('skyhooksWidget', 5)], skyhooksPanel: { position: { col: 3 }, window: 'now' } };
 			assert.equal(rs.cleanOptions(o), true);

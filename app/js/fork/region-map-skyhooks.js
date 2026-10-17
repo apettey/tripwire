@@ -127,31 +127,13 @@ const regionMapSkyhooks = {
 
 	// ---- The retired floating box ----
 
-	/** A layout (options.grid: array, object, or the old {oog: ...} form) without the old box's entry. Never mutates. */
-	withoutOldWidget: function(grid) {
-		const id = regionMapSkyhooks.OLD_WIDGET_ID;
-		if (!grid || typeof grid !== "object") { return grid; }
-		const strip = function(source) {
-			if (Array.isArray(source)) { return source.filter(function(e) { return !(e && (e.id === id || e.id === id + "-removed")); }); }
-			const out = {};
-			Object.keys(source || {}).forEach(function(k) { if (!(source[k] && (source[k].id === id || source[k].id === id + "-removed"))) { out[k] = source[k]; } });
-			return out;
-		};
-		if (grid.oog && typeof grid.oog === "object" && !Array.isArray(grid)) { return Object.assign(strip(grid), { oog: strip(grid.oog) }); }
-		return strip(grid);
-	},
-
-	/** Whether a layout has the old box's entry */
-	hasOldWidget: function(grid) {
-		return JSON.stringify(regionMapSkyhooks.withoutOldWidget(grid)) !== JSON.stringify(grid);
-	},
-
 	/** Drop what only the box used from the options (its grid entry and options.skyhooksPanel.position), in place.
 	@return whether anything changed */
 	cleanOptions: function(opts) {
 		if (!opts || typeof opts !== "object") { return false; }
 		let changed = false;
-		if (regionMapSkyhooks.hasOldWidget(opts.grid)) { opts.grid = regionMapSkyhooks.withoutOldWidget(opts.grid); changed = true; }
+		const id = regionMapSkyhooks.OLD_WIDGET_ID;
+		if (panelHost.hasEntry(opts.grid, id)) { opts.grid = panelHost.withoutEntry(opts.grid, id); changed = true; }
 		if (opts.skyhooksPanel && typeof opts.skyhooksPanel === "object" && opts.skyhooksPanel.position !== undefined) {
 			opts.skyhooksPanel = Object.assign({}, opts.skyhooksPanel);
 			delete opts.skyhooksPanel.position;
