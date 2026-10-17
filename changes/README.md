@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-17 | [Kill panel display modes](2026-10-17-kill-panel-display-modes/README.md) | System kills and Chain kills panels can be Fixed, Fixed and minimized (header + newest kill) or Floating (movable, resizable window); header buttons, Settings > Kills & Intel selects, command palette |
 | 2026-10-13 | [Kill notifications: which system](2026-10-13-kill-notification-system/README.md) | Kill pop-ups show the hole label, system and class, wait while you're in game, find the node on click; pulsing kill marker on the map; desktop notifications |
 | 2026-10-13 | [Home region marker](2026-10-13-home-region-marker/README.md) | Small house mark on chain map systems in the same wormhole region as the chain tab's home; toggle in Settings > Map Markers |
 | 2026-10-13 | [Home region marker](2026-10-13-home-region-marker/README.md) | Region tag (R09) on home and chain map systems in the same wormhole region, hover highlights the group; toggle and colour in Settings > Map Markers, mask default via Mask Admin; fixes mask defaults not applying after a reload |
