@@ -425,7 +425,7 @@ const sigInline = {
 		const action = sigInline.keyAction({
 			key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey, repeat: e.repeat,
 			targetEditable: sigInline.targetEditable(e.target),
-			dialogOpen: $(".ui-dialog:visible").length > 0,
+			dialogOpen: $(".ui-dialog:visible").not(".dialog-floating").length > 0,	// floating windows (floating-windows.js) stay open while you work
 			selectedCount: document.querySelectorAll("#sigTable tbody tr.selected").length,
 			popoverField: p ? p.field : null,
 			focusOk: sigInline.focusOk(document.activeElement)

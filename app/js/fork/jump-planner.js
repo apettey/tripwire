@@ -1592,7 +1592,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const W = jp.WINDOW;
 			$d.dialog({
 				autoOpen: false, title: "Jump planner", modal: false, resizable: true, width: W.width, height: W.height, minWidth: W.minWidth, minHeight: W.minHeight,
-				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-jumpPlanner",
+				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-floating dialog-jumpPlanner",
 				// The dialog's own X / Escape: like the old close icon (stays closed, also after a reload, until opened again)
 				close: function() {
 					const quiet = closingQuietly;

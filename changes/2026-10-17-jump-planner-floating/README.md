@@ -14,7 +14,7 @@ and resize it anywhere over the chain map, and it no longer pushes the layout ar
 | ![before](before.jpg) | ![after](after.jpg) |
 
 Before: the planner is a layout tile, placed under the chain map (partly off-screen at 1400x900). After: a floating
-window, dragged over the chain map.
+window over the layout, next to a chain with two k-space exits.
 
 ## Settings
 
@@ -33,4 +33,9 @@ against.
   removed once, on the first load.
 - Removed the grid code (`defaultPlacement`, `savedPlacement`, `gridEntry`, `SIZE`/`MIN_SIZE`/`COL_PX`).
 - `app/css/fork/jump-planner.css`: dialog styles; the body scrolls when the window is short.
-- No upstream files touched.
+- `app/js/fork/floating-windows.js` (new): non-modal windows that can stay open (`dialog-floating`: the Jump planner
+  and the Region map) no longer count as "a dialog is open". It clears the page blur that
+  `app/js/dialogs/base-dialog.js` leaves when Settings closes over one. `sig-inline.js` keeps the signature table's
+  keys working while one is open.
+- Upstream file touched: `app/js/tripwire/eve.js` (one line): Follow skips `.dialog-floating` windows, so it keeps
+  following while the planner is open.
