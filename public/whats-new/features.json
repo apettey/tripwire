@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 113,
+      "date": "2026-10-17",
+      "title": "zKillboard and Anoik.is links in the Intel panel",
+      "description": "The Intel panel now has zKill and Anoik links right next to the system name, so you can open the system on either site in one click. Anoik.is links only show for wormhole systems.\n\nTurn them off in Settings > Kills & Intel.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-113-intel-links.png",
+          "caption": "zKill and Anoik links next to the system name in the Intel panel"
+        }
+      ]
+    },
+    {
       "pr": 112,
       "date": "2026-10-13",
       "title": "Kill pop-ups show where in the chain",
