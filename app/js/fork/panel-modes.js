@@ -434,7 +434,7 @@ const panelModes = {
 	/**
 	 * Notes being edited (CKEditor's iframe) don't survive a move in the page. Before the panel moves, each editor's text
 	 * is taken and the editor removed without writing it into its element (which keeps the saved note, for Cancel);
-	 * once the panel is in its new place the editor starts again with that text. Returns [{name, data, html}].
+	 * once the panel is in its new place the editor starts again with that text (resumeEditors). Returns [{name, data, html}].
 	 */
 	suspendEditors: function($w) {
 		if (typeof CKEDITOR === "undefined" || !CKEDITOR.instances) { return []; }
@@ -454,9 +454,14 @@ const panelModes = {
 
 	resumeEditors: function(editors) {
 		(editors || []).forEach(function(e) {
-			if (!document.getElementById(e.name) || typeof CKEDITOR === "undefined") { return; }
+			const el = document.getElementById(e.name);
+			if (!el || typeof CKEDITOR === "undefined") { return; }
+			// The editor starts with the unsaved text (from its element, as upstream's editors do: setData() here would
+			// reload the editor while app/js/ckeditor.js's instanceReady handler places the cursor). Once it is ready,
+			// before that handler runs, the element gets the saved note back for Cancel.
+			el.innerHTML = e.data;
 			const inst = CKEDITOR.replace(e.name, typeof CKConfig !== "undefined" ? CKConfig : {});
-			inst.on("instanceReady", function() { inst.setData(e.data); });
+			inst.on("instanceReady", function() { el.innerHTML = e.html; });
 		});
 	},
 
