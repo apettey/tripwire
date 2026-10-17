@@ -27,20 +27,29 @@
 /* Root nodes of the radial renderer are rounded: keep the icon on the ring */
 #chainMap .radial-map .top-level > .jp-ring { top: -6px; right: -2px; }
 
-/* Panel */
-#jumpPlannerWidget .controls { white-space: nowrap; }
-#jumpPlannerWidget .jp-title { color: #e0b080; font-weight: bold; cursor: default; }
-#jumpPlannerWidget .jp-close { float: right; color: #aaa; }
-#jumpPlannerWidget .jp-close:hover { color: #fff; }
-#jumpPlannerWidget .jp-settings { float: right; margin-right: 8px; color: #aaa; cursor: pointer; }
-#jumpPlannerWidget .jp-settings:hover { color: #fff; }
-#jumpPlannerWidget .content {
+/* The floating window (a jQuery UI dialog, like the Region map): the content fills it, the body scrolls when it is short */
+.dialog-jumpPlanner .ui-dialog-content { padding: 0 4px 4px; overflow: hidden; }
+.dialog-jumpPlanner .jp-wrap {
 	display: flex;
 	flex-direction: column;
+	height: 100%;
+	min-width: 0;
 	overflow: hidden;
 	text-align: left;
 	font-size: 11px;
 }
+.dialog-jumpPlanner .jp-head, .dialog-jumpPlanner .jp-fuelbar, .dialog-jumpPlanner .jp-modebar, .dialog-jumpPlanner .jp-tabs { flex: 0 0 auto; }
+/* The settings cog in the title bar, left of the close button */
+.dialog-jumpPlanner .ui-dialog-titlebar .jp-settings {
+	position: absolute;
+	top: 50%;
+	right: 30px;
+	transform: translateY(-50%);
+	color: #aaa;
+	cursor: pointer;
+	line-height: 1;
+}
+.dialog-jumpPlanner .ui-dialog-titlebar .jp-settings:hover { color: #fff; }
 .jp-head {
 	display: flex;
 	flex-wrap: wrap;
@@ -84,7 +93,7 @@
 .jp-tab.active { background: #1b2026; border-color: #3b4652; color: #fff; }
 .jp-tab-count { color: #5cc8f5; }
 
-.jp-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.jp-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
 .jp-state { padding: 10px 6px; color: #8a939e; }
 .jp-map {
 	position: relative;

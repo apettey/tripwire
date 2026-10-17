@@ -870,7 +870,7 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
 
 ### Jump planner
 
-A range-ring icon on the chain's low-sec / null-sec exits opens the Jump planner panel (`app/js/fork/jump-planner.js`):
+A range-ring icon on the chain's low-sec / null-sec exits opens the Jump planner window (`app/js/fork/jump-planner.js`):
 which systems a jump ship reaches from that exit, by distance band, on a top-down mini-map and a list, plus trade-hub
 reach. The range maths is a separate pure engine, `app/js/fork/jump-range.js` (tests: `app/js-test/fork/jump-range.test.js`,
 `jump-midpoints.test.js`). No configuration. The browser's only external call is CCP's public ESI, like the chain map's own

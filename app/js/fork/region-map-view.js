@@ -872,7 +872,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($d.hasClass("ui-dialog-content")) { return $d; }
 			$d.dialog({
 				autoOpen: false, title: "Region map", modal: false, resizable: true, width: 1000, height: 680, minWidth: 560, minHeight: 360,
-				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-regionMap",
+				dialogClass: "dialog-noeffect ui-dialog-shadow dialog-floating dialog-regionMap",
 				open: function() {
 					measure();
 					clearInterval(state.timer);
