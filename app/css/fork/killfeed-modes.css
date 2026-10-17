@@ -1,0 +1,65 @@
+/* Kill panel display modes (fork-owned, see app/js/fork/killfeed-modes.js): System kills and Chain kills */
+
+/* Header buttons: minimize / restore, float / dock */
+.skm-buttons .skm-btn {
+	color: #888;
+	margin-left: 2px;
+}
+
+.skm-buttons .skm-btn:hover {
+	color: #fff;
+}
+
+/* Minimized: the header and the most recent kill only */
+.skm-panel.skm-minimized .content {
+	overflow: hidden;
+}
+
+.skm-panel.skm-minimized .skf-list > .skf-row ~ .skf-row,
+.skm-panel.skm-minimized .skf-note {
+	display: none;
+}
+
+.skm-panel.skm-minimized .skf-list > .skf-row {
+	border-bottom: none;
+}
+
+.gridster .skm-panel.skm-minimized .grid-resize {
+	display: none;
+}
+
+/* Floating: a jQuery UI dialog (.skm-float-host) holding the panel. options.apply() writes saved layout sizes onto
+   the element with the panel's id, so its size is fixed here. */
+.ui-dialog .skm-float-host.ui-dialog-content {
+	padding: 0;
+	overflow: hidden;
+	background: rgba(0, 0, 0, 0.85);
+}
+
+.skm-panel.skm-floating {
+	position: absolute !important;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	width: auto !important;
+	height: auto !important;
+}
+
+.skm-panel.skm-floating .skm-heading {
+	display: none;	/* the window title says it */
+}
+
+.skm-panel.skm-floating .controls {
+	text-align: right;
+}
+
+.skm-panel.skm-floating .content {
+	position: absolute;
+	top: 22px;
+	right: 4px;
+	bottom: 4px;
+	left: 4px;
+	overflow-x: hidden;
+	overflow-y: auto;
+}

@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 115,
+      "date": "2026-10-17",
+      "title": "Kill panels: fixed, minimized or floating",
+      "description": "System kills and Chain kills can now each be shown three ways: fixed in the layout as before, minimized to just the newest kill, or floating in their own window that you can drag and resize like the Region map. Use the buttons in the panel's header to switch.\n\nPick each panel's default in Settings > Kills & Intel. Closing a floating window puts the panel back in the layout.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-115-kill-panel-modes.png",
+          "caption": "System kills floating over the map, Chain kills minimized to its newest kill"
+        }
+      ]
+    },
+    {
       "pr": 114,
       "date": "2026-10-17",
       "title": "Jump planner in its own window",

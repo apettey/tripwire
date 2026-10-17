@@ -3,7 +3,7 @@ const chainKillFeed = {
 	// null-sec system on the current chain map. Reads public/system_kills.php (the pooled zKillboard integration in
 	// zkill/); the browser itself only loads images from images.evetech.net and links to zkillboard.com.
 	// Rows are drawn by the System Kill Feed's renderer (systemKillFeed.rowHtml, app/js/fork/system-killfeed.js).
-	// Setting: options.chainKillFeed.enabled (missing = on). Keep `const chainKillFeed` on the first line:
+	// Settings: options.chainKillFeed.enabled (missing = on), .mode (app/js/fork/killfeed-modes.js). Keep `const chainKillFeed` on the first line:
 	// the test helper strips it to define a global.
 	URL: "system_kills.php",
 	WIDGET_ID: "chainKillFeedWidget",
@@ -324,36 +324,29 @@ const chainKillFeed = {
 		return chainKillFeed.systemKind(systemAnalysis.analyse(systemID));
 	},
 
-	widgetHtml: function() {
-		return "<li id='" + chainKillFeed.WIDGET_ID + "' class='gridWidget'>"
-			+ "<div class='controls'>"
-			+ "<span class='ckf-title'>Chain kills</span>"
+	// Display modes (fixed / minimized / floating): app/js/fork/killfeed-modes.js
+	MODE_KEY: "chainKillFeed",
+	FLOAT_INDEX: 1,
+
+	innerHtml: function() {
+		return "<div class='controls'>"
+			+ "<span class='ckf-title skm-heading'>Chain kills</span>"
 			+ "<div style='float: right;'>"
 			+ "<span class='ckf-loading hidden'></span>"
 			+ "<span class='ckf-status'></span>"
+			+ "<span class='skm-buttons'></span>"
 			+ "</div>"
 			+ "</div>"
-			+ "<div class='content'><div class='ckf-body'></div></div>"
-			+ "</li>";
+			+ "<div class='content'><div class='ckf-body'></div></div>";
 	},
 
-	addWidget: function() {
-		const g = systemKillFeed.gridster();
-		if (!g || chainKillFeed.$widget().length) { return; }
-		const others = $(".gridster li.gridWidget").map(function() {
-			return { col: parseInt($(this).attr("data-col"), 10), row: parseInt($(this).attr("data-row"), 10),
-				size_x: parseInt($(this).attr("data-sizex"), 10), size_y: parseInt($(this).attr("data-sizey"), 10) };
-		}).get();
-		const saved = systemKillFeed.savedPosition(typeof options !== "undefined" ? options.grid : null, chainKillFeed.WIDGET_ID);
-		const size = chainKillFeed.SIZE;
-		const pos = saved || systemKillFeed.defaultPosition(others, $(window).width(), size);
-		const $w = g.add_widget(chainKillFeed.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
-		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-		$w.addClass("gridster-transition");
-		const content = $w.find(".content")[0];
-		content.addEventListener("error", function(e) {
-			if (e.target && e.target.tagName === "IMG") { $(e.target).replaceWith("<span class='" + e.target.className + " skf-noimg'></span>"); }
-		}, true);
+	/** Title of the floating window */
+	title: function() {
+		return "Chain kills";
+	},
+
+	/** Handlers on the panel's content (killfeedModes.attach) */
+	setupContent: function(content) {
 		// System name: view that system instead of opening the kill
 		content.addEventListener("click", function(e) {
 			const sys = e.target && e.target.closest ? e.target.closest(".ckf-sys[data-system]") : null;
@@ -362,14 +355,11 @@ const chainKillFeed = {
 			e.stopPropagation();
 			tripwire.systemChange(parseInt(sys.getAttribute("data-system"), 10));
 		});
-		const fit = function() {
-			$w.removeClass("skf-lt340 skf-lt280 skf-lt230 skf-wide").addClass(systemKillFeed.widthClasses(content.clientWidth).join(" "));
-		};
-		fit();
-		if (typeof ResizeObserver !== "undefined") {
-			chainKillFeed.observer = new ResizeObserver(fit);
-			chainKillFeed.observer.observe(content);
-		}
+	},
+
+	addWidget: function() {
+		if (chainKillFeed.$widget().length || !killfeedModes.attach(chainKillFeed)) { return; }
+		clearInterval(chainKillFeed.tickTimer);
 		chainKillFeed.tickTimer = setInterval(chainKillFeed.tick, chainKillFeed.TICK_MS);
 		chainKillFeed.render();
 		chainKillFeed.chainChanged(0);
@@ -379,17 +369,11 @@ const chainKillFeed = {
 		chainKillFeed.stop();
 		clearInterval(chainKillFeed.tickTimer);
 		chainKillFeed.tickTimer = null;
-		if (chainKillFeed.observer) { chainKillFeed.observer.disconnect(); chainKillFeed.observer = null; }
-		const $w = chainKillFeed.$widget();
-		if (!$w.length) { return; }
-		chainKillFeed.detachTooltips($w);
-		$w.attr("id", chainKillFeed.WIDGET_ID + "-removed");	// see systemKillFeed.removeWidget
-		const g = systemKillFeed.gridster();
-		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
+		killfeedModes.detach(chainKillFeed, false);
 	},
 
 	sync: function() {
-		if (chainKillFeed.isOn()) { chainKillFeed.addWidget(); } else { chainKillFeed.removeWidget(); }
+		killfeedModes.sync(chainKillFeed);
 	},
 
 	/** Stop all requests and timers and forget the feed (the panel is off) */
@@ -694,7 +678,7 @@ const chainKillFeed = {
 		$w.find(".ckf-status").text(state === "list" ? count + (count === 1 ? " kill" : " kills") : "")
 			.attr("title", chainKillFeed.ids.length + (chainKillFeed.ids.length === 1 ? " system" : " systems") + " watched (high-sec left out)");
 		const $loading = $w.find(".ckf-loading");
-		chainKillFeed.detachTooltips($w.find(".controls"));
+		if ($loading.is("[data-tooltip]") && typeof Tooltips !== "undefined" && Tooltips.detach) { Tooltips.detach($loading); }
 		if (pendingIDs.length) {
 			const names = pendingIDs.map(function(id) { return tripwire.systems[id] ? tripwire.systems[id].name : id; });
 			const shown = names.slice(0, 10).join(", ") + (names.length > 10 ? " and " + (names.length - 10) + " more" : "");
@@ -728,8 +712,9 @@ const chainKillFeed = {
 			section: "intel", order: 20, id: "chainKillFeed-enabled", type: "checkbox", key: "chainKillFeed",
 			label: "Chain kill feed:", text: "Show the Chain kills panel for the chain map",
 			get: function() { return chainKillFeed.isOn(); },
-			set: function(o, on) { o.chainKillFeed = { enabled: on }; }
+			set: function(o, on) { o.chainKillFeed = killfeedModes.merge(o.chainKillFeed, { enabled: on }); }
 		});
+		killfeedModes.registerSetting(chainKillFeed, { order: 21, label: "Chain kills display:" });
 		// options.apply() runs on Save and Reset: add or remove the panel to match
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.chainKillFeedWrapped) {
 			const apply = options.apply;
@@ -749,6 +734,7 @@ const chainKillFeed = {
 		chainKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.chainKills", title: "Toggle chain kills panel", key: "chainKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });
+			killfeedModes.registerCommands(chainKillFeed, { id: "panel.chainKills", name: "chain kills panel", keywords: ["kills", "killboard", "feed", "chain"] });
 		}
 		// Follow the chain map: every draw (new hole, chain tab or mask switch, system change) re-reads its systems
 		if (typeof chain !== "undefined" && chain && typeof chain.draw === "function" && !chain.draw.chainKillFeedWrapped) {

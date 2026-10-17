@@ -2,7 +2,7 @@ const systemKillFeed = {
 	// System Kill Feed (fork-owned): a layout panel listing the most recent kills in the viewed system.
 	// Reads public/system_kills.php, which serves kills stored by the pooled zKillboard integration (zkill/);
 	// the browser itself only loads images from images.evetech.net and links to zkillboard.com.
-	// Setting: options.systemKillFeed.enabled (missing = on). Keep `const systemKillFeed` on the first line:
+	// Settings: options.systemKillFeed.enabled (missing = on), .mode (app/js/fork/killfeed-modes.js). Keep `const systemKillFeed` on the first line:
 	// the test helper strips it to define a global.
 	URL: "system_kills.php",
 	WIDGET_ID: "systemKillFeedWidget",
@@ -281,17 +281,26 @@ const systemKillFeed = {
 		return $("#" + systemKillFeed.WIDGET_ID);
 	},
 
-	widgetHtml: function() {
-		return "<li id='" + systemKillFeed.WIDGET_ID + "' class='gridWidget'>"
-			+ "<div class='controls'>"
-			+ "<span class='skf-title'>Kills in</span> <span class='skf-system'></span>"
+	// Display modes (fixed / minimized / floating): app/js/fork/killfeed-modes.js
+	MODE_KEY: "systemKillFeed",
+	FLOAT_INDEX: 0,
+
+	innerHtml: function() {
+		return "<div class='controls'>"
+			+ "<span class='skf-title skm-heading'>Kills in</span> <span class='skf-system skm-heading'></span>"
 			+ "<div style='float: right;'>"
 			+ "<span class='skf-status'></span>"
 			+ "<a class='skf-zkill' href='#' target='_blank' rel='noopener noreferrer' data-tooltip='Open the system on zKillboard'>zKillboard</a>"
+			+ "<span class='skm-buttons'></span>"
 			+ "</div>"
 			+ "</div>"
-			+ "<div class='content'><div class='skf-body'></div></div>"
-			+ "</li>";
+			+ "<div class='content'><div class='skf-body'></div></div>";
+	},
+
+	/** Title of the floating window */
+	title: function() {
+		const system = systemKillFeed.systemID && typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[systemKillFeed.systemID] : null;
+		return system && system.name ? "Kills in " + system.name : "System kills";
 	},
 
 	gridster: function() {
@@ -299,33 +308,9 @@ const systemKillFeed = {
 	},
 
 	addWidget: function() {
-		const g = systemKillFeed.gridster();
-		if (!g || systemKillFeed.$widget().length) { return; }
-		const others = $(".gridster li.gridWidget").map(function() {
-			return { col: parseInt($(this).attr("data-col"), 10), row: parseInt($(this).attr("data-row"), 10),
-				size_x: parseInt($(this).attr("data-sizex"), 10), size_y: parseInt($(this).attr("data-sizey"), 10) };
-		}).get();
-		const saved = systemKillFeed.savedPosition(typeof options !== "undefined" ? options.grid : null, systemKillFeed.WIDGET_ID);
-		const pos = saved || systemKillFeed.defaultPosition(others, $(window).width());
-		const size = systemKillFeed.SIZE;
-		const $w = g.add_widget(systemKillFeed.widgetHtml(), pos.size_x, pos.size_y, pos.col, pos.row, null, [size.minX, size.minY]);
-		// Same as layout.js does for the built-in widgets: resize handle only while customising the layout
-		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
-		$w.addClass("gridster-transition");
-		$w.find(".content")[0].addEventListener("error", function(e) {
-			if (e.target && e.target.tagName === "IMG") { $(e.target).replaceWith("<span class='" + e.target.className + " skf-noimg'></span>"); }
-		}, true);
-		Tooltips.attach($w.find(".controls [data-tooltip]"));
-		const content = $w.find(".content")[0];
-		const fit = function() {
-			$w.removeClass("skf-lt340 skf-lt280 skf-lt230 skf-wide").addClass(systemKillFeed.widthClasses(content.clientWidth).join(" "));
-		};
-		fit();
-		if (typeof ResizeObserver !== "undefined") {
-			systemKillFeed.observer = new ResizeObserver(fit);
-			systemKillFeed.observer.observe(content);
-		}
+		if (systemKillFeed.$widget().length || !killfeedModes.attach(systemKillFeed)) { return; }
 		systemKillFeed.load(typeof viewingSystemID !== "undefined" ? viewingSystemID : null);
+		clearInterval(systemKillFeed.tickTimer);
 		systemKillFeed.tickTimer = setInterval(systemKillFeed.tick, systemKillFeed.TICK_MS);
 	},
 
@@ -333,22 +318,31 @@ const systemKillFeed = {
 		systemKillFeed.stop();
 		clearInterval(systemKillFeed.tickTimer);
 		systemKillFeed.tickTimer = null;
-		if (systemKillFeed.observer) { systemKillFeed.observer.disconnect(); systemKillFeed.observer = null; }
-		const g = systemKillFeed.gridster();
-		const $w = systemKillFeed.$widget();
-		if (!$w.length) { return; }
-		// Drop the id first: gridster fades the widget out before removing it, and turning the setting back on
-		// meanwhile must add a new panel
-		$w.attr("id", systemKillFeed.WIDGET_ID + "-removed");
-		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $w.find("[data-tooltip]"));
+		if (!systemKillFeed.$widget().length) { return; }
+		killfeedModes.detach(systemKillFeed, false);
 		systemKillFeed.systemID = null;
 		systemKillFeed.response = null;
-		if (g) { g.remove_widget($w, true); } else { $w.remove(); }
+	},
+
+	/** The panel moved between the layout and a floating window: its header again (the body is re-rendered) */
+	afterSwap: function() {
+		systemKillFeed.showHeader();
+	},
+
+	/** Header: system name, zKillboard link, floating window title */
+	showHeader: function() {
+		const id = systemKillFeed.systemID;
+		const $w = systemKillFeed.$widget();
+		if (!$w.length || !id) { return; }
+		const system = typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[id] : null;
+		$w.find(".skf-system").text(system && system.name ? system.name : "");
+		$w.find(".skf-zkill").attr("href", "https://zkillboard.com/system/" + id + "/");
+		killfeedModes.updateTitle(systemKillFeed);
 	},
 
 	/** Add or remove the panel to match the setting */
 	sync: function() {
-		if (systemKillFeed.isOn()) { systemKillFeed.addWidget(); } else { systemKillFeed.removeWidget(); }
+		killfeedModes.sync(systemKillFeed);
 	},
 
 	stop: function() {
@@ -370,10 +364,7 @@ const systemKillFeed = {
 		if (!systemKillFeed.$widget().length || !id) { return; }
 		const changed = id !== systemKillFeed.systemID;
 		systemKillFeed.systemID = id;
-		const system = typeof tripwire !== "undefined" && tripwire.systems ? tripwire.systems[id] : null;
-		const $w = systemKillFeed.$widget();
-		$w.find(".skf-system").text(system && system.name ? system.name : "");
-		$w.find(".skf-zkill").attr("href", "https://zkillboard.com/system/" + id + "/");
+		systemKillFeed.showHeader();
 		if (changed) {
 			systemKillFeed.response = null;
 			systemKillFeed.error = "";
@@ -455,8 +446,10 @@ const systemKillFeed = {
 			section: "intel", order: 10, id: "systemKillFeed-enabled", type: "checkbox", key: "systemKillFeed",
 			label: "System kill feed:", text: "Show the Kills panel for the viewed system",
 			get: function() { return systemKillFeed.isOn(); },
-			set: function(o, on) { o.systemKillFeed = { enabled: on }; }
+			set: function(o, on) { o.systemKillFeed = killfeedModes.merge(o.systemKillFeed, { enabled: on }); }
 		});
+		killfeedModes.registerSetting(systemKillFeed, { order: 11, label: "System kills display:",
+			hint: "Minimized: the newest kill only. Floating: a window you can move and resize." });
 		// options.apply() runs on Save and Reset: add or remove the panel to match
 		if (typeof options !== "undefined" && typeof options.apply === "function" && !options.apply.systemKillFeedWrapped) {
 			const apply = options.apply;
@@ -473,6 +466,7 @@ const systemKillFeed = {
 		systemKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.systemKills", title: "Toggle system kills panel", key: "systemKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });
+			killfeedModes.registerCommands(systemKillFeed, { id: "panel.systemKills", name: "system kills panel", keywords: ["kills", "killboard", "feed"] });
 		}
 		// Follow the viewed system
 		if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.systemKillFeedWrapped) {
