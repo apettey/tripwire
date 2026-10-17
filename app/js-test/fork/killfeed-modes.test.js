@@ -40,12 +40,34 @@ describe('Kill panel display modes', () => {
 		});
 	});
 
+	describe('places (kept out of the mask-default keys)', () => {
+		it('reads the place of a panel, {} when missing or broken', () => {
+			assert.deepEqual(km().place({ killPanelPlaces: { k: { fullSizeY: 7 } } }, 'k'), { fullSizeY: 7 });
+			assert.deepEqual(km().place({}, 'k'), {});
+			assert.deepEqual(km().place(undefined, 'k'), {});
+			assert.deepEqual(km().place({ killPanelPlaces: { k: [1] } }, 'k'), {});
+		});
+		it('merges into the entry of the panel and keeps the other panels, without mutating', () => {
+			const opts = { killPanelPlaces: { a: { fullSizeY: 7 }, b: { float: { left: 1 } } }, a: { mode: 'fixed' } };
+			const out = km().withPlace(opts, 'a', { float: { left: 5, top: 6, width: 300, height: 200 } });
+			assert.deepEqual(out, { a: { fullSizeY: 7, float: { left: 5, top: 6, width: 300, height: 200 } }, b: { float: { left: 1 } } });
+			assert.deepEqual(opts.killPanelPlaces.a, { fullSizeY: 7 });
+			assert.deepEqual(km().withPlace({}, 'c', { fullSizeY: 5 }), { c: { fullSizeY: 5 } });
+		});
+		it('uses a key that is not a Settings row', () => {
+			assert.equal(km().PLACES_KEY, 'killPanelPlaces');
+		});
+	});
+
 	describe('minimized size', () => {
 		it('reads the remembered full height', () => {
-			assert.equal(km().fullSizeY({ k: { fullSizeY: 9 } }, 'k', 3), 9);
-			assert.equal(km().fullSizeY({ k: { fullSizeY: '9' } }, 'k', 3), 9);
-			assert.equal(km().fullSizeY({ k: { fullSizeY: 2 } }, 'k', 3), null);
-			assert.equal(km().fullSizeY({ k: {} }, 'k', 3), null);
+			const at = (v) => ({ killPanelPlaces: { k: v } });
+			assert.equal(km().fullSizeY(at({ fullSizeY: 9 }), 'k', 3), 9);
+			assert.equal(km().fullSizeY(at({ fullSizeY: '9' }), 'k', 3), 9);
+			assert.equal(km().fullSizeY(at({ fullSizeY: 2 }), 'k', 3), null);
+			assert.equal(km().fullSizeY(at({}), 'k', 3), null);
+			assert.equal(km().fullSizeY({ k: { fullSizeY: 9 } }, 'k', 3), null);	// not in the panel's own (mask-default) key
+			assert.equal(km().fullSizeY({ killPanelPlaces: 'x' }, 'k', 3), null);
 			assert.equal(km().fullSizeY(undefined, 'k', 3), null);
 		});
 		it('is header plus one kill row (2 rows of 50 px + margin)', () => {
@@ -94,6 +116,17 @@ describe('Kill panel display modes', () => {
 		});
 		it('copes with a viewport smaller than the minimum size', () => {
 			assert.deepEqual(km().clampFloat({ left: 10, top: 10, width: 400, height: 300 }, 200, 100, 0), { left: 0, top: 0, width: 200, height: 100 });
+		});
+		it('fits the outer width (CSS width + border and padding) into the viewport', () => {
+			assert.deepEqual(km().clampFloat({ left: 0, top: 0, width: 3000, height: 300 }, 1280, 800, 0, 6), { left: 0, top: 0, width: 1274, height: 300 });
+			assert.deepEqual(km().clampFloat({ left: 1200, top: 0, width: 400, height: 300 }, 1280, 800, 0, 6), { left: 874, top: 0, width: 400, height: 300 });
+			assert.deepEqual(km().clampFloat(undefined, 1600, 900, 0, 6), { left: 1600 - 420 - 6 - 16, top: 60, width: 420, height: 360 });
+		});
+		it('works in CSS pixels of a UI-scaled page (viewport divided by the zoom)', () => {
+			// 1280x800 window at UI scale 1.4: 914x571 CSS pixels; the default window must open fully on screen
+			const g = km().clampFloat(undefined, 1280 / 1.4, 800 / 1.4, 1, 6);
+			assert.ok(g.left >= 0 && g.left + g.width + 6 <= 1280 / 1.4, JSON.stringify(g));
+			assert.ok(g.top >= 0 && g.top + g.height <= 800 / 1.4, JSON.stringify(g));
 		});
 		it('rounds to whole pixels', () => {
 			assert.deepEqual(km().clampFloat({ left: 10.4, top: 20.6, width: 300.2, height: 200.7 }, 1280, 800, 0), { left: 10, top: 21, width: 300, height: 201 });

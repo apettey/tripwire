@@ -2,11 +2,12 @@ const killfeedModes = {
 	// Kill panel display modes (fork-owned), shared by the System kills (system-killfeed.js) and Chain kills
 	// (chain-killfeed.js) panels. Each panel has its own mode, stored per user in options.<key>.mode:
 	//   fixed      a layout (gridster) panel, as it always was
-	//   minimized  the same layout panel shrunk to its header and the most recent kill (options.<key>.fullSizeY
-	//              remembers the height to restore)
-	//   floating   not in the layout: a non-modal, draggable, resizable dialog like the Region map
-	//              (options.<key>.float = {left, top, width, height}, viewport pixels); closing it docks it back
-	// Missing or unknown = fixed. Switched from the panel header, Settings > Kills & Intel and the command palette.
+	//   minimized  the same layout panel shrunk to its header and the most recent kill
+	//   floating   not in the layout: a non-modal, draggable, resizable dialog like the Region map; closing it docks it back
+	// Missing or unknown = fixed. Where each panel was (the height to restore after minimized, the floating window's
+	// {left, top, width, height} in CSS pixels of the zoomed page) is kept apart in options.killPanelPlaces.<key>: that
+	// key is not a Settings row, so a mask default (mask-defaults.js, whole options.<key> objects) never carries one
+	// person's window position or panel height to everyone. Switched from the panel header, Settings > Kills & Intel and the command palette.
 	// A panel object passed in here provides: MODE_KEY (options key), WIDGET_ID, SIZE {x, y, minX, minY},
 	// FLOAT_INDEX (0, 1: default float position), isOn(), innerHtml() (controls + content, with an empty
 	// <span class='skm-buttons'>), title() (dialog title), setupContent(content) (optional), render(),
@@ -18,6 +19,7 @@ const killfeedModes = {
 	MIN_SIZE_Y: 2,	// gridster rows (50 px + 10 px margin): the header and one kill row
 	FLOAT: { width: 420, height: 360, minWidth: 260, minHeight: 140, top: 60, margin: 16, gap: 10 },
 	SAVE_DELAY_MS: 800,	// moving or resizing the floating panel saves once it has settled
+	PLACES_KEY: "killPanelPlaces",
 
 	/** A known mode, else "fixed" */
 	normalize: function(mode) {
@@ -35,9 +37,24 @@ const killfeedModes = {
 		return Object.assign({}, base, patch || {});
 	},
 
+	/** Where the panel was: options.killPanelPlaces.<key> ({fullSizeY, float}), {} when nothing is stored */
+	place: function(opts, key) {
+		const places = opts ? opts[killfeedModes.PLACES_KEY] : null;
+		const v = places && typeof places === "object" ? places[key] : null;
+		return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	},
+
+	/** A new options.killPanelPlaces with `patch` merged into the panel's entry. Never mutates. */
+	withPlace: function(opts, key, patch) {
+		const places = opts ? opts[killfeedModes.PLACES_KEY] : null;
+		const out = killfeedModes.merge(places);
+		out[key] = killfeedModes.merge(killfeedModes.place(opts, key), patch);
+		return out;
+	},
+
 	/** The remembered full height (gridster rows) of a minimized panel, or null */
 	fullSizeY: function(opts, key, minY) {
-		const v = opts && opts[key] && typeof opts[key] === "object" ? parseInt(opts[key].fullSizeY, 10) : NaN;
+		const v = parseInt(killfeedModes.place(opts, key).fullSizeY, 10);
 		return v >= (minY || 1) ? v : null;
 	},
 
@@ -61,23 +78,29 @@ const killfeedModes = {
 		return previous && previous >= size.minY ? previous : size.y;
 	},
 
-	/** Default floating geometry: right side under the top bar; the second panel goes under the first */
-	defaultFloat: function(index, viewportWidth, viewportHeight) {
+	/**
+	 * Default floating geometry: right side under the top bar; the second panel goes under the first.
+	 * @param chrome the dialog's border + padding width (`width` is its CSS width, `height` its outer height)
+	 */
+	defaultFloat: function(index, viewportWidth, viewportHeight, chrome) {
 		const f = killfeedModes.FLOAT;
 		const i = Math.max(0, parseInt(index, 10) || 0);
-		return { left: Math.round((viewportWidth || 0) - f.width - f.margin), top: f.top + i * (f.height + f.gap),
+		return { left: Math.round((viewportWidth || 0) - f.width - (Number(chrome) || 0) - f.margin), top: f.top + i * (f.height + f.gap),
 			width: f.width, height: f.height };
 	},
 
 	/**
 	 * Floating geometry that fits the viewport: saved values where valid, defaults for the rest, then size and
 	 * position clamped so the whole panel is on screen (as much as the viewport allows).
+	 * Viewport and geometry in CSS pixels of the (UI-scaled) page. `width` is the dialog's CSS width, which jQuery UI
+	 * takes without its border and padding (`chrome`), so the outer width (width + chrome) is what has to fit.
 	 */
-	clampFloat: function(geom, viewportWidth, viewportHeight, index) {
+	clampFloat: function(geom, viewportWidth, viewportHeight, index, chrome) {
 		const f = killfeedModes.FLOAT;
-		const vw = Math.max(0, Number(viewportWidth) || 0);
+		const extra = Math.max(0, Number(chrome) || 0);
+		const vw = Math.max(0, (Number(viewportWidth) || 0) - extra);	// room for the CSS width
 		const vh = Math.max(0, Number(viewportHeight) || 0);
-		const def = killfeedModes.defaultFloat(index, vw, vh);
+		const def = killfeedModes.defaultFloat(index, vw + extra, vh, extra);
 		const g = geom && typeof geom === "object" ? geom : {};
 		const num = function(v, fallback) { const n = Number(v); return v !== null && v !== "" && isFinite(n) ? n : fallback; };
 		const clamp = function(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
@@ -122,6 +145,24 @@ const killfeedModes = {
 		return typeof grid !== "undefined" && grid && typeof grid.add_widget === "function" ? grid : null;
 	},
 
+	/** Settings > General > UI Scale: the body's CSS zoom */
+	zoom: function() {
+		return parseFloat($("body").css("zoom")) || 1;
+	},
+
+	/** Viewport size and scroll in CSS pixels of the zoomed page */
+	viewport: function() {
+		const z = killfeedModes.zoom();
+		return { width: $(window).width() / z, height: $(window).height() / z, left: $(window).scrollLeft() / z, top: $(window).scrollTop() / z };
+	},
+
+	/** A dialog's border + padding (CSS pixels): {w, h} */
+	chrome: function($d) {
+		const px = function(name) { return parseFloat($d.css(name)) || 0; };
+		return { w: px("border-left-width") + px("border-right-width") + px("padding-left") + px("padding-right"),
+			h: px("border-top-width") + px("border-bottom-width") + px("padding-top") + px("padding-bottom") };
+	},
+
 	$panel: function(panel) {
 		return $("#" + panel.WIDGET_ID);
 	},
@@ -152,7 +193,7 @@ const killfeedModes = {
 		}).get();
 		const size = panel.SIZE;
 		const saved = systemKillFeed.savedPosition(opts ? opts.grid : null, panel.WIDGET_ID);
-		const pos = saved || systemKillFeed.defaultPosition(others, $(window).width(), size);
+		const pos = saved || systemKillFeed.defaultPosition(others, killfeedModes.viewport().width, size);
 		const sizeY = killfeedModes.gridSizeY(mode, saved, killfeedModes.fullSizeY(opts, panel.MODE_KEY, size.minY), size);
 		const minimized = mode === "minimized";
 		const $w = g.add_widget("<li id='" + panel.WIDGET_ID + "' class='gridWidget skm-panel" + (minimized ? " skm-minimized" : "") + "'>"
@@ -164,9 +205,9 @@ const killfeedModes = {
 	},
 
 	attachFloating: function(panel) {
-		const opts = killfeedModes.opts();
-		const saved = opts && opts[panel.MODE_KEY] ? opts[panel.MODE_KEY].float : null;
-		const geom = killfeedModes.clampFloat(saved, $(window).width(), $(window).height(), panel.FLOAT_INDEX);
+		const saved = killfeedModes.place(killfeedModes.opts(), panel.MODE_KEY).float;
+		const view = killfeedModes.viewport();
+		let geom = killfeedModes.clampFloat(saved, view.width, view.height, panel.FLOAT_INDEX);
 		const f = killfeedModes.FLOAT;
 		// The dialog element is a host: jQuery UI sizes it, and options.apply() (which writes saved layout sizes onto
 		// the element with the panel's id) only reaches the panel inside it, whose size the CSS fixes
@@ -181,7 +222,11 @@ const killfeedModes = {
 			dragStop: function() { killfeedModes.queueSave(panel); },
 			resizeStop: function() { killfeedModes.queueSave(panel); }
 		});
-		$host.dialog("widget").css({ left: geom.left + $(window).scrollLeft(), top: geom.top + $(window).scrollTop() });
+		// Now that the dialog's border and padding are known: fit its outer width into the viewport
+		const $d = $host.dialog("widget");
+		geom = killfeedModes.clampFloat(geom, view.width, view.height, panel.FLOAT_INDEX, killfeedModes.chrome($d).w);
+		$host.dialog("option", { width: geom.width, height: geom.height });
+		$d.css({ left: geom.left + view.left, top: geom.top + view.top });
 		return $host.find("#" + panel.WIDGET_ID);
 	},
 
@@ -265,7 +310,7 @@ const killfeedModes = {
 		if (!g || !coords) { return; }
 		if (to === "minimized") {
 			if (opts) {
-				opts[panel.MODE_KEY] = killfeedModes.merge(opts[panel.MODE_KEY],
+				opts[killfeedModes.PLACES_KEY] = killfeedModes.withPlace(opts, panel.MODE_KEY,
 					{ fullSizeY: killfeedModes.rememberSizeY(coords.size_y, killfeedModes.fullSizeY(opts, panel.MODE_KEY, size.minY), size) });
 			}
 			g.set_widget_min_size($w, [size.minX, killfeedModes.MIN_SIZE_Y]);
@@ -336,11 +381,13 @@ const killfeedModes = {
 		const $host = killfeedModes.$panel(panel).closest(".skm-float-host");
 		if (!opts || !$host.hasClass("ui-dialog-content")) { return; }
 		const $d = $host.dialog("widget");
-		const offset = $d.offset();
-		opts[panel.MODE_KEY] = killfeedModes.merge(opts[panel.MODE_KEY], { float: {
-			left: Math.round(offset.left - $(window).scrollLeft()), top: Math.round(offset.top - $(window).scrollTop()),
-			// jQuery UI takes `width` as the CSS width but `height` as the outer height
-			width: Math.round($d.width()), height: Math.round($d.outerHeight()) } });
+		// CSS values, not offset() (zoomed screen pixels with Settings > UI Scale). jQuery UI takes `width` as the
+		// CSS width but `height` as the outer height.
+		const view = killfeedModes.viewport();
+		const px = function(name) { return parseFloat($d.css(name)) || 0; };
+		opts[killfeedModes.PLACES_KEY] = killfeedModes.withPlace(opts, panel.MODE_KEY, { float: {
+			left: Math.round(px("left") - view.left), top: Math.round(px("top") - view.top),
+			width: Math.round(px("width")), height: Math.round(px("height") + killfeedModes.chrome($d).h) } });
 		if (save && typeof opts.save === "function") { opts.save(); }
 	},
 
