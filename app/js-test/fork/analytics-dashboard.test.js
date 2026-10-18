@@ -125,10 +125,10 @@ describe('analyticsDashboard', () => {
 		});
 		it('names the day, until when it counts people twice, and what the view does about it', () => {
 			const r = { date: '2026-10-25', until: '2027-01-16' };
-			const f = a.rotationNote({ rotation: r, repeatSince: '2026-10-25' }, 'features');
-			assert.ok(f.includes('2026-10-25') && f.includes('2027-01-16') && f.includes('count twice') && f.includes('Repeat only counts use since'), f);
-			assert.ok(a.rotationNote({ rotation: r }, 'funnel').includes('only uses data since 2026-10-25'));
-			assert.ok(!a.rotationNote({ rotation: r }, 'launches').includes('Repeat'));
+			const f = a.rotationNote({ rotation: r }, 'features');
+			assert.ok(f.includes('2026-10-25') && f.includes('2027-01-16') && f.includes('count twice'), f);
+			assert.ok(a.rotationNote({ rotation: r }, 'health').includes('New users are not counted'));
+			assert.ok(!a.rotationNote({ rotation: r }, 'funnel').includes('only uses data since'));
 		});
 	});
 

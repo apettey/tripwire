@@ -9,8 +9,8 @@
 // minus eligible, say) can still give a small number away. Fine for an operator-only view without per-user rows.
 //
 // Salt replacement (every ANALYTICS_DAYS, analytics.inc.php) gives everyone a new uid, so a window that includes days on
-// both sides counts people active on both sides twice. Every view says so (`rotation`), and per-user measures (repeat,
-// retained, time to first use) only use data since the replacement.
+// both sides counts people active on both sides twice. Every view says so (`rotation`). Per-uid measures (repeat,
+// retained, time to first use) keep all data: a replacement only splits a person into two uids, a slight undercount.
 //
 // Windows end on $today (UTC date, inclusive): "28 days" = $today and the 27 days before it. "Use" = the feature's use
 // actions in the catalog (command, opened and its `use` words), as analytics_is_use counts it for masks.
@@ -271,9 +271,7 @@ function dash_view_features(PDO $db, $today) {
     $lastEvent = [];
     foreach (dash_rows($db, 'SELECT feature, MAX(day) FROM fork_analytics_daily GROUP BY feature') as $r) $lastEvent[$r[0]] = $r[1];
 
-    // After a salt replacement in the window, repeat use only counts days since then (older days belong to other uids)
     $rotation = dash_rotation($db, $from90, $today, 7 * DASH_WEEKS);
-    $repeatFrom = $rotation && $rotation['date'] > $from ? $rotation['date'] : $from;
 
     $activeN = count($active);
     $rows = [];
@@ -287,7 +285,7 @@ function dash_view_features(PDO $db, $today) {
         $eligible = array_diff_key($active, $offSet);
         $eligibleN = count($eligible);
         $usedEligibleN = count(array_intersect_key($used, $eligible));   // adoption: only users in the denominator
-        $repeatN = dash_repeat_count(array_intersect_key($useDays, $used), DASH_REPEAT_DAYS, $repeatFrom, $today);
+        $repeatN = dash_repeat_count(array_intersect_key($useDays, $used), DASH_REPEAT_DAYS, $from, $today);
         $adoption = null;
         if ($eligibleN > 0 && !dash_small($usedEligibleN) && !dash_small($eligibleN)) {
             $ci = dash_wilson($usedEligibleN, $eligibleN);
@@ -320,7 +318,7 @@ function dash_view_features(PDO $db, $today) {
         ];
     }
     return ['today' => $today, 'window' => DASH_WINDOW, 'active' => dash_users($activeN), 'features' => $rows,
-        'rotation' => $rotation, 'repeatSince' => $repeatFrom !== $from ? $repeatFrom : null];
+        'rotation' => $rotation];
 }
 
 /** 2. Funnel of one feature: eligible -> exposed -> tried -> repeat -> retained, and the median time from first seen to first use */
@@ -329,9 +327,7 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
     if (!isset($features[$featureId])) return null;
     $f = $features[$featureId];
     $from = dash_day($today, -(DASH_WINDOW - 1));
-    // A salt replacement in the window: the whole funnel starts on that day (one uid per person)
     $rotation = dash_rotation($db, $from, $today, DASH_WINDOW);
-    if ($rotation) $from = $rotation['date'];
     $active = dash_users_between(dash_active_days($db, $from, $today), $from, $today);
     $off = dash_off_users($db, $from, $today);
     $eligible = array_diff_key($active, isset($off[$featureId]) ? $off[$featureId] : []);
@@ -351,10 +347,13 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
             if (isset($weeks[$w], $weeks[$w + 1])) { $retainedN++; break; }
         }
     }
-    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt); after a salt
-    // replacement in the kept data only milestones since then (an older one belongs to someone's old uid)
+    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt). Milestones from
+    // before a salt replacement are genuine and kept; a person active on both sides then has an old and a new uid (the new
+    // one often seen and used on the same day), which isn't merged: the page says so. A feature released on or after the
+    // replacement only has milestones since then.
     $kept = dash_rotation($db, dash_day($today, -(analytics_days() - 1)), $today, analytics_days());
-    $milestonesFrom = $kept ? strtotime($kept['date'] . ' 00:00:00 UTC') : 0;
+    $since = $kept && $f['released'] !== null && $f['released'] >= $kept['date'] ? $kept['date'] : null;
+    $milestonesFrom = $since ? strtotime($since . ' 00:00:00 UTC') : 0;
     $firstShown = [];
     $firstUse = [];
     $place = implode(', ', array_fill(0, count($f['use']), '?'));
@@ -374,7 +373,7 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
     }
     $median = count($hours) >= DASH_MIN_USERS ? round(dash_median($hours), 1) : null;
     return [
-        'today' => $today, 'window' => DASH_WINDOW, 'from' => $from, 'rotation' => $rotation ?: $kept,
+        'today' => $today, 'window' => DASH_WINDOW, 'from' => $from, 'rotation' => $rotation,
         'feature' => ['id' => $featureId, 'title' => $f['title'], 'released' => $f['released'], 'kind' => $f['kind']],
         'steps' => [
             ['key' => 'eligible', 'users' => dash_users(count($eligible)), 'base' => null],
@@ -384,7 +383,7 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
             ['key' => 'retained', 'users' => dash_users($retainedN), 'base' => 'tried'],
         ],
         'toUse' => ['medianHours' => $median, 'users' => dash_users(count($hours)), 'usedBeforeShown' => dash_users($usedFirst),
-            'since' => $kept ? $kept['date'] : null],
+            'since' => $since, 'saltReplaced' => $kept ? $kept['date'] : null],
     ];
 }
 
@@ -479,7 +478,6 @@ function dash_view_never(PDO $db, $today) {
     $features = dash_features();
     $from = dash_day($today, -(analytics_days() - 1));
     $rotation = dash_rotation($db, $from, $today, analytics_days());
-    $repeatFrom = $rotation ? $rotation['date'] : null;
     $uses = dash_use_days($db, $features, $from, $today);
     $shown = dash_action_users($db, 'shown', $from, $today);
     $candidates = [];
@@ -494,7 +492,7 @@ function dash_view_never(PDO $db, $today) {
             $reason = 'fewseen';
         } else {
             $seenN = null;
-            $repeatN = dash_repeat_count($days, DASH_REPEAT_DAYS, $repeatFrom);
+            $repeatN = dash_repeat_count($days, DASH_REPEAT_DAYS);
             if ($usersN >= DASH_MIN_USERS && $repeatN > 0) continue;
             $reason = $usersN < DASH_MIN_USERS ? 'few' : 'norepeat';
         }
@@ -505,7 +503,7 @@ function dash_view_never(PDO $db, $today) {
         if ($age !== null && $age > DASH_NEVER_AGE) $candidates[] = $row; else $tooNew[] = $row;
     }
     return ['today' => $today, 'days' => analytics_days(), 'minAge' => DASH_NEVER_AGE, 'candidates' => $candidates, 'tooNew' => $tooNew,
-        'rotation' => $rotation, 'repeatSince' => $repeatFrom];
+        'rotation' => $rotation];
 }
 
 /** 6. App health: daily / weekly active users, new users, masks, and when people are active */

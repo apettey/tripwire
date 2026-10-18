@@ -181,7 +181,7 @@ const analyticsDashboard = {
 			if (f.adoption) {
 				adoption = a.bar(f.adoption.pct, f.adoption.pct + "% <span class='an-dim'>" + f.adoption.lo + "–" + f.adoption.hi + "</span>");
 			} else {
-				adoption = "<span class='an-dim'>" + (a.isSuppressed(f.used) ? "&lt;5 users" : "—") + "</span>";
+				adoption = "<span class='an-dim'>" + (a.isSuppressed(f.used) || a.isSuppressed(f.usedEligible) ? "&lt;5 users" : "—") + "</span>";
 			}
 			if (f.kind === "passive" && f.used === 0) { adoption = "<span class='an-dim' title='Drawn on the map: no use action, see Exposed and Opt-out'>passive</span>"; }
 			const repeat = f.repeat.pct !== null ? f.repeat.pct + "%" : (a.isSuppressed(f.repeat.users) ? "&lt;5" : "—");
@@ -195,7 +195,7 @@ const analyticsDashboard = {
 				+ "<td class='an-num'>" + a.escape(a.count(f.eligible)) + "</td>"
 				+ "<td class='an-num'>" + a.escape(a.count(f.exposed)) + "</td>"
 				+ "<td class='an-num'>" + a.escape(a.count(f.used)) + "</td>"
-				+ "<td>" + adoption + "</td>"
+				+ "<td title='Eligible users who used it ÷ eligible users'>" + adoption + "</td>"
 				+ "<td class='an-num'>" + repeat + "</td>"
 				+ "<td class='an-num'>" + optOut + "</td>"
 				+ "<td class='an-num'>" + a.escape(a.count(f.masks)) + "</td>"
@@ -235,7 +235,9 @@ const analyticsDashboard = {
 		const t = data.toUse;
 		out += "<p>Median time from first seeing it to first use: <b>" + (t.medianHours === null ? "—" : a.escape(a.hours(t.medianHours))) + "</b>"
 			+ " <span class='an-dim'>(" + a.escape(a.count(t.users)) + " users seen before they used it; " + a.escape(a.count(t.usedBeforeShown))
-			+ " used it before it was ever counted as seen" + (t.since ? "; only since " + a.escape(t.since) : "") + ")</span></p>";
+			+ " used it before it was ever counted as seen" + (t.since ? "; only since " + a.escape(t.since) : "") + ")</span>"
+			+ (t.saltReplaced && !t.since ? " <span class='an-dim'>Pseudonym salt replaced on " + a.escape(t.saltReplaced)
+				+ ": someone active before and after has an old and a new id, counted separately here.</span>" : "") + "</p>";
 		if (data.feature.kind === "passive") { out += "<p class='an-dim'>Passive feature (drawn on the map): few or no use actions, so Exposed and Turned off say more.</p>"; }
 		return out;
 	},
@@ -375,9 +377,6 @@ const analyticsDashboard = {
 		const a = analyticsDashboard, r = data && data.rotation;
 		if (!r || !r.date) { return ""; }
 		const extra = {
-			features: data.repeatSince ? " Repeat only counts use since " + r.date + "." : "",
-			funnel: " This funnel only uses data since " + r.date + ".",
-			never: data.repeatSince ? " Repeat users only count use since " + r.date + "." : "",
 			health: " New users are not counted for windows that include it."
 		}[tab] || "";
 		return "Pseudonym salt replaced on " + r.date + ": people active before and after it count twice in this view until " + r.until

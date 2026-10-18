@@ -160,12 +160,12 @@ $at = by_id($v['features'], 'apiTokens');
 check('features: zero use flagged, nothing at all since release flagged', $at['flags'], ['silent', 'unused']);
 check('features: a passive feature with only snapshots is not silent', by_id($v['features'], 'sizeTags')['flags'], []);
 check('features: no uid anywhere', strpos(json_encode($v), 'dashtest'), false);
-check('features: no salt replacement in the window', [$v['rotation'], $v['repeatSince']], [null, null]);
+check('features: no salt replacement in the window', $v['rotation'], null);
 
 $f = dash_view($db, 'funnel', $T, 'jumpPlanner');
 check('funnel: steps (exposed and tried of the eligible)', array_column($f['steps'], 'users'), [11, 10, 7, 5, 5]);
 check('funnel: each step names its base (retained is of tried, not of repeat)', array_column($f['steps'], 'base'), [null, 'eligible', 'exposed', 'tried', 'tried']);
-check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5', 'since' => null]);
+check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5', 'since' => null, 'saltReplaced' => null]);
 check('funnel: setting_changed is not a use', dash_view($db, 'funnel', $T, 'jumpPlanner')['steps'][2]['users'], 7);
 
 $l = dash_view($db, 'launches', $T);
@@ -215,13 +215,23 @@ $r17 = null;
 foreach ($t['whatsNew']['releases'] as $r) if ($r['date'] === '2026-10-17') $r17 = $r;
 check('tips: What\'s New opened after the 2026-10-17 release', [$r17['active'], $r17['opened'], $r17['pct'], $r17['complete']], [10, 5, 50, true]);
 
-// Salt replaced on 2026-10-25 (rows from before exist): every view says so, per-user measures start there
+// Salt replaced on 2026-10-25 (rows from before exist): every view says so; per-uid measures keep all data
 set_salt_date('2026-10-25');
 $v = dash_view($db, 'features', $T);
-check('rotation: features note and repeat since the replacement', [$v['rotation'], $v['repeatSince'], by_id($v['features'], 'jumpPlanner')['repeat']['users']],
-    [['date' => '2026-10-25', 'until' => '2027-01-16'], '2026-10-25', 0]);
+check('rotation: features note, repeat unchanged', [$v['rotation'], by_id($v['features'], 'jumpPlanner')['repeat']['users']],
+    [['date' => '2026-10-25', 'until' => '2027-01-16'], 5]);
 $f = dash_view($db, 'funnel', $T, 'jumpPlanner');
-check('rotation: the funnel starts on the replacement day', [$f['from'], array_column($f['steps'], 'users'), $f['toUse']['users'], $f['toUse']['since']], ['2026-10-25', [11, 10, 7, 0, 0], 0, '2026-10-25']);
+check('rotation: the funnel keeps its 28 days and all milestones (released before the replacement)',
+    [$f['from'], $f['rotation']['date'], array_column($f['steps'], 'users'), $f['toUse']['users'], $f['toUse']['medianHours'], $f['toUse']['since'], $f['toUse']['saltReplaced']],
+    ['2026-10-03', '2026-10-25', [11, 10, 7, 5, 5], 5, 3.0, null, '2026-10-25']);
+check('rotation: never used still counts repeat users across it', by_id(dash_view($db, 'never', '2026-12-20')['candidates'], 'jumpPlanner'), null);
+// A replacement outside the funnel's 28 days (but inside the kept data): no funnel banner
+$daily->execute(['2026-09-01', 'app', 'active', $u(99), 1, 600]);
+set_salt_date('2026-09-20');
+$f = dash_view($db, 'funnel', $T, 'jumpPlanner');
+check('rotation: outside the funnel window: no banner, the caveat stays', [$f['rotation'], $f['toUse']['saltReplaced'], dash_view($db, 'features', $T)['rotation']['date']], [null, '2026-09-20', '2026-09-20']);
+$db->prepare('DELETE FROM fork_analytics_daily WHERE uid = ?')->execute([$u(99)]);
+set_salt_date('2026-10-25');
 $h = dash_view($db, 'health', $T);
 check('rotation: no new-user counts across it', [$h['new7'], $h['new28'], $h['rotation']['date']], [null, null, '2026-10-25']);
 foreach (['launches', 'off', 'never', 'tips'] as $m) check("rotation: $m says so", dash_view($db, $m, $T)['rotation']['date'] ?? null, '2026-10-25');

@@ -754,7 +754,7 @@ of the feature's `use` actions, never `shown`, `disabled` or a setting change un
 | Turned off | Features with a Settings toggle: users with it off now, and users who switched it off in 28 days, split into after using it and without trying it. |
 | Never used | Released over 60 days ago and, for an active feature, fewer than 5 users in the kept data or nobody using it on 3+ days; for a passive one (drawn on the map, no use events), fewer than 5 users who had it on screen: candidates to prune, rethink or make easier to find. Younger features are listed apart. |
 | App health | Daily (median of the last 7 full days), weekly and 28-day active users (real keyboard/mouse input), weekly ÷ 28-day, new users, masks where someone used a feature, and a weekday x UTC-hour heatmap. The heatmap counts user-days by the hour each feature's first event of the day happened (the daily rows keep only that minute), so late hours of long sessions are under-counted. New users: everyone looks new again after the pseudonym salt is replaced (every `ANALYTICS_DAYS`). |
-| Tips & What's New | Per feature: users shown its tip (`hint_shown`), who acted on it (`hint_acted`) and who used the feature within 7 days of first seeing it; tip outcomes of all tips together (feature `hints`: `tip_shown`, `acted`, `got_it`, `closed`, `ignored`, `section_off`; they don't say which tip, so no per-tip split); "Show feature tips" turned off (setting_off) and off now (snapshot). Empty until feature tips ship. Per release: the share of active users who opened What's New themselves within 7 days (its automatic opening after an update isn't counted). |
+| Tips & What's New | Per feature: users shown its tip (`hint_shown`), who acted on it (`hint_acted`) and who used the feature within 7 days of first seeing it; tip outcomes of all tips together (feature `hints`: `tip_shown`, `acted`, `got_it`, `closed`, `ignored`, `section_off`; they don't say which tip, so no per-tip split); "Show feature tips" turned off (setting_off) and off now (snapshot). Empty until feature tips ship. None of these are use actions: the tips PR declares them in the catalog's top-level `generic` list and per-feature `events`, never in `use`, so they never count as using a feature (the catalog feature `hints` has settingsKey `hints`). Per release: the share of active users who opened What's New themselves within 7 days (its automatic opening after an update isn't counted). |
 
 Small numbers: tens of users make every number a direction, not a measurement (the page says so). User counts of 1-4
 show as "<5" and mask counts of 1-2 as "<3"; percentages of such counts are left out and a split is hidden when one part
@@ -763,9 +763,10 @@ for an operator-only view that never shows ids or per-user rows. Answers are cac
 older than a day are cleaned up).
 
 Salt replacement: every `ANALYTICS_DAYS` the pseudonym salt is replaced and everyone gets a new id, so for one window
-length afterwards people active before and after count twice (active users, eligible, used, masks...). Each view then
-shows a banner with the date and until when; repeat, retained, the funnel and time to first use only use data since the
-replacement, and new users aren't counted for windows that include it.
+length afterwards people active before and after count twice (active users, eligible, used, masks...). Each view whose
+window includes it shows a banner with the date and until when, and new users aren't counted for windows that include
+it. Per-person measures (repeat, retained, time to first use) keep all data: the replacement only splits a person into
+an old and a new id, a slight undercount the funnel mentions.
 
 - Try it in the dev stack with made-up data: `docker compose -f docker-compose.dev.yml exec -T app php docker/dev-seed-analytics.php`
   (40 fake users over 35 days; `--clear` removes them), with `ANALYTICS_ADMINS` set to your dev character's ID
