@@ -24,11 +24,15 @@ const panelModes = {
 	PLACES_KEY: "panelPlaces",
 	SAVE_DELAY_MS: 800,	// moving or resizing a window saves once it has settled
 	// Upstream's panels (tripwire.php), first in menus. size: tripwire.php's defaults (data-sizex/-sizey/-min-size*).
+	// small / smallHint / smallSize: their small views (panel-small-views.js and its CSS)
 	UPSTREAM: [
-		{ id: "infoWidget", title: "System info", size: { x: 7, y: 6, minX: 5, minY: 4 } },
-		{ id: "signaturesWidget", title: "Signatures", size: { x: 7, y: 6, minX: 5, minY: 2 } },
+		{ id: "infoWidget", title: "System info", size: { x: 7, y: 6, minX: 5, minY: 4 },
+			small: true, smallHint: "Small view: name, class and statics", smallSize: { width: 300, height: 150 } },
+		{ id: "signaturesWidget", title: "Signatures", size: { x: 7, y: 6, minX: 5, minY: 2 },
+			small: true, smallHint: "Small view: unscanned count and newest signatures", smallSize: { width: 330, height: 210 } },
 		{ id: "notesWidget", title: "Notes", size: { x: 7, y: 6, minX: 5, minY: 2 } }
 	],
+	SMALL_HINT: "Small view: a small window with only the newest",	// the kill panels' (a def without smallHint)
 	// #115 kept the kill panels' mode in options.<key>.mode ("minimized" was: shrunk in the layout) and their window in
 	// options.killPanelPlaces.<key>.float
 	// options.killPanelPlaces.<key>.fullSizeY: the height before minimizing (its layout entry kept the 2 rows it shrank to)
@@ -93,12 +97,26 @@ const panelModes = {
 		return r === "small" && def && def.small ? "small" : "floating";
 	},
 
+	/** What the panel's small view shows (button tooltip, Panels menu): def.smallHint, else the kill panels' wording */
+	smallHint: function(def) {
+		const h = def && typeof def.smallHint === "string" ? def.smallHint.trim() : "";
+		return h || panelModes.SMALL_HINT;
+	},
+
 	/**
 	 * The window's size limits in a shape ("floating" or "small"): panelHost's FLOAT or SMALL ({width, height, minWidth,
-	 * minHeight}), with the panel's own def.minSize {minWidth, minHeight} for its normal window (the Jump planner's is bigger)
+	 * minHeight}), with the panel's own def.minSize {minWidth, minHeight} for its normal window (the Jump planner's is
+	 * bigger) and def.smallSize {width, height} for its small one (each view opens at a size that fits it, never under
+	 * the minimum)
 	 */
 	sizeFor: function(def, shape, sizes) {
 		const base = Object.assign({}, shape === "small" ? sizes.SMALL : sizes.FLOAT);
+		const own = def && def.smallSize;
+		if (shape === "small" && own && typeof own === "object") {
+			["width", "height"].forEach(function(k) { const v = Number(own[k]); if (v > 0) { base[k] = Math.round(v); } });
+			base.width = Math.max(base.width, base.minWidth);
+			base.height = Math.max(base.height, base.minHeight);
+		}
 		const min = def && def.minSize;
 		if (shape !== "small" && min && typeof min === "object") {
 			["minWidth", "minHeight"].forEach(function(k) { const v = Number(min[k]); if (v > 0) { base[k] = v; } });
@@ -152,7 +170,7 @@ const panelModes = {
 		const b = {
 			pop: { to: "floating", icon: "fullscreen", tooltip: "Pop out: a window you can move and resize" },
 			normal: { to: "floating", icon: "fullscreen", tooltip: "Normal size" },
-			small: { to: "small", icon: "fullscreen-exit", tooltip: "Small view: a small window with only the newest" },
+			small: { to: "small", icon: "fullscreen-exit", tooltip: panelModes.smallHint(def) },
 			min: { to: "minimized", icon: "minus", tooltip: "Minimize: hide it (bring it back from the Panels menu at the top right)" },
 			dock: { to: "fixed", icon: "pin", tooltip: "Dock back into the layout" }
 		};
@@ -164,8 +182,9 @@ const panelModes = {
 
 	/** The buttons as HTML (for the panel header or the window's title bar) */
 	buttonsHtml: function(mode, def) {
+		const esc = function(s) { return String(s).replace(/[&<>"']/g, function(c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); };
 		return panelModes.buttons(mode, def).map(function(b) {
-			return "<i class='ph-btn' data-ph-id='" + def.id + "' data-ph-to='" + b.to + "' data-icon='" + b.icon + "' data-tooltip='" + b.tooltip + "'></i>";
+			return "<i class='ph-btn' data-ph-id='" + def.id + "' data-ph-to='" + b.to + "' data-icon='" + b.icon + "' data-tooltip='" + esc(b.tooltip) + "'></i>";
 		}).join("");
 	},
 
@@ -177,7 +196,7 @@ const panelModes = {
 		const out = [];
 		if (m !== "fixed") { out.push({ to: "fixed", label: "Dock" }); }
 		if (m !== "floating") { out.push({ to: "floating", label: m === "small" ? "Normal size" : "Pop out" }); }
-		if (small && m !== "small") { out.push({ to: "small", label: "Small view" }); }
+		if (small && m !== "small") { out.push({ to: "small", label: "Small view", hint: panelModes.smallHint(def) }); }
 		out.push({ to: "minimized", label: "Minimize" });
 		return out;
 	},
@@ -197,7 +216,11 @@ const panelModes = {
 	/** Palette commands per panel: [{verb, to}] ("restore" = back to restoreMode); Small view only with a small view */
 	commandList: function(def) {
 		const out = [{ verb: "Pop out", to: "floating" }, { verb: "Dock", to: "fixed" }, { verb: "Minimize", to: "minimized" }, { verb: "Restore", to: "restore" }];
-		if (def && def.small) { out.push({ verb: "Small view", to: "small" }); }
+		if (def && def.small) {
+			// The palette's subtitle: what it shows, without the "Small view: " its title already says
+			const text = panelModes.smallHint(def).replace(/^Small view:\s*/, "");
+			out.push({ verb: "Small view", to: "small", hint: text.charAt(0).toUpperCase() + text.slice(1) });
+		}
 		return out;
 	},
 
@@ -708,7 +731,7 @@ const panelModes = {
 		if (!model.rows.length) { return "<div class='ph-menu-empty'>No panels are on</div>"; }
 		return "<table class='ph-menu-table'>" + model.rows.map(function(r) {
 			return "<tr class='ph-row ph-mode-" + r.mode + "'><td class='ph-name'>" + esc(r.title) + "</td><td class='ph-state'>" + esc(r.label) + "</td><td class='ph-acts'>"
-				+ r.actions.map(function(a) { return "<a href='#' class='ph-act' data-ph-id='" + esc(r.id) + "' data-ph-to='" + a.to + "'>" + esc(a.label) + "</a>"; }).join(" ")
+				+ r.actions.map(function(a) { return "<a href='#' class='ph-act' data-ph-id='" + esc(r.id) + "' data-ph-to='" + a.to + "'" + (a.hint ? " title='" + esc(a.hint) + "'" : "") + ">" + esc(a.label) + "</a>"; }).join(" ")
 				+ "</td></tr>";
 		}).join("") + "</table>";
 	},
@@ -781,6 +804,7 @@ const panelModes = {
 				if (forkCommands.commands.some(function(x) { return x.id === "panel." + slug + "." + c.to; })) { return; }
 				forkCommands.register({
 					id: "panel." + slug + "." + c.to, title: c.verb + " " + def.title, group: "Panels", icon: icons[c.to],
+					hint: c.hint ? function() { return c.hint; } : undefined,
 					keywords: ["panel", "window", "pop out", "float", "dock", "minimize", "restore", def.title.toLowerCase()],
 					enabled: function() {
 						if ($("#dialog-options").is(":visible")) { return "Close Settings first"; }
@@ -801,7 +825,7 @@ const panelModes = {
 			const $w = panelModes.$el(u.id);
 			if (!$w.length) { return; }
 			const n = function(name, fallback) { const v = parseInt($w.attr(name), 10); return v > 0 ? v : fallback; };
-			const def = panelHost.register({ id: u.id, title: u.title, upstream: true,
+			const def = panelHost.register({ id: u.id, title: u.title, upstream: true, small: !!u.small, smallHint: u.smallHint, smallSize: u.smallSize,
 				size: { x: u.size.x, y: u.size.y, minX: n("data-min-sizex", u.size.minX), minY: n("data-min-sizey", u.size.minY) },
 				onResize: u.id === "infoWidget" ? function() { if (typeof activity !== "undefined" && activity.redraw) { activity.redraw(); } } : undefined });
 			const mode = panelModes.modeFor(u.id);
