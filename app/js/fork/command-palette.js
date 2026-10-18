@@ -917,7 +917,7 @@ const commandPalette = {
 			run: function() { $("#settings").trigger("click"); } });
 		add({ id: "app.whatsNew", title: "What's new", group: "App", icon: "info", keywords: ["changes", "updates", "release"],
 			enabled: function() { return typeof whatsNew !== "undefined" ? true : "Not available"; },
-			run: function() { whatsNew.open(); } });
+			run: function() { whatsNew.open(true); } });	// true: from Ctrl+K (forkUsage counts whatsNew.command, not opened)
 	},
 
 	/** Open (or switch to) a chain tab for a system, as the chain map's context menu does */

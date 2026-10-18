@@ -416,8 +416,9 @@ const forkUsage = {
 			forkUsage.wrap(commandPalette, "open", function() { forkUsage.track("commandPalette", "opened"); });
 		}
 		if (typeof whatsNew !== "undefined") {
-			// Only when the user opened it (it also opens by itself after an update)
-			forkUsage.wrap(whatsNew, "open", function() { if (forkUsage.byUser()) { forkUsage.track("whatsNew", "opened"); } });
+			// Only when the user opened it (it also opens by itself after an update); open(true) is Ctrl+K, which the
+			// forkCommands hook above counts as whatsNew.command already (one open, one use)
+			forkUsage.wrap(whatsNew, "open", function(result, args) { if (args[0] !== true && forkUsage.byUser()) { forkUsage.track("whatsNew", "opened"); } });
 		}
 		// Panels: added by the user (not at page load), or switched to another mode
 		if (typeof panelHost !== "undefined") {
