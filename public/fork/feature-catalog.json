@@ -11,7 +11,7 @@
     { "id": "whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": ["app.whatsNew"], "panels": [], "use": ["opened"],
       "events": ["tried"] },
-    { "id": "gettingStarted", "title": "Getting started", "section": "general", "prs": [], "settingsKey": null,
+    { "id": "gettingStarted", "title": "Getting started", "section": "general", "prs": [123], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["how"],
       "events": ["done_mask", "done_tab", "done_paste", "done_tracking", "done_palette", "all_done", "collapsed", "expanded", "hidden"],
       "exposed": "#gettingStarted",
@@ -107,7 +107,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.open"], "panels": [], "use": ["opened"] },
     { "id": "regionMapJumps", "title": "Jump range on the region map", "section": "routes", "prs": [100], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.jumps"], "panels": [], "use": ["shown_range"] },
-    { "id": "jumpPlanner", "try": "jumpPlanner.open", "title": "Jump planner", "section": "jumpPlanner", "prs": [50, 52, 57, 86, 88, 114], "settingsKey": "jumpRange",
+    { "id": "jumpPlanner", "try": "jumpPlanner.open", "settingsRow": "jumpPlanner-enabled-general", "title": "Jump planner", "section": "jumpPlanner", "prs": [50, 52, 57, 86, 88, 114], "settingsKey": "jumpRange",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["jumpPlanner.open", "panel.jumpPlanner"], "panels": ["jumpPlannerWidget"],
       "use": ["opened", "route_planned"], "exposed": ".jp-ring" },
 

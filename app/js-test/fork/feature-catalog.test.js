@@ -78,6 +78,32 @@ describe('feature catalog', () => {
 		(catalog.generic || []).forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a), 'generic action ' + a));
 	});
 
+	// Settings rows: their ids and the `key` they declare (forkFeatureActions finds a feature's row by its catalog
+	// `settingsRow`, else by a row whose `key` is the settingsKey: What's New "Turn it on", the features hub)
+	const rowIds = new Set();
+	const rowKeys = new Set();
+	sources.forEach(s => s.text.split('forkSettings.register(').slice(1).forEach(chunk => {
+		const head = chunk.slice(0, 1500);
+		const id = head.match(/\bid:\s*"([A-Za-z0-9_-]+)"/);
+		if (id) { rowIds.add(id[1]); }
+		const key = head.match(/\bkey:\s*"([A-Za-z0-9_]+)"/);
+		if (key) { rowKeys.add(key[1]); }
+	}));
+
+	it('every settingsRow is a registered Settings row id', () => {
+		assert.ok(rowIds.has('jumpPlanner-enabled-general') && rowIds.has('hints-enabled'), 'scan found the rows');
+		features.filter(f => f.settingsRow !== undefined).forEach(f =>
+			assert.ok(typeof f.settingsRow === 'string' && rowIds.has(f.settingsRow), f.id + ': settingsRow ' + f.settingsRow + ' is not a forkSettings.register id'));
+	});
+
+	it('every feature with a toggle has a findable Settings row (a row with its key, or settingsRow)', () => {
+		// Toggles with no Settings row of their own on purpose: Mask Admin settings (fightHereDiscord: rallyDiscord)
+		const NO_ROW = ['fightHereDiscord'];
+		const missing = features.filter(f => f.settingsKey && !rowKeys.has(f.settingsKey) && !f.settingsRow && !NO_ROW.includes(f.id))
+			.map(f => f.id + ' (' + f.settingsKey + ')');
+		assert.deepStrictEqual(missing, [], 'add "settingsRow": "<forkSettings.register id>" to these catalog entries');
+	});
+
 	it('every settingsKey is a key a Settings row stores', () => {
 		features.filter(f => f.settingsKey).forEach(f => assert.ok(settingsKeys.has(f.settingsKey), f.id + ': no Settings row stores ' + f.settingsKey));
 	});

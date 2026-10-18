@@ -235,8 +235,16 @@ const gettingStarted = {
 				gettingStarted.notify("Press Add to log in a character with EVE, then turn on the auto-mapper in the Signatures panel. " + item.how);
 			}
 		} else if (id === "palette") {
-			const did = typeof forkFeatureActions !== "undefined" ? forkFeatureActions.tryIt("commandPalette") : null;
-			if (!did) { gettingStarted.notify("Press Ctrl+K (Cmd+K on Mac) anywhere outside a text box. " + item.how); }
+			// Open it for them (doOpen: not counted as the user pressing Ctrl+K, so the step still waits for that), with how
+			gettingStarted.notify("Next time press Ctrl+K (Cmd+K on Mac) anywhere outside a text box. " + item.how);
+			if (typeof commandPalette !== "undefined" && typeof commandPalette.doOpen === "function") {
+				try { commandPalette.doOpen(); } catch (e) {
+					console.error("gettingStarted: palette", e);
+					commandPalette.state.open = false;
+					const overlay = document.getElementById("cp-overlay");
+					if (overlay) { overlay.className = "cp-hidden"; }
+				}
+			}
 		}
 	},
 

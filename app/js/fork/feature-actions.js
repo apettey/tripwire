@@ -90,6 +90,16 @@ const forkFeatureActions = {
 		return out.concat(setting, toast);
 	},
 
+	/** The palette would open on an empty picker: the command's first required argument is a chain system, hole or signature
+	 *  and candidatesOf(arg) (the palette's argCandidates) has none (e.g. Jump planner from an exit, with no exit in range) */
+	pickerEmpty: function(command, candidatesOf) {
+		const first = ((command && command.args) || []).filter(function(a) { return a && !a.optional; })[0];
+		if (!first || ["chainSystem", "hole", "signature"].indexOf(first.type) < 0) { return false; }
+		let list = [];
+		try { list = candidatesOf(first) || []; } catch (e) { list = []; }
+		return list.length === 0;
+	},
+
 	/** The first paragraph of the newest What's New entry of the feature (features: features.json's list), cut to max chars */
 	howTextOf: function(entry, features, max) {
 		if (!entry || !Array.isArray(entry.prs) || !Array.isArray(features)) { return ""; }
@@ -187,8 +197,14 @@ const forkFeatureActions = {
 		return forkCommands.commands.filter(function(c) { return c.id === id; })[0] || null;
 	},
 
+	/** The feature's Settings row: the catalog's `settingsRow` (a row id) when given, else a row storing its settingsKey */
 	settingItem: function(entry) {
-		if (!entry || !entry.settingsKey || typeof forkSettings === "undefined") { return null; }
+		if (!entry || typeof forkSettings === "undefined") { return null; }
+		if (typeof entry.settingsRow === "string" && entry.settingsRow) {
+			const own = forkSettings.items.filter(function(r) { return r.id === entry.settingsRow; })[0];
+			if (own) { return own; }
+		}
+		if (!entry.settingsKey) { return null; }
 		const rows = forkSettings.items.filter(function(r) { return r.key === entry.settingsKey; });
 		return rows.filter(function(r) { return r.type !== "custom"; })[0] || rows[0] || null;
 	},
@@ -245,6 +261,12 @@ const forkFeatureActions = {
 					return false;
 				}
 				if (!commandPalette.state.open) { return false; }
+				// Its candidates are known only once the palette has built its index (doOpen): an empty picker is no way to
+				// try it, so close again and let tryIt fall through to the panel / Settings row / toast
+				if (forkFeatureActions.pickerEmpty(command, function(arg) { return commandPalette.argCandidates(command, arg); })) {
+					commandPalette.close(false);
+					return false;
+				}
 				commandPalette.startCommand(command);
 				return true;
 			}
