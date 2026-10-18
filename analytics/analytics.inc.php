@@ -145,6 +145,7 @@ function analytics_catalog($path = ANALYTICS_CATALOG) {
     $out = [];
     $json = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
     if (is_array($json) && isset($json['features']) && is_array($json['features'])) {
+        $generic = isset($json['generic']) && is_array($json['generic']) ? $json['generic'] : [];
         foreach ($json['features'] as $f) {
             if (!is_array($f) || !isset($f['id']) || !is_string($f['id']) || !preg_match(ANALYTICS_FEATURE_RE, $f['id'])) continue;
             $use = [];
@@ -152,7 +153,10 @@ function analytics_catalog($path = ANALYTICS_CATALOG) {
                 if (is_string($a) && preg_match(ANALYTICS_ACTION_RE, $a)) $use[$a] = true;
             }
             $actions = $use;
-            foreach (ANALYTICS_GENERIC_ACTIONS as $a) $actions[$a] = true;
+            // Allowed but not use: the generic actions, the catalog's `generic` list (every feature) and the feature's `events`
+            foreach (array_merge(ANALYTICS_GENERIC_ACTIONS, $generic, isset($f['events']) && is_array($f['events']) ? $f['events'] : []) as $a) {
+                if (is_string($a) && preg_match(ANALYTICS_ACTION_RE, $a)) $actions[$a] = true;
+            }
             $out[$f['id']] = ['actions' => $actions, 'use' => $use];
         }
         foreach (isset($json['internal']) && is_array($json['internal']) ? $json['internal'] : [] as $id) {

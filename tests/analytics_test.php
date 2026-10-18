@@ -63,6 +63,7 @@ $catalog = analytics_catalog();
 check('catalog loaded', isset($catalog['jumpPlanner'], $catalog['app']), true);
 check('generic and own actions allowed', [analytics_allowed($catalog, 'jumpPlanner', 'opened'), analytics_allowed($catalog, 'jumpPlanner', 'route_planned'), analytics_allowed($catalog, 'sizeTags', 'shown')], [true, true, true]);
 check('other features\' actions refused', analytics_allowed($catalog, 'sizeTags', 'route_planned'), false);
+check('catalog `generic` actions for every feature, `events` for their own, neither counts as use', [analytics_allowed($catalog, 'sizeTags', 'hint_shown'), analytics_allowed($catalog, 'hints', 'ignored'), analytics_allowed($catalog, 'sizeTags', 'ignored'), analytics_is_use($catalog, 'hints', 'ignored'), analytics_is_use($catalog, 'hints', 'acted')], [true, true, false, false, true]);
 check('internal ids take their own actions only', [analytics_allowed($catalog, 'app', 'active'), analytics_allowed($catalog, 'app', 'opened')], [true, false]);
 check('unknown feature / bad action refused', [analytics_allowed($catalog, 'J123456', 'opened'), analytics_allowed($catalog, 'jumpPlanner', 'Opened'), analytics_allowed($catalog, 'jumpPlanner', 'a b'), analytics_allowed($catalog, 'jumpPlanner', str_repeat('a', 25))], [false, false, false, false]);
 $p = analytics_parse(json_encode(['t' => 'tok', 'e' => [

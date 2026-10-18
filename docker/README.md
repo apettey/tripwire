@@ -704,7 +704,8 @@ first use, `docker/sql/analytics.sql` is the reference). Users turn it off in Se
 
 - **What is sent.** Counters like "jumpPlanner opened 3 times": a feature id from `public/fork/feature-catalog.json` and
   an action from a fixed list (`command`, `opened`, `shown`, `disabled`, `setting_on`/`setting_off`, the feature's `use`
-  actions, and `app.active` at most once per 5 minutes of real input). Batched every 60 s (and when the tab is hidden),
+  actions, the catalog's `generic` actions such as a feature tip's `hint_shown` / `hint_acted`, the feature's own
+  non-use `events`, and `app.active` at most once per 5 minutes of real input). Batched every 60 s (and when the tab is hidden),
   at most 50 counters / 8 KB a request, with a per-session token; the server accepts only catalog ids and actions and
   always answers 204.
 - **Where the counts come from.** Automatically: Ctrl+K palette commands that succeeded, panels the user opens or switches
