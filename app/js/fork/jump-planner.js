@@ -300,6 +300,13 @@ const jumpPlanner = {
 		return out;
 	},
 
+	/** Which chain the exits belong to: "<mask>|<chain tab>" (a switch of either primes chain.exit instead of firing it) */
+	exitsKey: function(opts) {
+		const mask = opts && opts.masks ? opts.masks.active : "";
+		const tab = opts && opts.chain ? opts.chain.active : "";
+		return String(mask === undefined || mask === null ? "" : mask) + "|" + String(tab === undefined || tab === null ? "" : tab);
+	},
+
 	/** Exits (system ids) in `next` that weren't in `prev`: the chain just got them (the tips' chain.exit event) */
 	newExits: function(prev, next) {
 		const had = {};
@@ -1536,10 +1543,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					// home (new, EOL, mass, preserve mass, a new root)
 					const allExits = s.enabled ? jp.homeExits(result, systems()) : [];
 					const homeKey = s.enabled && s.mode === "home" ? jp.homeKey(result, systems(), preserveFlags()) : "";
-					// Tips' chain.exit: exits the chain gets, not the ones it had at page load or a mask switch (those prime it)
-					const mask = typeof options !== "undefined" && options.masks ? String(options.masks.active) : "";
-					const primed = state.exitsMask === mask;
-					state.exitsMask = mask;
+					// Tips' chain.exit: exits the chain gets, not the ones it had at page load, a mask or a chain tab switch (those prime it)
+					const chainKey = jp.exitsKey(typeof options !== "undefined" ? options : null);
+					const primed = state.exitsKey === chainKey;
+					state.exitsKey = chainKey;
 					if (exits.join(",") !== state.exits.join(",") || allExits.join(",") !== state.allExits.join(",") || homeKey !== state.homeKey) {
 						const added = primed ? jp.newExits(state.exits, exits) : [];
 						if (added.length && typeof forkHints !== "undefined") { setTimeout(function() { forkHints.emit("chain.exit", { systemIDs: added }); }, 0); }

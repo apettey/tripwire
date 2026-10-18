@@ -167,5 +167,23 @@ check('route: corporation without a Tripwire admin', rally_discord_route($rdb, '
 $rdb->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute(array('not json', '98000001.2'));
 check('route: unreadable settings count as off', rally_discord_route($rdb, '98000001.2', $legacy)['via'], 'legacy');
 
+// --- rally_discord_any_channel / rally_discord_has_channels: rally.php's "discordChannels" (Mask Admin feature tip) ---
+$cdb = new PDO('sqlite::memory:');
+$cdb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$logTo = ini_get('error_log');
+ini_set('error_log', '/dev/null');	// SQLite's "no such table" isn't MySQL's 42S02, so it is logged: keep the output clean
+check('channels: no discord_webhooks table', rally_discord_any_channel($cdb, '98000001.2'), false);
+ini_set('error_log', $logTo === false ? '' : $logTo);
+$cdb->exec('CREATE TABLE discord_webhooks (id INTEGER PRIMARY KEY, maskID TEXT NOT NULL, name TEXT, url TEXT)');
+check('channels: no webhooks at all', rally_discord_any_channel($cdb, '98000001.2'), false);
+$cdb->prepare('INSERT INTO discord_webhooks (maskID, name, url) VALUES (?, ?, ?)')->execute(array('98000009.2', 'other', 'plain:x'));
+check('channels: only another mask has one', rally_discord_any_channel($cdb, '98000001.2'), false);
+$cdb->prepare('INSERT INTO discord_webhooks (maskID, name, url) VALUES (?, ?, ?)')->execute(array('98000001.2', 'kills', 'plain:y'));
+check('channels: this mask has one', rally_discord_any_channel($cdb, '98000001.2'), true);
+check('channels: a Fight here route (or the server webhook) counts without asking',
+	rally_discord_has_channels(array('via' => 'legacy', 'hook' => 'https://discord.example/x'), $cdb, '98000005.2'), true);
+check('channels: no route, none of its own', rally_discord_has_channels(null, $cdb, '98000005.2'), false);
+check('channels: no route, one of its own', rally_discord_has_channels(null, $cdb, '98000001.2'), true);
+
 echo ($count - $failures) . "/$count passed\n";
 exit($failures ? 1 : 0);

@@ -61,6 +61,12 @@ function rally_discord_any_channel($mysql, $mask) {
 	}
 }
 
+/** rally.php's "discordChannels": a Fight here route (a channel, or the server-wide DISCORD_WEB_HOOK of the mask) or
+	any channel of the mask's own (only asked when there is no route) */
+function rally_discord_has_channels($route, $mysql, $mask) {
+	return $route ? true : rally_discord_any_channel($mysql, $mask);
+}
+
 /** Neutralise user-controlled text for a Discord message: no mentions (@everyone, @here, <@id>), no
 	markdown, no links, one line, at most $max characters. */
 function rally_discord_clean($text, $max = 100) {

@@ -141,6 +141,16 @@ describe('feature tips: eligibility', () => {
 		assert.deepStrictEqual(jumpPlanner.newExits(null, undefined), []);
 	});
 
+	it('jumpPlanner.exitsKey: a mask or a chain tab switch is another chain (primes chain.exit)', () => {
+		const key = (mask, tab) => jumpPlanner.exitsKey({ masks: { active: mask }, chain: { active: tab } });
+		assert.strictEqual(key('1.2', 0), '1.2|0');
+		assert.notStrictEqual(key('1.2', 0), key('1.2', 1), 'chain tab switch');
+		assert.notStrictEqual(key('1.2', 0), key('3.2', 0), 'mask switch');
+		assert.strictEqual(key('1.2', 1), key('1.2', 1));
+		assert.strictEqual(jumpPlanner.exitsKey(null), '|');
+		assert.strictEqual(jumpPlanner.exitsKey({}), '|');
+	});
+
 	it('panelModes.crowded: 5 panels or more on screen', () => {
 		assert.strictEqual(panelModes.crowded(4), false);
 		assert.strictEqual(panelModes.crowded(5), true);

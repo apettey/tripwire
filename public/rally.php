@@ -101,7 +101,7 @@ try {
 
 $route = rally_discord_route($mysql, $mask);
 $output['discord'] = !!$route;
-$output['discordChannels'] = $route || rally_discord_any_channel($mysql, $mask);	// any channel at all (the Mask Admin tip)
+$output['discordChannels'] = rally_discord_has_channels($route, $mysql, $mask);	// any channel at all (the Mask Admin tip)
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
 echo json_encode($output);
