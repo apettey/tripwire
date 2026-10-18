@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-18 | [More feature tips](2026-10-18-more-feature-tips/README.md) | Twelve tips for easy-to-miss features (edit life/mass in place, d-scan sharing, Mass dialog, rolling, region map, staging scan, jump planner, chain kills, panel modes, Mask Admin Discord / Watchlist / Bookmarks); tips inside dialogs |
 | 2026-10-18 | [Feature tips](2026-10-18-feature-tips/README.md) | Tips engine: one short tip at a quiet moment for a feature not used yet (caps, quiet check, usage-aware), Settings > General toggle; pilot tips for Ctrl+K and hiding anomalies; "Does it need a tip?" in the feature workflow |
 | 2026-10-18 | [Usage analytics dashboard](2026-10-18-analytics-dashboard/README.md) | Operator-only dashboard (characters in `ANALYTICS_ADMINS`) over the usage counters: feature adoption, funnels, launches, opt-outs, never-used features, app health, tips; small counts shown as <5 |
 | 2026-10-18 | [Usage statistics](2026-10-18-usage-tracking/README.md) | First-party feature usage counters (no third parties; pseudonymous, 90 days), feature catalog, Settings > General toggle, analytics check in the feature workflow |

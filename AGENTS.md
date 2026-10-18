@@ -109,7 +109,9 @@ change-log entry.
 - **How:** call `forkHints.register({...})` from the feature's own JS file (fields documented at the top of
   [app/js/fork/hints.js](app/js/fork/hints.js); the command palette and Hide anomalies tips are examples). Pick a
   trigger event, `feature` = its catalog id (the tip retires once that feature is used), an anchor that is on screen
-  then, and `kind` (callout, beacon or toast). The engine handles the caps, quiet moments, Settings and statistics.
+  then, and `kind` (callout, beacon or toast). A tip inside a dialog (Mass dialog, Mask Admin) names it in `dialog`. A new
+  trigger event is emitted from a fork file with one guarded line and added to `EVENTS` in hints.js. The engine handles
+  the caps, quiet moments, Settings and statistics; `app/js-test/fork/feature-tips-content.test.js` checks every tip.
 - **Text:** one or two sentences, plain EVE terms (the tripwire-domain skill), say where the setting is, and end with
   "Turn tips off in Settings > General."
 - Check it in the dev stack with `forkHints.debug(true)` (logs every decision, skips the 2-minute grace and 30-minute
