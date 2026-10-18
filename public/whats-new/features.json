@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 125,
+      "date": "2026-10-18",
+      "title": "More feature tips",
+      "description": "Tripwire now points out easy-to-miss features when they are useful: editing life and mass right in the signature list, the region map, the jump planner ring, the Chain kills panel, and Rolling and Preserve mass in the Mass dialog. Mask admins get pointers to Discord, Watchlist and bookmark names.\n\nAt most one tip a session, never about something you already use. Turn tips off in Settings > General.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-125-more-tips.png",
+          "caption": "A tip inside the Mass dialog"
+        }
+      ]
+    },
+    {
       "pr": 124,
       "date": "2026-10-18",
       "title": "Features you have not tried",
