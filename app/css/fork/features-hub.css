@@ -1,0 +1,41 @@
+/* Features dialog, "Features you haven't tried" (fork-owned, see app/js/fork/features-hub.js) */
+
+.dialog-featuresHub .ui-dialog-content { padding: 0; overflow: hidden; }
+.dialog-featuresHub .fhub-wrap { display: flex; flex-direction: column; height: 100%; font-size: 12px; text-align: left; color: #ccc; }
+
+.dialog-featuresHub .fhub-filters { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; background: #151515; border-bottom: 1px solid #333; }
+.dialog-featuresHub .fhub-filters input,
+.dialog-featuresHub .fhub-filters select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; font-size: 12px; }
+.dialog-featuresHub .fhub-text { flex: 1 1 140px; min-width: 120px; }
+.dialog-featuresHub .fhub-summary { flex: 0 0 auto; padding: 4px 10px; color: #9FB3C6; border-bottom: 1px solid #2a2a2a; }
+
+.dialog-featuresHub .fhub-list { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 0 8px 8px; list-style: none; }
+.dialog-featuresHub .fhub-row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid #262626; }
+.dialog-featuresHub .fhub-row:hover { background: #1b2230; }
+.dialog-featuresHub .fhub-main { flex: 1 1 auto; min-width: 0; }
+.dialog-featuresHub .fhub-name { color: #e6e6e6; font-weight: bold; }
+.dialog-featuresHub .fhub-section { color: #888; font-size: 11px; }
+.dialog-featuresHub .fhub-desc { margin-top: 2px; color: #aaa; line-height: 15px; }
+.dialog-featuresHub .fhub-empty { padding: 12px 2px; color: #888; font-style: italic; }
+
+.dialog-featuresHub .fhub-badge { flex: 0 0 auto; min-width: 62px; padding: 1px 5px; border-radius: 3px; font-size: 10px; text-align: center; white-space: nowrap; }
+.dialog-featuresHub .fhub-badge-new { background: #1C3A57; color: #CFE3FF; border: 1px solid #3B6E99; }
+.dialog-featuresHub .fhub-badge-used { background: #173017; color: #6FD36F; border: 1px solid #2f5d2f; }
+.dialog-featuresHub .fhub-badge-off { background: #222; color: #A0A0A0; border: 1px solid #444; font-style: italic; }
+
+.dialog-featuresHub .fhub-buttons { flex: 0 0 auto; display: flex; gap: 4px; }
+.dialog-featuresHub .fhub-buttons button { padding: 1px 8px; border: 1px solid #555; border-radius: 3px; background: #222; color: #ddd; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.dialog-featuresHub .fhub-buttons .fhub-try { border-color: #4A9EE0; background: #1C3A57; color: #fff; }
+.dialog-featuresHub .fhub-buttons button:hover,
+.dialog-featuresHub .fhub-buttons button:focus { background: #275684; }
+.dialog-featuresHub .fhub-buttons button[disabled] { opacity: 0.4; cursor: default; background: #222; border-color: #444; }
+.dialog-featuresHub .fhub-used .fhub-name { color: #c4c4c4; font-weight: normal; }
+
+@media (max-width: 520px) {
+	.dialog-featuresHub .fhub-row { flex-wrap: wrap; }
+	.dialog-featuresHub .fhub-main { flex-basis: 100%; }
+}
+
+/* The link in What's New's footer */
+.dialog-whatsNew .ui-dialog-buttonpane .fhub-wn-link { float: left; margin: 0.9em 0 0 0.6em; color: #8fb3e0; font-size: 12px; }
+.dialog-whatsNew .ui-dialog-buttonpane .fhub-wn-link:hover { color: #fff; }
