@@ -57,7 +57,8 @@ try {
 	if (!isset($mysql) || !($mysql instanceof PDO)) throw new RuntimeException('no database');
 	$today = gmdate('Y-m-d');
 	$feature = isset($_GET['feature']) && is_string($_GET['feature']) ? $_GET['feature'] : null;
-	$data = dash_cached($mode . '|' . $feature . '|' . $today, function () use ($mysql, $mode, $today, $feature) {
+	// Keyed by view (and feature for the funnel) only: the 2-minute lifetime covers a new day
+	$data = dash_cached($mode === 'funnel' ? 'funnel|' . $feature : $mode, function () use ($mysql, $mode, $today, $feature) {
 		return dash_view($mysql, $mode, $today, $feature);
 	});
 	if ($data === null) {

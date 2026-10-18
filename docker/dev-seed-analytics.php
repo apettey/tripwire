@@ -4,6 +4,7 @@
 //
 //   docker compose -f docker-compose.dev.yml exec -T app php docker/dev-seed-analytics.php          # add / replace
 //   docker compose -f docker-compose.dev.yml exec -T app php docker/dev-seed-analytics.php --clear  # remove them again
+//   ... --keep-salt: leave the salt date (dated back by default so the made-up days are not split by it)
 //
 // Fake rows have uids starting with "f0e5" (real ones are HMAC hex, so a clash is possible but harmless in dev); a run
 // first deletes the earlier fake rows. Deterministic (fixed random seed) for a given day. Never run it in production.
@@ -92,6 +93,20 @@ for ($u = 0; $u < USERS; $u++) {
     // Turned off in Settings in the window (some after using the feature)
     if (isset($off['killReporting'])) $add(dash_day($today, -mt_rand(1, 20)), 'killReporting', 'setting_off', $uid, 1, $hour * 60);
     if (isset($off['sizeTags'])) $add(dash_day($today, -mt_rand(1, 20)), 'sizeTags', 'setting_off', $uid, 1, $hour * 60);
+    // Feature tips (the names the tips feature sends): a tip per feature, its outcome on feature "hints"
+    if ($u < 24) {
+        $tipFeature = ['jumpPlanner', 'regionMap', 'intelScans'][$u % 3];
+        $tipDay = dash_day($today, -mt_rand(2, 14));
+        $add($tipDay, $tipFeature, 'hint_shown', $uid, 1, $hour * 60);
+        $add($tipDay, 'hints', 'tip_shown', $uid, 1, $hour * 60);
+        $outcome = ['acted', 'got_it', 'closed', 'ignored', 'acted'][mt_rand(0, 4)];
+        $add($tipDay, 'hints', $outcome, $uid, 1, $hour * 60 + 1);
+        if ($outcome === 'acted') {
+            $add($tipDay, $tipFeature, 'hint_acted', $uid, 1, $hour * 60 + 1);
+            $add($tipDay, $tipFeature, 'opened', $uid, 1, $hour * 60 + 2);
+        }
+    }
+    if ($u % 9 === 4) $add(dash_day($today, -mt_rand(1, 10)), 'hints', 'setting_off', $uid, 1, $hour * 60);
     if ($u % 7 === 3 && isset($adopt['jumpReturn'])) $add(dash_day($today, -mt_rand(0, 3)), 'jumpReturn', 'setting_off', $uid, 1, min(1439, $hour * 60 + 300));
 }
 
@@ -116,5 +131,14 @@ foreach ($user as $k => $v) {
 $stmt = $mysql->prepare('INSERT IGNORE INTO fork_analytics_mask (day, maskHash, feature) VALUES (?, ?, ?)');
 foreach ($masks as $k => $_) $stmt->execute(explode('|', $k));
 $mysql->commit();
+// The made-up days are older than this dev database's salt: date the salt back (key unchanged) so the dashboard doesn't
+// report a salt replacement in the middle of them. Pass --keep-salt to see that banner instead.
+if (!in_array('--keep-salt', $argv, true)) {
+    $salt = (string) $mysql->query("SELECT v FROM fork_analytics_meta WHERE k = 'salt'")->fetchColumn();
+    $oldest = dash_day($today, -DAYS - 1);
+    if (preg_match('/^\d{4}-\d{2}-\d{2}:/', $salt) && substr($salt, 0, 10) > $oldest) {
+        $mysql->prepare("UPDATE fork_analytics_meta SET v = ? WHERE k = 'salt' AND v = ?")->execute([$oldest . substr($salt, 10), $salt]);
+    }
+}
 foreach (glob(__DIR__ . '/../cache/fork-analytics-*.json') ?: [] as $f) @unlink($f);
 echo 'analytics seed: ', count($daily), ' daily rows, ', count($user), ' milestones, ', count($masks), " mask rows for ", USERS, " fake users\n";

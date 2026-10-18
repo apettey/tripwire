@@ -5,7 +5,12 @@
 //
 // Everything returned is aggregated: never a uid, never a per-user row. Small cells are suppressed: a user count of 1-4 is
 // returned as "<5" and a mask count of 1-2 as "<3"; a percentage whose count is suppressed is left out, and a split whose
-// parts would reveal a suppressed part is hidden as a whole.
+// parts would reveal a suppressed part is hidden as a whole. Suppression is per cell: differences between cells (active
+// minus eligible, say) can still give a small number away. Fine for an operator-only view without per-user rows.
+//
+// Salt replacement (every ANALYTICS_DAYS, analytics.inc.php) gives everyone a new uid, so a window that includes days on
+// both sides counts people active on both sides twice. Every view says so (`rotation`), and per-user measures (repeat,
+// retained, time to first use) only use data since the replacement.
 //
 // Windows end on $today (UTC date, inclusive): "28 days" = $today and the 27 days before it. "Use" = the feature's use
 // actions in the catalog (command, opened and its `use` words), as analytics_is_use counts it for masks.
@@ -60,13 +65,6 @@ function dash_masks($n) {
 
 function dash_small($n) {
     return $n > 0 && $n < DASH_MIN_USERS;
-}
-
-/** Eligible users (active minus those with the feature turned off) as shown. Next to the active count, an exact number
- *  would give a suppressed number turned off away: then a range "a-b" as wide as the suppression. */
-function dash_eligible($activeN, $offN) {
-    if (!dash_small($offN)) return dash_users(max(0, $activeN - $offN));
-    return max(0, $activeN - DASH_MIN_USERS + 1) . '-' . max(0, $activeN - 1);
 }
 
 /** Whole percent of $k in $n, or null when $k is suppressed or $n is 0 */
@@ -237,6 +235,24 @@ function dash_users_between(array $days, $from, $to) {
     return $out;
 }
 
+/** The current pseudonym salt's start date (fork_analytics_meta, date part only), or null */
+function dash_salt_date(PDO $db) {
+    $rows = dash_rows($db, "SELECT v FROM fork_analytics_meta WHERE k = 'salt'");
+    return $rows && preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $rows[0][0]) ? substr((string) $rows[0][0], 0, 10) : null;
+}
+
+/**
+ * A salt replacement inside a window ($from, $today]: people active on both sides count twice. Only when rows from before
+ * the replacement exist (the first salt of a fresh install splits nobody). ['date' => day replaced, 'until' => last day a
+ * window of $days still includes days from before] or null.
+ */
+function dash_rotation(PDO $db, $from, $today, $days) {
+    $r = dash_salt_date($db);
+    if ($r === null || $r <= $from || $r > $today) return null;
+    if (!dash_rows($db, 'SELECT 1 FROM fork_analytics_daily WHERE day < ? LIMIT 1', [$r])) return null;
+    return ['date' => $r, 'until' => dash_day($r, $days - 1)];
+}
+
 // ---- views ----
 
 /** 1. Features: every catalog feature, used or not */
@@ -255,6 +271,10 @@ function dash_view_features(PDO $db, $today) {
     $lastEvent = [];
     foreach (dash_rows($db, 'SELECT feature, MAX(day) FROM fork_analytics_daily GROUP BY feature') as $r) $lastEvent[$r[0]] = $r[1];
 
+    // After a salt replacement in the window, repeat use only counts days since then (older days belong to other uids)
+    $rotation = dash_rotation($db, $from90, $today, 7 * DASH_WEEKS);
+    $repeatFrom = $rotation && $rotation['date'] > $from ? $rotation['date'] : $from;
+
     $activeN = count($active);
     $rows = [];
     foreach ($features as $id => $f) {
@@ -262,15 +282,16 @@ function dash_view_features(PDO $db, $today) {
         $used = dash_users_between($useDays, $from, $today);
         $usedN = count($used);
         $exposedN = count(array_replace(isset($shown[$id]) ? $shown[$id] : [], $used));
-        $offN = isset($off[$id]) ? count(array_intersect_key($off[$id], $active)) : 0;
-        $eligibleN = max(0, $activeN - $offN);
-        // Eligible next to the (public) active count would give the number turned off away: a range when that is suppressed
-        $eligible = dash_eligible($activeN, $offN);
-        $repeatN = dash_repeat_count(array_intersect_key($useDays, $used), DASH_REPEAT_DAYS, $from, $today);
+        $offSet = isset($off[$id]) ? array_intersect_key($off[$id], $active) : [];
+        $offN = count($offSet);
+        $eligible = array_diff_key($active, $offSet);
+        $eligibleN = count($eligible);
+        $usedEligibleN = count(array_intersect_key($used, $eligible));   // adoption: only users in the denominator
+        $repeatN = dash_repeat_count(array_intersect_key($useDays, $used), DASH_REPEAT_DAYS, $repeatFrom, $today);
         $adoption = null;
-        if ($eligibleN > 0 && !dash_small($usedN) && !dash_small($eligibleN)) {
-            $ci = dash_wilson($usedN, $eligibleN);
-            $adoption = ['pct' => (int) round(100 * $usedN / $eligibleN), 'lo' => $ci[0], 'hi' => $ci[1]];
+        if ($eligibleN > 0 && !dash_small($usedEligibleN) && !dash_small($eligibleN)) {
+            $ci = dash_wilson($usedEligibleN, $eligibleN);
+            $adoption = ['pct' => (int) round(100 * $usedEligibleN / $eligibleN), 'lo' => $ci[0], 'hi' => $ci[1]];
         }
         $spark = [];
         for ($w = DASH_WEEKS - 1; $w >= 0; $w--) {
@@ -287,10 +308,10 @@ function dash_view_features(PDO $db, $today) {
         $rows[] = [
             'id' => $id, 'title' => $f['title'], 'section' => $f['section'], 'prs' => $f['prs'], 'released' => $f['released'],
             'kind' => $f['kind'], 'audience' => $f['audience'], 'toggle' => $f['settingsKey'] !== null,
-            'eligible' => $eligible,
+            'eligible' => dash_users($eligibleN),
             'exposed' => dash_users($exposedN),
             'used' => dash_users($usedN),
-            'adoption' => $adoption,
+            'adoption' => $adoption, 'usedEligible' => dash_users($usedEligibleN),
             'repeat' => ['users' => dash_users($repeatN), 'pct' => dash_small($usedN) ? null : dash_pct($repeatN, $usedN)],
             'optOut' => $f['settingsKey'] === null ? null : ['users' => dash_users($offN), 'pct' => dash_pct($offN, $activeN)],
             'masks' => dash_masks(isset($masks[$id]) ? $masks[$id] : 0),
@@ -298,7 +319,8 @@ function dash_view_features(PDO $db, $today) {
             'flags' => $flags,
         ];
     }
-    return ['today' => $today, 'window' => DASH_WINDOW, 'active' => dash_users($activeN), 'features' => $rows];
+    return ['today' => $today, 'window' => DASH_WINDOW, 'active' => dash_users($activeN), 'features' => $rows,
+        'rotation' => $rotation, 'repeatSince' => $repeatFrom !== $from ? $repeatFrom : null];
 }
 
 /** 2. Funnel of one feature: eligible -> exposed -> tried -> repeat -> retained, and the median time from first seen to first use */
@@ -307,17 +329,20 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
     if (!isset($features[$featureId])) return null;
     $f = $features[$featureId];
     $from = dash_day($today, -(DASH_WINDOW - 1));
+    // A salt replacement in the window: the whole funnel starts on that day (one uid per person)
+    $rotation = dash_rotation($db, $from, $today, DASH_WINDOW);
+    if ($rotation) $from = $rotation['date'];
     $active = dash_users_between(dash_active_days($db, $from, $today), $from, $today);
-    $uses = dash_use_days($db, [$f], $from, $today);
-    $useDays = isset($uses[$featureId]) ? $uses[$featureId] : [];
-    $shown = dash_action_users($db, 'shown', $from, $today);
     $off = dash_off_users($db, $from, $today);
-    $offN = isset($off[$featureId]) ? count(array_intersect_key($off[$featureId], $active)) : 0;
-    $eligibleN = max(0, count($active) - $offN);
-    $exposedN = count(array_replace(isset($shown[$featureId]) ? $shown[$featureId] : [], $useDays));
+    $eligible = array_diff_key($active, isset($off[$featureId]) ? $off[$featureId] : []);
+    // Every step is a subset of the one it is measured against: exposed and tried of the eligible users
+    $uses = dash_use_days($db, [$f], $from, $today);
+    $useDays = array_intersect_key(isset($uses[$featureId]) ? $uses[$featureId] : [], $eligible);
+    $shown = dash_action_users($db, 'shown', $from, $today);
+    $exposedN = count(array_intersect_key(array_replace(isset($shown[$featureId]) ? $shown[$featureId] : [], $useDays), $eligible));
     $triedN = count($useDays);
     $repeatN = dash_repeat_count($useDays, DASH_REPEAT_DAYS);
-    // Retained: used in two consecutive 7-day weeks of the window (weeks counted back from today)
+    // Retained: used in two consecutive 7-day weeks of the window (weeks counted back from today); not a subset of repeat
     $retainedN = 0;
     foreach ($useDays as $set) {
         $weeks = [];
@@ -326,7 +351,10 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
             if (isset($weeks[$w], $weeks[$w + 1])) { $retainedN++; break; }
         }
     }
-    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt)
+    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt); after a salt
+    // replacement in the kept data only milestones since then (an older one belongs to someone's old uid)
+    $kept = dash_rotation($db, dash_day($today, -(analytics_days() - 1)), $today, analytics_days());
+    $milestonesFrom = $kept ? strtotime($kept['date'] . ' 00:00:00 UTC') : 0;
     $firstShown = [];
     $firstUse = [];
     $place = implode(', ', array_fill(0, count($f['use']), '?'));
@@ -340,22 +368,23 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
     $hours = [];
     $usedFirst = 0;
     foreach ($firstUse as $uid => $t) {
-        if (!isset($firstShown[$uid])) continue;
+        if (!isset($firstShown[$uid]) || $firstShown[$uid] < $milestonesFrom || $t < $milestonesFrom) continue;
         if ($t < $firstShown[$uid]) { $usedFirst++; continue; }
         $hours[] = ($t - $firstShown[$uid]) / 3600;
     }
     $median = count($hours) >= DASH_MIN_USERS ? round(dash_median($hours), 1) : null;
     return [
-        'today' => $today, 'window' => DASH_WINDOW,
+        'today' => $today, 'window' => DASH_WINDOW, 'from' => $from, 'rotation' => $rotation ?: $kept,
         'feature' => ['id' => $featureId, 'title' => $f['title'], 'released' => $f['released'], 'kind' => $f['kind']],
         'steps' => [
-            ['key' => 'eligible', 'users' => dash_eligible(count($active), $offN)],
-            ['key' => 'exposed', 'users' => dash_users($exposedN)],
-            ['key' => 'tried', 'users' => dash_users($triedN)],
-            ['key' => 'repeat', 'users' => dash_users($repeatN)],
-            ['key' => 'retained', 'users' => dash_users($retainedN)],
+            ['key' => 'eligible', 'users' => dash_users(count($eligible)), 'base' => null],
+            ['key' => 'exposed', 'users' => dash_users($exposedN), 'base' => 'eligible'],
+            ['key' => 'tried', 'users' => dash_users($triedN), 'base' => 'exposed'],
+            ['key' => 'repeat', 'users' => dash_users($repeatN), 'base' => 'tried'],
+            ['key' => 'retained', 'users' => dash_users($retainedN), 'base' => 'tried'],
         ],
-        'toUse' => ['medianHours' => $median, 'users' => dash_users(count($hours)), 'usedBeforeShown' => dash_users($usedFirst)],
+        'toUse' => ['medianHours' => $median, 'users' => dash_users(count($hours)), 'usedBeforeShown' => dash_users($usedFirst),
+            'since' => $kept ? $kept['date'] : null],
     ];
 }
 
@@ -367,7 +396,9 @@ function dash_view_launches(PDO $db, $today) {
     $entries = array_slice(dash_whatsnew(), 0, DASH_LAUNCHES);
     $oldest = $today;
     foreach ($entries as $e) if ($e['date'] < $oldest) $oldest = $e['date'];
-    $firstData = dash_day($today, -(analytics_days() - 1));
+    // The first day with any data (a fresh install, or retention): earlier launches can't be measured
+    $first = dash_rows($db, 'SELECT MIN(day) FROM fork_analytics_daily');
+    $firstData = $first && $first[0][0] !== null ? $first[0][0] : null;
     $active = dash_active_days($db, $oldest, $today);
     $uses = dash_use_days($db, array_values(array_filter($features, function ($f) use ($byPr, $entries) {
         foreach ($entries as $e) if (isset($byPr[$e['pr']]) && $byPr[$e['pr']]['id'] === $f['id']) return true;
@@ -380,7 +411,8 @@ function dash_view_launches(PDO $db, $today) {
         $flag = false;
         foreach (DASH_LAUNCH_DAYS as $k) {
             $end = dash_day($e['date'], $k - 1);
-            if (!$f || $end > $today || $e['date'] < $firstData) { $days[(string) $k] = null; continue; }
+            if (!$f || $end > $today) { $days[(string) $k] = null; continue; }
+            if ($firstData === null || $e['date'] < $firstData) { $days[(string) $k] = ['noData' => true]; continue; }
             $base = dash_users_between($active, $e['date'], $end);
             $tried = array_intersect_key(dash_users_between(isset($uses[$f['id']]) ? $uses[$f['id']] : [], $e['date'], $end), $base);
             $pct = count($base) ? 100 * count($tried) / count($base) : null;
@@ -392,7 +424,8 @@ function dash_view_launches(PDO $db, $today) {
             'feature' => $f ? ['id' => $f['id'], 'title' => $f['title'], 'followUp' => $f['prs'] && min($f['prs']) !== $e['pr']] : null,
             'days' => $days, 'flag' => $flag];
     }
-    return ['today' => $today, 'launches' => $out];
+    return ['today' => $today, 'launches' => $out, 'firstData' => $firstData,
+        'rotation' => dash_rotation($db, $oldest, $today, dash_days_between($oldest, $today) + 1)];
 }
 
 /** 4. Turned off: features with a Settings toggle, how many have it off now and who switched it off after / without using it */
@@ -434,28 +467,45 @@ function dash_view_off(PDO $db, $today) {
             'turnedOn' => dash_users(isset($turnedOn[$id]) ? count($turnedOn[$id]) : 0),
         ];
     }
-    return ['today' => $today, 'window' => DASH_WINDOW, 'active' => dash_users($activeN), 'features' => $rows];
+    return ['today' => $today, 'window' => DASH_WINDOW, 'active' => dash_users($activeN), 'features' => $rows,
+        'rotation' => dash_rotation($db, $from, $today, DASH_WINDOW)];
 }
 
-/** 5. Never used: fewer than 5 users in the kept data or no repeat user, released more than 60 days ago */
+/**
+ * 5. Never used, released more than 60 days ago: an active feature with fewer than 5 users in the kept data or no repeat
+ * user; a passive one (drawn on the map, no use events) with fewer than 5 users who had it on screen
+ */
 function dash_view_never(PDO $db, $today) {
     $features = dash_features();
     $from = dash_day($today, -(analytics_days() - 1));
+    $rotation = dash_rotation($db, $from, $today, analytics_days());
+    $repeatFrom = $rotation ? $rotation['date'] : null;
     $uses = dash_use_days($db, $features, $from, $today);
+    $shown = dash_action_users($db, 'shown', $from, $today);
     $candidates = [];
     $tooNew = [];
     foreach ($features as $id => $f) {
         $days = isset($uses[$id]) ? $uses[$id] : [];
         $usersN = count($days);
-        $repeatN = dash_repeat_count($days, DASH_REPEAT_DAYS);
-        if ($usersN >= DASH_MIN_USERS && $repeatN > 0) continue;
+        if ($f['kind'] === 'passive') {
+            $seenN = count(array_replace(isset($shown[$id]) ? $shown[$id] : [], $days));
+            if ($seenN >= DASH_MIN_USERS) continue;
+            $repeatN = null;
+            $reason = 'fewseen';
+        } else {
+            $seenN = null;
+            $repeatN = dash_repeat_count($days, DASH_REPEAT_DAYS, $repeatFrom);
+            if ($usersN >= DASH_MIN_USERS && $repeatN > 0) continue;
+            $reason = $usersN < DASH_MIN_USERS ? 'few' : 'norepeat';
+        }
         $age = $f['released'] === null ? null : dash_days_between($f['released'], $today);
         $row = ['id' => $id, 'title' => $f['title'], 'section' => $f['section'], 'kind' => $f['kind'], 'released' => $f['released'],
-            'age' => $age, 'users' => dash_users($usersN), 'repeat' => dash_users($repeatN),
-            'reason' => $usersN < DASH_MIN_USERS ? 'few' : 'norepeat'];
+            'age' => $age, 'users' => dash_users($usersN), 'seen' => $seenN === null ? null : dash_users($seenN),
+            'repeat' => $repeatN === null ? null : dash_users($repeatN), 'reason' => $reason];
         if ($age !== null && $age > DASH_NEVER_AGE) $candidates[] = $row; else $tooNew[] = $row;
     }
-    return ['today' => $today, 'days' => analytics_days(), 'minAge' => DASH_NEVER_AGE, 'candidates' => $candidates, 'tooNew' => $tooNew];
+    return ['today' => $today, 'days' => analytics_days(), 'minAge' => DASH_NEVER_AGE, 'candidates' => $candidates, 'tooNew' => $tooNew,
+        'rotation' => $rotation, 'repeatSince' => $repeatFrom];
 }
 
 /** 6. App health: daily / weekly active users, new users, masks, and when people are active */
@@ -477,7 +527,10 @@ function dash_view_health(PDO $db, $today) {
     for ($w = DASH_WEEKS - 1; $w >= 0; $w--) {
         $weeks[] = dash_users(count(dash_users_between($active, dash_day($today, -7 * $w - 6), dash_day($today, -7 * $w))));
     }
-    $new = function ($days) use ($db, $today) {
+    $rotation = dash_rotation($db, $from84, $today, 7 * DASH_WEEKS);
+    // New users: after a salt replacement everyone looks new, so a window that includes it has no honest number
+    $new = function ($days) use ($db, $today, $rotation) {
+        if ($rotation && $rotation['date'] > dash_day($today, -$days)) return null;
         $rows = dash_rows($db, "SELECT COUNT(*) FROM fork_analytics_user WHERE feature = 'app' AND action = 'active' AND firstAt >= ?",
             [dash_day($today, -($days - 1)) . ' 00:00:00']);
         return $rows ? (int) $rows[0][0] : 0;
@@ -502,28 +555,61 @@ function dash_view_health(PDO $db, $today) {
         'wau' => dash_users($wauN), 'mau' => dash_users($mauN),
         'stickiness' => dash_small($wauN) || dash_small($mauN) || !$mauN ? null : (int) round(100 * $wauN / $mauN),
         'weeks' => $weeks,
-        'new7' => dash_users($new(7)), 'new28' => dash_users($new(DASH_WINDOW)),
+        'new7' => ($n7 = $new(7)) === null ? null : dash_users($n7), 'new28' => ($n28 = $new(DASH_WINDOW)) === null ? null : dash_users($n28),
         'masks7' => dash_masks($masks(7)), 'masks28' => dash_masks($masks(DASH_WINDOW)),
         'heat' => $heat,
+        'rotation' => $rotation,
     ];
 }
 
-/** 7. Tips & What's New: feature tips events ("hints", sent by the tips feature) and What's New opens after each release */
+/**
+ * 7. Tips & What's New. Feature tips (the tips feature) report per feature `hint_shown` / `hint_acted`, and their outcome
+ * as actions of feature `hints` (tip_shown, acted, got_it, closed, ignored, section_off; its `shown` is the usual
+ * once-a-day exposure, not an outcome); "Show feature tips" is the `hints` setting (setting_off, disabled snapshot). Outcomes carry no feature, so they can't be split per tip.
+ */
 function dash_view_tips(PDO $db, $today) {
     $from = dash_day($today, -(DASH_WINDOW - 1));
-    $hints = [];
+    $features = dash_features();
+    $active = dash_users_between(dash_active_days($db, $from, $today), $from, $today);
+    $outcomes = [];
     foreach (dash_rows($db, "SELECT action, COUNT(DISTINCT uid), SUM(n) FROM fork_analytics_daily WHERE feature = 'hints' AND day BETWEEN ? AND ?
-        GROUP BY action ORDER BY action", [$from, $today]) as $r) {
+        AND action IN ('tip_shown', 'acted', 'got_it', 'closed', 'ignored', 'section_off') GROUP BY action ORDER BY action", [$from, $today]) as $r) {
         $users = (int) $r[1];
-        $hints[] = ['action' => $r[0], 'users' => dash_users($users), 'events' => dash_small($users) ? null : (int) $r[2]];
+        $outcomes[] = ['action' => $r[0], 'users' => dash_users($users), 'events' => dash_small($users) ? null : (int) $r[2]];
     }
+    // Per feature: who was shown its tip (first day in the window), who acted on it, who used the feature within 7 days
+    $firstShown = [];
+    $acted = [];
+    foreach (dash_rows($db, "SELECT feature, uid, action, MIN(day) FROM fork_analytics_daily WHERE action IN ('hint_shown', 'hint_acted')
+        AND day BETWEEN ? AND ? GROUP BY feature, uid, action", [$from, $today]) as $r) {
+        if ($r[2] === 'hint_shown') $firstShown[$r[0]][$r[1]] = $r[3]; else $acted[$r[0]][$r[1]] = true;
+    }
+    $tipped = array_values(array_filter($features, function ($f) use ($firstShown) { return isset($firstShown[$f['id']]); }));
+    $uses = dash_use_days($db, $tipped, $from, $today);
+    $perFeature = [];
+    foreach ($tipped as $f) {
+        $id = $f['id'];
+        $shownN = count($firstShown[$id]);
+        $usedN = 0;
+        foreach ($firstShown[$id] as $uid => $d) {
+            $end = dash_day($d, 6);
+            foreach (isset($uses[$id][$uid]) ? $uses[$id][$uid] : [] as $ud => $_) if ($ud >= $d && $ud <= $end) { $usedN++; break; }
+        }
+        $actedN = isset($acted[$id]) ? count(array_intersect_key($acted[$id], $firstShown[$id])) : 0;
+        $perFeature[] = ['id' => $id, 'title' => $f['title'], 'shown' => dash_users($shownN),
+            'acted' => dash_users($actedN), 'actedPct' => dash_pct($actedN, $shownN),
+            'used7' => dash_users($usedN), 'used7Pct' => dash_pct($usedN, $shownN)];
+    }
+    $tipsOff = dash_action_users($db, 'setting_off', $from, $today);
+    $off = dash_off_users($db, $from, $today);
+    $offNowN = isset($off['hints']) ? count(array_intersect_key($off['hints'], $active)) : 0;
     $opened = dash_action_users($db, 'opened', $from, $today);
     // Releases: What's New entries grouped by date; who opened What's New within 7 days of each
     $dates = [];
     foreach (dash_whatsnew() as $e) $dates[$e['date']][] = $e['pr'];
     $dates = array_slice($dates, 0, 6, true);
     $oldest = $dates ? min(array_keys($dates)) : $today;
-    $active = dash_active_days($db, $oldest, $today);
+    $activeSince = dash_active_days($db, $oldest, $today);
     $opens = [];
     foreach (dash_rows($db, "SELECT uid, day FROM fork_analytics_daily WHERE feature = 'whatsNew' AND action = 'opened' AND day BETWEEN ? AND ?", [$oldest, $today]) as $r) {
         $opens[$r[0]][$r[1]] = true;
@@ -531,15 +617,20 @@ function dash_view_tips(PDO $db, $today) {
     $releases = [];
     foreach ($dates as $date => $prs) {
         $end = min($today, dash_day($date, 6));
-        $base = dash_users_between($active, $date, $end);
+        $base = dash_users_between($activeSince, $date, $end);
         $who = array_intersect_key(dash_users_between($opens, $date, $end), $base);
         $releases[] = ['date' => $date, 'prs' => $prs, 'complete' => dash_day($date, 6) < $today,
             'active' => dash_users(count($base)), 'opened' => dash_users(count($who)), 'pct' => dash_pct(count($who), count($base))];
     }
+    $start = min($from, $oldest);
     return [
         'today' => $today, 'window' => DASH_WINDOW,
-        'hints' => $hints,
+        'hints' => $outcomes,
+        'tips' => $perFeature,
+        'tipsOff' => ['turnedOff' => dash_users(isset($tipsOff['hints']) ? count($tipsOff['hints']) : 0),
+            'offNow' => dash_users($offNowN), 'pct' => dash_pct($offNowN, count($active)), 'active' => dash_users(count($active))],
         'whatsNew' => ['opened' => dash_users(isset($opened['whatsNew']) ? count($opened['whatsNew']) : 0), 'releases' => $releases],
+        'rotation' => dash_rotation($db, $start, $today, dash_days_between($start, $today) + 1),
     ];
 }
 
@@ -571,6 +662,12 @@ function dash_cached($key, callable $fn, $dir = null, $seconds = DASH_CACHE_SECO
     if ($seconds > 0 && is_array($data) && is_dir($dir) && is_writable($dir)) {
         $tmp = $file . '.' . bin2hex(random_bytes(4));
         if (@file_put_contents($tmp, json_encode($data)) !== false) @rename($tmp, $file); else @unlink($tmp);
+        // Now and then: drop answers (and stray temp files) older than a day
+        if (mt_rand(1, 20) === 1) {
+            foreach (glob(rtrim($dir, '/') . '/fork-analytics-*') ?: [] as $old) {
+                if (time() - (int) @filemtime($old) > 86400) @unlink($old);
+            }
+        }
     }
     return $data;
 }

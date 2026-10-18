@@ -156,7 +156,7 @@ const analyticsDashboard = {
 		{ key: "eligible", title: "Eligible", get: function(f) { return analyticsDashboard.value(f.eligible); }, tip: "Active users (28 days) without the feature turned off" },
 		{ key: "exposed", title: "Exposed", get: function(f) { return analyticsDashboard.value(f.exposed); }, tip: "Users who had it on screen or used it (28 days)" },
 		{ key: "used", title: "Used", get: function(f) { return analyticsDashboard.value(f.used); }, tip: "Users with a use event (28 days): command, opened or the feature's own use actions" },
-		{ key: "adoption", title: "Adoption", get: function(f) { return f.adoption ? f.adoption.pct : null; }, tip: "Used ÷ eligible, with a 95% interval" },
+		{ key: "adoption", title: "Adoption", get: function(f) { return f.adoption ? f.adoption.pct : null; }, tip: "Eligible users who used it ÷ eligible, with a 95% interval" },
 		{ key: "repeat", title: "Repeat", get: function(f) { return f.repeat.pct; }, tip: "Share of users who used it on 3+ days in 28" },
 		{ key: "optOut", title: "Opt-out", get: function(f) { return f.optOut ? (f.optOut.pct !== null ? f.optOut.pct : analyticsDashboard.value(f.optOut.users) / 100) : null; }, tip: "Active users with it turned off now" },
 		{ key: "masks", title: "Masks", get: function(f) { return analyticsDashboard.value(f.masks); }, tip: "Masks where someone used it (28 days)" },
@@ -217,20 +217,25 @@ const analyticsDashboard = {
 		const LABELS = { eligible: ["Eligible", "active users without it turned off"], exposed: ["Exposed", "had it on screen or used it"],
 			tried: ["Tried", "used it at least once"], repeat: ["Repeat", "used it on 3+ days"], retained: ["Retained", "used it in two weeks in a row"] };
 		const top = a.value(data.steps[0].users) || Math.max.apply(null, [1].concat(data.steps.map(function(s) { return a.value(s.users) || 0; })));
-		out += "<table class='an-table an-funnel'><thead><tr><th>Step</th><th>Users</th><th></th><th title='Share of the step before, with a 95% interval'>Of previous step</th></tr></thead><tbody>";
-		data.steps.forEach(function(s, i) {
-			const prev = i ? data.steps[i - 1].users : null;
+		const byKey = {};
+		data.steps.forEach(function(s) { byKey[s.key] = s; });
+		out += "<p class='an-sub'>Users from " + a.escape(data.from) + " to " + a.escape(data.today) + ". Each share is of the step named next to it"
+			+ " (repeat and retained are both shares of tried: someone can come back in a second week without using it on 3 days).</p>";
+		out += "<table class='an-table an-funnel'><thead><tr><th>Step</th><th>Users</th><th></th><th title='Share of the step named, with a 95% interval'>Share</th></tr></thead><tbody>";
+		data.steps.forEach(function(s) {
+			const base = s.base ? byKey[s.base] : null;
 			const v = a.value(s.users) || 0;
 			out += "<tr><td><b>" + LABELS[s.key][0] + "</b> <span class='an-dim'>" + LABELS[s.key][1] + "</span></td>"
 				+ "<td class='an-num'>" + a.escape(a.count(s.users)) + "</td>"
 				+ "<td class='an-funnel-bar'>" + a.bar(Math.round(100 * v / top), "") + "</td>"
-				+ "<td class='an-num'>" + (i ? a.rate(typeof s.users === "number" ? s.users : null, typeof prev === "number" ? prev : null) : "") + "</td></tr>";
+				+ "<td class='an-num'>" + (base ? a.rate(typeof s.users === "number" ? s.users : null, typeof base.users === "number" ? base.users : null)
+					+ " <span class='an-dim'>of " + a.escape(LABELS[base.key][0].toLowerCase()) + "</span>" : "") + "</td></tr>";
 		});
 		out += "</tbody></table>";
 		const t = data.toUse;
 		out += "<p>Median time from first seeing it to first use: <b>" + (t.medianHours === null ? "—" : a.escape(a.hours(t.medianHours))) + "</b>"
 			+ " <span class='an-dim'>(" + a.escape(a.count(t.users)) + " users seen before they used it; " + a.escape(a.count(t.usedBeforeShown))
-			+ " used it before it was ever counted as seen)</span></p>";
+			+ " used it before it was ever counted as seen" + (t.since ? "; only since " + a.escape(t.since) : "") + ")</span></p>";
 		if (data.feature.kind === "passive") { out += "<p class='an-dim'>Passive feature (drawn on the map): few or no use actions, so Exposed and Turned off say more.</p>"; }
 		return out;
 	},
@@ -246,6 +251,7 @@ const analyticsDashboard = {
 		if (!data.launches.length) { return a.empty("No What's New entries."); }
 		const cell = function(c) {
 			if (!c) { return "<td class='an-dim an-num'>not yet</td>"; }
+			if (c.noData) { return "<td class='an-dim an-num' title='Released before the first day with data'>no data</td>"; }
 			if (c.pct === null) { return "<td class='an-num'>" + a.escape(a.count(c.users)) + " <span class='an-dim'>of " + a.escape(a.count(c.active)) + "</span></td>"; }
 			return "<td>" + a.bar(c.pct, c.pct + "% <span class='an-dim'>" + a.escape(a.count(c.users)) + "/" + a.escape(a.count(c.active)) + "</span>") + "</td>";
 		};
@@ -279,16 +285,17 @@ const analyticsDashboard = {
 	renderNever: function(data) {
 		const a = analyticsDashboard;
 		const table = function(rows) {
-			return "<table class='an-table'><thead><tr><th>Feature</th><th>Section</th><th>Kind</th><th>Released</th><th>Age</th><th>Users (" + data.days + " d)</th><th>Repeat users</th><th>Why</th></tr></thead><tbody>"
+			const WHY = { few: "fewer than 5 users", norepeat: "nobody came back (3+ days)", fewseen: "passive: fewer than 5 users saw it" };
+			return "<table class='an-table'><thead><tr><th>Feature</th><th>Section</th><th>Kind</th><th>Released</th><th>Age</th><th>Users (" + data.days + " d)</th><th>Saw it</th><th>Repeat users</th><th>Why</th></tr></thead><tbody>"
 				+ rows.map(function(f) {
 					return "<tr data-feature='" + a.escape(f.id) + "' class='an-row-link'><td>" + a.escape(f.title) + "</td><td>" + a.escape(a.sectionName(f.section)) + "</td><td>" + a.escape(f.kind) + "</td>"
 						+ "<td class='an-nowrap'>" + a.escape(f.released || "unknown") + "</td><td class='an-num'>" + (f.age === null ? "—" : f.age + " d") + "</td>"
-						+ "<td class='an-num'>" + a.escape(a.count(f.users)) + "</td><td class='an-num'>" + a.escape(a.count(f.repeat)) + "</td>"
-						+ "<td>" + (f.reason === "few" ? "fewer than 5 users" : "nobody came back (3+ days)") + "</td></tr>";
+						+ "<td class='an-num'>" + a.escape(a.count(f.users)) + "</td><td class='an-num'>" + a.escape(a.count(f.seen)) + "</td><td class='an-num'>" + a.escape(a.count(f.repeat)) + "</td>"
+						+ "<td>" + a.escape(WHY[f.reason] || f.reason) + "</td></tr>";
 				}).join("") + "</tbody></table>";
 		};
-		return "<p class='an-sub'>Candidates to prune, rethink or make easier to find: fewer than 5 users in the " + data.days
-			+ " days kept, or nobody used it on 3+ days, and released more than " + data.minAge + " days ago. Passive features (drawn on the map) rarely have use events: judge them by Exposed and Turned off.</p>"
+		return "<p class='an-sub'>Candidates to prune, rethink or make easier to find, released more than " + data.minAge + " days ago: an active feature with fewer than 5 users in the "
+			+ data.days + " days kept or nobody using it on 3+ days; a passive one (drawn on the map, no use events) that fewer than 5 users had on screen.</p>"
 			+ (data.candidates.length ? table(data.candidates) : a.empty("No feature older than " + data.minAge + " days qualifies."))
 			+ "<h4>Not judged yet <span class='an-dim'>(released under " + data.minAge + " days ago, or no release date)</span></h4>"
 			+ (data.tooNew.length ? table(data.tooNew) : a.empty("None."));
@@ -304,8 +311,8 @@ const analyticsDashboard = {
 			+ tile("weekly active", a.count(data.wau), "Users active in the last 7 days")
 			+ tile(data.window + "-day active", a.count(data.mau), "Users active in the last " + data.window + " days")
 			+ tile("weekly ÷ " + data.window + "-day", a.pct(data.stickiness), "How many of the month's users came back this week")
-			+ tile("new, 7 days", a.count(data.new7), "First activity in the last 7 days (everyone looks new again after the pseudonym salt is replaced, every ANALYTICS_DAYS)")
-			+ tile("new, " + data.window + " days", a.count(data.new28), "First activity in the last " + data.window + " days")
+			+ tile("new, 7 days", a.count(data.new7), data.new7 === null ? "Not counted: the pseudonym salt was replaced in this window, so everyone looks new" : "First activity in the last 7 days")
+			+ tile("new, " + data.window + " days", a.count(data.new28), data.new28 === null ? "Not counted: the pseudonym salt was replaced in this window, so everyone looks new" : "First activity in the last " + data.window + " days")
 			+ tile("masks, 7 days", a.count(data.masks7), "Masks where someone used a feature")
 			+ tile("masks, " + data.window + " days", a.count(data.masks28), "Masks where someone used a feature")
 			+ "</div>";
@@ -332,12 +339,24 @@ const analyticsDashboard = {
 
 	renderTips: function(data) {
 		const a = analyticsDashboard;
-		let out = "<h4>Feature tips</h4>";
+		let out = "<h4>Feature tips by feature <span class='an-dim'>(last " + data.window + " days)</span></h4>";
+		out += data.tips.length
+			? "<table class='an-table'><thead><tr><th>Feature</th><th>Tip shown</th><th>Acted on it</th><th title='Used the feature within 7 days of first seeing its tip'>Used within 7 days</th></tr></thead><tbody>" + data.tips.map(function(t) {
+				const share = function(n, pct) { return pct !== null ? a.bar(pct, pct + "% <span class='an-dim'>" + a.escape(a.count(n)) + "</span>") : a.escape(a.count(n)); };
+				return "<tr data-feature='" + a.escape(t.id) + "' class='an-row-link'><td>" + a.escape(t.title) + "</td><td class='an-num'>" + a.escape(a.count(t.shown)) + "</td>"
+					+ "<td>" + share(t.acted, t.actedPct) + "</td><td>" + share(t.used7, t.used7Pct) + "</td></tr>";
+			}).join("") + "</tbody></table>"
+			: a.empty("No tip has been shown yet (tips report hint_shown / hint_acted per feature once they ship).");
+		out += "<h4>Tip outcomes <span class='an-dim'>(all tips together: the outcome events don't say which tip)</span></h4>";
 		out += data.hints.length
-			? "<table class='an-table'><thead><tr><th>Action</th><th>Users (" + data.window + " d)</th><th>Events</th></tr></thead><tbody>" + data.hints.map(function(h) {
+			? "<table class='an-table'><thead><tr><th>Outcome</th><th>Users (" + data.window + " d)</th><th>Events</th></tr></thead><tbody>" + data.hints.map(function(h) {
 				return "<tr><td>" + a.escape(h.action) + "</td><td class='an-num'>" + a.escape(a.count(h.users)) + "</td><td class='an-num'>" + a.escape(a.count(h.events)) + "</td></tr>";
 			}).join("") + "</tbody></table>"
-			: a.empty("No feature tip events yet. Once tips ship they report shown, acted, got_it, closed and ignored here.");
+			: a.empty("No tip outcomes yet (tip_shown, acted, got_it, closed, ignored, section_off).");
+		const off = data.tipsOff;
+		out += "<p>\u201cShow feature tips\u201d turned off: <b>" + a.escape(a.count(off.turnedOff)) + "</b> users in " + data.window + " days; off now: <b>"
+			+ a.escape(a.count(off.offNow)) + "</b>" + (off.pct !== null ? " (" + off.pct + "% of " + a.escape(a.count(off.active)) + " active)" : "")
+			+ ". <span class='an-dim'>More than a few % a month means tips come too often.</span></p>";
 		out += "<h4>What's New</h4><p class='an-sub'>" + a.escape(a.count(data.whatsNew.opened)) + " users opened What's New themselves in the last " + data.window
 			+ " days (the automatic opening after an update isn't counted). Per release: active users in the 7 days from the release date who opened it.</p>";
 		out += data.whatsNew.releases.length
@@ -349,6 +368,20 @@ const analyticsDashboard = {
 			}).join("") + "</tbody></table>"
 			: a.empty("No releases.");
 		return out;
+	},
+
+	/** The warning for a pseudonym salt replacement inside a view's window (text, escaped) */
+	rotationNote: function(data, tab) {
+		const a = analyticsDashboard, r = data && data.rotation;
+		if (!r || !r.date) { return ""; }
+		const extra = {
+			features: data.repeatSince ? " Repeat only counts use since " + r.date + "." : "",
+			funnel: " This funnel only uses data since " + r.date + ".",
+			never: data.repeatSince ? " Repeat users only count use since " + r.date + "." : "",
+			health: " New users are not counted for windows that include it."
+		}[tab] || "";
+		return "Pseudonym salt replaced on " + r.date + ": people active before and after it count twice in this view until " + r.until
+			+ " (their ids changed)." + extra;
 	},
 
 	// ---- Dialog ----
@@ -453,7 +486,8 @@ const analyticsDashboard = {
 			html = a.empty("Could not draw this view.");
 		}
 		const off = data && data.enabled === false ? "<p class='an-warn'>Collection is turned off on this server (ANALYTICS_ENABLED): showing what is stored.</p>" : "";
-		$body.html(off + html);
+		const rotation = a.rotationNote(data, tab);
+		$body.html(off + (rotation ? "<p class='an-warn an-rotation'>" + a.escape(rotation) + "</p>" : "") + html);
 		if (tab === "features") { $body.scrollTop(scroll); }
 	},
 

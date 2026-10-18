@@ -5,7 +5,7 @@
 //   docker compose -f docker-compose.dev.yml exec -T app php tests/analytics_dashboard_test.php
 // 1. Access list, suppression, Wilson interval.
 // 2. Fresh install (no tables): every view answers with empty numbers and creates nothing.
-// 3. Each view's numbers on seeded rows (fixed day 2026-10-30), suppression and hidden splits.
+// 3. Each view's numbers on seeded rows (fixed day 2026-10-30), suppression and hidden splits, a salt replacement.
 // 4. public/fork_analytics.php over HTTP: login, the ANALYTICS_ADMINS check (403), access mode, no uids in answers.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
@@ -35,7 +35,12 @@ foreach (TABLES as $t) {
     if (exists($t)) $db->exec("RENAME TABLE $t TO {$t}_dashtest");
 }
 $adminEnv = getenv('ANALYTICS_ADMINS');
-register_shutdown_function(function () use ($db, $adminEnv) {
+function salt_row() { global $db; try { return $db->query("SELECT v FROM fork_analytics_meta WHERE k = 'salt'")->fetchColumn(); } catch (PDOException $e) { return false; } }
+function set_salt_date($date) { global $db; analytics_ensure_schema($db); $db->prepare("REPLACE INTO fork_analytics_meta (k, v) VALUES ('salt', ?)")->execute([$date . ':' . str_repeat('ab', 32)]); }
+$savedSalt = salt_row();
+register_shutdown_function(function () use ($db, $adminEnv, $savedSalt) {
+    if ($savedSalt !== false) $db->prepare("REPLACE INTO fork_analytics_meta (k, v) VALUES ('salt', ?)")->execute([$savedSalt]);
+    else { try { $db->exec("DELETE FROM fork_analytics_meta WHERE k = 'salt'"); } catch (PDOException $e) { } }
     foreach (TABLES as $t) {
         if (exists("{$t}_dashtest")) { $db->exec("DROP TABLE IF EXISTS $t"); $db->exec("RENAME TABLE {$t}_dashtest TO $t"); }
     }
@@ -58,7 +63,6 @@ check('masks: 1-2 suppressed', [dash_masks(0), dash_masks(2), dash_masks(3)], [0
 check('pct: left out when a count is suppressed', [dash_pct(3, 40), dash_pct(10, 40), dash_pct(10, 0), dash_pct(0, 40)], [null, 25, null, 0]);
 check('wilson: 10 of 40', dash_wilson(10, 40), [14, 41]);
 check('wilson: 0 of 20 / 20 of 20 / no sample', [dash_wilson(0, 20), dash_wilson(20, 20), dash_wilson(0, 0)], [[0, 17], [83, 100], null]);
-check('eligible: exact, or a range when the number turned off is suppressed', [dash_eligible(40, 0), dash_eligible(40, 6), dash_eligible(40, 2)], [40, 34, '36-39']);
 check('median', [dash_median([3, 1, 2]), dash_median([4, 1, 2, 3]), dash_median([])], [2, 2.5, null]);
 $features = dash_features();
 check('catalog: release date = earliest What\'s New date of its PRs', [$features['jumpPlanner']['released'], $features['maskAdmins']['released']], ['2026-10-11', null]);
@@ -73,12 +77,13 @@ foreach (['features', 'launches', 'off', 'never', 'health', 'tips'] as $m) {
 $v = dash_view($db, 'features', $T);
 check('no tables: every feature listed with zeros', [count($v['features']) === count($features), $v['active'], by_id($v['features'], 'jumpPlanner')['used']], [true, 0, 0]);
 check('no tables: health is zero', [dash_view($db, 'health', $T)['mau'], dash_view($db, 'health', $T)['heat'][0][0]], [0, 0]);
-check('no tables: funnel', dash_view($db, 'funnel', $T, 'jumpPlanner')['steps'][2], ['key' => 'tried', 'users' => 0]);
+check('no tables: funnel', dash_view($db, 'funnel', $T, 'jumpPlanner')['steps'][2], ['key' => 'tried', 'users' => 0, 'base' => 'exposed']);
 check('no tables: none created', array_map('exists', TABLES), [false, false, false]);
 check('unknown view / feature', [dash_view($db, 'nope', $T), dash_view($db, 'funnel', $T, 'nope'), dash_view($db, 'funnel', $T, "x' OR 1")], [null, null, null]);
 
 // ---- 3. seeded numbers ----
 analytics_ensure_schema($db);
+set_salt_date('2026-01-01');   // no salt replacement inside any window (see the end of this section)
 $day = function ($offset) use ($T) { return dash_day($T, $offset); };
 $daily = $db->prepare('INSERT INTO fork_analytics_daily (day, feature, action, uid, n, firstMinute) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE n = n + 1');
 $user = $db->prepare('INSERT INTO fork_analytics_user (uid, feature, action, firstAt, lastAt, n) VALUES (?, ?, ?, ?, ?, 1)');
@@ -96,7 +101,8 @@ $add(0, 'jumpPlanner', 'route_planned', 6);
 $add(0, 'jumpPlanner', 'command', 7);
 for ($i = 8; $i <= 10; $i++) $add(0, 'jumpPlanner', 'shown', $i);
 $add(0, 'jumpPlanner', 'disabled', 11);
-$add(-20, 'jumpPlanner', 'setting_changed', 12);                               // not a use
+$add(-12, 'jumpPlanner', 'setting_changed', 12);                               // not a use
+$add(-5, 'jumpPlanner', 'opened', 11);                                         // used it, then turned it off: not eligible
 for ($i = 1; $i <= 5; $i++) {                                                  // seen, then used i hours later
     $user->execute([$u($i), 'jumpPlanner', 'shown', '2026-10-17 10:00:00', $T . ' 20:00:00']);
     $user->execute([$u($i), 'jumpPlanner', 'opened', sprintf('2026-10-17 %02d:00:00', 10 + $i), $T . ' 20:00:00']);
@@ -123,20 +129,28 @@ for ($i = 1; $i <= 6; $i++) {
 $user->execute([$u(1), 'killReporting', 'clicked', '2026-10-14 08:00:00', '2026-10-14 08:00:00']);
 $add(-1, 'killReporting', 'setting_on', 2);
 // Tips: shown to 6, got_it by 2
-for ($i = 1; $i <= 6; $i++) $add(0, 'hints', 'shown', $i);
+for ($i = 1; $i <= 6; $i++) $add(0, 'hints', 'tip_shown', $i);
+$add(0, 'hints', 'shown', 9);                                                 // exposure, not an outcome
 for ($i = 1; $i <= 2; $i++) $add(0, 'hints', 'got_it', $i);
+// Passive features: high-sec region seen by u1-6, size tags by nobody
+for ($i = 1; $i <= 6; $i++) $add(0, 'highsecRegion', 'shown', $i);
+// Jump planner tip: shown to u1-6 ten days ago, acted on by u1-5 (who used it 2 days later); tips turned off by u7, off for u8
+for ($i = 1; $i <= 6; $i++) $add(-10, 'jumpPlanner', 'hint_shown', $i);
+for ($i = 1; $i <= 5; $i++) $add(-10, 'jumpPlanner', 'hint_acted', $i);
+$add(-2, 'hints', 'setting_off', 7);
+$add(0, 'hints', 'disabled', 8);
 // What's New opened in the week after 2026-10-17 by u1-5
 for ($i = 1; $i <= 5; $i++) $add(-13, 'whatsNew', 'opened', $i);
 
 $v = dash_view($db, 'features', $T);
 $jp = by_id($v['features'], 'jumpPlanner');
 check('features: active users', $v['active'], 12);
-check('features: jump planner counts', [$jp['eligible'], $jp['exposed'], $jp['used']], ['8-11', 10, 7]);
-check('features: adoption with Wilson interval', $jp['adoption'], ['pct' => 64, 'lo' => 35, 'hi' => 85]);
-check('features: repeat', $jp['repeat'], ['users' => 5, 'pct' => 71]);
+check('features: jump planner counts (exact eligible)', [$jp['eligible'], $jp['exposed'], $jp['used'], $jp['usedEligible']], [11, 11, 8, 7]);
+check('features: adoption = eligible users who used it / eligible, Wilson interval', $jp['adoption'], ['pct' => 64, 'lo' => 35, 'hi' => 85]);
+check('features: repeat', $jp['repeat'], ['users' => 5, 'pct' => 63]);
 check('features: opt-out suppressed', $jp['optOut'], ['users' => '<5', 'pct' => null]);
 check('features: masks', $jp['masks'], 4);
-check('features: sparkline (weeks before the release are null)', $jp['spark'], array_merge(array_fill(0, 9, null), [0, 5, 7]));
+check('features: sparkline (weeks before the release are null)', $jp['spark'], array_merge(array_fill(0, 9, null), [0, 5, 8]));
 check('features: no flags on a used feature', $jp['flags'], []);
 $st = by_id($v['features'], 'sizeTags');
 check('features: size tags off for 6 (old snapshot ignored)', [$st['eligible'], $st['optOut']], [6, ['users' => 6, 'pct' => 50]]);
@@ -146,10 +160,12 @@ $at = by_id($v['features'], 'apiTokens');
 check('features: zero use flagged, nothing at all since release flagged', $at['flags'], ['silent', 'unused']);
 check('features: a passive feature with only snapshots is not silent', by_id($v['features'], 'sizeTags')['flags'], []);
 check('features: no uid anywhere', strpos(json_encode($v), 'dashtest'), false);
+check('features: no salt replacement in the window', [$v['rotation'], $v['repeatSince']], [null, null]);
 
 $f = dash_view($db, 'funnel', $T, 'jumpPlanner');
-check('funnel: steps', array_column($f['steps'], 'users'), ['8-11', 10, 7, 5, 5]);
-check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5']);
+check('funnel: steps (exposed and tried of the eligible)', array_column($f['steps'], 'users'), [11, 10, 7, 5, 5]);
+check('funnel: each step names its base (retained is of tried, not of repeat)', array_column($f['steps'], 'base'), [null, 'eligible', 'exposed', 'tried', 'tried']);
+check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5', 'since' => null]);
 check('funnel: setting_changed is not a use', dash_view($db, 'funnel', $T, 'jumpPlanner')['steps'][2]['users'], 7);
 
 $l = dash_view($db, 'launches', $T);
@@ -158,10 +174,14 @@ $l114 = null;
 $l112 = null;
 foreach ($l['launches'] as $x) { if ($x['pr'] === 114) $l114 = $x; if ($x['pr'] === 112) $l112 = $x; }
 check('launches: #114 is a jump planner follow-up', $l114['feature'], ['id' => 'jumpPlanner', 'title' => 'Jump planner', 'followUp' => true]);
+$l113 = null;
+foreach ($l['launches'] as $x) if ($x['pr'] === 113) $l113 = $x;
 check('launches: #114 by day 1 / 7 / 14 / 28', [$l114['days']['1'], $l114['days']['7'], $l114['days']['14'], $l114['days']['28']],
-    [['users' => 5, 'active' => 10, 'pct' => 50], ['users' => 5, 'active' => 10, 'pct' => 50], ['users' => 7, 'active' => 12, 'pct' => 58], null]);
+    [['users' => 5, 'active' => 10, 'pct' => 50], ['users' => 5, 'active' => 10, 'pct' => 50], ['users' => 8, 'active' => 12, 'pct' => 67], null]);
 check('launches: #114 not flagged', $l114['flag'], false);
-check('launches: #112 (kill reporting, nobody used it) flagged at day 14', [$l112['days']['14']['users'], $l112['flag']], [0, true]);
+check('launches: #113 (d-scan, nobody used it) flagged at day 14', [$l113['days']['14']['users'], $l113['flag']], [0, true]);
+check('launches: first data day', $l['firstData'], '2026-10-17');
+check('launches: #112 released before the first data day: no data, never flagged', [$l112['days']['1'], $l112['days']['14'], $l112['flag']], [['noData' => true], ['noData' => true], false]);
 
 $o = dash_view($db, 'off', $T);
 $jr = by_id($o['features'], 'jumpReturn');
@@ -175,6 +195,8 @@ $n = dash_view($db, 'never', '2026-12-20');
 check('never: region map (3 users, released 2026-10-12) is a candidate after 60 days', by_id($n['candidates'], 'regionMap') !== null && by_id($n['candidates'], 'regionMap')['reason'] === 'few', true);
 check('never: jump planner (7 users, repeat users) is not', [by_id($n['candidates'], 'jumpPlanner'), by_id($n['tooNew'], 'jumpPlanner')], [null, null]);
 check('never: no release date = not judged', by_id($n['tooNew'], 'maskAdmins')['age'], null);
+check('never: a passive feature nobody saw is judged by exposure', [by_id($n['candidates'], 'sizeTags')['reason'] ?? null, by_id($n['candidates'], 'sizeTags')['repeat']], ['fewseen', null]);
+check('never: a passive feature 6 users saw is not listed', [by_id($n['candidates'], 'highsecRegion'), by_id($n['tooNew'], 'highsecRegion')], [null, null]);
 check('never: before 60 days nothing is a candidate', dash_view($db, 'never', $T)['candidates'], []);
 
 $h = dash_view($db, 'health', $T);
@@ -186,10 +208,40 @@ check('health: heatmap (Friday 20:00 UTC, Saturday 10:00)', [$h['heat'][4][20], 
 check('health: weeks', array_slice($h['weeks'], -2), [10, 12]);
 
 $t = dash_view($db, 'tips', $T);
-check('tips: hint actions, events left out for suppressed users', $t['hints'], [['action' => 'got_it', 'users' => '<5', 'events' => null], ['action' => 'shown', 'users' => 6, 'events' => 6]]);
+check('tips: hint outcomes, events left out for suppressed users, settings not outcomes', $t['hints'], [['action' => 'got_it', 'users' => '<5', 'events' => null], ['action' => 'tip_shown', 'users' => 6, 'events' => 6]]);
+check('tips: per feature shown / acted / used within 7 days', $t['tips'], [['id' => 'jumpPlanner', 'title' => 'Jump planner', 'shown' => 6, 'acted' => 5, 'actedPct' => 83, 'used7' => 5, 'used7Pct' => 83]]);
+check('tips: "Show feature tips" off', $t['tipsOff'], ['turnedOff' => '<5', 'offNow' => '<5', 'pct' => null, 'active' => 12]);
 $r17 = null;
 foreach ($t['whatsNew']['releases'] as $r) if ($r['date'] === '2026-10-17') $r17 = $r;
 check('tips: What\'s New opened after the 2026-10-17 release', [$r17['active'], $r17['opened'], $r17['pct'], $r17['complete']], [10, 5, 50, true]);
+
+// Salt replaced on 2026-10-25 (rows from before exist): every view says so, per-user measures start there
+set_salt_date('2026-10-25');
+$v = dash_view($db, 'features', $T);
+check('rotation: features note and repeat since the replacement', [$v['rotation'], $v['repeatSince'], by_id($v['features'], 'jumpPlanner')['repeat']['users']],
+    [['date' => '2026-10-25', 'until' => '2027-01-16'], '2026-10-25', 0]);
+$f = dash_view($db, 'funnel', $T, 'jumpPlanner');
+check('rotation: the funnel starts on the replacement day', [$f['from'], array_column($f['steps'], 'users'), $f['toUse']['users'], $f['toUse']['since']], ['2026-10-25', [11, 10, 7, 0, 0], 0, '2026-10-25']);
+$h = dash_view($db, 'health', $T);
+check('rotation: no new-user counts across it', [$h['new7'], $h['new28'], $h['rotation']['date']], [null, null, '2026-10-25']);
+foreach (['launches', 'off', 'never', 'tips'] as $m) check("rotation: $m says so", dash_view($db, $m, $T)['rotation']['date'] ?? null, '2026-10-25');
+set_salt_date('2026-10-17');
+check('rotation: not when no rows are older than the salt', dash_view($db, 'features', $T)['rotation'], null);
+set_salt_date('2026-01-01');
+
+// Cache: answers are reused for the lifetime, old files are cleaned up
+$dir = sys_get_temp_dir() . '/dashtest-cache-' . getmypid();
+@mkdir($dir);
+$calls = 0;
+$fn = function () use (&$calls) { $calls++; return ['n' => $calls]; };
+dash_cached('features', $fn, $dir);
+check('cache: second read from the file', [dash_cached('features', $fn, $dir), $calls], [['n' => 1], 1]);
+touch($dir . '/fork-analytics-stale.json', time() - 2 * 86400);
+mt_srand(1);
+for ($i = 0; $i < 60; $i++) dash_cached('k' . $i, $fn, $dir);
+check('cache: files older than a day are deleted now and then', file_exists($dir . '/fork-analytics-stale.json'), false);
+array_map('unlink', glob($dir . '/*') ?: []);
+@rmdir($dir);
 
 // ---- 4. HTTP ----
 function sess($name, array $data) {

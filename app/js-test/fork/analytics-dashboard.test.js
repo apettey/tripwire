@@ -118,6 +118,20 @@ describe('analyticsDashboard', () => {
 		});
 	});
 
+	describe('rotationNote', () => {
+		it('empty without a salt replacement in the window', () => {
+			assert.strictEqual(a.rotationNote({ rotation: null }, 'features'), '');
+			assert.strictEqual(a.rotationNote(null, 'features'), '');
+		});
+		it('names the day, until when it counts people twice, and what the view does about it', () => {
+			const r = { date: '2026-10-25', until: '2027-01-16' };
+			const f = a.rotationNote({ rotation: r, repeatSince: '2026-10-25' }, 'features');
+			assert.ok(f.includes('2026-10-25') && f.includes('2027-01-16') && f.includes('count twice') && f.includes('Repeat only counts use since'), f);
+			assert.ok(a.rotationNote({ rotation: r }, 'funnel').includes('only uses data since 2026-10-25'));
+			assert.ok(!a.rotationNote({ rotation: r }, 'launches').includes('Repeat'));
+		});
+	});
+
 	describe('heatLevel and hours', () => {
 		it('heatLevel scales 1-5 and keeps empty at 0', () => {
 			assert.strictEqual(a.heatLevel(0, 20), 0);
