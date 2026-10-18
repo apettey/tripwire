@@ -348,13 +348,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function send(targets, target) {
-			if (typeof forkUsage !== "undefined") { forkUsage.track("setRouteInGame", "sent"); }
 			const dest = systemName(target.destID);
 			busy = true;		// covers the whole run, every character
 			ap.sendToCharacters(targets, target.destID, function(characterID, systemID, clear) {
 				return tripwire.esi.setDestination(systemID, characterID, clear, false);
 			}).then(function(results) {
 				busy = false;
+				if ((results || []).some(function(r) { return r && r.ok; }) && typeof forkUsage !== "undefined") { forkUsage.track("setRouteInGame", "sent"); }
 				const result = ap.summary(results, dest, target.jumps, systemName(target.from));
 				notify(result.lines.map(ap.escape).join("<br/>"), result.color, result.color === "green" ? 6000 : 15000);
 			}).catch(function(err) {	// only a bug in the code above gets here

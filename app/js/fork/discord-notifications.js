@@ -298,7 +298,6 @@ const discordNotifications = {
 	},
 
 	request: function(mode, data) {
-		if (typeof forkUsage !== "undefined") { forkUsage.track("discordNotifications", "configured"); }
 		return $.ajax({
 			url: discordNotifications.URL,
 			type: "POST",
@@ -306,7 +305,7 @@ const discordNotifications = {
 			dataType: "JSON",
 			data: JSON.stringify(Object.assign({ mode: mode }, data || {})),
 			headers: { "X-CSRF-Token": discordNotifications.csrf, "X-Requested-With": "XMLHttpRequest" }
-		});
+		}).done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("discordNotifications", "configured"); } });
 	},
 
 	errorText: function(xhr) {

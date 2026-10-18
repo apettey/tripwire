@@ -316,10 +316,11 @@ const preserveMass = {
 	set: function(wormholeID, reason) {
 		if (!preserveMass.isWormholeID(wormholeID)) { return; }
 		const body = preserveMass.payload("set", wormholeID, reason);
-		if (typeof forkUsage !== "undefined") { forkUsage.track("preserveMass", "marked"); }
 		preserveMass.optimistic(wormholeID, { wormholeID: Number(wormholeID), setBy: tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.characterName : null,
 			setAt: Math.floor(Date.now() / 1000), reason: body.reason });
-		return preserveMass.post(body);
+		const req = preserveMass.post(body);
+		if (req && typeof req.done === "function") { req.done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("preserveMass", "marked"); } }); }
+		return req;
 	},
 
 	clear: function(wormholeID) {

@@ -164,7 +164,6 @@ const maskAdminTab = {
 
 	load: function() {
 		const t = maskAdminTab;
-		if (typeof forkUsage !== "undefined") { forkUsage.track("maskAdmins", "opened"); }
 		return $.ajax({ url: t.URL, type: "GET", data: { mode: "get", q: t.query }, dataType: "JSON", cache: false }).done(function(data) {
 			t.state = data;
 			t.csrf = data.csrf || t.csrf;
@@ -248,6 +247,7 @@ const maskAdminTab = {
 				$d.dialog("option", "height", Math.min(700, Math.max(350, $(window).height() - 40)));
 				t.blocking = null;
 				t.query = "";
+				if (typeof forkUsage !== "undefined") { forkUsage.track("maskAdmins", "opened"); }
 				t.load();
 			}
 		});

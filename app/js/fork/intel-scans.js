@@ -991,9 +991,9 @@ const intelScans = {
 		const systemID = intelScans.dialogSystemID;
 		const parsed = intelScans.parse(text);
 		if (parsed.error || !intelScans.isSystem(systemID)) { return; }
-		if (typeof forkUsage !== "undefined") { forkUsage.track("intelScans", "pasted"); }
 		const $share = $dialog.parent().find(".intel-share").prop("disabled", true).addClass("ui-state-disabled");
 		intelScans.post({ mode: "add", systemID: systemID, text: text }).done(function(response) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("intelScans", "pasted"); }
 			if (String(systemID) === String(intelScans.scansSystemID)) {
 				intelScans.absorb(response);
 				intelScans.openScanID = response && response.added ? response.added : null;

@@ -348,7 +348,6 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		// --- Reporting a jump ---
 		function post(payload) {
-			if (typeof forkUsage !== "undefined") { forkUsage.track("autoMass", "logged"); }
 			return $.ajax({ url: "jump_fit.php", type: "POST", data: payload, dataType: "JSON", headers: { "X-Requested-With": "XMLHttpRequest" } });
 		}
 
@@ -389,6 +388,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const $buttons = $box.find(".automass-set").prop("disabled", true);
 			post({ mode: "hot", wormholeID: $box.data("wormhole"), characterID: $box.data("character"), time: $box.data("time"), hot: hot })
 				.done(function() {
+					if (typeof forkUsage !== "undefined") { forkUsage.track("autoMass", "logged"); }
 					$buttons.removeClass("active").filter("[data-hot='" + hot + "']").addClass("active");
 					$box.find(".automass-source").text(hot == 1 ? "Logged as hot." : "Logged as cold.");
 				})
@@ -410,6 +410,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			function send() {
 				post(payload).done(function(res) {
 					if (res && res.matched) {
+						if (typeof forkUsage !== "undefined") { forkUsage.track("autoMass", "logged"); }
 						if (autoMass.promptEnabled(opts())) {
 							showPrompt(character, from, to, fit, { wormholeID: res.wormholeID, characterID: characterID, time: res.time }, hot);
 						}
@@ -500,6 +501,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			post({ mode: "hot", wormholeID: $t.attr("data-wormhole"), characterID: $t.attr("data-character"), time: $t.attr("data-time"),
 				hot: $t.attr("data-hot") == 1 ? 0 : 1 })
 				.done(function() {
+					if (typeof forkUsage !== "undefined") { forkUsage.track("autoMass", "logged"); }
 					const open = $("#dialog-mass").dialog("option", "open");
 					if (typeof open === "function" && $("#dialog-mass").dialog("isOpen")) { open.call($("#dialog-mass")[0]); }
 				})

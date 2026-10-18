@@ -233,13 +233,13 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function link(seq, from, to, hole, candidate) {
-			if (typeof forkUsage !== "undefined") { forkUsage.track("jumpSigPrompt", "linked"); }
 			const plan = jumpSigPrompt.plan(candidate, from, to, hole);
 			let classText = "";
 			try { classText = holeNaming.classText(systemAnalysis.analyse(to).systemTypeName); } catch (e) { classText = ""; }
 			const bookmark = jumpSigPrompt.bookmark(plan, candidate, from, classText);
 			hidePanel();
 			post({ mode: "link", bareID: Number(hole.wormhole.id), candidateSigID: Number(candidate.sig.id) }).done(function(answer) {
+				if (typeof forkUsage !== "undefined") { forkUsage.track("jumpSigPrompt", "linked"); }
 				// One undo step: the server puts back exactly what the link changed (see the tripwire.undo wrapper below)
 				const undoSystemID = typeof automapperUndo !== "undefined" ? automapperUndo.system(viewingSystemID, from, to) : to;
 				const stack = tripwire.signatures.undo[undoSystemID] = tripwire.signatures.undo[undoSystemID] || [];

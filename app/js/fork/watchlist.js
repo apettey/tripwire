@@ -798,12 +798,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** An admin's change; the answer is the new list */
 		function request(mode, payload) {
-			if (typeof forkUsage !== "undefined") { forkUsage.track("watchlist", "configured"); }
 			return $.ajax({
 				url: wl.URL, type: "POST", contentType: "application/json", dataType: "JSON",
 				data: JSON.stringify(Object.assign({ mode: mode }, payload || {})),
 				headers: { "X-CSRF-Token": server.csrf, "X-Requested-With": "XMLHttpRequest" }
 			}).done(function(data) {
+				if (typeof forkUsage !== "undefined") { forkUsage.track("watchlist", "configured"); }
 				absorb(data);
 				redrawChain();
 				renderAll();

@@ -350,7 +350,6 @@ const rally = {
 	/** Set (or move) the fight point, with a comp of the mask ("" / undefined = no comp) */
 	set: function(systemID, compID) {
 		if (!rally.isRealSystemID(systemID)) { return; }
-		if (typeof forkUsage !== "undefined") { forkUsage.track("fightHere", "set"); }
 		const comp = compID ? rally.comps.filter(function(c) { return c.id === compID; })[0] || null : null;
 		const same = String(rally.state.systemID) === String(systemID);
 		// optimistic; keep the label while it stays on the same system
@@ -358,7 +357,9 @@ const rally = {
 			comp: comp, label: same ? rally.state.label : "", age: 0 }, false);
 		const payload = { mode: "set", systemID: Number(systemID) };
 		if (comp) { payload.compID = comp.id; }
-		return rally.post(payload);
+		const req = rally.post(payload);
+		if (req && typeof req.done === "function") { req.done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("fightHere", "set"); } }); }
+		return req;
 	},
 
 	clear: function() {
