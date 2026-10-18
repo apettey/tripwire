@@ -489,6 +489,8 @@ const forkHints = {
 		}
 		// Asked for (Try it, features hub): a beacon opens as its callout at once
 		const as = forced && hint.kind === "beacon" ? Object.assign({}, hint, { kind: "callout" }) : hint;
+		// Its beacon, if already on screen, goes: clicking it later would reopen a tip that is done
+		if (as !== hint) { forkHintsUI.removeBeacons(function(h) { return h.id === hint.id; }); }
 		const shown = forkHintsUI.render(as, { title: hint.title, body: body, actionLabel: hint.action ? (hint.action.label || "Show me") : "" }, data, ctx);
 		if (!shown) { return false; }
 		const now = Date.now();

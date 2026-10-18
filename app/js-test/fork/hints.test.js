@@ -486,6 +486,19 @@ describe('forkHints', () => {
 			assert.strictEqual(forkHints.session.shown, 0);
 		});
 
+		it('show(force) of a beacon tip removes its beacon already on screen (no second open of a done tip)', () => {
+			const removed = [];
+			ui.removeBeacons = (pred) => { removed.push(pred({ id: 't.a' }), pred({ id: 't.other' })); };
+			forkHints.register(def({ kind: 'beacon' }));
+			assert.strictEqual(forkHints.show('t.a', { force: true }), true);
+			assert.deepStrictEqual(removed, [true, false], 'only this tip\'s beacon');
+			removed.length = 0;
+			forkHints.register(def({ id: 't.c' }));
+			ui.tip = null;
+			forkHints.show('t.c', { force: true });
+			assert.deepStrictEqual(removed, [], 'a callout tip touches no beacons');
+		});
+
 		it('tips turned off: nothing is queued', () => {
 			forkHints.register(def());
 			options.hints = { enabled: false };
