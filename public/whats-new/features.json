@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 120,
+      "date": "2026-10-18",
+      "title": "Usage statistics",
+      "description": "Tripwire now counts which features you use, as simple daily totals sent only to this Tripwire server, so we can see what helps and what nobody finds. It never includes your systems, signatures, characters or anything you type.\n\nTurn it off in Settings > General > Usage statistics.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-120-usage-stats.png",
+          "caption": "The Usage statistics setting in Settings > General"
+        }
+      ]
+    },
+    {
       "pr": 119,
       "date": "2026-10-18",
       "title": "Small views for more panels",

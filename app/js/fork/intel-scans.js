@@ -955,6 +955,7 @@ const intelScans = {
 		e.stopImmediatePropagation();
 		e.stopPropagation();
 		$(e.target).val("").trigger("blur");
+		if (typeof forkUsage !== "undefined") { forkUsage.track("dscanPaste", "pasted"); }
 		intelScans.openDialog(systemID);
 		// openDialog empties the box, so fill it afterwards
 		$("#" + intelScans.DIALOG_ID).find(".intel-text").val(text);
@@ -992,6 +993,7 @@ const intelScans = {
 		if (parsed.error || !intelScans.isSystem(systemID)) { return; }
 		const $share = $dialog.parent().find(".intel-share").prop("disabled", true).addClass("ui-state-disabled");
 		intelScans.post({ mode: "add", systemID: systemID, text: text }).done(function(response) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("intelScans", "pasted"); }
 			if (String(systemID) === String(intelScans.scansSystemID)) {
 				intelScans.absorb(response);
 				intelScans.openScanID = response && response.added ? response.added : null;

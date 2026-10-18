@@ -47,6 +47,12 @@ reopened from Settings > General > What's new. Its content is
     `public/whats-new/img/pr-<number>-<name>.png` and referenced as
     `{ "src": "whats-new/img/pr-<number>-<name>.png", "caption": "..." }`
 - Internal-only changes (Docker, CI, docs, refactoring) don't get an entry.
+- Every user-facing feature also adds its entry to [public/fork/feature-catalog.json](public/fork/feature-catalog.json)
+  (a follow-up PR adds its number to the parent feature's `prs`; the mocha test `app/js-test/fork/feature-catalog.test.js`
+  fails until every What's New PR is covered) and states a one-line success signal in the PR, e.g. "used by >=20% of
+  eligible users by day 28, opt-out <10%" (also in the entry's optional `success` field when it is clear). Usage is
+  counted first-party ([Product analytics](docker/README.md#product-analytics)); check it with `forkUsage.debug(true)`
+  (tripwire-feature skill, section 6).
 - Keep wording consistent with the existing entries: plain language, written for the user.
 
 ### Ask for every feature: does it need a Settings toggle?
@@ -80,7 +86,7 @@ own Save/open/Reset hooks. Give the row an `order` so its place doesn't depend o
 | Jump Planner (`jumpPlanner`) | One feature's own cluster: jump ship, range, mini-map | jump planner |
 | Kills & Intel (`intel`) | Kill feeds, threat info, intel panels | system/chain kill feed, threat & residents, d-scan & local, Watchlist, smart notes |
 | Kill Reporting (`killReporting`) | One feature's own cluster: kill sounds and pop-ups | kill reporting |
-| General (`general`) | The whole app rather than one area | background, UI scale, What's new |
+| General (`general`) | The whole app rather than one area | background, UI scale, What's new, usage statistics |
 
 Drawn on the map means Map Markers, even when it is about mass or kills; a panel or pop-up goes with its
 topic. Account Settings and Personal Statistics stay as upstream has them.
@@ -126,7 +132,7 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
   open) and target that branch, so open PRs form one chain and don't conflict; merge them bottom-up (head branches
   are deleted on merge, so the next PR retargets to `main`). Describe what changed and link the change-log entry.
 - Every feature goes through a review loop before its PR: a fresh reviewer checks the diff, the author fixes,
-  and it repeats until a review round has no findings (see the tripwire-feature skill, section 7).
+  and it repeats until a review round has no findings (see the tripwire-feature skill, section 8).
 - Every merge to `main` is released automatically: it gets a `vX.Y.Z` tag, a GitHub Release and the
   `petdog/tripwire:latest` image, so `main` must always build and run.
 - The version bump follows the PR: a What's New entry is minor, docs-only is no release, anything else is

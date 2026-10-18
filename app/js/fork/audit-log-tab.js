@@ -232,6 +232,7 @@ const auditLogTab = {
 			$d.closest(".ui-dialog").addClass("ma-admin-active");	// hides the "Total: n" tray, like Admins & members
 			// upstream's own menu handler sizes the dialog after this one: wait for it
 			setTimeout(function() { $d.dialog("option", "height", Math.min(700, Math.max(350, $(window).height() - 40))); }, 0);
+			if (typeof forkUsage !== "undefined") { forkUsage.track("auditLog", "opened"); }
 			t.open();
 		});
 	}

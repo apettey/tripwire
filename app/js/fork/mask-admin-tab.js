@@ -247,6 +247,7 @@ const maskAdminTab = {
 				$d.dialog("option", "height", Math.min(700, Math.max(350, $(window).height() - 40)));
 				t.blocking = null;
 				t.query = "";
+				if (typeof forkUsage !== "undefined") { forkUsage.track("maskAdmins", "opened"); }
 				t.load();
 			}
 		});

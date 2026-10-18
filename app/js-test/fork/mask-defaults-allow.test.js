@@ -24,6 +24,7 @@ describe('maskDefaults allow-list', () => {
 		// anything past the server's keys is a made-up key another test pushed (mask-defaults.test.js), never a real one
 		maskDefaults.ALLOWED.slice(server.length).forEach(k => assert.ok(['a', 'b', 'x', 'ok', 'alpha', 'zeta'].includes(k), 'extra key ' + k));
 		keys.delete('favoritesPanel');   // left out on purpose: it carries the admin's own favourite systems
+		keys.delete('usageStats');       // left out on purpose: sending usage statistics is each user's own privacy choice
 		assert.deepStrictEqual([...keys].sort(), server);
 	});
 

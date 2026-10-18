@@ -529,6 +529,7 @@ const killReporting = {
 			$box.on("click", ".kill-toast-close", function() { $(this).closest(".kill-toast").remove(); });
 			$box.on("click", ".kill-toast[data-systemid]", function(e) {
 				if ($(e.target).closest("a, .kill-toast-close, .kill-toast-desktop").length) { return; }
+				if (typeof forkUsage !== "undefined") { forkUsage.track("killReporting", "clicked"); }
 				killReporting.focusNode($(this).attr("data-systemid"));
 			});
 			$box.on("click", ".kill-toast-desktop", function(e) {

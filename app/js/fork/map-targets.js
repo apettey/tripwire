@@ -278,7 +278,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const def = mt.defaultExpiry(skyhookEnd(id), now());
 			const params = Object.assign({ mode: "add", systemID: id, note: mt.cleanNote(note) },
 				choice ? mt.expiryParams(choice, def.until) : (def.until ? { until: String(def.until) } : { hours: String(def.hours) }));
-			return post(params);
+			const req = post(params);
+			if (req && typeof req.done === "function") { req.done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("mapTargets", "marked"); } }); }
+			return req;
 		}
 		function remove(id) { return post({ mode: "remove", systemID: Number(id) }); }
 		function clear() { return post({ mode: "clear" }); }

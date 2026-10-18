@@ -239,6 +239,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const bookmark = jumpSigPrompt.bookmark(plan, candidate, from, classText);
 			hidePanel();
 			post({ mode: "link", bareID: Number(hole.wormhole.id), candidateSigID: Number(candidate.sig.id) }).done(function(answer) {
+				if (typeof forkUsage !== "undefined") { forkUsage.track("jumpSigPrompt", "linked"); }
 				// One undo step: the server puts back exactly what the link changed (see the tripwire.undo wrapper below)
 				const undoSystemID = typeof automapperUndo !== "undefined" ? automapperUndo.system(viewingSystemID, from, to) : to;
 				const stack = tripwire.signatures.undo[undoSystemID] = tripwire.signatures.undo[undoSystemID] || [];

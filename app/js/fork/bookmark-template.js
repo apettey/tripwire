@@ -227,6 +227,7 @@ const bookmarkTemplate = {
 			data: JSON.stringify(Object.assign({ mode: mode }, data || {})),
 			headers: { "X-CSRF-Token": t.csrf, "X-Requested-With": "XMLHttpRequest" }
 		}).done(function(answer) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("bookmarkTemplate", "configured"); }
 			t.state = answer;
 			t.csrf = answer.csrf || t.csrf;
 			t.use(answer.templates, answer.jumpPrompt);

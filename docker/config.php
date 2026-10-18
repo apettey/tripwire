@@ -64,6 +64,14 @@ define('ZKILL_API_INTERVAL', tw_env('ZKILL_API_INTERVAL', 2));
 define('ZKILL_THREAT_KEEP_DAYS', tw_env('ZKILL_THREAT_KEEP_DAYS', 90));
 // Audit log (fork, audit/audit.inc.php): days (1-3650, default 60) the log of who changed which signature / wormhole is kept; 0 = not recorded
 define('AUDIT_LOG_DAYS', tw_env('AUDIT_LOG_DAYS', 60));
+// Product analytics (fork, analytics/, docker/README.md#product-analytics): first-party feature usage counters.
+// ANALYTICS_ENABLED false = nothing collected; ANALYTICS_DAYS (1-3650) counters kept and how often the pseudonym salt is
+// replaced; ANALYTICS_RAW_DAYS (0-90, 0 = off) single events also kept for debugging; ANALYTICS_ADMINS comma-separated
+// character IDs that may open the analytics dashboard (empty = nobody)
+define('ANALYTICS_ENABLED', tw_env_bool('ANALYTICS_ENABLED', true));
+define('ANALYTICS_DAYS', tw_env('ANALYTICS_DAYS', 90));
+define('ANALYTICS_RAW_DAYS', tw_env('ANALYTICS_RAW_DAYS', 0));
+define('ANALYTICS_ADMINS', tw_env('ANALYTICS_ADMINS', ''));
 // Local scans (fork, intel/pilots.inc.php): false = the worker never asks zKillboard for the stats of pilots in shared
 // local scans (corporations / alliances from ESI still work)
 define('INTEL_ZKILL_THREAT_ENABLED', tw_env_bool('INTEL_ZKILL_THREAT_ENABLED', true));

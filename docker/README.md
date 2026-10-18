@@ -132,6 +132,10 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `ZKILL_RETENTION_HOURS` | `48` | `config.php` (`ZKILL_RETENTION_HOURS`), `zkill/` | Hours (1-168) the [zKillboard integration](#zkillboard-integration) keeps kills in `zkill_killmails`; also the longest window `public/system_kills.php` serves |
 | `ZKILL_THREAT_KEEP_DAYS` | `90` | `config.php` (`ZKILL_THREAT_KEEP_DAYS`), `zkill/profile.php` | Days (0-90) the stored kills of systems people look at are kept for the System Threat [90-day profile](#90-day-profile-system-threat) instead of `ZKILL_RETENTION_HOURS`; `0` = off |
 | `AUDIT_LOG_DAYS` | `60` | `config.php` (`AUDIT_LOG_DAYS`), `audit/audit.inc.php` | Days (1-3650) the [audit log](#audit-log) of who changed which signature or wormhole is kept; older entries are never shown and are deleted; `0` = nothing is recorded |
+| `ANALYTICS_ENABLED` | `true` | `config.php` (`ANALYTICS_ENABLED`), `analytics/`, `public/fork_events.php` | First-party [product analytics](#product-analytics): daily feature usage counters. `false` = nothing is collected and the browser sends nothing |
+| `ANALYTICS_DAYS` | `90` | `config.php` (`ANALYTICS_DAYS`), `analytics/` | Days (1-3650) the [product analytics](#product-analytics) counters are kept; also how often the pseudonym salt is replaced (the old one is deleted) |
+| `ANALYTICS_RAW_DAYS` | `0` | `config.php` (`ANALYTICS_RAW_DAYS`), `analytics/` | Days (0-90) single events are also kept in `fork_analytics_raw`, for debugging; `0` = not stored (the table is dropped) |
+| `ANALYTICS_ADMINS` | empty | `config.php` (`ANALYTICS_ADMINS`) | Comma-separated character IDs that may open the analytics dashboard; empty = nobody |
 | `ZKILL_API_INTERVAL` | `2` | `config.php` (`ZKILL_API_INTERVAL`), `zkill/` | Minimum seconds (1-60) between the worker's zKillboard API requests (back-fills). The R2Z2 feed is paced separately |
 | `INTEL_ZKILL_THREAT_ENABLED` | `true` | `config.php` (`INTEL_ZKILL_THREAT_ENABLED`), `intel/pilots.inc.php` | Whether the worker fetches zKillboard character stats for pilots in shared local scans ([who is in local](#who-is-in-local)). `false` = corporations / alliances only (ESI), nothing is asked from zKillboard for local scans. Without `ZKILL_FEED_ENABLED` neither lookup runs |
 | `DISCORD_SECRET_KEY` | unset | `discord/` (environment) | Key (any long random string) the webhook URLs of the [Discord notifications](#discord-notifications) are encrypted with at rest. Unset = stored unencrypted. Changing or removing it makes stored webhooks unreadable (marked broken, to be added again) |
@@ -690,6 +694,46 @@ or deleted which signature or wormhole on the mask, newest first, with before/af
   The mask-admin actions of [Mask admins](#mask-admins) (`fork_mask_audit`) appear in the same list. Filters: system
   (either end of a wormhole), character, kind and date range (UTC); 50 per page.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/audit_log_test.php`.
+
+### Product analytics
+
+First-party usage statistics, so we know which fork features are used, by how many people and how often they are turned
+off. No third-party host, script or pixel: the browser (`app/js/fork/feature-usage.js`) sends counters to
+`public/fork_events.php` on this server, which writes them to MySQL (`analytics/analytics.inc.php`; tables created on
+first use, `docker/sql/analytics.sql` is the reference). Users turn it off in Settings > General > Usage statistics.
+
+- **What is sent.** Counters like "jumpPlanner opened 3 times": a feature id from `public/fork/feature-catalog.json` and
+  an action from a fixed list (`command`, `opened`, `shown`, `disabled`, `setting_on`/`setting_off`, the feature's `use`
+  actions, and `app.active` at most once per 5 minutes of real input). Batched every 60 s (and when the tab is hidden),
+  at most 50 counters / 8 KB a request, with a per-session token; the server accepts only catalog ids and actions and
+  always answers 204.
+- **Where the counts come from.** Automatically: Ctrl+K palette commands that succeeded, panels the user opens or switches
+  to another mode, Settings Save (a feature's setting turned on/off or changed), catalog `exposed` elements on screen
+  (`shown`, once a day per account) and a daily list of features turned off. Everything else is an explicit
+  `forkUsage.track("<id>", "<action>")` call (or `data-track` attribute) in the feature's own code where it is used (a
+  menu choice, a button, a save, a paste); the catalog test checks every `use` action has one.
+- **Limits.** A daily counter stops at 10,000 (`ANALYTICS_MAX_DAILY`); at most 30 requests per user a minute
+  (`fork_analytics_rate`, one row per pseudonymous user); a user who turned statistics off in Settings is dropped
+  server-side too (their stored options), so an old open tab can't keep sending.
+- **What is stored.** Per UTC day: pseudonymous user id, feature, action, count, first minute (`fork_analytics_daily`);
+  first/last time per user, feature and action (`fork_analytics_user`); a pseudonymous mask hash per day and used feature,
+  only to count masks using it (`fork_analytics_mask`); the salt (`fork_analytics_meta`). The ids are 8 bytes of
+  HMAC-SHA256 of the account id / mask id with a random salt that is replaced every `ANALYTICS_DAYS` (old salt deleted),
+  so older rows can't be tied to anyone. A user is an account, so alts don't count twice.
+- **What is never stored.** Account, character, corporation or mask ids and names, systems, signatures, wormholes, IP
+  addresses, user agents, page URLs or any typed text.
+- **Retention.** `ANALYTICS_DAYS` (default 90); `analytics_prune.cron.php` deletes older rows hourly (`DELETE ... LIMIT
+  5000`, from `docker/crontab`, no MySQL event scheduler needed). `ANALYTICS_RAW_DAYS` (default 0) keeps single events in
+  `fork_analytics_raw` for debugging only.
+- **Size.** About 30 counters per active user a day at ~80 bytes with indexes: 200 users for 90 days is under 60 MB.
+- **Checking a feature in the dev stack.** In the browser console run `forkUsage.debug(true)`: every event is logged as
+  `[usage] feature.action` and sent right away instead of every 60 s (stored in this browser's localStorage; turn it off
+  with `forkUsage.debug(false)`). Then list today's rows for the feature:
+
+  ```bash
+  docker compose -f docker-compose.dev.yml exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" tripwire_database -e "SELECT action, COUNT(*) users, SUM(n) n FROM fork_analytics_daily WHERE day = UTC_DATE() AND feature = \"jumpPlanner\" GROUP BY action"'
+  ```
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/analytics_test.php`.
 
 ### REST API
 

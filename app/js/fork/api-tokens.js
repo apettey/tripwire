@@ -186,6 +186,7 @@ const apiTokens = {
 		const t = apiTokens;
 		return t.request("create", { name: name, expiresDays: days }).done(function(data) {
 			t.created = data.token;
+			if (typeof forkUsage !== "undefined") { forkUsage.track("apiTokens", "created"); }
 			t.message = null;
 			delete data.token;
 			t.use(data);

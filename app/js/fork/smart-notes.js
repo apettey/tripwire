@@ -744,6 +744,7 @@ const smartNotes = {
 		// A zKillboard system chip whose system is on the chain map views it in Tripwire instead of opening zKillboard
 		$(document).on("click", "a.sn-system[target]", function(e) {
 			if (!smartNotes.ours.has(this)) { return; }
+			if (typeof forkUsage !== "undefined") { forkUsage.track("smartNotes", "clicked"); }
 			if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { return; }
 			const id = parseInt($(this).attr("data-system-id"), 10);
 			if (smartNotes.onMap(id) && typeof tripwire !== "undefined" && tripwire.systemChange) {

@@ -361,6 +361,7 @@ const sigInline = {
 		const p = sigInline.pop;
 		if (!p) { return; }
 		const wormholeID = p.wormholeID, field = p.field;
+		if (typeof forkUsage !== "undefined") { forkUsage.track("sigInline", "edited"); }
 		sigInline.close();
 		const change = {};
 		change[field] = value;

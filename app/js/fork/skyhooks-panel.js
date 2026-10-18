@@ -510,6 +510,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$doc.on("click", "#chainMap .sky-icon", function(e) {
 				e.preventDefault();
 				e.stopPropagation();
+				if (typeof forkUsage !== "undefined") { forkUsage.track("skyhooks", "opened"); }
 				openMap($(this).attr("data-sky-system"));
 			});
 			$doc.on("mousedown", "#chainMap .sky-icon", function(e) { e.stopPropagation(); });

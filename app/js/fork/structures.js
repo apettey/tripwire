@@ -1013,6 +1013,7 @@ const structures = {
 				structures.pending = { params: params };
 				return;
 			}
+			if (typeof forkUsage !== "undefined") { forkUsage.track("structures", "saved"); }
 			if (response && response.systemID === structures.systemID) { structures.absorb(response); }
 			structures.editing = null;
 			structures.redraw();
@@ -1048,6 +1049,7 @@ const structures = {
 
 	setView: function(view) {
 		structures.view = view === "timers" ? "timers" : "system";
+		if (view === "timers" && typeof forkUsage !== "undefined") { forkUsage.track("structureTimers", "opened"); }
 		structures.editing = null; structures.moreID = null;
 		if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.fetchBoard(); }
 		structures.redraw();

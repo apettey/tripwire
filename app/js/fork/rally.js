@@ -357,7 +357,9 @@ const rally = {
 			comp: comp, label: same ? rally.state.label : "", age: 0 }, false);
 		const payload = { mode: "set", systemID: Number(systemID) };
 		if (comp) { payload.compID = comp.id; }
-		return rally.post(payload);
+		const req = rally.post(payload);
+		if (req && typeof req.done === "function") { req.done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("fightHere", "set"); } }); }
+		return req;
 	},
 
 	clear: function() {

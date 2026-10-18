@@ -78,11 +78,23 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
       frame well, capture with the zoom/region action, then copy the saved PNG from the tool-results
       folder into the repo (`changes/...` and `public/whats-new/img/`).
 
-## 6. Change log (required)
+## 6. Analytics check (required for user-facing features)
+- [ ] The feature has its entry in `public/fork/feature-catalog.json` (a follow-up PR adds its number to the parent
+      feature's `prs`); the catalog test (`app/js-test/fork/feature-catalog.test.js`) fails until every What's New PR is
+      covered. Fill `settingsKey`, `commands`, `panels`, `exposed` (a selector that is on screen when the feature shows
+      something) and `use`, and write the one-line success signal in the PR (and in `success` when it is clear).
+- [ ] Know which events count as use: a catalog command run (`command`), a catalog panel opened (`opened`), or a `use`
+      action the feature sends with `forkUsage.track(id, action)` or a `data-track="id.action"` attribute.
+- [ ] In the dev stack, run `forkUsage.debug(true)` in the console, use the feature, and confirm its `shown` and use
+      events appear as `[usage] id.action` lines and in `fork_analytics_daily` (SQL in
+      [docker/README.md](../../../docker/README.md#product-analytics)).
+- [ ] Paste that evidence (the console lines or the SQL result) in the PR body. The reviewer checks this step.
+
+## 7. Change log (required)
 - [ ] `changes/YYYY-MM-DD-<feature>/README.md` from `changes/_template.md` with `before.png` /
       `after.png`; add the top row to `changes/README.md`.
 
-## 7. Review loop (required, before the PR)
+## 8. Review loop (required, before the PR)
 Every feature is reviewed until a review comes back with **no findings**. Don't open the PR before that.
 - [ ] Commit, then hand the branch to a **fresh reviewer** (a new agent/session that didn't write the
       code; when an agent built it, the coordinating session spawns the reviewer). Give it the branch,
@@ -98,12 +110,13 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
   - tests: pure logic covered by mocha, tests pass
     (`MSYS_NO_PATHCONV=1 docker compose -f docker-compose.dev.yml exec -T assets npx mocha --recursive app/js-test`);
   - it actually works in the dev stack, and the screenshots show the final version.
+  - the analytics check (section 6): catalog entry right, use events known, evidence in the PR body;
 - [ ] The author fixes every finding (or answers why it's not a problem), commits, and the reviewer
       reviews **again from the new diff**. Repeat until a round returns no findings. Where possible use
       the same reviewer each round so it can check its earlier findings were addressed.
 - [ ] Note the number of review rounds in the PR body.
 
-## 8. PR and What's New
+## 9. PR and What's New
 - [ ] Commit, push, open the PR against the branch you stacked on (`main` only when nothing else is open)
       **first** to learn its number `<N>`. Start the body with "**Stacked on #<M>** (merge that first)" when stacked.
 - [ ] Add the entry at the top of `public/whats-new/features.json`: `pr: <N>`, `date`, `title`,
@@ -111,9 +124,10 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
 - [ ] PR body: what changed, link to the change-log entry, before/after screenshots as
       `https://raw.githubusercontent.com/<owner>/<repo>/<commit sha>/<path>` (pin the SHA so images
       survive branch deletion). End with the attribution line.
+- [ ] PR body: the success signal and the analytics evidence from section 6.
 - [ ] Image builds: `docker build -f docker/Dockerfile -t tripwire:local .`
 
-## 9. Merge
+## 10. Merge
 - [ ] Merge with a **merge commit** (not squash/rebase).
 - [ ] Merge stacked PRs **bottom-up**. The repo deletes head branches on merge, so GitHub retargets the next PR
       to `main` by itself; if a PR still points at a merged branch, `gh pr edit <N> --base main`.

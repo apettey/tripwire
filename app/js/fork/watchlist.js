@@ -863,6 +863,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				data: JSON.stringify(Object.assign({ mode: mode }, payload || {})),
 				headers: { "X-CSRF-Token": server.csrf, "X-Requested-With": "XMLHttpRequest" }
 			}).done(function(data) {
+				if (typeof forkUsage !== "undefined") { forkUsage.track("watchlist", "configured"); }
 				absorb(data);
 				redrawChain();
 				renderAll();
