@@ -19,7 +19,9 @@ const panelHost = {
 	/**
 	 * Add a panel to the list (again: replaces the one with the same id). Returns def.
 	 * @param def {id (element id), title (its name in menus), key (options key of its on/off setting), size {x, y, minX,
-	 * minY} (gridster cells), and for panel-modes.js: small (true: has a small view), windowTitle() (the popped-out
+	 * minY} (gridster cells), and for panel-modes.js: small (true: has a small view), smallHint (what the small view
+	 * shows: "Small view: ..."; default the kill panels' wording), smallSize {width, height} (its small window's, default
+	 * SMALL's), afterMove(mode) (after it moved to another mode), windowTitle() (the popped-out
 	 * window's title, default title), defaultMode (default "fixed"), floatDefault() (optional first window place
 	 * {left, top, width, height}), minSize {minWidth, minHeight} (its window's, default FLOAT's), onEscape() (Escape
 	 * in its window), onResize() (after its size changed: moved, resized, docked), upstream (true: markup

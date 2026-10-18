@@ -1,0 +1,172 @@
+/* Small views of upstream's panels (fork-owned, see app/js/fork/panel-small-views.js): shown in the small window of
+   panel-modes.js (.ph-small on the panel). The full content stays in the page, hidden. */
+
+/* ---- Signatures: unscanned count and the newest signatures ---- */
+
+#signaturesWidget .ssv {
+	display: none;
+}
+
+#signaturesWidget.ph-small > .controls,
+#signaturesWidget.ph-small > .content > :not(.ssv) {
+	display: none !important;
+}
+
+#signaturesWidget.ph-small > .content {
+	top: 5px;
+	overflow: hidden;
+}
+
+#signaturesWidget.ph-small .ssv {
+	display: block;
+	text-align: left;
+}
+
+.ssv .ssv-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 0 2px 3px;
+	border-bottom: 1px solid #333;
+	color: #ccc;
+}
+
+.ssv .ssv-unscanned {
+	color: #888;
+}
+
+.ssv .ssv-unscanned.ssv-hot {
+	color: #f0b030;
+	font-weight: bold;
+}
+
+.ssv .ssv-add {
+	margin-left: auto;
+	padding: 0 4px;
+	color: #aaa;
+	font-weight: bold;
+	text-decoration: none;
+}
+
+.ssv .ssv-add:hover {
+	color: #fff;
+}
+
+.ssv .ssv-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ssv .ssv-row {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	padding: 1px 2px;
+	line-height: 16px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.ssv .ssv-row:hover {
+	background: #333;
+}
+
+.ssv .ssv-id {
+	flex: 0 0 auto;
+	width: 54px;
+	font-family: "lucida", monospace;
+}
+
+.ssv .ssv-type {
+	flex: 0 0 auto;
+	width: 56px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-transform: capitalize;
+	color: #aaa;
+}
+
+.ssv .ssv-unscanned-row .ssv-type {
+	color: #f0b030;
+	font-weight: bold;
+}
+
+.ssv .ssv-leads {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ssv .ssv-age {
+	flex: 0 0 auto;
+	min-width: 28px;
+	padding: 0 2px;
+	text-align: right;
+	color: #888;
+}
+
+/* The tints of "Colour signatures by age" (sig-age.css), on the age */
+.ssv .ssv-age.sig-age-aging {
+	background-color: rgba(230, 159, 0, 0.16);
+	box-shadow: inset 2px 0 0 rgba(230, 159, 0, 0.55);
+	color: #ccc;
+}
+
+.ssv .ssv-age.sig-age-stale {
+	background-color: rgba(230, 159, 0, 0.34);
+	box-shadow: inset 4px 0 0 rgba(240, 175, 30, 0.9);
+	color: #ffd88a;
+}
+
+/* ---- System info: name, class (or security), region and statics ---- */
+
+#infoWidget.ph-small > .controls,
+#infoWidget.ph-small #infoExtra,
+#infoWidget.ph-small #infoFaction,
+#infoWidget.ph-small #activityGraphControls,
+#infoWidget.ph-small #infoLinks,
+#infoWidget.ph-small #structuresInfoLine,
+#infoWidget.ph-small #systemThreatInfo,
+#infoWidget.ph-small #infoSecurity > [data-tooltip],	/* the effect (its tooltip lists what it does) */
+#infoWidget.ph-small #infoStatics > :not(div) {	/* k-space: gates and routes to favourites */
+	display: none !important;
+}
+
+#infoWidget.ph-small > .content {
+	top: 5px;
+	overflow: hidden;
+}
+
+/* The activity graph is moved out of sight, not display: none: the chart drawn (data loaded) while it can't be measured
+   would keep its legend and axis labels empty when it comes back */
+#infoWidget.ph-small #activityGraph {
+	position: absolute !important;
+	left: -10000px;
+	top: 0;
+	width: 400px;
+	visibility: hidden;
+}
+
+#infoWidget.ph-small #infoGeneral {
+	float: none !important;
+	width: auto !important;
+}
+
+#infoWidget.ph-small #infoGeneral h1 {
+	margin: 0;
+	font-size: 1.6em;
+	line-height: 1.2;
+}
+
+/* Class (or security) and region on one line */
+#infoWidget.ph-small #infoSecurity,
+#infoWidget.ph-small #infoRegion {
+	display: inline-block;
+	margin: 0 10px 2px 0;
+}
+
+#infoWidget.ph-small #infoStatics {
+	text-align: left;
+}
