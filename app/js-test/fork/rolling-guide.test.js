@@ -147,7 +147,8 @@ describe('Rolling guide', () => {
 			assert.strictEqual((html.match(/rg-active/g) || []).length, 1);
 			assert.ok(html.indexOf("<img src='images/rolling-guide/3-3b.png?v=") >= 0);
 			assert.strictEqual((html.match(/target='_blank' rel='noopener'/g) || []).length, 3);
-			assert.ok(html.indexOf("<a href='images/rolling-guide/poster.png?v=1' target='_blank' rel='noopener' class='rg-poster'>All sizes</a>") >= 0);
+			assert.ok(html.indexOf("<a href='images/rolling-guide/poster.png?v=" + rollingGuide.IMAGE_VERSION + "' target='_blank' rel='noopener' class='rg-poster'>All sizes</a>") >= 0);
+			assert.strictEqual(rollingGuide.posterUrl(), 'images/rolling-guide/poster.png?v=' + rollingGuide.IMAGE_VERSION);
 			assert.ok(html.indexOf('Open full size') >= 0);
 			assert.ok(html.indexOf("<div class='rg-caption'>H296 · 3.3B kg") >= 0);
 			assert.ok(html.indexOf('rg-note') < 0);

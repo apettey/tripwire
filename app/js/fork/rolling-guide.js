@@ -116,7 +116,10 @@ const rollingGuide = {
 		return { size: size, caption: "", holeGuide: null, note: note };
 	},
 
-	POSTER_URL: "images/rolling-guide/poster.png?v=1",
+	/** All sizes on one page (poster.png) */
+	posterUrl: function() {
+		return rollingGuide.IMAGE_DIR + "poster.png?v=" + rollingGuide.IMAGE_VERSION;
+	},
 
 	imageUrl: function(key) {
 		return rollingGuide.guide(key) ? rollingGuide.IMAGE_DIR + key + ".png?v=" + rollingGuide.IMAGE_VERSION : "";
@@ -142,7 +145,7 @@ const rollingGuide = {
 			html += "<div class='rg-image'><a href='" + e(url) + "' target='_blank' rel='noopener' class='rg-full' data-tooltip='Open full size in a new tab'>"
 				+ "<img src='" + e(url) + "' alt='" + e("Fleet rolling flowchart for " + current.label + " kg holes") + "'></a></div>"
 				+ "<div class='rg-foot'><a href='" + e(url) + "' target='_blank' rel='noopener'>Open full size</a> · "
-				+ "<a href='" + rollingGuide.POSTER_URL + "' target='_blank' rel='noopener' class='rg-poster'>All sizes</a></div>";
+				+ "<a href='" + e(rollingGuide.posterUrl()) + "' target='_blank' rel='noopener' class='rg-poster'>All sizes</a></div>";
 		}
 		return html;
 	},
