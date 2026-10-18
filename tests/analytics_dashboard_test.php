@@ -165,7 +165,7 @@ check('features: no salt replacement in the window', $v['rotation'], null);
 $f = dash_view($db, 'funnel', $T, 'jumpPlanner');
 check('funnel: steps (exposed and tried of the eligible)', array_column($f['steps'], 'users'), [11, 10, 7, 5, 5]);
 check('funnel: each step names its base (retained is of tried, not of repeat)', array_column($f['steps'], 'base'), [null, 'eligible', 'exposed', 'tried', 'tried']);
-check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5', 'since' => null, 'saltReplaced' => null]);
+check('funnel: median hours from first seen to first use', $f['toUse'], ['medianHours' => 3.0, 'users' => 5, 'usedBeforeShown' => '<5', 'since' => null, 'before' => null, 'saltReplaced' => null]);
 check('funnel: setting_changed is not a use', dash_view($db, 'funnel', $T, 'jumpPlanner')['steps'][2]['users'], 7);
 
 $l = dash_view($db, 'launches', $T);
@@ -220,10 +220,17 @@ set_salt_date('2026-10-25');
 $v = dash_view($db, 'features', $T);
 check('rotation: features note, repeat unchanged', [$v['rotation'], by_id($v['features'], 'jumpPlanner')['repeat']['users']],
     [['date' => '2026-10-25', 'until' => '2027-01-16'], 5]);
+// A new uid after the replacement: seen and used it half an hour apart (a returning person's next visit)
+$user->execute([$u(20), 'jumpPlanner', 'shown', '2026-10-26 10:00:00', '2026-10-26 10:00:00']);
+$user->execute([$u(20), 'jumpPlanner', 'opened', '2026-10-26 10:30:00', '2026-10-26 10:30:00']);
 $f = dash_view($db, 'funnel', $T, 'jumpPlanner');
-check('rotation: the funnel keeps its 28 days and all milestones (released before the replacement)',
-    [$f['from'], $f['rotation']['date'], array_column($f['steps'], 'users'), $f['toUse']['users'], $f['toUse']['medianHours'], $f['toUse']['since'], $f['toUse']['saltReplaced']],
-    ['2026-10-03', '2026-10-25', [11, 10, 7, 5, 5], 5, 3.0, null, '2026-10-25']);
+check('rotation: the funnel keeps its 28 days; time to first use only from milestones before the replacement',
+    [$f['from'], $f['rotation']['date'], array_column($f['steps'], 'users'), $f['toUse']['users'], $f['toUse']['medianHours'], $f['toUse']['since'], $f['toUse']['before'], $f['toUse']['saltReplaced']],
+    ['2026-10-03', '2026-10-25', [11, 10, 7, 5, 5], 5, 3.0, null, '2026-10-25', '2026-10-25']);
+set_salt_date('2026-01-01');
+check('rotation: without a replacement the same milestone counts', [dash_view($db, 'funnel', $T, 'jumpPlanner')['toUse']['users'], dash_view($db, 'funnel', $T, 'jumpPlanner')['toUse']['medianHours']], [6, 2.5]);
+set_salt_date('2026-10-25');
+$db->prepare('DELETE FROM fork_analytics_user WHERE uid = ?')->execute([$u(20)]);
 check('rotation: never used still counts repeat users across it', by_id(dash_view($db, 'never', '2026-12-20')['candidates'], 'jumpPlanner'), null);
 // A replacement outside the funnel's 28 days (but inside the kept data): no funnel banner
 $daily->execute(['2026-09-01', 'app', 'active', $u(99), 1, 600]);

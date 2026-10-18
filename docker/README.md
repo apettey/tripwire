@@ -765,8 +765,9 @@ older than a day are cleaned up).
 Salt replacement: every `ANALYTICS_DAYS` the pseudonym salt is replaced and everyone gets a new id, so for one window
 length afterwards people active before and after count twice (active users, eligible, used, masks...). Each view whose
 window includes it shows a banner with the date and until when, and new users aren't counted for windows that include
-it. Per-person measures (repeat, retained, time to first use) keep all data: the replacement only splits a person into
-an old and a new id, a slight undercount the funnel mentions.
+it. Repeat and retained keep all data (the replacement only splits a person into an old and a new id: a slight
+undercount). Time to first use, for a feature released before the replacement, only uses people who first saw and used
+it before then (a returning person's new id would look like a first-time user); the funnel says so.
 
 - Try it in the dev stack with made-up data: `docker compose -f docker-compose.dev.yml exec -T app php docker/dev-seed-analytics.php`
   (40 fake users over 35 days; `--clear` removes them), with `ANALYTICS_ADMINS` set to your dev character's ID

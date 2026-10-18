@@ -236,8 +236,8 @@ const analyticsDashboard = {
 		out += "<p>Median time from first seeing it to first use: <b>" + (t.medianHours === null ? "—" : a.escape(a.hours(t.medianHours))) + "</b>"
 			+ " <span class='an-dim'>(" + a.escape(a.count(t.users)) + " users seen before they used it; " + a.escape(a.count(t.usedBeforeShown))
 			+ " used it before it was ever counted as seen" + (t.since ? "; only since " + a.escape(t.since) : "") + ")</span>"
-			+ (t.saltReplaced && !t.since ? " <span class='an-dim'>Pseudonym salt replaced on " + a.escape(t.saltReplaced)
-				+ ": someone active before and after has an old and a new id, counted separately here.</span>" : "") + "</p>";
+			+ (t.before ? " <span class='an-dim'>Pseudonym salt replaced on " + a.escape(t.before) + ": only people who first saw and used it"
+				+ " before then (after it, returning people get new ids that would look like first-time users).</span>" : "") + "</p>";
 		if (data.feature.kind === "passive") { out += "<p class='an-dim'>Passive feature (drawn on the map): few or no use actions, so Exposed and Turned off say more.</p>"; }
 		return out;
 	},

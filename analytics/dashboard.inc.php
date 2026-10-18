@@ -347,13 +347,15 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
             if (isset($weeks[$w], $weeks[$w + 1])) { $retainedN++; break; }
         }
     }
-    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt). Milestones from
-    // before a salt replacement are genuine and kept; a person active on both sides then has an old and a new uid (the new
-    // one often seen and used on the same day), which isn't merged: the page says so. A feature released on or after the
-    // replacement only has milestones since then.
+    // Time from the first "shown" to the first use, per user (milestones: fork_analytics_user firstAt). After a salt
+    // replacement in the kept data a returning person gets a new uid whose "first" milestones are just their next visit
+    // (often seen and used the same day). So for a feature released before the replacement only milestones from before it
+    // count (people who are really new since then are left out); a feature released since only has new ones.
     $kept = dash_rotation($db, dash_day($today, -(analytics_days() - 1)), $today, analytics_days());
     $since = $kept && $f['released'] !== null && $f['released'] >= $kept['date'] ? $kept['date'] : null;
+    $before = $kept && !$since ? $kept['date'] : null;
     $milestonesFrom = $since ? strtotime($since . ' 00:00:00 UTC') : 0;
+    $milestonesTo = $before ? strtotime($before . ' 00:00:00 UTC') : PHP_INT_MAX;
     $firstShown = [];
     $firstUse = [];
     $place = implode(', ', array_fill(0, count($f['use']), '?'));
@@ -368,6 +370,7 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
     $usedFirst = 0;
     foreach ($firstUse as $uid => $t) {
         if (!isset($firstShown[$uid]) || $firstShown[$uid] < $milestonesFrom || $t < $milestonesFrom) continue;
+        if ($firstShown[$uid] >= $milestonesTo || $t >= $milestonesTo) continue;
         if ($t < $firstShown[$uid]) { $usedFirst++; continue; }
         $hours[] = ($t - $firstShown[$uid]) / 3600;
     }
@@ -383,7 +386,7 @@ function dash_view_funnel(PDO $db, $today, $featureId) {
             ['key' => 'retained', 'users' => dash_users($retainedN), 'base' => 'tried'],
         ],
         'toUse' => ['medianHours' => $median, 'users' => dash_users(count($hours)), 'usedBeforeShown' => dash_users($usedFirst),
-            'since' => $since, 'saltReplaced' => $kept ? $kept['date'] : null],
+            'since' => $since, 'before' => $before, 'saltReplaced' => $kept ? $kept['date'] : null],
     ];
 }
 

@@ -35,8 +35,9 @@ No toggle, because it is an operator tool, not a user feature: it is off unless 
   within 7 days; tip outcomes for all tips together, since outcome events don't name the tip; "Show feature tips" off
   rate; What's New opens per release). The tips part stays empty until feature tips ship.
 - **Salt replacement.** Every view shows a banner when the pseudonym salt was replaced inside its window (people count
-  twice until one window length later) and new users aren't counted across it. Repeat, retained and time to first use
-  keep all data (a person then has two ids: a slight undercount, noted in the funnel).
+  twice until one window length later) and new users aren't counted across it. Repeat and retained keep all data (a
+  person then has two ids: a slight undercount); time to first use of a feature released before the replacement only
+  uses milestones from before it (noted in the funnel).
 - **Heatmap.** The daily table keeps the minute of each feature/action's first event of the day (`firstMinute`), so the
   heatmap counts user-days by the UTC hour things first happened; activity late in a long session is under-counted (said
   on the page).
