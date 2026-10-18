@@ -32,7 +32,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["created"] },
     { "id": "panelModes", "title": "Pop out, shrink or hide any panel", "section": "general", "prs": [115, 117, 119], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["mode"] },
-    { "id": "hints", "title": "Feature tips", "section": "general", "prs": [122], "settingsKey": "hints",
+    { "id": "hints", "title": "Feature tips", "section": "general", "prs": [122, 125], "settingsKey": "hints",
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["acted", "got_it"],
       "events": ["tip_shown", "closed", "ignored", "section_off"], "success": "acted on >=15% of tips shown, tips turned off by <10% of active users" },
 
@@ -64,7 +64,7 @@
     { "id": "jumpReturn", "title": "Return bookmark after a jump", "section": "jumps", "prs": [8, 42], "settingsKey": "jumpReturn",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["copied"], "exposed": ".jump-return-text" },
     { "id": "rollingCalc", "title": "Rolling calculator and how to roll", "section": "jumps", "prs": [24, 67], "settingsKey": "rollingCalc",
-      "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".rolling-log-head" },
+      "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["opened"], "exposed": ".rolling-log-head" },
     { "id": "rollingGuide", "try": "rollingGuide.open", "title": "Rolling guide", "section": "jumps", "prs": [118], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rollingGuide.open"], "panels": ["rollingGuideWidget"], "use": [] },
     { "id": "autoMass", "title": "Fitted jump mass", "section": "jumps", "prs": [38], "settingsKey": "autoMass",

@@ -13,7 +13,8 @@
 //				Add discord=1 to a change to also post it to Discord: the channel a corp admin chose for the
 //				"Fight here" type in Mask Admin > Discord (queued in the Discord outbox, discord/rally.php), or else
 //				upstream's server-wide DISCORD_WEB_HOOK of the mask (posted directly, rally_discord.inc.php).
-//				"discord" in every answer says whether either is there.
+//				"discord" in every answer says whether either is there; "discordChannels" whether the mask has any
+//				Discord channel at all (Mask Admin > Discord, for any type) or that server-wide hook.
 //
 //	The fork_rally table (and its comp columns) is created on first use, so existing databases need no migration.
 //	Internal names stay "rally" (table, endpoint, Discord type key): only what users read says "Fight here".
@@ -100,6 +101,7 @@ try {
 
 $route = rally_discord_route($mysql, $mask);
 $output['discord'] = !!$route;
+$output['discordChannels'] = rally_discord_has_channels($route, $mysql, $mask);	// any channel at all (the Mask Admin tip)
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
 echo json_encode($output);

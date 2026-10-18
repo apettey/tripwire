@@ -754,6 +754,12 @@ const watchlist = {
 		return server.filters || [];
 	},
 
+	/** Mask Admin tip: this admin may edit the active mask's filters, and it has none (loaded, so not "unknown") */
+	tipNoFilters: function(server, activeMask) {
+		const filters = watchlist.filtersFor(server, activeMask);
+		return !!(server && server.canEdit) && filters !== null && filters.length === 0;
+	},
+
 	/** Whether to ask for the active mask's filters now: they aren't loaded, no request for this mask is under way,
 	and the last one for it (request: {mask, at, pending}) was at least MASK_RETRY_MS ago */
 	needsReload: function(server, activeMask, request, now) {
@@ -1408,6 +1414,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					loadFilters();
 				}
 			});
+			// Tip (hints.js): Mask Admin opened, the mask has no Watchlist filters (the filters every member polls anyway).
+			// After the Discord tip by priority; one pop-up tip a session.
+			if (typeof forkHints !== "undefined") {
+				forkHints.register({
+					id: "watchlist.maskAdmin", feature: "watchlist", section: "maskAdmin", audience: "maskAdmin",
+					trigger: "maskAdmin.open", kind: "callout", placement: "left", dialog: "#dialog-admin",
+					eligible: function() { return wl.tipNoFilters(server, activeMask()); },
+					anchor: function() { return $("#dialog-admin .menu li[data-window='watchlist']:visible")[0] || null; },
+					title: "Watchlist",
+					body: "Tell Tripwire what your mask hunts (\"a C5 with a Wolf-Rayet\", \"an H296 within 3 jumps\") and everyone "
+						+ "gets a pop-up when the chain finds it. Add filters on the Watchlist page.\n\nTurn tips off in Settings > General.",
+					action: { label: "Show me", run: function() { $("#dialog-admin .menu li[data-window='watchlist']").trigger("click"); } },
+					priority: 21, maxShows: 2, cooldownHours: 72, ttlSeconds: 120
+				});
+			}
 		}
 
 		$(function() {

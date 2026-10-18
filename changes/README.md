@@ -5,6 +5,8 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-18 | [Ctrl+K opens count once](2026-10-18-ctrl-k-open-counts-once/README.md) | A Ctrl+K open of Usage analytics or What's New logs `command` only, not `opened` too (as the features hub does); the dashboard's What's New numbers include Ctrl+K opens |
+| 2026-10-18 | [More feature tips](2026-10-18-more-feature-tips/README.md) | Twelve tips for easy-to-miss features (edit life/mass in place, d-scan sharing, Mass dialog, rolling, region map, staging scan, jump planner, chain kills, panel modes, Mask Admin Discord / Watchlist / Bookmarks); tips inside dialogs |
 | 2026-10-18 | [Features you haven't tried](2026-10-18-features-hub/README.md) | Features dialog: every feature with Used / Not tried / Turned off, Show me and Settings, not-tried first near the sections you use; from Ctrl+K, Settings > General and What's New |
 | 2026-10-18 | [What's New first run + Getting started](2026-10-18-whats-new-first-run/README.md) | New accounts skip the list of every feature so far and get a 5-step Getting started card; What's New entries get Try it, a used tick and Turned off; account age from fork_events.php |
 | 2026-10-18 | [Feature tips](2026-10-18-feature-tips/README.md) | Tips engine: one short tip at a quiet moment for a feature not used yet (caps, quiet check, usage-aware), Settings > General toggle; pilot tips for Ctrl+K and hiding anomalies; "Does it need a tip?" in the feature workflow |

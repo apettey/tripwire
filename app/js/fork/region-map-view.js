@@ -1125,6 +1125,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			updateInfoLink(viewingSystemID);
 		}
 
+		// Tip (hints.js): a beacon on the system panel's "Region map" link the 3rd time a k-space system is viewed
+		function setupTip() {
+			if (typeof forkHints === "undefined") { return; }
+			forkHints.register({
+				id: "regionMap.infoLink", feature: "regionMap", section: "routes",
+				trigger: "system.viewed", minCount: 3, kind: "beacon", placement: "bottom",
+				eligible: function(ctx, data) { return enabled() && !!data && rm.canOpen(appData.systems[data.systemID]); },
+				anchor: "#infoLinks .rm-info-link",
+				title: "Region map",
+				body: "See this system on a Dotlan-style map of its region, with your chain's exits, pilots, routes and the last "
+					+ "hour's kills and jumps. Also on the map's right-click menu and Ctrl+K.\n\nTurn tips off in Settings > General.",
+				action: { label: "Show me", run: function(ctx) { rm.openSystem(ctx.viewingSystemID); } },
+				priority: 40, maxShows: 2, cooldownHours: 72, ttlSeconds: 300
+			});
+		}
+
 		function setupCommand() {
 			if (typeof forkCommands === "undefined") { return; }
 			forkCommands.register({
@@ -1210,6 +1226,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				setupCommand();
 				setupChainMenu();
 				setupInfoLink();
+				setupTip();
 			} catch (e) { console.error("Region map: setup failed", e); }
 		});
 	})();

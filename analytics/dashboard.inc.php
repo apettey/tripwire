@@ -604,7 +604,10 @@ function dash_view_tips(PDO $db, $today) {
     $tipsOff = dash_action_users($db, 'setting_off', $from, $today);
     $off = dash_off_users($db, $from, $today);
     $offNowN = isset($off['hints']) ? count(array_intersect_key($off['hints'], $active)) : 0;
+    // What's New opened by the user: "opened" (Settings > General) or "command" (Ctrl+K, which doesn't also count "opened")
     $opened = dash_action_users($db, 'opened', $from, $today);
+    $byCommand = dash_action_users($db, 'command', $from, $today);
+    $whatsNewUsers = (isset($opened['whatsNew']) ? $opened['whatsNew'] : []) + (isset($byCommand['whatsNew']) ? $byCommand['whatsNew'] : []);
     // Releases: What's New entries grouped by date; who opened What's New within 7 days of each
     $dates = [];
     foreach (dash_whatsnew() as $e) $dates[$e['date']][] = $e['pr'];
@@ -612,7 +615,7 @@ function dash_view_tips(PDO $db, $today) {
     $oldest = $dates ? min(array_keys($dates)) : $today;
     $activeSince = dash_active_days($db, $oldest, $today);
     $opens = [];
-    foreach (dash_rows($db, "SELECT uid, day FROM fork_analytics_daily WHERE feature = 'whatsNew' AND action = 'opened' AND day BETWEEN ? AND ?", [$oldest, $today]) as $r) {
+    foreach (dash_rows($db, "SELECT uid, day FROM fork_analytics_daily WHERE feature = 'whatsNew' AND action IN ('opened', 'command') AND day BETWEEN ? AND ?", [$oldest, $today]) as $r) {
         $opens[$r[0]][$r[1]] = true;
     }
     $releases = [];
@@ -630,7 +633,7 @@ function dash_view_tips(PDO $db, $today) {
         'tips' => $perFeature,
         'tipsOff' => ['turnedOff' => dash_users(isset($tipsOff['hints']) ? count($tipsOff['hints']) : 0),
             'offNow' => dash_users($offNowN), 'pct' => dash_pct($offNowN, count($active)), 'active' => dash_users(count($active))],
-        'whatsNew' => ['opened' => dash_users(isset($opened['whatsNew']) ? count($opened['whatsNew']) : 0), 'releases' => $releases],
+        'whatsNew' => ['opened' => dash_users(count($whatsNewUsers)), 'releases' => $releases],
         'rotation' => dash_rotation($db, $start, $today, dash_days_between($start, $today) + 1),
     ];
 }

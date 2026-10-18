@@ -300,6 +300,20 @@ const jumpPlanner = {
 		return out;
 	},
 
+	/** Which chain the exits belong to: "<mask>|<chain tab>" (a switch of either primes chain.exit instead of firing it) */
+	exitsKey: function(opts) {
+		const mask = opts && opts.masks ? opts.masks.active : "";
+		const tab = opts && opts.chain ? opts.chain.active : "";
+		return String(mask === undefined || mask === null ? "" : mask) + "|" + String(tab === undefined || tab === null ? "" : tab);
+	},
+
+	/** Exits (system ids) in `next` that weren't in `prev`: the chain just got them (the tips' chain.exit event) */
+	newExits: function(prev, next) {
+		const had = {};
+		(prev || []).forEach(function(id) { had[id] = true; });
+		return (next || []).filter(function(id) { return !had[id]; });
+	},
+
 	/** The ring icon for a node */
 	ringHtml: function(systemID, name) {
 		return "<span class='jp-ring' data-jp-exit='" + (parseInt(systemID, 10) || 0) + "' title='"
@@ -1529,7 +1543,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					// home (new, EOL, mass, preserve mass, a new root)
 					const allExits = s.enabled ? jp.homeExits(result, systems()) : [];
 					const homeKey = s.enabled && s.mode === "home" ? jp.homeKey(result, systems(), preserveFlags()) : "";
+					// Tips' chain.exit: exits the chain gets, not the ones it had at page load, a mask or a chain tab switch (those prime it)
+					const chainKey = jp.exitsKey(typeof options !== "undefined" ? options : null);
+					const primed = state.exitsKey === chainKey;
+					state.exitsKey = chainKey;
 					if (exits.join(",") !== state.exits.join(",") || allExits.join(",") !== state.allExits.join(",") || homeKey !== state.homeKey) {
+						const added = primed ? jp.newExits(state.exits, exits) : [];
+						if (added.length && typeof forkHints !== "undefined") { setTimeout(function() { forkHints.emit("chain.exit", { systemIDs: added }); }, 0); }
 						state.exits = exits;
 						state.allExits = allExits;
 						state.homeKey = homeKey;
@@ -2393,6 +2413,31 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					run: function(args) { open(args.exit, true); }
 				});
 				forkCommands.panelToggle({ id: "panel.jumpPlanner", title: "Toggle Jump planner", key: "jumpRange", icon: "follow", keywords: ["jump", "range"] });
+			}
+			// Tip (hints.js): a beacon on the range ring of a low-sec / null-sec exit the chain just got
+			if (typeof forkHints !== "undefined") {
+				const ringOf = function(data) {
+					const ids = data && Array.isArray(data.systemIDs) ? data.systemIDs : [];
+					for (let i = 0; i < ids.length; i++) {
+						const el = $("#chainMap .jp-ring[data-jp-exit='" + (parseInt(ids[i], 10) || 0) + "']:visible")[0];
+						if (el) { return el; }
+					}
+					return null;
+				};
+				forkHints.register({
+					id: "jumpPlanner.exit", feature: "jumpPlanner", section: "jumpPlanner",
+					trigger: "chain.exit", kind: "beacon", placement: "right",
+					eligible: function(ctx, data) { return jp.enabled(ctx.options) && !!data && Array.isArray(data.systemIDs) && data.systemIDs.length > 0; },
+					anchor: function(ctx, data) { return ringOf(data); },
+					title: "Jump planner",
+					body: "This exit has a jump range ring. Click it to see where a jump freighter, Black Ops or carrier can jump "
+						+ "from here, with fuel and a route home.\n\nTurn tips off in Settings > General.",
+					action: { label: "Show me", run: function(ctx, data) {
+						const ring = ringOf(data);
+						if (ring) { open(ring.getAttribute("data-jp-exit"), true); }
+					} },
+					priority: 40, maxShows: 2, cooldownHours: 72, ttlSeconds: 600
+				});
 			}
 			const $doc = $(document);
 			const sel = "#" + jp.WIDGET_ID;

@@ -25,6 +25,11 @@ describe('forkHints', () => {
 				{ anchor: undefined }, { title: '' }, { body: 5 }, { eligible: true }, { action: { label: 'x' } }, { priority: 'high' }]
 				.forEach(o => assert.throws(() => forkHints.normalize(def(o)), JSON.stringify(o)));
 		});
+		it('dialog: a selector or nothing', () => {
+			assert.strictEqual(forkHints.normalize(def({ dialog: '#dialog-mass' })).dialog, '#dialog-mass');
+			assert.throws(() => forkHints.normalize(def({ dialog: 5 })), /dialog/);
+			assert.throws(() => forkHints.normalize(def({ dialog: '' })), /dialog/);
+		});
 		it('a toast needs no anchor', () => {
 			assert.strictEqual(forkHints.normalize(def({ kind: 'toast', anchor: undefined })).kind, 'toast');
 		});
@@ -393,6 +398,28 @@ describe('forkHints', () => {
 			assert.strictEqual(forkHints.queue.length, 0);
 		});
 
+		it('minCount counts eligible triggers only', () => {
+			forkHints.register(def({ minCount: 2, eligible: (c, d) => d.ok }));
+			quiet = 'user busy';
+			forkHints.emit('paste.sigs', { ok: false });
+			forkHints.emit('paste.sigs', { ok: false });
+			assert.strictEqual(forkHints.queue.length, 0);
+			assert.ok(!options.hints.state['t.a'] || !options.hints.state['t.a'].n, 'not counted');
+			forkHints.emit('paste.sigs', { ok: true });
+			assert.strictEqual(forkHints.queue.length, 0);
+			forkHints.emit('paste.sigs', { ok: true });
+			assert.strictEqual(forkHints.queue.length, 1);
+		});
+
+		it('a tip in a dialog asks the quiet check without its own dialog', () => {
+			forkHints.register(def({ dialog: '#dialog-mass' }));
+			const asked = [];
+			ui.quietSignals = (now, hint) => { asked.push(hint && hint.dialog); return {}; };
+			forkHints.emit('paste.sigs', {});
+			assert.deepStrictEqual(asked, ['#dialog-mass']);
+			assert.strictEqual(ui.shown.length, 1);
+		});
+
 		it('minCount: the 5th trigger; saves stop once counted', () => {
 			forkHints.register(def({ minCount: 5, kind: 'toast', anchor: undefined }));
 			quiet = 'user busy';
@@ -446,6 +473,30 @@ describe('forkHints', () => {
 			ui.tip = null;
 			assert.strictEqual(forkHints.show('t.a', { force: true }), false);
 			assert.strictEqual(forkHints.show('nope', { force: true }), false);
+		});
+
+		it('show(force) opens a beacon tip as its callout (the user asked: no dot to click first)', () => {
+			const kinds = [];
+			ui.render = (hint) => { kinds.push(hint.kind); if (hint.kind !== 'beacon') { ui.tip = hint.id; } return true; };
+			forkHints.register(def({ kind: 'beacon' }));
+			assert.strictEqual(forkHints.show('t.a', { force: true }), true);
+			assert.deepStrictEqual(kinds, ['callout']);
+			assert.strictEqual(forkHints.current.hint.id, 't.a');
+			assert.strictEqual(forkHints.hints['t.a'].kind, 'beacon', 'the registered tip stays a beacon');
+			assert.strictEqual(forkHints.session.shown, 0);
+		});
+
+		it('show(force) of a beacon tip removes its beacon already on screen (no second open of a done tip)', () => {
+			const removed = [];
+			ui.removeBeacons = (pred) => { removed.push(pred({ id: 't.a' }), pred({ id: 't.other' })); };
+			forkHints.register(def({ kind: 'beacon' }));
+			assert.strictEqual(forkHints.show('t.a', { force: true }), true);
+			assert.deepStrictEqual(removed, [true, false], 'only this tip\'s beacon');
+			removed.length = 0;
+			forkHints.register(def({ id: 't.c' }));
+			ui.tip = null;
+			forkHints.show('t.c', { force: true });
+			assert.deepStrictEqual(removed, [], 'a callout tip touches no beacons');
 		});
 
 		it('tips turned off: nothing is queued', () => {

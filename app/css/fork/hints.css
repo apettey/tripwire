@@ -134,8 +134,20 @@
 	100% { box-shadow: 0 0 0 9px rgba(74, 158, 224, 0); }
 }
 
+/* "Show me" on something already on screen (forkHintsUI.flash): a short outline */
+.fh-flash {
+	outline: 2px solid #4A9EE0 !important;
+	outline-offset: 1px;
+	animation: fh-flash 0.8s ease-in-out 3;
+}
+
+@keyframes fh-flash {
+	50% { outline-color: rgba(74, 158, 224, 0.2); }
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.fh-beacon span { animation: none; }
+	.fh-flash { animation: none; }
 }
 
 /* Screen readers only (the polite live region that reads a tip out) */

@@ -11,7 +11,7 @@ const forkHintsUI = {
 	GAP: 10,			// between the anchor and the callout (room for the arrow)
 	ARROW_PAD: 14,		// the arrow stays this far from the callout's corners
 	// The app's own pop-ups: a tip waits while one is open and steps aside when one appears
-	POPUPS: ["#jump-return-panel", "#jump-sig-panel", "#autoMass-prompt", "#kill-reporting-toasts .kill-toast", "#cp-overlay:not(.cp-hidden)"],
+	POPUPS: ["#jump-return-panel", "#jump-sig-panel", ".automass-notice", "#kill-reporting-toasts .kill-toast", "#cp-overlay:not(.cp-hidden)"],
 
 	escape: function(s) {
 		return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, function(c) {
@@ -123,12 +123,15 @@ const forkHintsUI = {
 		return forkHintsUI.POPUPS.some(function(sel) { return $(sel).filter(":visible").length > 0; });
 	},
 
-	dialogOpen: function() {
-		return $(".ui-dialog:visible").not(".dialog-floating").length > 0;
+	/** A (non-floating) dialog is open; except: the selector of a tip's own dialog (hint.dialog), which doesn't count */
+	dialogOpen: function(except) {
+		let $open = $(".ui-dialog:visible").not(".dialog-floating");
+		if (except) { $open = $open.filter(function() { return !$(this).find(except).length; }); }
+		return $open.length > 0;
 	},
 
-	/** What hints.js' quietReason needs */
-	quietSignals: function(now) {
+	/** What hints.js' quietReason needs (hint: the tip asking; its own dialog doesn't count as an open dialog) */
+	quietSignals: function(now, hint) {
 		const a = document.activeElement;
 		const s = forkHints.signals;
 		let fight = false;
@@ -140,7 +143,7 @@ const forkHintsUI = {
 			lastInput: s.lastInput,
 			lastKill: s.lastKill,
 			lastPaste: s.lastPaste,
-			dialogOpen: forkHintsUI.dialogOpen(),
+			dialogOpen: forkHintsUI.dialogOpen(hint && hint.dialog),
 			// CKEditor (comments, notes) types inside an iframe: focus on an IFRAME, or an editor instance with the focus
 			inputFocused: !!(a && a !== document.body && a.id !== "clipboard" && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT|IFRAME)$/.test(a.tagName)))
 				|| !!(typeof CKEDITOR !== "undefined" && CKEDITOR && CKEDITOR.currentInstance),
@@ -222,6 +225,17 @@ const forkHintsUI = {
 		else if (typeof forkHints !== "undefined" && forkHints.current && forkHints.current.hint.id === tip.hint.id) { forkHints.current = null; }
 	},
 
+	/** A tip's "Show me" for something already on screen: outline it for a moment (no motion with reduced motion) */
+	flash: function(el) {
+		if (el && el.jquery) { el = el[0]; }
+		if (!el || !el.classList) { return; }
+		if (typeof el.scrollIntoView === "function") { el.scrollIntoView({ block: "nearest" }); }
+		el.classList.remove("fh-flash");
+		void el.offsetWidth;	// restart the animation
+		el.classList.add("fh-flash");
+		setTimeout(function() { el.classList.remove("fh-flash"); }, 2600);
+	},
+
 	removeBeacons: function(pred) {
 		forkHintsUI.beacons = forkHintsUI.beacons.filter(function(b) {
 			if (!pred(b.hint)) { return true; }
@@ -249,7 +263,8 @@ const forkHintsUI = {
 		}
 		forkHintsUI.beacons.forEach(function(b) {
 			const r = b.anchor.getBoundingClientRect();
-			b.$el.css({ left: Math.round(r.left + r.width - 6) + "px", top: Math.round(r.top - 6) + "px" });
+			// The anchor's top right corner, or the window's edge when the anchor runs past it (a wide panel header)
+			b.$el.css({ left: Math.round(Math.min(r.left + r.width, view.width - 8) - 6) + "px", top: Math.round(Math.max(r.top, 8) - 6) + "px" });
 		});
 	},
 
@@ -274,7 +289,7 @@ const forkHintsUI = {
 		const tip = forkHintsUI.tip;
 		if (tip) {
 			if (tip.anchor && !(tip.anchor = forkHintsUI.reanchor(tip.hint, tip.anchor, tip.data))) { forkHintsUI.hide("ignored"); }
-			else if (forkHintsUI.popupOpen() || forkHintsUI.dialogOpen()) { forkHintsUI.hide("ignored"); }
+			else if (forkHintsUI.popupOpen() || forkHintsUI.dialogOpen(tip.hint.dialog)) { forkHintsUI.hide("ignored"); }
 			else {
 				if (document.visibilityState !== "hidden" && !tip.hovered) { tip.remaining -= now - tip.lastTick; }
 				tip.lastTick = now;

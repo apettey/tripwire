@@ -731,9 +731,41 @@ const chainKillFeed = {
 		}
 	},
 
+	// ---- Tip (hints.js): after a kill in the chain, once things are quiet again ----
+	// kill.chain queues it with a long ttl; the quiet check holds every tip for 10 minutes after a chain kill, so it shows at
+	// the first calm moment after that. A beacon on the panel's header, or on the Panels menu when the panel is out of view.
+
+	/** The tip's anchor: the panel's header when it is on screen, else (minimized, or scrolled out of view) the Panels menu
+	 *  icon in the top bar; "Show me" brings the panel back and into view */
+	tipAnchor: function() {
+		const head = $("#" + chainKillFeed.WIDGET_ID + " .controls:visible")[0];
+		if (head && typeof forkHintsUI !== "undefined" && forkHintsUI.visible(head)) { return head; }
+		return $("#ph-menu-link:visible")[0] || null;
+	},
+
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "chainKillFeed.afterKill", feature: "chainKillFeed", section: "intel",
+			trigger: "kill.chain", kind: "beacon", placement: "bottom",
+			eligible: function(ctx) { return chainKillFeed.enabled(ctx.options); },
+			anchor: function() { return chainKillFeed.tipAnchor(); },
+			title: "Chain kills",
+			body: "The Chain kills panel lists every kill in your chain's systems, newest first. "
+				+ "Click one to open it on zKillboard.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() {
+				const id = chainKillFeed.WIDGET_ID;
+				if (typeof panelModes !== "undefined" && panelModes.modeFor(id) === "minimized") { panelModes.setMode(id, "restore"); }
+				setTimeout(function() { forkHintsUI.flash($("#" + id)); }, 50);
+			} },
+			priority: 55, maxShows: 2, cooldownHours: 72, ttlSeconds: 3600
+		});
+	},
+
 	init: function() {
 		if (typeof systemKillFeed === "undefined") { return; }
 		panelHost.register(chainKillFeed.panel());
+		chainKillFeed.setupTip();
 		// A kill opened from the feed (the rows are zKillboard links) is a use of it
 		$(document).on("click", "#" + chainKillFeed.WIDGET_ID + " a.skf-row", function() { if (typeof forkUsage !== "undefined") { forkUsage.track("chainKillFeed", "clicked"); } });
 		chainKillFeed.setupSettings();
