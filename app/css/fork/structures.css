@@ -101,3 +101,19 @@
 .str-sugg-dead:hover { color: #fff !important; }
 .str-sugg-x { color: #8f9ba3 !important; font-size: 8px; line-height: 14px; }
 .str-sugg-x:hover { color: #fff !important; }
+
+/* Small view (panel-modes.js, .ph-small): the next timer of the viewed system */
+#structuresWidget .str-sv { display: none; }
+#structuresWidget.ph-small > .controls, #structuresWidget.ph-small > .content > :not(.str-sv) { display: none !important; }
+#structuresWidget.ph-small > .content { top: 5px; overflow: hidden; }
+#structuresWidget.ph-small .str-sv { display: block; padding: 1px 3px; text-align: left; font-size: 11px; line-height: 14px; }
+.str-sv-line { display: flex; align-items: center; gap: 6px; min-height: 22px; white-space: nowrap; }
+.str-sv-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.str-sv-type { color: #ccc; font-weight: bold; }
+.str-sv-name { color: #aaa; }
+.str-sv-owner { flex: none; }
+.str-sv-kind { color: #aaa; }
+.str-sv-next .str-timer { min-width: 0; font-size: 1.15em; }
+.str-sv-at { color: #8f9ba3; }
+.str-sv-more { margin-left: auto; color: #8f9ba3; }
+.str-sv-empty { color: #8f9ba3; padding: 3px 2px; }

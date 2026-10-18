@@ -1,0 +1,90 @@
+<title>Fleet Rolling Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a fleet-ops reference card. Header with the two ship profiles, a rules strip, then one panel per hole size
+   holding a top-down decision flowchart (process boxes for waves, diamonds for hole checks). */
+:root {
+  color-scheme: dark;
+  --bg: #0a0f1d;
+  --panel: #111a2e;
+  --panel-2: #172340;
+  --line: #2a3a62;
+  --fg: #e7ecf7;
+  --muted: #93a0bf;
+  --hot: #ff8b3d;
+  --cold: #6fcbff;
+  --check: #c3a5ff;
+  --ok: #6fe3a5;
+  --warn: #ffd84a;
+  --f-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  background-image: radial-gradient(1200px 500px at 85% -10%, rgba(195,165,255,.10), transparent 60%),
+                    radial-gradient(900px 400px at -10% 10%, rgba(111,203,255,.07), transparent 60%);
+  color: var(--fg);
+  font: 15px/1.5 var(--f-body);
+  padding-inline: 16px;
+  padding-block: 28px 48px;
+}
+#poster { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+header { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px 32px; align-items: end; }
+.eyebrow { font: 600 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--check); }
+h1 { font: 800 clamp(40px, 7vw, 76px)/.92 var(--f-display); letter-spacing: .01em; margin: 8px 0 10px; text-transform: uppercase; text-wrap: balance; }
+h1 .hot { color: var(--hot); } h1 .cold { color: var(--cold); }
+.lede { color: var(--muted); max-width: 66ch; margin: 0; }
+.ships { display: grid; grid-template-columns: auto auto auto; gap: 6px 16px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-family: var(--f-mono); align-items: baseline; }
+.ships .hd { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.ships .nm { font-size: 16px; font-weight: 600; }
+.ships .c { color: var(--cold); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.ships .h { color: var(--hot); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.rule { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.rule h2 { font: 700 15px/1.2 var(--f-display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 8px; }
+.rule p, .rule li { color: var(--muted); font-size: 14px; margin: 0; }
+.rule ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.rule b { color: var(--fg); font-weight: 600; }
+.key { display: grid; gap: 7px; }
+.key .row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+.sw { flex: none; width: 34px; height: 20px; border-radius: 3px; border: 2px solid; }
+.sw.out { background: #2a1a10; border-color: var(--hot); }
+.sw.back { background: #0f2638; border-color: var(--cold); }
+.sw.check { width: 18px; height: 18px; margin: 0 8px; transform: rotate(45deg); background: #231a3d; border-color: var(--check); border-radius: 2px; }
+.sw.done { background: #12352a; border-color: var(--ok); border-radius: 10px; }
+
+.holes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.hole { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.hole.wide { grid-column: 1 / -1; }
+.hole-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px 20px; flex-wrap: wrap; }
+.mass { font: 800 54px/.9 var(--f-display); font-variant-numeric: tabular-nums; }
+.mass small { font-size: 22px; color: var(--muted); font-weight: 700; margin-left: 4px; letter-spacing: .06em; }
+.sub { font: 500 13px/1.3 var(--f-mono); color: var(--muted); margin-top: 4px; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat { font: 600 12px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 7px 9px; border-radius: 4px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.stat b { color: var(--fg); font-weight: 600; }
+.stat.fleet b { color: var(--warn); }
+.codes-note { font-size: 13px; color: var(--muted); margin: 0; }
+.codes { display: flex; flex-wrap: wrap; gap: 6px; }
+.code { font: 600 12px/1 var(--f-mono); padding: 5px 7px; border: 1px solid var(--line); border-radius: 3px; white-space: nowrap; }
+.code span { color: var(--muted); font-weight: 500; }
+.flow { overflow-x: auto; padding: 6px 0 2px; display: flex; justify-content: center; }
+.flow svg { max-width: 100%; height: auto; }
+.alt { font-size: 13px; color: var(--muted); margin: 0; padding: 9px 12px; border-radius: 4px; background: var(--panel-2); }
+.alt b { color: var(--warn); font-weight: 600; }
+
+footer { display: grid; gap: 6px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer p { margin: 0; max-width: 100ch; }
+footer b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 1000px) { .holes { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { header { grid-template-columns: minmax(0, 1fr); } .ships { justify-self: start; } }
+@media (max-width: 420px) { .mass { font-size: 44px; } }
+body.single .hole { grid-column: 1 / -1; }
+</style>

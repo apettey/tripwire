@@ -363,3 +363,73 @@
 .watchlist-toast-close:hover {
 	color: #fff;
 }
+
+/* Small view (panel-modes.js, .ph-small): only the current hits */
+#watchlistWidget .wl-sv {
+	display: none;
+}
+
+#watchlistWidget.ph-small > .controls,
+#watchlistWidget.ph-small > .content > :not(.wl-sv) {
+	display: none !important;
+}
+
+#watchlistWidget.ph-small > .content {
+	top: 5px;
+	overflow-x: hidden;
+	overflow-y: auto;	/* more hits than fit: they scroll */
+}
+
+#watchlistWidget.ph-small .wl-sv {
+	display: block;
+	text-align: left;
+}
+
+#watchlistWidget .wl-sv-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+#watchlistWidget .wl-sv-row {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	padding: 2px 2px 2px 4px;
+	border-left: 3px solid #4fc3f7;
+	margin-bottom: 2px;
+	background: rgba(79, 195, 247, 0.06);
+	line-height: 16px;
+	white-space: nowrap;
+}
+
+#watchlistWidget .wl-sv-name {
+	flex: 0 1 auto;
+	min-width: 40px;
+	max-width: 45%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: #DDD;
+	font-weight: bold;
+}
+
+#watchlistWidget .wl-sv-where {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#watchlistWidget .wl-sv-class,
+#watchlistWidget .wl-sv-when,
+#watchlistWidget .wl-sv-empty {
+	color: #888;
+}
+
+#watchlistWidget .wl-sv-when {
+	flex: 0 0 auto;
+}
+
+#watchlistWidget .wl-sv-empty {
+	padding: 4px 2px;
+}

@@ -1,0 +1,296 @@
+<title>Battleship Rolling Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a ship-console reference card. Header + rules strip, then one panel per hole size; each panel
+   is a left-to-right run of numbered passes that forks into labelled lanes at every hole check. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0f1d;
+  --panel: #111a2e;
+  --panel-2: #172340;
+  --line: #2a3a62;
+  --fg: #e7ecf7;
+  --muted: #93a0bf;
+  --hot: #ff8b3d;
+  --hot-ink: #1c0d02;
+  --cold: #6fcbff;
+  --check: #c3a5ff;
+  --warn: #ffd84a;
+  --close: #ff5c7a;
+  --ok: #6fe3a5;
+  --f-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  background-image: radial-gradient(1200px 500px at 85% -10%, rgba(195,165,255,.10), transparent 60%),
+                    radial-gradient(900px 400px at -10% 10%, rgba(111,203,255,.07), transparent 60%);
+  color: var(--fg);
+  font: 15px/1.5 var(--f-body);
+  padding-inline: 16px;
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+
+/* Header */
+header { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px 32px; align-items: end; }
+.eyebrow { font: 600 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--check); }
+h1 { font: 800 clamp(40px, 7vw, 76px)/.92 var(--f-display); letter-spacing: .01em; margin: 8px 0 10px; text-transform: uppercase; text-wrap: balance; }
+h1 .hot { color: var(--hot); } h1 .cold { color: var(--cold); }
+.lede { color: var(--muted); max-width: 64ch; margin: 0; }
+.roller { display: grid; grid-template-columns: auto auto; gap: 6px 14px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-family: var(--f-mono); }
+.roller dt { color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; align-self: center; }
+.roller dd { margin: 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.roller .h { color: var(--hot); } .roller .c { color: var(--cold); }
+
+/* Rules + legend */
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.rule { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.rule h2 { font: 700 15px/1.2 var(--f-display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 8px; color: var(--fg); }
+.rule p, .rule li { color: var(--muted); font-size: 14px; margin: 0; }
+.rule ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.rule b { color: var(--fg); font-weight: 600; }
+.legend { display: grid; gap: 8px; }
+.legend .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+
+/* Hole cards */
+.holes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.hole { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 18px 20px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.hole.wide { grid-column: 1 / -1; }
+.hole-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 20px; flex-wrap: wrap; }
+.hole-title { display: grid; gap: 2px; }
+.mass { font: 800 54px/.9 var(--f-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.mass small { font-size: 22px; color: var(--muted); font-weight: 700; margin-left: 4px; letter-spacing: .06em; }
+.sub { font: 500 13px/1.3 var(--f-mono); color: var(--muted); }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat { font: 600 12px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 7px 9px; border-radius: 4px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.stat b { color: var(--fg); font-weight: 600; }
+.stat.safe b { color: var(--ok); } .stat.tight b { color: var(--warn); }
+.codes { display: flex; flex-wrap: wrap; gap: 6px; }
+.code { font: 600 12px/1 var(--f-mono); padding: 5px 7px; border: 1px solid var(--line); border-radius: 3px; color: var(--fg); white-space: nowrap; }
+.code span { color: var(--muted); font-weight: 500; }
+.codes-note { font-size: 13px; color: var(--muted); margin: 0; }
+
+/* Pass chips */
+.seq { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pass { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px 0 7px; border-radius: 4px; font: 600 13px/1 var(--f-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pass .n { font-size: 11px; opacity: .75; min-width: 1.4em; text-align: right; }
+.pass .dir { font-family: var(--f-display); font-weight: 700; font-size: 15px; letter-spacing: .06em; }
+.pass.hot { background: var(--hot); color: var(--hot-ink); }
+.pass.cold { background: transparent; color: var(--cold); box-shadow: inset 0 0 0 2px var(--cold); }
+.pass.tight { outline: 2px dashed var(--warn); outline-offset: 2px; }
+.pass .t { color: var(--warn); }
+.pass.hot .t { color: var(--hot-ink); }
+.closes { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 9px; border-radius: 4px; font: 700 14px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--close); box-shadow: inset 0 0 0 1px var(--close); white-space: nowrap; }
+
+/* Checks and lanes */
+.fork { flex-basis: 100%; display: grid; gap: 8px; margin-top: 4px; }
+.ask { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 600 13px/1.3 var(--f-mono); color: var(--check); }
+.ask .dia { width: 12px; height: 12px; transform: rotate(45deg); background: var(--check); flex: none; }
+.ask span.where { color: var(--muted); font-weight: 500; }
+.lanes { display: grid; gap: 10px; padding-left: 16px; border-left: 2px solid var(--check); margin-left: 5px; }
+.lane { display: grid; gap: 6px; min-width: 0; }
+.state { display: inline-flex; align-items: center; gap: 6px; font: 700 13px/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; }
+.state i { font-style: normal; font-family: var(--f-mono); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); font-size: 12px; }
+.state.stable { color: var(--ok); } .state.reduced { color: var(--warn); } .state.critical { color: var(--close); }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+footer { display: grid; gap: 6px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer p { margin: 0; max-width: 100ch; }
+footer b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .holes { grid-template-columns: minmax(0, 1fr); }
+  header { grid-template-columns: minmax(0, 1fr); }
+  .roller { justify-self: start; }
+}
+@media (max-width: 420px) {
+  .mass { font-size: 44px; }
+  .lanes { padding-left: 10px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Wormhole rolling · Battleship holes</div>
+      <h1>Battleship <span class="hot">Rolling</span> <span class="cold">Card</span></h1>
+      <p class="lede">Close any wormhole that passes battleships with one roller, and always end on the home side. A hole's real mass is up to 10% above or below its listed total, so every plan below is worked out for the whole range, not just the listed number.</p>
+    </div>
+    <dl class="roller" aria-label="Assumed roller">
+      <dt>Roller</dt><dd>Battleship</dd>
+      <dt>Cold</dt><dd class="c">200,000 t</dd>
+      <dt>Hot</dt><dd class="h">300,000 t</dd>
+    </dl>
+  </header>
+
+  <section class="rules" aria-label="How to read the card">
+    <div class="rule legend">
+      <h2>Legend</h2>
+      <div class="row"><span class="pass hot"><span class="n">1</span><span class="dir">→ OUT</span>HOT</span> jump with prop mod running (300 kt)</div>
+      <div class="row"><span class="pass cold"><span class="n">2</span><span class="dir">← BACK</span>cold</span> jump with prop mod off (200 kt)</div>
+      <div class="row"><span class="pass hot tight"><span class="n">9</span><span class="dir">→ OUT</span>HOT <span class="t">⚠</span></span> no spare margin, see the note at the bottom</div>
+      <div class="row"><span class="closes">✕ Closes</span> this jump closes the hole behind you, with you home</div>
+    </div>
+    <div class="rule">
+      <h2>Rules</h2>
+      <ul>
+        <li>Start on a <b>fresh hole</b>: stable, nothing logged through it yet.</li>
+        <li><b>→ OUT</b> goes to the far side, <b>← BACK</b> comes home. Passes always alternate.</li>
+        <li>Any <b>← BACK</b> jump may close the hole early. That's fine: you're home.</li>
+        <li>Two battleships can share the work. Never have both on the far side.</li>
+      </ul>
+    </div>
+    <div class="rule">
+      <h2>Checking the hole</h2>
+      <p>At a <span style="color:var(--check)">◆ check</span>, Show Info on the wormhole and follow the lane that matches:</p>
+      <ul style="margin-top:8px">
+        <li><span class="state stable">Stable</span> half or more of its mass left</li>
+        <li><span class="state reduced">Reduced</span> under half left, not critical</li>
+        <li><span class="state critical">Critical</span> under 10% left</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="holes" id="holes" aria-label="Plans by hole size"></section>
+
+  <footer>
+    <p><b>⚠ No spare margin.</b> These out jumps are safe for every possible hole mass, but only just: in the worst case the hole has exactly as much mass left as the jump uses. They stay safe as long as your battleship really is 200,000 t cold and 300,000 t hot. Weigh your fit before rolling; if it is heavier, use the mass dialog in Tripwire instead of this card.</p>
+    <p><b>Still open after the last step?</b> It has almost no mass left. Don't send the battleship out again: let it expire, or close it with a cheap frigate.</p>
+    <p><b>Hole already used?</b> If anything has gone through it, this card's numbers no longer apply. Log the jumps and open the hole's mass dialog in Tripwire: <b>How to roll this hole</b> plans from the logged mass and the current state.</p>
+    <p>K162s take the type of the hole's other side. Hole masses come from Tripwire's wormhole table. Plans were checked against every real hole mass in the ±10% range.</p>
+  </footer>
+</div>
+
+<script>
+// Plan notation: "OH" out hot, "Oc" out cold, "BH" back hot, "Bc" back cold; "!" marks a step with no spare margin;
+// a check is {at: where the roller is, lanes: [[state, steps], ...]}. The last step of every lane closes the hole.
+const HOLES = [
+  { mass: "750", unit: "M", jump: "375,000 t", sub: "k-space → C2 / Drifter, and Thera exits",
+    codes: [["R943","→ C2"],["S877","→ C14"],["B735","→ C15"],["V928","→ C16"],["C414","→ C17"],["R259","→ C18"],["F135","→ Thera"]],
+    plan: ["Oc","Bc","Oc","BH"] },
+  { mass: "1", unit: "B", jump: "375,000 t (C729: 410,000 t)", sub: "C5 → C2/C3, k-space → C3/C4, Triglavian space",
+    codes: [["M267","C5→C3"],["D364","C5→C2"],["O128","K→C4"],["X702","K→C3"],["F216","→ Pochven"],["U372","NS→Pochven"],["R081","Pochven→C4"],["X450","Pochven→NS"],["O753","→ Pochven"],["R327","→ Pochven"],["C729","→ Pochven"]],
+    plan: ["OH","BH","Oc","BH"] },
+  { mass: "2", unit: "B", jump: "375,000 t (k-space links: 1,000,000 t)", sub: "Most C2–C4 statics and C2 k-space exits",
+    codes: [["Z457","C6→C4"],["L477","C6→C3"],["G024","C6→C2"],["E175","C5→C4"],["X877","C4→C4"],["C247","C4→C3"],["N766","C4→C2"],["T405","C3→C4"],["N968","C3→C3"],["I182","C3→C2"],["E545","C2→NS"],["A239","C2→LS"],["B274","C2→HS"],["Y683","→ C4"],["O477","→ C3"],["D382","→ C2"],["B449","→ HS"],["A641","HS→HS"],["M164","LS→Thera"],["V898","Thera→LS"]],
+    plan: ["OH","BH","Oc","Bc", { at: "after pass 4, from home", lanes: [
+      ["reduced", ["OH","Bc","Oc","BH"]],
+      ["stable",  ["OH","BH","OH","BH"]] ] }] },
+  { mass: "3", unit: "B", jump: "375,000 t (HS / NS / LS links: 1,000,000 t)", sub: "C4 statics, C3/C4 exits, C5/C6 entrances, high-sec links",
+    codes: [["K329","C4→NS"],["N290","C4→LS"],["S047","C4→HS"],["U574","C4→C6"],["H900","C4→C5"],["K346","→ NS"],["U210","→ LS"],["A982","C3→C6"],["N770","C3→C5"],["R474","→ C6"],["N062","→ C5"],["B520","C6→HS"],["D792","C5→HS"],["B041","HS→C6"],["M555","HS→C5"],["V283","HS→NS"],["R051","HS→LS"],["L031","NS→Thera"],["E587","Thera→NS"]],
+    plan: ["OH","BH","OH","BH","OH", { at: "after pass 5, from the far side", lanes: [
+      ["reduced", ["BH","OH","BH","OH!","BH"]],
+      ["stable",  ["BH","OH","BH","Oc","Bc","Oc!","BH"]] ] }] },
+  { mass: "3.3", unit: "B", jump: "2,000,000 t", sub: "C5 / C6 statics and their k-space entrances", wide: true,
+    codes: [["Z142","C5/C6→NS"],["C140","C5/C6→LS"],["C248","C6→NS"],["C391","C6→LS"],["W237","C6→C6"],["V911","C6→C5"],["V753","C5→C6"],["H296","C5→C5"],["U319","→ C6"],["N432","→ C5"],["N944","→ LS"],["S199","→ NS"]],
+    plan: ["OH","BH","OH","BH","OH", { at: "after pass 5, from the far side", lanes: [
+      ["reduced", ["BH","OH","BH","OH","BH"]],
+      ["stable",  ["Bc", { at: "after pass 6, from home", lanes: [
+        ["reduced", ["OH","BH","OH","Bc", { at: "after pass 10, from home", lanes: [
+          ["critical", ["Oc!","BH"]],
+          ["reduced",  ["OH","BH"]] ] }]],
+        ["stable",  ["OH","BH","Oc","Bc","Oc","Bc", { at: "after pass 12, from home", lanes: [
+          ["critical", ["Oc","BH"]],
+          ["reduced",  ["OH","BH"]] ] }]] ] }]] ] }] },
+  { mass: "5", unit: "B", jump: "375,000 t", sub: "The big C3 / C4 high-sec exit", wide: true,
+    codes: [["D845","C3/C4→HS"]],
+    plan: ["OH","BH","OH","BH","OH","BH","OH","BH", { at: "after pass 8, from home", lanes: [
+      ["reduced", ["OH","BH","OH","BH","OH","BH", { at: "after pass 14, from home", lanes: [
+        ["critical", ["Oc","BH"]],
+        ["reduced",  ["OH","BH"]] ] }]],
+      ["stable",  ["Oc", { at: "after pass 9, from the far side", lanes: [
+        ["reduced", ["BH","OH","BH","OH","BH","OH","Bc", { at: "after pass 16, from home", lanes: [
+          ["critical", ["Oc!","BH"]],
+          ["reduced",  ["OH","BH"]] ] }]],
+        ["stable",  ["BH","OH","BH","OH","BH","Oc","Bc","Oc", { at: "after pass 17, from the far side", lanes: [
+          ["critical", ["Bc","Oc","BH"]],
+          ["reduced",  ["BH","Oc","BH"]] ] }]] ] }]] ] }] }
+];
+const STATE_NOTE = { stable: "50%+ left", reduced: "under 50%", critical: "under 10%" };
+
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
+
+// Renders steps into a flex row; returns {passes: worst-case pass count, tight: number of ⚠ steps}
+function renderSeq(steps, start, row) {
+  let n = start, worst = start, tight = 0;
+  steps.forEach(function(s, i) {
+    if (typeof s === "object") {
+      const fork = el("div", "fork");
+      fork.appendChild(el("div", "ask", "<span class='dia'></span>Check the hole <span class='where'>" + s.at + "</span>"));
+      const lanes = el("div", "lanes");
+      s.lanes.forEach(function(l) {
+        const lane = el("div", "lane");
+        lane.appendChild(el("div", "state " + l[0], l[0] + " <i>" + STATE_NOTE[l[0]] + "</i>"));
+        const seq = el("div", "seq");
+        const r = renderSeq(l[1], n, seq);
+        worst = Math.max(worst, r.passes); tight += r.tight;
+        lane.appendChild(seq); lanes.appendChild(lane);
+      });
+      fork.appendChild(lanes); row.appendChild(fork);
+      return;
+    }
+    n++;
+    const out = s[0] === "O", hot = s[1] === "H", isTight = s.indexOf("!") >= 0;
+    if (isTight) tight++;
+    const chip = el("span", "pass " + (hot ? "hot" : "cold") + (isTight ? " tight" : ""),
+      "<span class='n'>" + n + "</span><span class='dir'>" + (out ? "→ OUT" : "← BACK") + "</span>" + (hot ? "HOT" : "cold") + (isTight ? " <span class='t'>⚠</span>" : ""));
+    chip.title = (out ? "Jump out to the far side" : "Jump back home") + ", prop mod " + (hot ? "on (300,000 t)" : "off (200,000 t)");
+    row.appendChild(chip);
+    if (i === steps.length - 1) row.appendChild(el("span", "closes", "✕ Closes"));
+    worst = Math.max(worst, n);
+  });
+  return { passes: worst, tight: tight };
+}
+
+function minPasses(steps, n) {
+  let best = Infinity;
+  for (const s of steps) {
+    if (typeof s === "object") { for (const l of s.lanes) best = Math.min(best, minPasses(l[1], n)); return best; }
+    n++;
+  }
+  return n;
+}
+function countChecks(steps) {
+  let worst = 0;
+  for (const s of steps) if (typeof s === "object") for (const l of s.lanes) worst = Math.max(worst, 1 + countChecks(l[1]));
+  return worst;
+}
+
+const root = document.getElementById("holes");
+// ?only=N renders just that hole (used to export one image per hole size)
+let only = null;
+try { only = new URLSearchParams(location.search).get("only"); } catch (e) {}
+(only === null ? HOLES : HOLES.filter(function(h, i) { return String(i) === only; })).forEach(function(h) {
+  if (only !== null) {
+    document.querySelector("h1").innerHTML = "Rolling a <span class='hot'>" + h.mass + h.unit + "</span> <span class='cold'>hole</span>";
+    document.title = "Rolling a " + h.mass + h.unit + " hole";
+  }
+  const card = el("article", "hole" + (h.wide || only !== null ? " wide" : ""));
+  card.setAttribute("aria-label", h.mass + h.unit + " hole");
+  const head = el("div", "hole-head");
+  head.appendChild(el("div", "hole-title", "<div class='mass'>" + h.mass + "<small>" + h.unit + " kg</small></div><div class='sub'>Max jump " + h.jump + "</div>"));
+  const seq = el("div", "seq");
+  const r = renderSeq(h.plan, 0, seq);
+  const lo = minPasses(h.plan, 0), checks = countChecks(h.plan);
+  head.appendChild(el("div", "stats",
+    "<span class='stat'>Passes <b>" + (lo === r.passes ? r.passes : lo + "–" + r.passes) + "</b></span>" +
+    "<span class='stat'>Checks <b>" + checks + "</b></span>" +
+    (r.tight ? "<span class='stat tight'>⚠ steps <b>" + r.tight + "</b></span>" : "<span class='stat safe'>Margin <b>always</b></span>")));
+  card.appendChild(head);
+  card.appendChild(el("p", "codes-note", h.sub));
+  const codes = el("div", "codes");
+  h.codes.forEach(function(c) { codes.appendChild(el("span", "code", c[0] + " <span>" + c[1] + "</span>")); });
+  card.appendChild(codes);
+  card.appendChild(seq);
+  root.appendChild(card);
+  if (only !== null && !r.tight) {	// single-hole image without ⚠ steps: drop the ⚠ legend row and note
+    document.querySelectorAll(".legend .row")[2].hidden = true;
+    document.querySelector("footer p").hidden = true;
+  }
+});
+</script>

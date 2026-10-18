@@ -369,6 +369,55 @@ const watchlist = {
 		return groups;
 	},
 
+	/**
+	 * When each match was first seen: {<key>: ms}. A key that still matches keeps its time, a new one gets `now`. One
+	 * that no longer matches is kept while diff() still remembers it (its system left the chain map less than FORGET_MS
+	 * ago), so viewing an unconnected system and coming back doesn't make every hit new; otherwise it is dropped (new
+	 * again when it comes back). Never mutates.
+	 * @param remembered diff()'s `seen` for the same chain (the keys it keeps)
+	 */
+	hitSince: function(since, matches, remembered, now) {
+		const before = since && typeof since === "object" ? since : {};
+		const keep = remembered && typeof remembered === "object" ? remembered : {};
+		const out = {};
+		const valid = function(v) { const t = Number(v); return isFinite(t) && t > 0 ? t : 0; };
+		(matches || []).forEach(function(m) {
+			if (!m || out[m.key] !== undefined) { return; }
+			out[m.key] = valid(before[m.key]) || Number(now) || 0;
+		});
+		Object.keys(before).forEach(function(key) {
+			if (out[key] === undefined && keep[key] !== undefined && valid(before[key])) { out[key] = valid(before[key]); }
+		});
+		return out;
+	},
+
+	/**
+	 * The small view's rows: the current hits (one per filter and system), newest first; ties in the filters' order.
+	 * @return [{key, filterName, systemID, since}]
+	 */
+	hitRows: function(matches, since) {
+		const seen = {};
+		const s = since || {};
+		return (matches || []).filter(function(m) {
+			if (!m || seen[m.key]) { return false; }
+			seen[m.key] = true;
+			return true;
+		}).map(function(m, i) {
+			return { key: m.key, filterName: m.filterName, systemID: m.systemID, since: Number(s[m.key]) || 0, i: i };
+		}).sort(function(a, b) { return b.since - a.since || a.i - b.i; }).map(function(r) {
+			return { key: r.key, filterName: r.filterName, systemID: r.systemID, since: r.since };
+		});
+	},
+
+	/** "now", "12m", "5h", "3d" since a hit was first seen */
+	ago: function(ms) {
+		const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+		if (s < 60) { return "now"; }
+		if (s < 3600) { return Math.floor(s / 60) + "m"; }
+		if (s < 86400) { return Math.floor(s / 3600) + "h"; }
+		return Math.floor(s / 86400) + "d";
+	},
+
 	/** Filter names per chain node: {<nodeID>: [names]} */
 	namesByNode: function(matches) {
 		const result = {};
@@ -724,6 +773,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		let lastTracked = null;		// tracked system when the chain was last matched
 		let renderTimer = null;
 		let seen = loadSeen();		// {<context>: {<filterID|systemID>: last matched}}: already announced, per mask and chain tab
+		const SINCE_KEY = "tripwire_watchlist_since";
+		let since = loadSince();	// {<context>: {<filterID|systemID>: first seen}}: the small view's "when", per mask and chain tab
 		// The mask's filters (public/watchlist.php): every member reads them, the corporation's admins change them
 		const server = { loaded: false, available: false, canEdit: false, filters: [], csrf: "", mask: null, error: "", loadedAt: 0 };
 		let maskRequest = null;		// {mask, at, pending, retries}: the last request for the filters after a mask switch
@@ -741,6 +792,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 		function storeSeen() {
 			try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(seen)); } catch (e) { /* private mode etc.: memory only */ }
+		}
+		function loadSince() {
+			try {
+				const raw = JSON.parse(sessionStorage.getItem(SINCE_KEY) || "{}");
+				return raw && typeof raw === "object" ? raw : {};
+			} catch (e) { return {}; }
+		}
+		function storeSince() {
+			try { sessionStorage.setItem(SINCE_KEY, JSON.stringify(since)); } catch (e) { /* memory only */ }
 		}
 
 		function activeMask() { return options.masks ? options.masks.active : ""; }
@@ -871,6 +931,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const d = wl.diff(seen[key], matches, onChain, Date.now());
 			seen[key] = d.seen;
 			storeSeen();
+			since[key] = wl.hitSince(since[key], matches, d.seen, Date.now());
+			storeSince();
 			if (d.fresh.length) { notify(d.fresh, settings); }
 			scheduleRender();
 		}
@@ -1040,8 +1102,34 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$widget.find(".wl-toolbar").toggleClass("hidden", !server.canEdit);
 			$widget.find(".wl-note").toggleClass("hidden", server.canEdit || !server.available)
 				.text("Set by your corporation's Tripwire admins (Mask Admin > Watchlist).");
+			renderSmall();
 		}
 		wl.render = render;
+
+		/** The small view (panel-modes.js, .ph-small): only the current hits, newest first (rendered in every mode, so it
+		is current the moment it is shown) */
+		function smallHtml() {
+			const esc = wl.escape;
+			const empty = function(text) { return "<div class='wl-sv-empty'>" + esc(text) + "</div>"; };
+			if (!server.loaded) { return empty(server.error || "Loading..."); }
+			if (!server.available) { return empty("The watchlist is on corporation masks only"); }
+			const rows = wl.hitRows(lastMatches, since[contextKey()]);
+			if (!rows.length) { return empty("No hits"); }
+			const now = Date.now();
+			return "<ul class='wl-sv-list'>" + rows.map(function(r) {
+				const s = systemAnalysis.analyse(r.systemID) || {};
+				return "<li class='wl-sv-row'>"
+					+ "<span class='wl-sv-name' title='" + esc(r.filterName) + "'>" + esc(r.filterName) + "</span>"
+					+ "<span class='wl-sv-where'>" + systemLink(r.systemID) + " <span class='wl-sv-class'>" + esc(s.systemTypeName || "") + "</span></span>"
+					+ "<span class='wl-sv-when' title='On the chain map since " + esc(r.since ? new Date(r.since).toLocaleTimeString() : "?") + "'>" + esc(r.since ? wl.ago(now - r.since) : "") + "</span>"
+					+ "</li>";
+			}).join("") + "</ul>";
+		}
+
+		function renderSmall() {
+			const $sv = $("#" + wl.WIDGET_ID + " .wl-sv");
+			if ($sv.length) { $sv.html(smallHtml()); }
+		}
 
 		function renderAdmin() {
 			const $page = $("#dialog-admin .window [data-window='watchlist'] .wl-admin");
@@ -1061,6 +1149,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<div class='wl-toolbar hidden'><input type='button' class='wl-new' value='New filter' /></div>"
 				+ "<ul class='wl-list'></ul>"
 				+ "<div class='wl-note hidden'></div>"
+				+ "<div class='wl-sv'></div>"	// the small view
 				+ "</div>"
 				+ "</li>";
 		}
@@ -1077,7 +1166,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** The panel as panelHost (panel-host.js) takes it */
 		const panel = { id: wl.WIDGET_ID, title: "Watchlist", key: "watchlist",
-			size: { x: wl.DEFAULT_SIZE.x, y: wl.DEFAULT_SIZE.y, minX: wl.MIN_SIZE.x, minY: wl.MIN_SIZE.y } };
+			size: { x: wl.DEFAULT_SIZE.x, y: wl.DEFAULT_SIZE.y, minX: wl.MIN_SIZE.x, minY: wl.MIN_SIZE.y },
+			small: true, smallHint: "Small view: only the current hits", smallSize: { width: 320, height: 170 },
+			afterMove: function(mode) { if (mode === "small") { renderSmall(); } } };
 
 		/** Default place: below the existing widgets, at the left */
 		function defaultPlacement(widgets) {
@@ -1330,6 +1421,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			setupMaskAdmin();
 			loadFilters();
 			setInterval(function() { if (!document.hidden) { loadFilters(); } }, wl.POLL_MS);
+			setInterval(renderSmall, 60000);	// the small view's "since" moves on
 			document.addEventListener("visibilitychange", function() {
 				if (!document.hidden && Date.now() - server.loadedAt > wl.POLL_MS / 2) { loadFilters(); }
 			});

@@ -13,6 +13,30 @@
       ]
     },
     {
+      "pr": 119,
+      "date": "2026-10-18",
+      "title": "Small views for more panels",
+      "description": "Signatures, Watchlist, Structures and System info now have a small view: a small popped-out window with just the essentials. Signatures shows how many are still unscanned and the newest ones, Watchlist only its current hits, Structures the next timer with a countdown, and System info the name, class and statics.\n\nUse the Small view button at the top right of the panel, or the Panels menu next to Customize layout.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-119-small-views.png",
+          "caption": "System info, Signatures, Watchlist and Structures in their small views"
+        }
+      ]
+    },
+    {
+      "pr": 118,
+      "date": "2026-10-18",
+      "title": "Rolling guide for every battleship hole",
+      "description": "Right-click a wormhole on the chain map and pick Rolling guide to see how to roll it shut with up to six characters: which battleships and HICs jump out and back in each wave, and which way to go when you check the hole, so it closes with everyone home.\n\nThe guide picks the hole's size for you (750M up to 5B) and opens popped out; dock it or minimize it like any other panel. It also opens from the mass dialog and the command palette.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-118-rolling-guide.png",
+          "caption": "The rolling guide for an H296, popped out next to the chain map"
+        }
+      ]
+    },
+    {
       "pr": 117,
       "date": "2026-10-17",
       "title": "Pop out, shrink or hide any panel",

@@ -299,4 +299,47 @@ describe('Panel display modes', () => {
 			pm().UPSTREAM.forEach(u => assert.ok(u.size.minX <= u.size.x && u.size.minY <= u.size.y));
 		});
 	});
+
+	describe('small views', () => {
+		const sizes = { FLOAT: { width: 420, height: 360, minWidth: 260, minHeight: 140 }, SMALL: { width: 340, height: 130, minWidth: 220, minHeight: 80 } };
+		const sigs = { id: 'signaturesWidget', title: 'Signatures', small: true, smallHint: 'Small view: unscanned count and newest signatures', smallSize: { width: 330, height: 210 } };
+
+		it("the hint: the panel's own, else the kill panels' wording", () => {
+			assert.equal(pm().smallHint(kills), 'Small view: a small window with only the newest');
+			assert.equal(pm().smallHint(sigs), 'Small view: unscanned count and newest signatures');
+			assert.equal(pm().smallHint({ smallHint: '  ' }), pm().SMALL_HINT);
+			assert.equal(pm().smallHint(null), pm().SMALL_HINT);
+		});
+		it('the header button, the Panels menu and the palette carry it', () => {
+			assert.equal(pm().buttons('fixed', sigs).filter(b => b.to === 'small')[0].tooltip, sigs.smallHint);
+			assert.equal(pm().buttons('floating', kills).filter(b => b.to === 'small')[0].tooltip, pm().SMALL_HINT);
+			assert.equal(pm().actions('floating', sigs).filter(a => a.to === 'small')[0].hint, sigs.smallHint);
+			assert.ok(pm().actions('fixed', plain).every(a => a.hint === undefined));
+			assert.equal(pm().commandList(sigs).filter(c => c.to === 'small')[0].hint, 'Unscanned count and newest signatures');
+			assert.equal(pm().commandList(kills).filter(c => c.to === 'small')[0].hint, 'A small window with only the newest');
+			assert.ok(pm().commandList(sigs).filter(c => c.to !== 'small').every(c => c.hint === undefined));
+		});
+		it('the tooltip is escaped in the button HTML', () => {
+			const html = pm().buttonsHtml('fixed', { id: 'x', small: true, smallHint: "Small view: it's <b>" });
+			assert.ok(html.indexOf('<b>') < 0);
+			assert.ok(html.indexOf("it's") < 0, 'a quote would end the attribute');
+			assert.ok(html.indexOf('it&#39;s &lt;b&gt;') > 0);
+		});
+		it("the small window takes the panel's own size, never under the minimum", () => {
+			assert.deepEqual(pm().sizeFor(sigs, 'small', sizes), { width: 330, height: 210, minWidth: 220, minHeight: 80 });
+			assert.deepEqual(pm().sizeFor(kills, 'small', sizes), sizes.SMALL);
+			assert.deepEqual(pm().sizeFor({ small: true, smallSize: { width: 100, height: 'x' } }, 'small', sizes), { width: 220, height: 130, minWidth: 220, minHeight: 80 });
+			assert.deepEqual(pm().sizeFor(sigs, 'floating', sizes), sizes.FLOAT);	// the normal window keeps its size
+			assert.deepEqual(sizes.SMALL, { width: 340, height: 130, minWidth: 220, minHeight: 80 });
+		});
+		it('System info and Signatures have small views; Notes has none', () => {
+			const by = id => pm().UPSTREAM.filter(u => u.id === id)[0];
+			['infoWidget', 'signaturesWidget'].forEach(id => {
+				assert.equal(by(id).small, true);
+				assert.ok(/^Small view: /.test(by(id).smallHint));
+				assert.ok(by(id).smallSize.width >= 220 && by(id).smallSize.height >= 80);
+			});
+			assert.ok(!by('notesWidget').small);
+		});
+	});
 });
