@@ -197,8 +197,14 @@ const forkFeatureActions = {
 		return forkCommands.commands.filter(function(c) { return c.id === id; })[0] || null;
 	},
 
+	/** The feature's Settings row: the catalog's `settingsRow` (a row id) when given, else a row storing its settingsKey */
 	settingItem: function(entry) {
-		if (!entry || !entry.settingsKey || typeof forkSettings === "undefined") { return null; }
+		if (!entry || typeof forkSettings === "undefined") { return null; }
+		if (typeof entry.settingsRow === "string" && entry.settingsRow) {
+			const own = forkSettings.items.filter(function(r) { return r.id === entry.settingsRow; })[0];
+			if (own) { return own; }
+		}
+		if (!entry.settingsKey) { return null; }
 		const rows = forkSettings.items.filter(function(r) { return r.key === entry.settingsKey; });
 		return rows.filter(function(r) { return r.type !== "custom"; })[0] || rows[0] || null;
 	},

@@ -116,6 +116,19 @@ describe('forkFeatureActions', () => {
 		});
 	});
 
+	describe('settingItem', () => {
+		let had;
+		before(() => { had = global.forkSettings; });
+		after(() => { global.forkSettings = had; });
+		it('the catalog settingsRow first, else a row storing the settingsKey', () => {
+			global.forkSettings = { items: [{ id: 'jumpRange-x', key: 'jumpRange', type: 'checkbox' }, { id: 'jumpPlanner-enabled-general', type: 'custom' }, { id: 's', key: 'sizeTags', type: 'checkbox' }] };
+			assert.strictEqual(forkFeatureActions.settingItem({ settingsKey: 'jumpRange', settingsRow: 'jumpPlanner-enabled-general' }).id, 'jumpPlanner-enabled-general');
+			assert.strictEqual(forkFeatureActions.settingItem({ settingsKey: 'jumpRange', settingsRow: 'gone' }).id, 'jumpRange-x');
+			assert.strictEqual(forkFeatureActions.settingItem({ settingsKey: 'sizeTags' }).id, 's');
+			assert.strictEqual(forkFeatureActions.settingItem({ settingsKey: null }), null);
+		});
+	});
+
 	describe('pickerEmpty (palette Try it with nothing to pick falls through)', () => {
 		const jpOpen = { id: 'jumpPlanner.open', args: [{ name: 'exit', type: 'chainSystem' }] };
 		it('empty first picker', () => assert.strictEqual(forkFeatureActions.pickerEmpty(jpOpen, () => []), true));

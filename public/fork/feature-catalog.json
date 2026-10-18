@@ -103,7 +103,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.open"], "panels": [], "use": ["opened"] },
     { "id": "regionMapJumps", "title": "Jump range on the region map", "section": "routes", "prs": [100], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.jumps"], "panels": [], "use": ["shown_range"] },
-    { "id": "jumpPlanner", "try": "jumpPlanner.open", "title": "Jump planner", "section": "jumpPlanner", "prs": [50, 52, 57, 86, 88, 114], "settingsKey": "jumpRange",
+    { "id": "jumpPlanner", "try": "jumpPlanner.open", "settingsRow": "jumpPlanner-enabled-general", "title": "Jump planner", "section": "jumpPlanner", "prs": [50, 52, 57, 86, 88, 114], "settingsKey": "jumpRange",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["jumpPlanner.open", "panel.jumpPlanner"], "panels": ["jumpPlannerWidget"],
       "use": ["opened", "route_planned"], "exposed": ".jp-ring" },
 
