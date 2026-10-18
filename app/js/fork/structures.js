@@ -583,6 +583,12 @@ const structures = {
 		return up.length ? { row: up[0], status: structures.timerStatus(up[0], nowSec), more: up.length - 1 } : null;
 	},
 
+	/** When a timer ends, in EVE time: "14:14" today (EVE date), "10-12 14:00" on another day */
+	endText: function(atSec, nowSec) {
+		const end = structures.formatEve(atSec * 1000);
+		return end.substr(0, 10) === structures.formatEve(nowSec * 1000).substr(0, 10) ? end.substr(11) : end.substr(5);
+	},
+
 	/**
 	 * The small view's content: the next timer (structure, owner, kind, countdown, when it ends in EVE time) and "+N more"
 	 * @param s {rows, nowSec, loaded, error, systemID}
@@ -607,7 +613,7 @@ const structures = {
 			+ "<div class='str-sv-line'>"
 			+ "<span class='str-sv-kind'>" + esc(t.label) + "</span>"
 			+ "<span class='str-timer str-t-" + t.phase + (t.urgent ? " str-urgent" : "") + "'>" + structures.icon("clock") + esc(t.text) + "</span>"
-			+ "<span class='str-sv-at'>" + esc(structures.formatEve(row.timerAt * 1000).substr(row.timerAt - s.nowSec < 72000 ? 11 : 5)) + " EVE</span>"
+			+ "<span class='str-sv-at'>" + esc(structures.endText(row.timerAt, s.nowSec)) + " EVE</span>"
 			+ (next.more ? "<span class='str-sv-more'>+" + next.more + " more</span>" : "")
 			+ "</div></div>";
 	},
@@ -855,7 +861,10 @@ const structures = {
 	renderSmall: function() {
 		const $sv = structures.$widget().find(".str-sv");
 		if (!$sv.length) { return; }
-		$sv.html(structures.smallHtml({ rows: structures.rows, nowSec: structures.nowSec(), loaded: structures.loaded, error: structures.error, systemID: structures.systemID }));
+		const html = structures.smallHtml({ rows: structures.rows, nowSec: structures.nowSec(), loaded: structures.loaded, error: structures.error, systemID: structures.systemID });
+		// Only when it changed (the countdown moves once a minute): its tooltip stays open, the icon doesn't flicker
+		if ($sv.data("svHtml") === html) { return; }
+		$sv.data("svHtml", html).html(html);
 	},
 
 	redraw: function() {
@@ -1248,7 +1257,10 @@ const structures = {
 		setInterval(structures.fetch, structures.POLL_MS);
 		setInterval(structures.renderPanel, 20000);	// countdowns and ages move on between polls
 		// The small view's countdown, every second while it is shown
-		setInterval(function() { if (structures.$widget().hasClass("ph-small")) { structures.renderSmall(); } }, 1000);
+		setInterval(function() {
+			const $w = structures.$widget();
+			if (!document.hidden && $w.hasClass("ph-small") && $w.is(":visible")) { structures.renderSmall(); }
+		}, 1000);
 		setInterval(function() { if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.tick(); } }, 1000);
 		structures.bindPanel();
 		structures.sync();

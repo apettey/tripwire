@@ -364,11 +364,17 @@ describe('Structures small view: the next timer', () => {
 		assert.ok(html.indexOf('str-side-hostile') > 0);
 		assert.ok(html.indexOf('Armor timer') > 0);
 		assert.ok(html.indexOf('2h14') > 0);
-		assert.ok(html.indexOf('14:14 EVE') > 0);	// ends today: the time only
+		assert.ok(html.indexOf('14:14 EVE') > 0);	// ends on today's EVE date: the time only
 		assert.ok(html.indexOf('+1 more') > 0);
 		const later = structures.smallHtml({ rows: [r(2, 'hull', 26 * 3600)], nowSec: NOW_S, loaded: true, systemID: 31001235 });
-		assert.ok(later.indexOf('10-12 14:00 EVE') > 0);	// another day: with the date
+		assert.ok(later.indexOf('10-12 14:00 EVE') > 0);	// another EVE date: with the date
 		assert.ok(later.indexOf('more') < 0);
+	});
+	it('the end time: the date only when it is on another EVE (UTC) date than now', () => {
+		assert.equal(structures.endText(NOW_S + 11 * 3600 + 59 * 60, NOW_S), '23:59');
+		assert.equal(structures.endText(NOW_S + 12 * 3600, NOW_S), '10-12 00:00');	// 12 hours: past midnight EVE
+		assert.equal(structures.endText(NOW_S + 3 * 86400, NOW_S), '10-14 12:00');
+		assert.equal(structures.endText(NOW_S - 12 * 3600, NOW_S), '00:00');
 	});
 	it('empty states: quiet', () => {
 		assert.ok(structures.smallHtml({ rows: [], nowSec: NOW_S, loaded: true, systemID: 31001235 }).indexOf('No timers') > 0);
