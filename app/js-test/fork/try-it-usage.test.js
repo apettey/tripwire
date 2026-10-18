@@ -129,7 +129,7 @@ describe('featuresHub.open counts opened once', () => {
 });
 
 // One Ctrl+K open is one use: forkUsage's forkCommands hook counts <feature>.command, so the open code must not add
-// <feature>.opened as well (it still does from the user menu, Settings or What's New links; never for the auto-open).
+// <feature>.opened as well (it still does from the user menu (dashboard) or Settings > General (What's New); never for the auto-open).
 describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () => {
 	before(() => {
 		loadFiles();
@@ -141,7 +141,7 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 		{ id: 'analyticsDashboard', try: 'analytics.open', settingsKey: null, commands: ['analytics.open'], panels: [], use: ['opened'] }
 	] };
 	const NAMES = ['forkCommands', 'commandPalette', 'whatsNew', 'panelHost', 'panelModes', 'forkSettings', 'document', 'window', 'setInterval', 'options', '$'];
-	let saved, savedUsage, savedPalette, commands, handlers;
+	let saved, savedUsage, commands, handlers;
 	const flush = () => new Promise(r => setImmediate(r));
 	// The palette's run: execute calls command.run() and resolves ok, as forkCommands.execute does
 	const runCommand = async (id) => {
@@ -154,7 +154,6 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 
 	beforeEach(() => {
 		saved = {};
-		savedPalette = global.commandPalette;
 		NAMES.forEach(n => { saved[n] = global[n]; global[n] = undefined; });
 		savedUsage = { pending: forkUsage.pending, index: forkUsage.index, serverKnown: forkUsage.serverKnown, server: forkUsage.server, queue: forkUsage.queue, listeners: forkUsage.listeners, debugOn: forkUsage.debugOn, lastInput: forkUsage.lastInput };
 		global.document = { addEventListener: () => {} };
@@ -185,7 +184,7 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 		forkUsage.serverKnown = true;
 		forkUsage.server = { enabled: true, token: 't'.repeat(64) };
 		forkFeatureActions.trying = null;
-		savedPalette.registerCommands.call(savedPalette);
+		saved.commandPalette.registerCommands.call(saved.commandPalette);
 		analyticsDashboard.setup();
 		forkUsage.installHooks();
 	});

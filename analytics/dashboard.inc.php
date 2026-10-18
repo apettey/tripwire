@@ -604,7 +604,7 @@ function dash_view_tips(PDO $db, $today) {
     $tipsOff = dash_action_users($db, 'setting_off', $from, $today);
     $off = dash_off_users($db, $from, $today);
     $offNowN = isset($off['hints']) ? count(array_intersect_key($off['hints'], $active)) : 0;
-    // What's New opened by the user: "opened" (Settings, links) or "command" (Ctrl+K, which doesn't also count "opened")
+    // What's New opened by the user: "opened" (Settings > General) or "command" (Ctrl+K, which doesn't also count "opened")
     $opened = dash_action_users($db, 'opened', $from, $today);
     $byCommand = dash_action_users($db, 'command', $from, $today);
     $whatsNewUsers = (isset($opened['whatsNew']) ? $opened['whatsNew'] : []) + (isset($byCommand['whatsNew']) ? $byCommand['whatsNew'] : []);
