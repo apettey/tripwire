@@ -338,3 +338,42 @@ describe('Structures', () => {
 		});
 	});
 });
+
+describe('Structures small view: the next timer', () => {
+	const r = (id, kind, secs, o) => row(Object.assign({ id: id, timerKind: kind, timerAt: secs === null ? null : NOW_S + secs }, o || {}));
+	it('the soonest timer still to come; ended and elapsed ones are ignored', () => {
+		const rows = [r(1, 'armor', -60), r(2, 'hull', 7200), r(3, 'anchoring', 3600), r(4, null, null), r(5, 'fuel', -86400)];
+		const next = structures.nextTimer(rows, NOW_S);
+		assert.equal(next.row.id, 3);
+		assert.equal(next.more, 1);
+		assert.equal(next.status.phase, 'upcoming');
+		assert.equal(next.status.text, '1h00');
+	});
+	it('ties by id; none: null', () => {
+		assert.equal(structures.nextTimer([r(9, 'armor', 600), r(4, 'hull', 600)], NOW_S).row.id, 4);
+		assert.equal(structures.nextTimer([r(1, 'armor', -1), r(2, null, null)], NOW_S), null);
+		assert.equal(structures.nextTimer([], NOW_S), null);
+		assert.equal(structures.nextTimer(null, NOW_S), null);
+	});
+	it('the view: structure, owner, kind, countdown, EVE time, +N more; all text escaped', () => {
+		const rows = [r(1, 'armor', 2 * 3600 + 14 * 60, { name: 'J163701 - <Keep>', ownerID: 98000001, ownerTicker: "<T'>", side: 'hostile' }), r(2, 'hull', 26 * 3600)];
+		const html = structures.smallHtml({ rows: rows, nowSec: NOW_S, loaded: true, systemID: 31001235 });
+		assert.ok(html.indexOf('Astrahus') > 0);
+		assert.ok(html.indexOf('&lt;Keep&gt;') > 0 && html.indexOf('<Keep>') < 0);
+		assert.ok(html.indexOf('[&lt;T&#39;&gt;]') > 0);
+		assert.ok(html.indexOf('str-side-hostile') > 0);
+		assert.ok(html.indexOf('Armor timer') > 0);
+		assert.ok(html.indexOf('2h14') > 0);
+		assert.ok(html.indexOf('14:14 EVE') > 0);	// ends today: the time only
+		assert.ok(html.indexOf('+1 more') > 0);
+		const later = structures.smallHtml({ rows: [r(2, 'hull', 26 * 3600)], nowSec: NOW_S, loaded: true, systemID: 31001235 });
+		assert.ok(later.indexOf('10-12 14:00 EVE') > 0);	// another day: with the date
+		assert.ok(later.indexOf('more') < 0);
+	});
+	it('empty states: quiet', () => {
+		assert.ok(structures.smallHtml({ rows: [], nowSec: NOW_S, loaded: true, systemID: 31001235 }).indexOf('No timers') > 0);
+		assert.ok(structures.smallHtml({ rows: [r(1, 'armor', -60)], nowSec: NOW_S, loaded: true, systemID: 31001235 }).indexOf('No timers') > 0);
+		assert.ok(structures.smallHtml({ rows: [], nowSec: NOW_S, loaded: false, systemID: 31001235 }).indexOf('Loading') > 0);
+		assert.ok(structures.smallHtml({ rows: [], nowSec: NOW_S, loaded: false, systemID: null }).indexOf('No timers') > 0);
+	});
+});

@@ -571,6 +571,47 @@ const structures = {
 		return String(rows.length) + (next ? " · " + next.label.toLowerCase().split(" ")[0] + " " + next.text : "");
 	},
 
+	// ---- Small view (panel-modes.js, .ph-small): the next timer ----
+
+	/**
+	 * The soonest timer still to come in a system's rows (ended and elapsed ones are ignored), ties by id:
+	 * {row, status (timerStatus), more (how many other timers are still to come)}, or null
+	 */
+	nextTimer: function(rows, nowSec) {
+		const up = (rows || []).filter(function(r) { return structures.timerStatus(r, nowSec).phase === "upcoming"; })
+			.sort(function(a, z) { return a.timerAt - z.timerAt || a.id - z.id; });
+		return up.length ? { row: up[0], status: structures.timerStatus(up[0], nowSec), more: up.length - 1 } : null;
+	},
+
+	/**
+	 * The small view's content: the next timer (structure, owner, kind, countdown, when it ends in EVE time) and "+N more"
+	 * @param s {rows, nowSec, loaded, error, systemID}
+	 */
+	smallHtml: function(s) {
+		const esc = structures.escape;
+		const empty = function(text) { return "<div class='str-sv-empty'>" + esc(text) + "</div>"; };
+		if (!s.systemID) { return empty("No timers"); }
+		if (!s.loaded) { return empty(s.error || "Loading…"); }
+		const next = structures.nextTimer(s.rows, s.nowSec);
+		if (!next) { return empty("No timers"); }
+		const row = next.row, t = next.status;
+		const owner = row.ownerID ? (row.ownerTicker ? "[" + row.ownerTicker + "]" : row.ownerName || "") : (row.ownerText || "");
+		const name = structures.shortName(row);
+		const url = structures.typeIconUrl(row.typeID);
+		return "<div class='str-sv-next' title='" + esc(structures.rowTitle(row, s.nowSec)) + "'>"
+			+ "<div class='str-sv-line'>"
+			+ (url ? "<img class='str-type' src='" + esc(url) + "' alt='' width='18' height='18' loading='lazy' />" : "<span class='str-type str-type-unk'>?</span>")
+			+ "<span class='str-sv-what'><span class='str-sv-type'>" + esc(row.typeName) + "</span>" + (name ? " <span class='str-sv-name'>" + esc(name) + "</span>" : "") + "</span>"
+			+ (owner ? "<span class='str-sv-owner str-side-" + (row.ownerID ? esc(row.side) : "unknown") + "'>" + esc(owner) + "</span>" : "")
+			+ "</div>"
+			+ "<div class='str-sv-line'>"
+			+ "<span class='str-sv-kind'>" + esc(t.label) + "</span>"
+			+ "<span class='str-timer str-t-" + t.phase + (t.urgent ? " str-urgent" : "") + "'>" + structures.icon("clock") + esc(t.text) + "</span>"
+			+ "<span class='str-sv-at'>" + esc(structures.formatEve(row.timerAt * 1000).substr(row.timerAt - s.nowSec < 72000 ? 11 : 5)) + " EVE</span>"
+			+ (next.more ? "<span class='str-sv-more'>+" + next.more + " more</span>" : "")
+			+ "</div></div>";
+	},
+
 	// ---- Dialog section (the d-scan paste dialog) ----
 
 	/**
@@ -763,6 +804,7 @@ const structures = {
 		if (!$w.length) { return; }
 		const nowSec = structures.nowSec();
 		const id = structures.systemID;
+		structures.renderSmall();
 		if (typeof structureTimers !== "undefined") { structureTimers.renderInfo(); }
 		const timersView = structures.view === "timers" && typeof structureTimers !== "undefined";
 		$w.toggleClass("str-view-timers", timersView).find(".str-board").toggleClass("str-on", timersView);
@@ -807,6 +849,13 @@ const structures = {
 		structures.notice = "";	// shown once
 		$content.scrollTop(scroll);
 		structures.restoreForm($w, cap);
+	},
+
+	/** The small view (rendered in every mode, so it is current the moment it is shown) */
+	renderSmall: function() {
+		const $sv = structures.$widget().find(".str-sv");
+		if (!$sv.length) { return; }
+		$sv.html(structures.smallHtml({ rows: structures.rows, nowSec: structures.nowSec(), loaded: structures.loaded, error: structures.error, systemID: structures.systemID }));
 	},
 
 	redraw: function() {
@@ -971,12 +1020,14 @@ const structures = {
 			+ "<span class='str-tools'><a href='#' class='str-board' title='Timers of all systems (click again to go back)'>" + structures.icon("clock") + "</a>"
 			+ "<a href='#' class='str-add' title='Add a structure'>+</a>"
 			+ "<a href='#' class='str-paste' title='Paste a d-scan'>" + structures.icon("paste") + "</a></span></div>"
-			+ "<div class='content'><div class='str-body'></div></div></li>";
+			+ "<div class='content'><div class='str-body'></div><div class='str-sv'></div></div></li>";
 	},
 
 	/** The panel as panelHost (panel-host.js) takes it */
 	panel: function() {
-		return { id: structures.WIDGET_ID, title: "Structures", key: "structures", size: structures.SIZE };
+		return { id: structures.WIDGET_ID, title: "Structures", key: "structures", size: structures.SIZE,
+			small: true, smallHint: "Small view: the next timer", smallSize: { width: 300, height: 110 },
+			afterMove: function(mode) { if (mode === "small") { structures.renderSmall(); } } };
 	},
 
 	addWidget: function() {
@@ -1196,6 +1247,8 @@ const structures = {
 		});
 		setInterval(structures.fetch, structures.POLL_MS);
 		setInterval(structures.renderPanel, 20000);	// countdowns and ages move on between polls
+		// The small view's countdown, every second while it is shown
+		setInterval(function() { if (structures.$widget().hasClass("ph-small")) { structures.renderSmall(); } }, 1000);
 		setInterval(function() { if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.tick(); } }, 1000);
 		structures.bindPanel();
 		structures.sync();
