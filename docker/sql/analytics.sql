@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS `fork_analytics_mask` (
   PRIMARY KEY (`day`, `feature`, `maskHash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Requests per user in the current window (ANALYTICS_RATE_MAX per ANALYTICS_RATE_WINDOW seconds); rows older than a day are
+-- deleted by the prune.
+CREATE TABLE IF NOT EXISTS `fork_analytics_rate` (
+  `uid` char(16) CHARACTER SET ascii NOT NULL,
+  `windowStart` datetime NOT NULL,
+  `n` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`uid`),
+  KEY `windowStart` (`windowStart`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- k = 'salt': v = '<YYYY-MM-DD it was made>:<64 hex>'
 CREATE TABLE IF NOT EXISTS `fork_analytics_meta` (
   `k` varchar(32) CHARACTER SET ascii NOT NULL,

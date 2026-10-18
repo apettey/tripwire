@@ -27,7 +27,7 @@ function check($name, $actual, $expected) {
         fwrite(STDERR, "FAIL $name\n  expected: " . var_export($expected, true) . "\n  actual:   " . var_export($actual, true) . "\n");
     }
 }
-const ACC_A = 9919001, ACC_B = 9919002;
+const ACC_A = 9919001;   // ACC_B: a real (test) account, preferences need one
 const MASK_A = '991901.0';
 function salt_row() { global $db; try { return $db->query("SELECT v FROM fork_analytics_meta WHERE k = 'salt'")->fetchColumn(); } catch (PDOException $e) { return false; } }
 function uid_of($account) { global $db; return analytics_hash(analytics_salt($db), 'account', $account); }
@@ -42,17 +42,21 @@ $uids = [];
 function cleanup() {
     global $db, $uids;
     foreach (array_unique($uids) as $u) {
-        foreach (['fork_analytics_daily', 'fork_analytics_user'] as $t) {
+        foreach (['fork_analytics_daily', 'fork_analytics_user', 'fork_analytics_rate'] as $t) {
             try { $db->prepare("DELETE FROM $t WHERE uid = ?")->execute([$u]); } catch (PDOException $e) { if ($e->getCode() !== '42S02') throw $e; }
         }
     }
     foreach (glob('/var/lib/php/session/sess_analyticstest*') ?: [] as $f) @unlink($f);
+    $db->exec("DELETE FROM accounts WHERE username = 'analytics-test-b'");   // cascades to preferences
 }
 
 putenv('ANALYTICS_ENABLED=true');
 putenv('ANALYTICS_DAYS=90');
 putenv('ANALYTICS_RAW_DAYS=0');
 $savedSalt = salt_row();
+$db->exec("DELETE FROM accounts WHERE username = 'analytics-test-b'");
+$db->exec("INSERT INTO accounts (username, password) VALUES ('analytics-test-b', 'x')");
+define('ACC_B', (int) $db->lastInsertId());
 $catalog = analytics_catalog();
 
 // ---- 1. parsing ----
@@ -128,6 +132,20 @@ check('record: raw events with ANALYTICS_RAW_DAYS>0 (table created)', (int) $db-
 putenv('ANALYTICS_ENABLED=false');
 check('record: nothing when ANALYTICS_ENABLED=false', analytics_record($db, ACC_A, MASK_A, [['jumpPlanner', 'opened', 1]]), 0);
 putenv('ANALYTICS_ENABLED=true');
+for ($i = 0; $i < 12; $i++) analytics_record($db, ACC_A, MASK_A, [['sizeTags', 'disabled', 1000]], time() + 120 * $i);
+$stmt = $db->prepare("SELECT n FROM fork_analytics_daily WHERE uid = ? AND feature = 'sizeTags' AND action = 'disabled'");
+$stmt->execute([$uidA2]);
+check('record: a daily counter stops at ANALYTICS_MAX_DAILY', (int) $stmt->fetchColumn(), ANALYTICS_MAX_DAILY);
+foreach (['fork_analytics_daily', 'fork_analytics_user', 'fork_analytics_raw'] as $t) {
+    $db->prepare("DELETE FROM $t WHERE uid = ? AND feature = 'sizeTags' AND action = 'disabled'")->execute([$uidA2]);
+}
+$rateUid = 'ratetest00000000';
+$uids[] = $rateUid;
+$t0 = time() + 100000;
+$ok = [];
+for ($i = 0; $i < ANALYTICS_RATE_MAX + 1; $i++) $ok[] = analytics_rate_ok($db, $rateUid, $t0 + 1);
+check('rate: ANALYTICS_RATE_MAX requests in a window, then refused', [count(array_filter($ok)), end($ok)], [ANALYTICS_RATE_MAX, false]);
+check('rate: a new window takes requests again', analytics_rate_ok($db, $rateUid, $t0 + 1 + ANALYTICS_RATE_WINDOW), true);
 check('record: no account, nothing', analytics_record($db, 0, MASK_A, [['jumpPlanner', 'opened', 1]]), 0);
 
 // ---- 5. prune ----
@@ -144,6 +162,20 @@ analytics_prune($db);
 check('prune: raw table dropped when ANALYTICS_RAW_DAYS=0', $db->query("SHOW TABLES LIKE 'fork_analytics_raw'")->fetchColumn(), false);
 exec('cd ' . escapeshellarg(getcwd()) . ' && php analytics_prune.cron.php 2>&1', $out, $rc);
 check('prune cron runs', $rc, 0);
+// Analytics off: the prune creates nothing and only deletes an expired salt
+$keepSalt = salt_row();
+foreach (['fork_analytics_daily', 'fork_analytics_user', 'fork_analytics_mask', 'fork_analytics_rate'] as $t) $db->exec("DROP TABLE IF EXISTS $t");
+putenv('ANALYTICS_ENABLED=false');
+analytics_prune($db);
+check('prune, analytics off: no tables created', $db->query("SHOW TABLES LIKE 'fork_analytics_daily'")->fetchColumn(), false);
+check('prune, analytics off: a fresh salt is kept', salt_row(), $keepSalt);
+$db->prepare("UPDATE fork_analytics_meta SET v = ? WHERE k = 'salt'")->execute([gmdate('Y-m-d', time() - 91 * 86400) . substr($keepSalt, 10)]);
+analytics_prune($db);
+check('prune, analytics off: an expired salt is deleted, none made', salt_row(), false);
+putenv('ANALYTICS_ENABLED=true');
+analytics_prune($db);
+check('prune, analytics on: still creates nothing', $db->query("SHOW TABLES LIKE 'fork_analytics_daily'")->fetchColumn(), false);
+analytics_ensure_schema($db);
 
 // ---- 6. HTTP ----
 function sess($name, array $data) {
@@ -170,14 +202,21 @@ function http($method, $path, $sid, $body = null, array $headers = []) {
 }
 $sid = sess('user', ['userID' => ACC_B, 'mask' => MASK_A, 'characterID' => 991901]);
 list($st, $text) = http('GET', 'fork_events.php?mode=get', null);
-check('http: mode=get without login: no token', [$st, json_decode($text, true)], [200, ['enabled' => false, 'token' => '']]);
+check('http: mode=get without a session cookie: 403, no session made', [$st, $text], [403, '']);
+$before = count(glob('/var/lib/php/session/sess_*') ?: []);
+http('GET', 'fork_events.php?mode=get', null);
+check('http: ... and no session file', count(glob('/var/lib/php/session/sess_*') ?: []), $before);
+list($st) = http('GET', 'fork_events.php?mode=get', 'analyticstestnobody');
+check('http: mode=get with a session that is not logged in: 403', $st, 403);
 list($st, $text) = http('GET', 'fork_events.php?mode=get', $sid);
 $got = json_decode($text, true);
 $token = $got['token'] ?? '';
 check('http: mode=get gives a token', [$st, $got['enabled'] ?? null, strlen($token)], [200, true, 64]);
+check('http: mode=get gives an opaque per-account key (not the stored uid)', [strlen($got['key'] ?? ''), ($got['key'] ?? '') === uid_of(ACC_B), ($got['key'] ?? '') === analytics_client_key($db, ACC_B)], [16, false, true]);
 list(, $text2) = http('GET', 'fork_events.php?mode=get', $sid);
 check('http: the token is per session (same on the next get)', json_decode($text2, true)['token'] ?? '', $token);
 $uidB = uid_of(ACC_B);
+$uids[] = $uidB;
 $body = function ($t, $f = 'jumpPlanner', $a = 'opened') { return json_encode(['t' => $t, 'e' => [['f' => $f, 'a' => $a, 'n' => 1]]]); };
 $plain = ['Content-Type: text/plain;charset=UTF-8'];
 list($st, $text) = http('POST', 'fork_events.php', $sid, $body($token), array_merge($plain, ['Origin: ' . $base, 'Sec-Fetch-Site: same-origin']));
@@ -193,6 +232,13 @@ list($st) = http('POST', 'fork_events.php', $sid, $body($token, 'J123456'), $pla
 check('http: unknown feature: 204, not recorded', [$st, rows($uidB)], [204, [['jumpPlanner', 'opened', 1]]]);
 list($st) = http('POST', 'fork_events.php', null, $body($token), $plain);
 check('http: no session: 204, not recorded', [$st, rows($uidB)], [204, [['jumpPlanner', 'opened', 1]]]);
+$db->prepare('INSERT INTO preferences (userID, options) VALUES (?, ?)')->execute([ACC_B, json_encode(['usageStats' => ['enabled' => false]])]);
+list($st) = http('POST', 'fork_events.php', $sid, $body($token), $plain);
+check('http: turned off in Settings (stored options): 204, not recorded', [$st, rows($uidB)], [204, [['jumpPlanner', 'opened', 1]]]);
+check('opted out: read from preferences', [analytics_opted_out($db, ACC_B), analytics_opted_out($db, ACC_A)], [true, false]);
+$db->prepare('UPDATE preferences SET options = ? WHERE userID = ?')->execute([json_encode(['usageStats' => ['enabled' => true]]), ACC_B]);
+list($st) = http('POST', 'fork_events.php', $sid, $body($token), $plain);
+check('http: turned back on: recorded', rows($uidB), [['jumpPlanner', 'opened', 2]]);
 list($st) = http('POST', 'fork_events.php', $sid, str_repeat('x', 9000), $plain);
 check('http: oversized body: 204', $st, 204);
 list($st) = http('PUT', 'fork_events.php', $sid, $body($token), $plain);

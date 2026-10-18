@@ -27,6 +27,11 @@ const ANALYTICS_FEATURE_RE = '/^[a-z][A-Za-z0-9]{1,39}$/';
 const ANALYTICS_GENERIC_ACTIONS = ['command', 'opened', 'shown', 'disabled', 'setting_on', 'setting_off', 'setting_changed'];
 const ANALYTICS_INTERNAL_ACTIONS = ['app' => ['active']];
 const ANALYTICS_USE_ACTIONS = ['command', 'opened'];   // count as use for every feature (plus its `use` list)
+const ANALYTICS_MAX_DAILY = 10000;     // one counter (day, user, feature, action) in a day: no inflating it past this
+// Requests per user and window: 1 a minute normally, plus one each time the tab is hidden and short bursts in
+// forkUsage.debug (a send every 2.5 s at most). Over the limit a request is dropped; it still gets 204.
+const ANALYTICS_RATE_WINDOW = 60;       // seconds
+const ANALYTICS_RATE_MAX = 30;          // requests per window
 const ANALYTICS_PRUNE_BATCH = 5000;
 const ANALYTICS_PRUNE_ROUNDS = 20;
 
@@ -56,6 +61,13 @@ const ANALYTICS_DDL = [
       `maskHash` char(16) CHARACTER SET ascii NOT NULL,
       `feature` varchar(40) CHARACTER SET ascii NOT NULL,
       PRIMARY KEY (`day`, `feature`, `maskHash`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    "CREATE TABLE IF NOT EXISTS `fork_analytics_rate` (
+      `uid` char(16) CHARACTER SET ascii NOT NULL,
+      `windowStart` datetime NOT NULL,
+      `n` int unsigned NOT NULL DEFAULT 0,
+      PRIMARY KEY (`uid`),
+      KEY `windowStart` (`windowStart`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
     "CREATE TABLE IF NOT EXISTS `fork_analytics_meta` (
       `k` varchar(32) CHARACTER SET ascii NOT NULL,
@@ -242,6 +254,44 @@ function analytics_hash($salt, $kind, $id) {
     return substr(hash_hmac('sha256', $kind . ':' . $id, $salt), 0, 16);
 }
 
+// ---- limits ----
+
+/**
+ * Count a request of this user against ANALYTICS_RATE_MAX per ANALYTICS_RATE_WINDOW (a window starts with the first request
+ * after the last one ended). True when it may be recorded. A table row per user (pseudonymous uid), not the session: the
+ * endpoint reads its session with read_and_close and can't write to it, and APCu isn't in the image.
+ */
+function analytics_rate_ok(PDO $db, $uid, $now = null) {
+    $now = $now === null ? time() : (int) $now;
+    $at = gmdate('Y-m-d H:i:s', $now);
+    $expired = gmdate('Y-m-d H:i:s', $now - ANALYTICS_RATE_WINDOW);
+    return analytics_run($db, function () use ($db, $uid, $at, $expired) {
+        $db->prepare('INSERT INTO fork_analytics_rate (uid, windowStart, n) VALUES (?, ?, 1)
+            ON DUPLICATE KEY UPDATE n = IF(windowStart <= ?, 1, n + 1), windowStart = IF(windowStart <= ?, VALUES(windowStart), windowStart)')
+            ->execute([$uid, $at, $expired, $expired]);
+        $stmt = $db->prepare('SELECT n FROM fork_analytics_rate WHERE uid = ?');
+        $stmt->execute([$uid]);
+        return (int) $stmt->fetchColumn() <= ANALYTICS_RATE_MAX;
+    });
+}
+
+/** Whether the user turned usage statistics off (Settings > General: options.usageStats.enabled === false, stored in
+ *  upstream's preferences table). The browser stops sending then; this also drops what an old tab still sends. */
+function analytics_opted_out(PDO $db, $accountID) {
+    $stmt = $db->prepare('SELECT options FROM preferences WHERE userID = ?');
+    $stmt->execute([(int) $accountID]);
+    $json = $stmt->fetchColumn();
+    if (!is_string($json) || $json === '') return false;
+    $o = json_decode($json, true);
+    return is_array($o) && isset($o['usageStats']) && is_array($o['usageStats'])
+        && array_key_exists('enabled', $o['usageStats']) && $o['usageStats']['enabled'] === false;
+}
+
+/** The browser's key for its once-a-day marks: opaque, per account, not the stored uid */
+function analytics_client_key(PDO $db, $accountID) {
+    return analytics_hash(analytics_salt($db), 'client', (int) $accountID);
+}
+
 // ---- writing ----
 
 /**
@@ -260,9 +310,10 @@ function analytics_record(PDO $db, $accountID, $mask, array $entries, $now = nul
         $uid = analytics_hash($salt, 'account', (int) $accountID);
         $maskHash = is_string($mask) && $mask !== '' ? analytics_hash($salt, 'mask', $mask) : '';
         $raw = analytics_raw_days() > 0;
+        if (!analytics_rate_ok($db, $uid, $now)) return 0;
         return analytics_run($db, function () use ($db, $catalog, $entries, $day, $at, $minute, $uid, $maskHash, $raw) {
             $daily = $db->prepare('INSERT INTO fork_analytics_daily (day, feature, action, uid, n, firstMinute) VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE n = LEAST(n + VALUES(n), 4000000000)');
+                ON DUPLICATE KEY UPDATE n = LEAST(n + VALUES(n), ' . ANALYTICS_MAX_DAILY . ')');
             $user = $db->prepare('INSERT INTO fork_analytics_user (uid, feature, action, firstAt, lastAt, n) VALUES (?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE lastAt = VALUES(lastAt), n = LEAST(n + VALUES(n), 4000000000)');
             $masks = $db->prepare('INSERT IGNORE INTO fork_analytics_mask (day, maskHash, feature) VALUES (?, ?, ?)');
@@ -295,39 +346,54 @@ function analytics_record(PDO $db, $accountID, $mask, array $entries, $now = nul
 
 // ---- retention ----
 
-/** Delete rows older than the retention, ANALYTICS_PRUNE_BATCH at a time. Returns the number of rows deleted. */
+/**
+ * Delete rows older than the retention, ANALYTICS_PRUNE_BATCH at a time. Returns the number of rows deleted. Never creates
+ * a table: only the tables that exist are pruned (so a server with analytics off stays without them). An expired salt is
+ * replaced (analytics on) or just deleted (analytics off), so old rows can't be linked to anyone either way.
+ */
 function analytics_prune(PDO $db, $days = null, $rawDays = null) {
     $days = $days === null ? analytics_days() : max(1, (int) $days);
     $rawDays = $rawDays === null ? analytics_raw_days() : max(0, (int) $rawDays);
     $deleted = 0;
-    $jobs = [
-        'DELETE FROM fork_analytics_daily WHERE day < DATE_SUB(UTC_DATE(), INTERVAL ' . $days . ' DAY) LIMIT ' . ANALYTICS_PRUNE_BATCH,
-        'DELETE FROM fork_analytics_mask WHERE day < DATE_SUB(UTC_DATE(), INTERVAL ' . $days . ' DAY) LIMIT ' . ANALYTICS_PRUNE_BATCH,
-        'DELETE FROM fork_analytics_user WHERE lastAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . $days . ' DAY) LIMIT ' . ANALYTICS_PRUNE_BATCH,
-    ];
-    try {
-        foreach ($jobs as $sql) {
+    $batch = function ($sql) use ($db, &$deleted) {
+        try {
             for ($i = 0; $i < ANALYTICS_PRUNE_ROUNDS; $i++) {
-                $n = analytics_run($db, function () use ($db, $sql) { return $db->exec($sql); });
-                $deleted += (int) $n;
+                $n = (int) $db->exec($sql);
+                $deleted += $n;
                 if ($n < ANALYTICS_PRUNE_BATCH) break;
             }
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '42S02') throw $e;   // no such table: nothing to prune
         }
+    };
+    try {
+        $limit = ' LIMIT ' . ANALYTICS_PRUNE_BATCH;
+        $batch('DELETE FROM fork_analytics_daily WHERE day < DATE_SUB(UTC_DATE(), INTERVAL ' . $days . ' DAY)' . $limit);
+        $batch('DELETE FROM fork_analytics_mask WHERE day < DATE_SUB(UTC_DATE(), INTERVAL ' . $days . ' DAY)' . $limit);
+        $batch('DELETE FROM fork_analytics_user WHERE lastAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . $days . ' DAY)' . $limit);
+        $batch('DELETE FROM fork_analytics_rate WHERE windowStart < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)' . $limit);
         // Raw events: kept $rawDays days; with raw storage off the whole table goes (if it exists)
-        $exists = $db->query("SHOW TABLES LIKE 'fork_analytics_raw'")->fetchColumn();
-        if ($exists !== false) {
-            if ($rawDays < 1) {
-                $db->exec('DROP TABLE fork_analytics_raw');
-            } else {
-                for ($i = 0; $i < ANALYTICS_PRUNE_ROUNDS; $i++) {
-                    $n = (int) $db->exec('DELETE FROM fork_analytics_raw WHERE at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . $rawDays . ' DAY) LIMIT ' . ANALYTICS_PRUNE_BATCH);
-                    $deleted += $n;
-                    if ($n < ANALYTICS_PRUNE_BATCH) break;
+        if ($rawDays < 1) {
+            $db->exec('DROP TABLE IF EXISTS fork_analytics_raw');
+        } else {
+            $batch('DELETE FROM fork_analytics_raw WHERE at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . $rawDays . ' DAY)' . $limit);
+        }
+        $row = false;
+        try {
+            $row = $db->query("SELECT v FROM fork_analytics_meta WHERE k = 'salt'")->fetchColumn();
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '42S02') throw $e;
+        }
+        if ($row !== false) {
+            $since = strtotime(substr((string) $row, 0, 10) . ' 00:00:00 UTC');
+            if ($since === false || time() - $since >= $days * 86400) {
+                if (analytics_enabled()) {
+                    analytics_salt($db, $days);   // replaces it
+                } else {
+                    $db->prepare("DELETE FROM fork_analytics_meta WHERE k = 'salt' AND v = ?")->execute([$row]);
                 }
             }
         }
-        // Replace an expired salt now rather than on the next event, so a quiet server doesn't keep it longer
-        analytics_salt($db, $days);
     } catch (Throwable $e) {
         error_log('analytics prune: ' . $e->getMessage());
     }
