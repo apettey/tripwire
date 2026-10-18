@@ -527,8 +527,14 @@ const sigInline = {
 
 	// ---- Tip (hints.js): after the user changed a hole's life or mass in the Edit signature dialog ----
 
-	dialogEdit: null,	// {sigID}: life / mass changed by the user since the Edit signature dialog opened (null: not)
-	lastEdit: null,		// the last such change (the tip's "Show me" opens that row's Mass cell)
+	dialogPending: null,	// {sigID}: life / mass changed by the user in the open Edit signature dialog, not saved yet
+	dialogEdit: null,	// the same once the dialog saved it (null: no saved change; Cancel / Esc leave it null)
+	lastEdit: null,		// the last saved change (the tip's "Show me" opens that row's Mass cell)
+
+	/** The dialog's save answer: saved (resultSet[0].result true, as signature-dialog.js checks it) */
+	savedAnswer: function(res) {
+		return !!(res && res.resultSet && res.resultSet[0] && res.resultSet[0].result == true);
+	},
 
 	/** The dialog close a tip follows: the Edit signature dialog, after a life or mass change in it */
 	tipEligible: function(data, dialogEdit, opts) {
@@ -545,12 +551,32 @@ const sigInline = {
 	},
 
 	setupTip: function() {
-		$(document).on("dialogopen", "#dialog-signature", function() { sigInline.dialogEdit = null; });
+		$(document).on("dialogopen", "#dialog-signature", function() { sigInline.dialogPending = sigInline.dialogEdit = null; });
 		$(document).on("change", "#dialog-signature [name='wormholeLife'], #dialog-signature [name='wormholeMass']", function(e) {
 			if (!e.originalEvent) { return; }	// the dialog filling itself in, not the user
 			if (typeof sigDialogVM === "undefined" || sigDialogVM.mode !== "update") { return; }
-			sigInline.dialogEdit = sigInline.lastEdit = { sigID: $("#dialog-signature").data("signatureid") || null };
+			sigInline.dialogPending = { sigID: $("#dialog-signature").data("signatureid") || null };
 		});
+		// The dialog saves through tripwire.refresh and closes itself in the success callback: mark the change saved just
+		// before that, so the dialog.close that follows a Save counts and a Cancel / Esc doesn't
+		if (typeof tripwire !== "undefined" && typeof tripwire.refresh === "function" && !tripwire.refresh.sigInlineTipWrapped) {
+			const refresh = tripwire.refresh;
+			const wrapped = function(mode, data, success) {
+				const pending = sigInline.dialogPending;
+				if (pending && typeof success === "function" && data && data.signatures && data.signatures.update && $("#dialog-signature").is(":visible")) {
+					const args = Array.prototype.slice.call(arguments);
+					args[2] = function(res) {
+						if (sigInline.savedAnswer(res)) { sigInline.dialogEdit = sigInline.lastEdit = pending; }
+						return success.apply(this, arguments);
+					};
+					return refresh.apply(this, args);
+				}
+				return refresh.apply(this, arguments);
+			};
+			Object.keys(refresh).forEach(function(k) { wrapped[k] = refresh[k]; });
+			wrapped.sigInlineTipWrapped = true;
+			tripwire.refresh = wrapped;
+		}
 		if (typeof forkHints === "undefined") { return; }
 		forkHints.register({
 			id: "sigInline.dialog", feature: "sigInline", section: "signatures",

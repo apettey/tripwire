@@ -11,7 +11,7 @@ const forkHintsUI = {
 	GAP: 10,			// between the anchor and the callout (room for the arrow)
 	ARROW_PAD: 14,		// the arrow stays this far from the callout's corners
 	// The app's own pop-ups: a tip waits while one is open and steps aside when one appears
-	POPUPS: ["#jump-return-panel", "#jump-sig-panel", "#autoMass-prompt", "#kill-reporting-toasts .kill-toast", "#cp-overlay:not(.cp-hidden)"],
+	POPUPS: ["#jump-return-panel", "#jump-sig-panel", ".automass-notice", "#kill-reporting-toasts .kill-toast", "#cp-overlay:not(.cp-hidden)"],
 
 	escape: function(s) {
 		return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, function(c) {

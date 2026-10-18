@@ -702,6 +702,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 		});
 
+		// Usage: opening a hole's Mass dialog with the guidance on is using it (and retires the tip below)
+		$(document).on("dialogopen", "#dialog-mass", function() {
+			if (rollingCalc.enabled(typeof options !== "undefined" ? options : null) && typeof forkUsage !== "undefined") { forkUsage.track("rollingCalc", "opened"); }
+		});
+
 		// Tip (hints.js): after a jump through a mapped hole, where its mass log and rolling guidance are (right-click > Mass).
 		// The chain node a hole leads into carries the hole's id (data-sigid); the Mass dialog opens on it like the menu does.
 		if (typeof forkHints !== "undefined") {

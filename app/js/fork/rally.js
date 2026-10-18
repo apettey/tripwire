@@ -228,6 +228,7 @@ const rally = {
 	DISCORD_HELP: "Fight here changes go to the Discord channel your corporation's admins chose in Mask Admin > Discord.",
 	// Whether fight changes of this mask go to Discord at all (from rally.php's "discord")
 	discordAvailable: false,
+	discordChannels: null,	// the mask has any Discord channel (rally.php "discordChannels"); null until rally.php answered (Mask Admin tip)
 
 	/** "Also post to Discord" choice: options.rallyDiscord.enabled, a missing key means on */
 	discordEnabled: function(opts) {
@@ -323,6 +324,7 @@ const rally = {
 	answer: function(data, fromOthers) {
 		if (!data) { return; }
 		rally.discordAvailable = !!data.discord;
+		if (data.discordChannels !== undefined) { rally.discordChannels = !!data.discordChannels; }
 		if (data.comps) { rally.setComps(data.comps); }
 		rally.apply(data.rally, fromOthers);
 	},

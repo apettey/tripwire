@@ -47,6 +47,20 @@ function rally_discord_route($mysql, $mask, $legacyMap = null) {
 	return $hook ? array('via' => 'legacy', 'hook' => $hook) : null;
 }
 
+/** Whether the mask has any Discord channel (a webhook in Mask Admin > Discord, whatever it is used for). One indexed
+	lookup; no discord_* tables yet means none. For the Mask Admin feature tip (rally.php's "discordChannels"). */
+function rally_discord_any_channel($mysql, $mask) {
+	try {
+		$stmt = $mysql->prepare('SELECT 1 FROM discord_webhooks WHERE maskID = :mask LIMIT 1');
+		$stmt->bindValue(':mask', $mask);
+		$stmt->execute();
+		return $stmt->fetchColumn() !== false;
+	} catch (Throwable $e) {
+		if (!($e instanceof PDOException && $e->getCode() === '42S02')) error_log('rally discord: reading the Discord webhooks failed: ' . rally_discord_redact($e->getMessage()));
+		return false;
+	}
+}
+
 /** Neutralise user-controlled text for a Discord message: no mentions (@everyone, @here, <@id>), no
 	markdown, no links, one line, at most $max characters. */
 function rally_discord_clean($text, $max = 100) {

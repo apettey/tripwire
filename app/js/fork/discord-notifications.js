@@ -676,9 +676,8 @@ const discordNotifications = {
 
 	// ---- Tip (hints.js): Mask Admin opened on a mask that posts nothing to Discord ----
 	// The first of the Mask Admin tips (then Watchlist, then Bookmarks, by priority; one pop-up tip a session, so at most
-	// one per open). Whether the mask has a channel isn't loaded until the Discord page opens: the
-	// Fight here state (rally.php, polled anyway) says whether a Fight here channel or the server webhook is there, the
-	// cheap stand-in used here.
+	// one per open). The Discord page loads its channels only when it opens; the Fight here poll (rally.php, polled
+	// anyway) carries "discordChannels": whether the mask has any channel. Not answered yet: no tip.
 
 	/** Mask Admin tab menu entry of a page (the Mask Admin tips point at it) */
 	menuItem: function(windowName) {
@@ -695,7 +694,7 @@ const discordNotifications = {
 		forkHints.register({
 			id: "discordNotifications.maskAdmin", feature: "discordNotifications", section: "maskAdmin", audience: "maskAdmin",
 			trigger: "maskAdmin.open", kind: "callout", placement: "left", dialog: "#dialog-admin",
-			eligible: function() { return typeof rally !== "undefined" && !rally.discordAvailable; },
+			eligible: function() { return typeof rally !== "undefined" && rally.discordChannels === false; },
 			anchor: function() { return discordNotifications.menuItem("discord"); },
 			title: "Post to Discord",
 			body: "Your mask can post to a Discord channel: kills in the chain, Fight here, new k-space exits, rolling and more. "

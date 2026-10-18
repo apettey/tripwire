@@ -576,7 +576,7 @@ const holeRolling = {
 			title: "Rolling this hole?",
 			body: "Mark it with Rolling... here, or right-click the system on the map: everyone on your mask sees " + holeRolling.GLYPH
 				+ " on the connection. Preserve mass... marks a hole nobody should roll.\n\nTurn tips off in Settings > General.",
-			action: { label: "Mark rolling", run: function() {
+			action: { label: "Mark rolling...", run: function() {
 				const id = $("#dialog-mass").data("id");
 				if (preserveMass.isWormholeID(id)) { holeRolling.openDialog(id); }
 			} },

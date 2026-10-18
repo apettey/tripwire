@@ -1096,8 +1096,12 @@ const intelScans = {
 			body: "Next time you paste a d-scan or local list, click Share: it stays in the Intel panel for everyone on your "
 				+ "mask, pinned to the system, with a dot on the map.\n\nTurn tips off in Settings > General.",
 			action: { label: "Show me", run: function() {
-				const $w = intelScans.$widget();
-				if ($w.length && typeof forkHintsUI !== "undefined") { forkHintsUI.flash($w); }
+				// Minimized (Panels menu): bring it back first, then outline it
+				if (typeof panelModes !== "undefined" && panelModes.modeFor(intelScans.WIDGET_ID) === "minimized") { panelModes.setMode(intelScans.WIDGET_ID, "restore"); }
+				setTimeout(function() {
+					const $w = intelScans.$widget();
+					if ($w.length && typeof forkHintsUI !== "undefined") { forkHintsUI.flash($w); }
+				}, 50);
 			} },
 			priority: 60, maxShows: 2, cooldownHours: 72, ttlSeconds: 900
 		});

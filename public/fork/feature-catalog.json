@@ -54,7 +54,7 @@
     { "id": "jumpReturn", "title": "Return bookmark after a jump", "section": "jumps", "prs": [8, 42], "settingsKey": "jumpReturn",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["copied"], "exposed": ".jump-return-text" },
     { "id": "rollingCalc", "title": "Rolling calculator and how to roll", "section": "jumps", "prs": [24, 67], "settingsKey": "rollingCalc",
-      "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".rolling-log-head" },
+      "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["opened"], "exposed": ".rolling-log-head" },
     { "id": "rollingGuide", "title": "Rolling guide", "section": "jumps", "prs": [118], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rollingGuide.open"], "panels": ["rollingGuideWidget"], "use": [] },
     { "id": "autoMass", "title": "Fitted jump mass", "section": "jumps", "prs": [38], "settingsKey": "autoMass",

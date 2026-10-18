@@ -66,6 +66,20 @@ describe('feature tips: content', () => {
 		});
 	});
 
+	it('the pop-ups a tip waits for are the app\'s real pop-ups (made by some fork file), not Settings fields', () => {
+		include('app/js/fork/hints-ui');
+		const fork = fs.readdirSync('app/js/fork').filter(n => /\.js$/.test(n) && !/^hints/.test(n))
+			.map(n => fs.readFileSync(path.join('app/js/fork', n), 'utf8')).join('\n');
+		forkHintsUI.POPUPS.forEach(sel => {
+			const m = /^([#.])([A-Za-z0-9_-]+)/.exec(sel);
+			assert.ok(m, sel);
+			const name = m[2];
+			assert.ok(fork.indexOf(name) >= 0, sel + ': no fork file makes it');
+			assert.ok(!new RegExp("<input[^>]*id=['\"]" + name + "['\"]").test(fork), sel + ' is a form field, not a pop-up');
+		});
+		assert.ok(forkHintsUI.POPUPS.includes('.automass-notice'), 'the auto-mass hot/cold prompt (jBox notice)');
+	});
+
 	it('every tip says how to turn tips off', () => {
 		// In the registration, or in the file's tipBody() (the pilots build their text there)
 		tips.forEach(({ file, text }) => assert.ok(/Turn tips off in Settings > General/.test(/tipBody/.test(text) ? fs.readFileSync(file, 'utf8') : text), field(text, 'id') + ' in ' + file));
@@ -101,6 +115,13 @@ describe('feature tips: eligibility', () => {
 		assert.strictEqual(sigInline.tipEligible({ id: 'dialog-mass' }, { sigID: 5 }, {}), false, 'another dialog');
 		assert.strictEqual(sigInline.tipEligible({ id: 'dialog-signature' }, { sigID: 5 }, { sigInline: { enabled: false } }), false, 'turned off');
 		assert.strictEqual(sigInline.tipEligible(undefined, { sigID: 5 }, {}), false);
+	});
+
+	it('sigInline.savedAnswer: only a successful save marks the dialog change saved', () => {
+		assert.strictEqual(sigInline.savedAnswer({ resultSet: [{ result: true }] }), true);
+		assert.strictEqual(sigInline.savedAnswer({ resultSet: [{ result: false }] }), false);
+		assert.strictEqual(sigInline.savedAnswer({}), false);
+		assert.strictEqual(sigInline.savedAnswer(undefined), false);
 	});
 
 	it('rollingCalc.jumpHole: the mapped hole between the two systems, either way', () => {

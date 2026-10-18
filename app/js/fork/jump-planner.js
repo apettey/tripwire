@@ -1536,8 +1536,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					// home (new, EOL, mass, preserve mass, a new root)
 					const allExits = s.enabled ? jp.homeExits(result, systems()) : [];
 					const homeKey = s.enabled && s.mode === "home" ? jp.homeKey(result, systems(), preserveFlags()) : "";
+					// Tips' chain.exit: exits the chain gets, not the ones it had at page load or a mask switch (those prime it)
+					const mask = typeof options !== "undefined" && options.masks ? String(options.masks.active) : "";
+					const primed = state.exitsMask === mask;
+					state.exitsMask = mask;
 					if (exits.join(",") !== state.exits.join(",") || allExits.join(",") !== state.allExits.join(",") || homeKey !== state.homeKey) {
-						const added = jp.newExits(state.exits, exits);
+						const added = primed ? jp.newExits(state.exits, exits) : [];
 						if (added.length && typeof forkHints !== "undefined") { setTimeout(function() { forkHints.emit("chain.exit", { systemIDs: added }); }, 0); }
 						state.exits = exits;
 						state.allExits = allExits;
