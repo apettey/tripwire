@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-18 | [What's New first run + Getting started](2026-10-18-whats-new-first-run/README.md) | New accounts skip the list of every feature so far and get a 5-step Getting started card; What's New entries get Try it, a used tick and Turned off; account age from fork_events.php |
 | 2026-10-18 | [Feature tips](2026-10-18-feature-tips/README.md) | Tips engine: one short tip at a quiet moment for a feature not used yet (caps, quiet check, usage-aware), Settings > General toggle; pilot tips for Ctrl+K and hiding anomalies; "Does it need a tip?" in the feature workflow |
 | 2026-10-18 | [Usage analytics dashboard](2026-10-18-analytics-dashboard/README.md) | Operator-only dashboard (characters in `ANALYTICS_ADMINS`) over the usage counters: feature adoption, funnels, launches, opt-outs, never-used features, app health, tips; small counts shown as <5 |
 | 2026-10-18 | [Usage statistics](2026-10-18-usage-tracking/README.md) | First-party feature usage counters (no third parties; pseudonymous, 90 days), feature catalog, Settings > General toggle, analytics check in the feature workflow |
