@@ -94,7 +94,8 @@ const gettingStarted = {
 				+ (done ? "" : "<button type='button' class='gs-how' data-item='" + esc(item.id) + "'>How</button>")
 				+ "</li>";
 		}).join("");
-		const foot = n === total ? "<div class='gs-foot'>All set. Hide this card whenever you like.</div>" : "";
+		// "See all features" opens the features hub (features-hub.js handles the click)
+		const foot = "<div class='gs-foot'>" + (n === total ? "All set. Hide this card whenever you like. " : "") + "<a href='#' class='gs-features'>See all features</a></div>";
 		return head + "<ul class='gs-list'>" + rows + "</ul>" + foot;
 	},
 

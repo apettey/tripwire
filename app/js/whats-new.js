@@ -81,7 +81,7 @@ const whatsNew = {
 		const esc = whatsNew.escape;
 		const status = info.status === "used" ? "<span class='whats-new-used' title='You have used this'>&#10003; You've used this</span>"
 			: info.status === "off" ? "<span class='whats-new-off' title='Turned off in Settings'>Turned off</span>" : "";
-		const tryIt = info.canTry ? "<button type='button' class='whats-new-try' data-feature='" + esc(info.feature) + "'>"
+		const tryIt = info.canTry && info.feature !== "whatsNew" ? "<button type='button' class='whats-new-try' data-feature='" + esc(info.feature) + "'>"
 			+ (info.status === "off" ? "Turn it on" : "Try it") + "</button>" : "";
 		return status || tryIt ? "<div class='whats-new-actions'>" + tryIt + status + "</div>" : "";
 	},

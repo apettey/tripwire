@@ -75,6 +75,7 @@ describe('gettingStarted', () => {
 			assert.ok(h.includes("gs-item gs-done' data-item='palette'"));
 			assert.ok(!h.includes('All set'));
 		});
+		it('links to all features (the features hub)', () => assert.ok(gettingStarted.html({ collapsed: false, done: [] }).includes("class='gs-features'")));
 		it('all done', () => assert.ok(gettingStarted.html({ collapsed: false, done: gettingStarted.ITEMS.map(i => i.id) }).includes('All set')));
 	});
 });
