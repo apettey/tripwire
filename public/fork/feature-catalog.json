@@ -11,7 +11,7 @@
     { "id": "whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": ["app.whatsNew"], "panels": [], "use": ["opened"],
       "events": ["tried"] },
-    { "id": "gettingStarted", "title": "Getting started", "section": "general", "prs": [], "settingsKey": null,
+    { "id": "gettingStarted", "title": "Getting started", "section": "general", "prs": [123], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["how"],
       "events": ["done_mask", "done_tab", "done_paste", "done_tracking", "done_palette", "all_done", "collapsed", "expanded", "hidden"],
       "exposed": "#gettingStarted",
