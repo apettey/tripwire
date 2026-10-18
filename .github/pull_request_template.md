@@ -14,6 +14,7 @@
 - [ ] User-facing? What's New entry in `public/whats-new/features.json` with this PR's number
 - [ ] User-facing? Entry in `public/fork/feature-catalog.json`, success signal: ..., analytics evidence (`forkUsage.debug` console lines or SQL result) below
 - [ ] **Settings toggle?** Yes: Settings > ... > ... (on by default) / No, because ...
+- [ ] **Feature tip?** Yes: `forkHints.register` id ..., trigger ... / No, because ... (visible button, bug fix, ...)
 - [ ] Tests added/updated; `npx mocha --recursive app/js-test` passes
 - [ ] Upstream files touched (list them, keep the diff minimal): none
 - [ ] Version bump: default (feature = minor, other = patch, docs = none) or a `semver:*` label

@@ -25,6 +25,7 @@ describe('maskDefaults allow-list', () => {
 		maskDefaults.ALLOWED.slice(server.length).forEach(k => assert.ok(['a', 'b', 'x', 'ok', 'alpha', 'zeta'].includes(k), 'extra key ' + k));
 		keys.delete('favoritesPanel');   // left out on purpose: it carries the admin's own favourite systems
 		keys.delete('usageStats');       // left out on purpose: sending usage statistics is each user's own privacy choice
+		keys.delete('hints');            // left out on purpose: feature tips are each user's own (and hold their tip history)
 		assert.deepStrictEqual([...keys].sort(), server);
 	});
 

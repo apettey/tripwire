@@ -51,12 +51,17 @@ const forkUsage = {
 	buildIndex: function(catalog) {
 		const index = { features: {}, commands: {}, panels: {} };
 		const list = catalog && Array.isArray(catalog.features) ? catalog.features : [];
+		const generic = catalog && Array.isArray(catalog.generic) ? catalog.generic : [];
 		list.forEach(function(f) {
 			if (!f || typeof f.id !== "string") { return; }
 			const use = {};
 			forkUsage.USE.concat(Array.isArray(f.use) ? f.use : []).forEach(function(a) { if (forkUsage.ACTION_RE.test(a)) { use[a] = true; } });
 			const actions = Object.assign({}, use);
-			forkUsage.GENERIC.forEach(function(a) { actions[a] = true; });
+			// Allowed but not use: the generic actions, the catalog's `generic` list (every feature, e.g. a tip's hint_shown)
+			// and the feature's own `events`
+			forkUsage.GENERIC.concat(generic, Array.isArray(f.events) ? f.events : []).forEach(function(a) {
+				if (typeof a === "string" && forkUsage.ACTION_RE.test(a)) { actions[a] = true; }
+			});
 			index.features[f.id] = { entry: f, actions: actions, use: use };
 			(f.commands || []).forEach(function(c) { index.commands[c] = f.id; });
 			(f.panels || []).forEach(function(p) { index.panels[p] = f.id; });

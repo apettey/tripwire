@@ -2,6 +2,7 @@
   "version": 1,
   "about": "Every user-visible fork feature, one entry each (follow-up PRs merged into their parent). Read by app/js/fork/feature-usage.js and analytics/analytics.inc.php (event whitelist). Fields: AGENTS.md section 2 and app/js-test/fork/feature-catalog.test.js.",
   "internal": ["app"],
+  "generic": ["hint_shown", "hint_acted"],
   "skip": [
     { "pr": 34, "why": "game data refresh (ship masses, Pochven holes), nothing to use" },
     { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" }
@@ -21,6 +22,9 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["created"] },
     { "id": "panelModes", "title": "Pop out, shrink or hide any panel", "section": "general", "prs": [115, 117, 119], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["mode"] },
+    { "id": "hints", "title": "Feature tips", "section": "general", "prs": [122], "settingsKey": "hints",
+      "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["acted", "got_it"],
+      "events": ["tip_shown", "closed", "ignored", "section_off"], "success": "acted on >=15% of tips shown, tips turned off by <10% of active users" },
 
     { "id": "sizeTags", "title": "Hole size tags", "section": "markers", "prs": [10, 32], "settingsKey": "sizeTags",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".size-tag" },

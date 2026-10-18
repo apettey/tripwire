@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 122,
+      "date": "2026-10-18",
+      "title": "Feature tips",
+      "description": "Now and then Tripwire shows one short tip about a feature you have not used yet, right where it helps: for example how to hide cosmic anomalies after a paste, or doing an action faster with Ctrl+K. At most one tip a session, never in the middle of a fight, and never about something you already use.\n\nTurn tips off in Settings > General > Show feature tips.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-122-feature-tips.png",
+          "caption": "A tip after pasting signatures that include cosmic anomalies"
+        }
+      ]
+    },
+    {
       "pr": 120,
       "date": "2026-10-18",
       "title": "Usage statistics",

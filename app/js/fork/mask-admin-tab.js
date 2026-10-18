@@ -238,6 +238,7 @@ const maskAdminTab = {
 			$dialog.find(".window").append("<div data-window='" + t.WINDOW + "' class='hidden'></div>");
 		}
 		t.bind();
+		$(document).on("dialogopen", "#dialog-admin", function() { if (typeof forkHints !== "undefined") { forkHints.emit("maskAdmin.open"); } });
 		$(document).on("click", "#dialog-admin .menu li", function() {
 			const mine = $(this).attr("data-window") === t.WINDOW;
 			const $d = $("#dialog-admin");

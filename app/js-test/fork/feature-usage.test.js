@@ -28,6 +28,19 @@ describe('forkUsage', () => {
 		delete global.options;
 	});
 
+	describe('catalog generic and events', () => {
+		const idx = forkUsage.buildIndex({ generic: ['hint_shown', 'Bad!'], features: [
+			{ id: 'hints', use: ['acted'], events: ['ignored'] }, { id: 'sizeTags', use: [] }] });
+		it('allows the catalog\'s generic actions for every feature and events for their own; neither is use', () => {
+			assert.ok(forkUsage.allowed(idx, 'sizeTags', 'hint_shown'));
+			assert.ok(forkUsage.allowed(idx, 'hints', 'ignored'));
+			assert.ok(!forkUsage.allowed(idx, 'sizeTags', 'ignored'));
+			assert.ok(!forkUsage.allowed(idx, 'sizeTags', 'Bad!'));
+			assert.ok(!forkUsage.isUse(idx, 'hints', 'ignored') && !forkUsage.isUse(idx, 'sizeTags', 'hint_shown'));
+			assert.ok(forkUsage.isUse(idx, 'hints', 'acted'));
+		});
+	});
+
 	describe('catalog index', () => {
 		it('maps commands and panels to features', () => {
 			assert.strictEqual(index.commands['jumpPlanner.open'], 'jumpPlanner');

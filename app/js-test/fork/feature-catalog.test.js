@@ -64,9 +64,18 @@ describe('feature catalog', () => {
 			assert.ok(['active', 'passive'].includes(f.kind), f.id + ' kind');
 			['commands', 'panels', 'use'].forEach(k => assert.ok(Array.isArray(f[k]), f.id + ' ' + k));
 			f.use.forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a), f.id + ': action ' + a));
+			if (f.events !== undefined) {
+				assert.ok(Array.isArray(f.events), f.id + ' events');
+				f.events.forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a) && !f.use.includes(a), f.id + ': event ' + a + ' (an event is not a use)'));
+			}
 			if (f.exposed !== undefined) { assert.ok(typeof f.exposed === 'string' && f.exposed, f.id + ' exposed'); }
 			if (f.success !== undefined) { assert.ok(typeof f.success === 'string' && f.success, f.id + ' success'); }
 		});
+	});
+
+	it('generic actions (allowed for every feature, not use) are valid action words', () => {
+		assert.ok(Array.isArray(catalog.generic || []));
+		(catalog.generic || []).forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a), 'generic action ' + a));
 	});
 
 	it('every settingsKey is a key a Settings row stores', () => {
@@ -133,12 +142,12 @@ describe('feature catalog', () => {
 	it('every explicit track call names a catalog feature and an action it accepts', () => {
 		const byId = {};
 		features.forEach(f => { byId[f.id] = f; });
-		const GENERIC = ['command', 'opened', 'shown', 'disabled', 'setting_on', 'setting_off', 'setting_changed'];
+		const GENERIC = ['command', 'opened', 'shown', 'disabled', 'setting_on', 'setting_off', 'setting_changed'].concat(catalog.generic || []);
 		[...emitted].forEach(e => {
 			const [id, a] = e.split('.');
 			if (catalog.internal.includes(id)) { return; }
 			assert.ok(byId[id], e + ': unknown feature');
-			assert.ok(byId[id].use.includes(a) || GENERIC.includes(a), e + ': action not in the feature\'s use list');
+			assert.ok(byId[id].use.includes(a) || (byId[id].events || []).includes(a) || GENERIC.includes(a), e + ': action not in the feature\'s use or events list');
 		});
 	});
 
