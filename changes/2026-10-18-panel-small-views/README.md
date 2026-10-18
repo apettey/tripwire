@@ -26,15 +26,18 @@ they pick it.
 
 - **Signatures**: "8 signatures  3 unscanned" (amber when there are unscanned ones) with the add (+) button, then the
   newest signatures first (by creation time, ties: the later added), one row each: ID, type, name / where a wormhole
-  leads, age. A click on a row opens its edit dialog (as a double-click on the table row does).
+  leads, age. Only the signatures the table draws (a wormhole needs its wormhole and its other end, as upstream). A
+  click on a row opens its edit dialog (as a double-click on the table row does).
   **Unscanned** = a signature whose group nobody has identified yet: type `unknown` or no type (what a scanner still has
   to scan down). Wormholes and sites count as scanned, whatever else is missing. Anomalies hidden by Settings >
   Signatures > Anomalies are left out (as in the list); "Colour signatures by age" tints the age.
 - **Watchlist**: one row per current **hit** = a watchlist filter that matches a system on the chain map now (the same
   matches that mark the map and give the pop-up): filter, system and class, and how long it has been on the map (since
-  it was first seen in this browser session), newest first. "No hits" when nothing matches.
+  it was first seen in this browser session; kept while its system is off the map for up to 30 minutes, as for the
+  pop-ups), newest first, scrolling when there are more than fit. "No hits" when nothing matches.
 - **Structures**: the soonest timer still to come in the viewed system (structure, owner, timer kind, countdown that ticks
-  every second while shown, end in EVE time) and "+N more"; ended timers are ignored. "No timers" otherwise.
+  every second while shown and the tab is visible, redrawn only when it changes; end in EVE time, with the date when
+  it is another EVE day) and "+N more"; ended timers are ignored. "No timers" otherwise.
 - **System info**: CSS only: name (with its copy link), class / security, region and the statics; the activity graph,
   links, effect, favourites, gates and the other lines are hidden. The graph is moved out of sight (not `display: none`),
   so it still draws its labels when the panel goes back to normal or docked.
