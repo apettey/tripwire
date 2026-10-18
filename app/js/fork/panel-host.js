@@ -226,7 +226,10 @@ const panelHost = {
 		}
 		// Popped out (panel-modes.js): a window instead of a layout panel
 		const $popped = typeof panelModes !== "undefined" ? panelModes.addPopped(def, html) : null;
-		if ($popped) { return $popped; }
+		if ($popped) {
+			if (typeof forkHints !== "undefined") { forkHints.emit("panel.open", { id: def.id, popped: true }); }
+			return $popped;
+		}
 		const size = def.size;
 		const opts = panelHost.opts();
 		const others = panelHost.occupied();
@@ -246,6 +249,7 @@ const panelHost = {
 		$w.find(".grid-resize").attr("data-icon", "resize").toggleClass("hidden", !$("#layout").hasClass("active"));
 		if (o.transition !== false) { $w.addClass("gridster-transition"); }
 		if (typeof panelModes !== "undefined") { panelModes.added(def, $w); }	// header buttons, Panels menu
+		if (typeof forkHints !== "undefined") { forkHints.emit("panel.open", { id: def.id }); }
 		return $w;
 	},
 

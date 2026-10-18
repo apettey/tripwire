@@ -956,6 +956,7 @@ const intelScans = {
 		e.stopPropagation();
 		$(e.target).val("").trigger("blur");
 		if (typeof forkUsage !== "undefined") { forkUsage.track("dscanPaste", "pasted"); }
+		if (typeof forkHints !== "undefined") { forkHints.emit("paste.dscan", { systemID: systemID }); }
 		intelScans.openDialog(systemID);
 		// openDialog empties the box, so fill it afterwards
 		$("#" + intelScans.DIALOG_ID).find(".intel-text").val(text);

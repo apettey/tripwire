@@ -321,6 +321,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function onJump(from, to) {
+			if (typeof forkHints !== "undefined") { forkHints.emit("jump.done", { from: from, to: to }); }
 			jumpSeq++;
 			const seq = jumpSeq;
 			const jumpAt = serverNow();
