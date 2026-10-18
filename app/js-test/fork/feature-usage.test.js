@@ -146,6 +146,26 @@ describe('forkUsage', () => {
 			forkUsage.track('nope', 'opened');
 			assert.deepStrictEqual(forkUsage.pending, { 'jumpPlanner.opened': 2 });
 		});
+		it('a use while Try it / Show me runs that feature is not counted; other actions, other features and later uses are', () => {
+			forkUsage.index = index;
+			forkUsage.serverKnown = true;
+			forkUsage.server = { enabled: true, token: 't'.repeat(64) };
+			let tryingId = 'jumpPlanner';
+			global.forkFeatureActions = { isTrying: id => id === tryingId };
+			try {
+				forkUsage.track('jumpPlanner', 'command');
+				forkUsage.track('jumpPlanner', 'opened');
+				forkUsage.track('jumpPlanner', 'route_planned');
+				forkUsage.track('jumpPlanner', 'shown');		// not a use: still counted
+				forkUsage.track('whatsNew', 'opened');			// another feature
+				assert.ok(!forkUsage.used('jumpPlanner'));
+				assert.deepStrictEqual(forkUsage.pending, { 'jumpPlanner.shown': 1, 'whatsNew.opened': 1 });
+				tryingId = null;								// Try it is over: the user's own use counts
+				forkUsage.track('jumpPlanner', 'command');
+				assert.ok(forkUsage.used('jumpPlanner'));
+				assert.strictEqual(forkUsage.pending['jumpPlanner.command'], 1);
+			} finally { delete global.forkFeatureActions; }
+		});
 		it('nothing is counted when the server collects none', () => {
 			forkUsage.index = index;
 			forkUsage.serverKnown = true;

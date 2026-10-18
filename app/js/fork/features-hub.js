@@ -4,9 +4,11 @@ const featuresHub = {
 	// admins): title, Settings section, the first sentence of its newest What's New entry, Used / Not tried / Turned off,
 	// and "Show me" (forkFeatureActions.tryIt) / "Settings" (its Settings row). Not tried comes first, from the sections the
 	// user already uses most ("near what you already use"), then used, then turned off. Filters: section, stage, status, text.
-	// Opened from Ctrl+K (features.open), Settings > General and a link in the What's New dialog's footer.
+	// Opened from Ctrl+K (features.open), Settings > General, a link in the What's New dialog's footer and the "See all
+	// features" link in the Getting started card (getting-started.js renders it, this file handles the click).
 	// No Settings toggle (it only opens when asked) and no tip (Getting started and What's New link to it).
-	// Statistics: featuresHub.opened (use), .tried (Show me: use), .settings (the Settings button).
+	// Statistics: featuresHub.opened (use; from Ctrl+K it is featuresHub.command instead, counted by forkUsage),
+	// .tried (Show me: use), .settings (the Settings button).
 	// Keep `const featuresHub` on the first line: the test helper strips it to define a global. Pure logic first.
 
 	DIALOG_ID: "dialog-featuresHub",
@@ -125,7 +127,7 @@ const featuresHub = {
 		return "You've used " + used + " of " + total + " feature" + (total === 1 ? "" : "s");
 	},
 
-	/** Sections that have rows, in the order they first appear in the sorted rows: [{key, title}] */
+	/** Sections that have rows, once each, sorted by title: [{key, title}] */
 	sections: function(rows) {
 		const seen = {};
 		const out = [];
@@ -253,10 +255,14 @@ const featuresHub = {
 		return $d;
 	},
 
-	/** Open the dialog (closes What's New first: both are modal) */
-	open: function() {
+	/** Open the dialog (closes What's New first: both are modal). fromCommand: Ctrl+K, which forkUsage counts as
+	 *  featuresHub.command already; What's New's Try it running that command isn't the user opening it at all */
+	open: function(fromCommand) {
 		if (typeof forkFeatureActions === "undefined" || typeof $ === "undefined") { return; }
-		if (typeof forkUsage !== "undefined") { forkUsage.track("featuresHub", "opened"); }
+		if (typeof forkUsage !== "undefined" && fromCommand !== true && !forkFeatureActions.isTrying("featuresHub")) { forkUsage.track("featuresHub", "opened"); }
+		// Each open starts from the full list (a section or stage picked last time stays)
+		featuresHub.state.status = "";
+		featuresHub.state.text = "";
 		const $wn = $("#dialog-whatsNew");
 		if ($wn.length && $wn.hasClass("ui-dialog-content") && $wn.dialog("isOpen")) { $wn.dialog("close"); }
 		const $d = featuresHub.ensureDialog();
@@ -265,6 +271,7 @@ const featuresHub = {
 		Promise.all([forkFeatureActions.load(), featuresHub.loadWhatsNew()]).then(function(res) {
 			if (!res[0]) { $d.find(".fhub-list").html("<li class='fhub-empty'>Could not load the feature list.</li>"); return; }
 			featuresHub.all = featuresHub.currentRows(res[1]);
+			featuresHub.all.forEach(featuresHub.addPageState);	// once per open, not on every keystroke
 			featuresHub.fillSections();
 			featuresHub.draw();
 			$d.find(".fhub-list").scrollTop(0);
@@ -293,25 +300,24 @@ const featuresHub = {
 		const filtered = shown.length !== featuresHub.all.length;
 		$d.find(".fhub-summary").text(featuresHub.summary(featuresHub.all) + (filtered ? " · showing " + shown.length : ""));
 		$d.find(".fhub-list").html(shown.length ? shown.map(function(r) {
-			let canTry = false, canTell = false;
-			try { canTry = forkFeatureActions.canTry(r.id); } catch (e) { canTry = false; }
-			// Nothing to show on screen: tryIt can still tell how in a toast (the newest What's New text)
-			try { canTell = !canTry && typeof forkFeatureActions.howText === "function" && !!forkFeatureActions.howText(forkFeatureActions.byId(r.id)); } catch (e) { canTell = false; }
-			return featuresHub.rowHtml(r, { canTry: canTry, canTell: canTell, hasSetting: !!featuresHub.settingRow(r.id) });
+			return featuresHub.rowHtml(r, r.page);
 		}).join("") : "<li class='fhub-empty'>No features match.</li>");
 	},
 
-	/** Close the hub (and Settings, which it may sit on), then let the feature show itself */
-	closeAll: function() {
-		["#" + featuresHub.DIALOG_ID, "#dialog-options"].forEach(function(sel) {
-			const $x = $(sel);
-			if ($x.length && $x.hasClass("ui-dialog-content") && $x.dialog("isOpen")) { $x.dialog("close"); }
-		});
+	/** What the page offers for a row now: r.page = {canTry, canTell, hasSetting} */
+	addPageState: function(r) {
+		let canTry = false, canTell = false;
+		try { canTry = forkFeatureActions.canTry(r.id); } catch (e) { canTry = false; }
+		// Nothing to show on screen: tryIt can still tell how in a toast (the newest What's New text)
+		try { canTell = !canTry && typeof forkFeatureActions.howText === "function" && !!forkFeatureActions.howText(forkFeatureActions.byId(r.id)); } catch (e) { canTell = false; }
+		r.page = { canTry: canTry, canTell: canTell, hasSetting: !!featuresHub.settingRow(r.id) };
 	},
 
+	/** Show me: close the hub, then let the feature show itself. Settings, if the hub sits on it, stays open (it may hold
+	 *  unsaved changes). */
 	showMe: function(id) {
 		if (typeof forkUsage !== "undefined") { forkUsage.track("featuresHub", "tried"); }
-		featuresHub.closeAll();
+		$("#" + featuresHub.DIALOG_ID).dialog("close");
 		setTimeout(function() {
 			const did = typeof forkFeatureActions !== "undefined" ? forkFeatureActions.tryIt(id) : null;
 			if (!did && typeof Notify !== "undefined") { Notify.trigger("Nothing to show for this right now", "yellow"); }
@@ -331,7 +337,7 @@ const featuresHub = {
 			forkCommands.register({
 				id: "features.open", title: "Features you haven't tried", group: "App", icon: "info",
 				keywords: ["features", "help", "discover", "tips", "what can", "hub"],
-				run: function() { featuresHub.open(); }
+				run: function() { featuresHub.open(true); }
 			});
 		}
 		if (typeof forkSettings !== "undefined") {
@@ -348,7 +354,7 @@ const featuresHub = {
 			if (!$pane.length || $pane.find(".fhub-wn-link").length) { return; }
 			$pane.prepend("<a href='#' class='fhub-wn-link'>Features you haven't tried</a>");
 		});
-		$(document).on("click", ".fhub-wn-link", function(e) { e.preventDefault(); featuresHub.open(); });
+		$(document).on("click", ".fhub-wn-link, #gettingStarted .gs-features", function(e) { e.preventDefault(); featuresHub.open(); });
 	}
 };
 

@@ -237,6 +237,11 @@ const forkUsage = {
 			console.warn("forkUsage.track: unknown feature or action " + feature + "." + action + " (public/fork/feature-catalog.json)");
 			return;
 		}
+		// "Try it" / "Show me" running the feature (its command, panel, own open code) is not the user using it
+		if (forkUsage.isUse(forkUsage.index, feature, action) && forkUsage.fromTry(feature)) {
+			if (forkUsage.debugOn) { console.log("[usage] " + feature + "." + action + " (not counted: Try it)"); }
+			return;
+		}
 		const now = Date.now();
 		const opts = forkUsage.opts();
 		if (opts && forkUsage.isUse(forkUsage.index, feature, action)) {
@@ -374,6 +379,11 @@ const forkUsage = {
 		return Date.now() - forkUsage.lastInput <= forkUsage.USER_ACTION_MS;
 	},
 
+	/** "Try it" / "Show me" is running the feature right now (forkFeatureActions): not the user using it */
+	fromTry: function(feature) {
+		return typeof forkFeatureActions !== "undefined" && typeof forkFeatureActions.isTrying === "function" && forkFeatureActions.isTrying(feature);
+	},
+
 	/** Wrap a method of a global object (once): after(result, args) runs after it, and never breaks it */
 	wrap: function(obj, name, after, before) {
 		if (!obj || typeof obj[name] !== "function" || obj[name].forkUsageWrapped) { return; }
@@ -420,8 +430,9 @@ const forkUsage = {
 			// setMode returns early (changes nothing) without options or an unknown panel; minimizing isn't opening it
 			forkUsage.wrap(panelModes, "setMode", function(result, args, known) {
 				if (!known) { return; }
-				forkUsage.track("panelModes", "mode");
 				const feature = idx() ? idx().panels[args[0]] : null;
+				if (feature && forkUsage.fromTry(feature)) { return; }	// "Try it" restoring the panel
+				forkUsage.track("panelModes", "mode");
 				if (feature && panelModes.modeFor(args[0]) !== "minimized") { forkUsage.track(feature, "opened"); }
 			}, function(id) {
 				return !!(panelModes.opts() && panelModes.defOf(id));

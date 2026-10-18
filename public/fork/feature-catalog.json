@@ -8,7 +8,7 @@
     { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" }
   ],
   "features": [
-    { "id": "whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,
+    { "id": "whatsNew", "try": "app.whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": ["app.whatsNew"], "panels": [], "use": ["opened"],
       "events": ["tried"] },
     { "id": "gettingStarted", "title": "Getting started", "section": "general", "prs": [123], "settingsKey": null,

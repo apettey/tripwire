@@ -36,6 +36,10 @@
 	.dialog-featuresHub .fhub-main { flex-basis: 100%; }
 }
 
+/* The link in the Getting started card (getting-started.js) */
+#gettingStarted .gs-features { color: #8fb3e0; }
+#gettingStarted .gs-features:hover, #gettingStarted .gs-features:focus { color: #fff; }
+
 /* The link in What's New's footer */
 .dialog-whatsNew .ui-dialog-buttonpane .fhub-wn-link { float: left; margin: 0.9em 0 0 0.6em; color: #8fb3e0; font-size: 12px; }
 .dialog-whatsNew .ui-dialog-buttonpane .fhub-wn-link:hover { color: #fff; }

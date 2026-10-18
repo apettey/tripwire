@@ -173,7 +173,7 @@ describe('forkFeatureActions', () => {
 			orig = { env: forkFeatureActions.env, run: forkFeatureActions.run };
 			forkFeatureActions.setCatalog(catalog);
 		});
-		afterEach(() => { forkFeatureActions.env = orig.env; forkFeatureActions.run = orig.run; });
+		afterEach(() => { forkFeatureActions.env = orig.env; forkFeatureActions.run = orig.run; forkFeatureActions.trying = null; });
 		const stub = (env, ok) => {
 			forkFeatureActions.env = () => env;
 			forkFeatureActions.run = c => { ran.push(c.kind); return ok.includes(c.kind); };
@@ -201,6 +201,30 @@ describe('forkFeatureActions', () => {
 			console.error = (...a) => errs.push(a);
 			try { assert.deepStrictEqual(forkFeatureActions.tryIt('sizeTags'), { did: 'setting', id: 'r' }); } finally { console.error = ce; }
 			assert.strictEqual(errs.length, 1);
+		});
+		it('its own run is not the user using the feature (isTrying), and later uses count again', () => {
+			let during = null;
+			forkFeatureActions.env = () => ({ settingRow: 'r' });
+			forkFeatureActions.run = () => { during = [forkFeatureActions.isTrying('sizeTags'), forkFeatureActions.isTrying('jumpPlanner')]; return true; };
+			assert.deepStrictEqual(forkFeatureActions.tryIt('sizeTags'), { did: 'setting', id: 'r' });
+			assert.deepStrictEqual(during, [true, false]);
+			assert.strictEqual(forkFeatureActions.isTrying('sizeTags'), false, 'done at once for anything but a command');
+		});
+		it('a command stays "trying" until its result is in (run ends it), at most TRY_MS', () => {
+			stub({ command: () => ({ available: true, hasArgs: false }) }, ['command']);
+			assert.deepStrictEqual(forkFeatureActions.tryIt('jumpPlanner'), { did: 'command', id: 'jumpPlanner.open' });
+			assert.strictEqual(forkFeatureActions.isTrying('jumpPlanner'), true);
+			assert.strictEqual(forkFeatureActions.isTrying('jumpPlanner', Date.now() + forkFeatureActions.TRY_MS + 1), false);
+			const mark = forkFeatureActions.trying;
+			forkFeatureActions.endTry({ id: 'other' });	// someone else's end doesn't clear it
+			assert.strictEqual(forkFeatureActions.isTrying('jumpPlanner'), true);
+			forkFeatureActions.endTry(mark);
+			assert.strictEqual(forkFeatureActions.isTrying('jumpPlanner'), false);
+		});
+		it('nothing worked: not trying any more', () => {
+			stub({ settingRow: 'r' }, []);
+			forkFeatureActions.tryIt('sizeTags');
+			assert.strictEqual(forkFeatureActions.trying, null);
 		});
 		it('null when nothing works or the feature is unknown', () => {
 			stub({ settingRow: 'r' }, []);

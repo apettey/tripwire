@@ -19,16 +19,27 @@ const forkFeatureActions = {
 	// Only `try` commands are ever run, never the feature's other `commands`: `try` is an allow-list of commands that only
 	// open or show something (TRY_SAFE; the catalog test checks every `try` against it), because the palette prefilled at
 	// e.g. Fight here or Mark rolling is two Enters away from a write for the whole mask.
-	// tryIt sends no statistics of its own: the caller tracks its click (e.g. whatsNew.tried); a tip counts as tips do, a
-	// command as a palette command.
+	// tryIt sends no statistics of its own: the caller tracks its click (e.g. whatsNew.tried); a tip counts as tips do.
+	// What tryIt itself runs is not the user using the feature: while it runs (a command until its result is in),
+	// isTrying(feature) is true and forkUsage's automatic hooks (command, panel opened, mode) skip that feature.
 	// Keep `const forkFeatureActions` on the first line: the test helper strips it to define a global. Pure logic first.
 
 	CATALOG_URL: "fork/feature-catalog.json",
 	// The only commands a catalog `try` may name: they open a panel, window or map and write nothing for the mask (a panel
 	// toggle changes the user's own options). Add one here only after checking its run() (and the catalog test passes).
-	TRY_SAFE: /^panel\.[A-Za-z]+$|^(destinations|regionmap|jumpPlanner|rollingGuide|analytics|features)\.open$|^structures\.(show|timers)$/,
+	TRY_SAFE: /^panel\.[A-Za-z]+$|^(destinations|regionmap|jumpPlanner|rollingGuide|analytics|features)\.open$|^structures\.(show|timers)$|^app\.whatsNew$/,
 	FLASH_MS: 1500,
 	TOAST_CHARS: 220,
+	TRY_MS: 3000,	// longest a Try it command may take before its own use counts again
+
+	/** The feature tryIt is running now ({id, until}: Date.now() limit), or null */
+	trying: null,
+
+	/** A use of `feature` the automatic hooks see now comes from tryIt, not from the user (now: Date.now()) */
+	isTrying: function(feature, now) {
+		const t = forkFeatureActions.trying;
+		return !!(t && t.id === feature && (now === undefined ? Date.now() : now) < t.until);
+	},
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -174,12 +185,23 @@ const forkFeatureActions = {
 	tryIt: function(id) {
 		const entry = forkFeatureActions.byId(id);
 		const list = forkFeatureActions.candidates(entry, forkFeatureActions.env(entry));
-		for (let i = 0; i < list.length; i++) {
+		const mark = entry ? { id: entry.id, until: Date.now() + forkFeatureActions.TRY_MS } : null;
+		forkFeatureActions.trying = mark;
+		let did = null;
+		for (let i = 0; i < list.length && !did; i++) {
 			let ok = false;
 			try { ok = forkFeatureActions.run(list[i]); } catch (e) { console.error("forkFeatureActions: " + list[i].kind + " " + list[i].id + " failed", e); }
-			if (ok) { return { did: list[i].kind, id: list[i].id }; }
+			if (ok) { did = { did: list[i].kind, id: list[i].id }; }
 		}
-		return null;
+		// A command clears it once its result is in (run()); anything else is done now. A palette command the user confirms
+		// later is theirs.
+		if (!did || did.did !== "command") { forkFeatureActions.endTry(mark); }
+		return did;
+	},
+
+	/** tryIt's own run is over (only the one that set `mark`) */
+	endTry: function(mark) {
+		if (forkFeatureActions.trying === mark) { forkFeatureActions.trying = null; }
 	},
 
 	// ---- Browser-only code below (not run under mocha) ----
@@ -271,7 +293,10 @@ const forkFeatureActions = {
 				return true;
 			}
 			const ctx = forkFeatureActions.commandCtx();
+			const mark = forkFeatureActions.trying;
+			// forkUsage's hook on this result runs first (it was attached inside execute), so it still sees isTrying
 			forkCommands.execute(command, {}, ctx).then(function(r) {
+				forkFeatureActions.endTry(mark);
 				if (r && !r.ok && typeof Notify !== "undefined") { Notify.trigger("Could not run \"" + forkFeatureActions.escape(command.title) + "\"", "red"); }
 			});
 			return true;
