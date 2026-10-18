@@ -60,7 +60,7 @@ describe('feature catalog', () => {
 			assert.ok(Array.isArray(f.prs) && f.prs.every(Number.isInteger), f.id + ' prs');
 			assert.ok(f.settingsKey === null || typeof f.settingsKey === 'string', f.id + ' settingsKey');
 			assert.ok(STAGES.includes(f.stage), f.id + ' stage');
-			assert.ok(['all', 'maskAdmin'].includes(f.audience), f.id + ' audience');
+			assert.ok(['all', 'maskAdmin', 'operator'].includes(f.audience), f.id + ' audience');
 			assert.ok(['active', 'passive'].includes(f.kind), f.id + ' kind');
 			['commands', 'panels', 'use'].forEach(k => assert.ok(Array.isArray(f[k]), f.id + ' ' + k));
 			f.use.forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a), f.id + ': action ' + a));

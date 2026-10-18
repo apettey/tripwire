@@ -131,6 +131,8 @@
       "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["opened"] },
 
     { "id": "usageStats", "title": "Usage statistics", "section": "general", "prs": [120], "settingsKey": "usageStats",
-      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] }
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
+    { "id": "analyticsDashboard", "title": "Usage analytics dashboard", "section": "general", "prs": [], "settingsKey": null,
+      "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] }
   ]
 }
