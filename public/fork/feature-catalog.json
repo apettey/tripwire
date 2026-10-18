@@ -22,7 +22,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["created"] },
     { "id": "panelModes", "title": "Pop out, shrink or hide any panel", "section": "general", "prs": [115, 117, 119], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["mode"] },
-    { "id": "hints", "title": "Feature tips", "section": "general", "prs": [], "settingsKey": "hints",
+    { "id": "hints", "title": "Feature tips", "section": "general", "prs": [122], "settingsKey": "hints",
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["acted", "got_it"],
       "events": ["tip_shown", "closed", "ignored", "section_off"], "success": "acted on >=15% of tips shown, tips turned off by <10% of active users" },
 
