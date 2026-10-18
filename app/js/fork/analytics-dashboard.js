@@ -418,12 +418,13 @@ const analyticsDashboard = {
 		return $d;
 	},
 
-	open: function(tab) {
+	/** fromCommand: Ctrl+K, which forkUsage counts as analyticsDashboard.command already (one open, one use) */
+	open: function(tab, fromCommand) {
 		const a = analyticsDashboard;
 		const $d = a.ensureDialog();
 		if (!$d.dialog("isOpen")) { $d.dialog("open"); }
 		$d.dialog("moveToTop");
-		if (typeof forkUsage !== "undefined") { forkUsage.track("analyticsDashboard", "opened"); }
+		if (typeof forkUsage !== "undefined" && fromCommand !== true) { forkUsage.track("analyticsDashboard", "opened"); }
 		a.show(tab || a.state.tab);
 	},
 
@@ -504,7 +505,7 @@ const analyticsDashboard = {
 			forkCommands.register({
 				id: "analytics.open", title: "Usage analytics", group: "App", icon: "info",
 				keywords: ["analytics", "statistics", "usage", "adoption", "dashboard", "metrics"],
-				run: function() { a.open(); }
+				run: function() { a.open(undefined, true); }
 			});
 		}
 	},

@@ -139,8 +139,9 @@ for ($i = 1; $i <= 6; $i++) $add(-10, 'jumpPlanner', 'hint_shown', $i);
 for ($i = 1; $i <= 5; $i++) $add(-10, 'jumpPlanner', 'hint_acted', $i);
 $add(-2, 'hints', 'setting_off', 7);
 $add(0, 'hints', 'disabled', 8);
-// What's New opened in the week after 2026-10-17 by u1-5
+// What's New opened in the week after 2026-10-17 by u1-5, and from Ctrl+K by u6 (counted as "command" only)
 for ($i = 1; $i <= 5; $i++) $add(-13, 'whatsNew', 'opened', $i);
+$add(-12, 'whatsNew', 'command', 6);
 
 $v = dash_view($db, 'features', $T);
 $jp = by_id($v['features'], 'jumpPlanner');
@@ -213,7 +214,8 @@ check('tips: per feature shown / acted / used within 7 days', $t['tips'], [['id'
 check('tips: "Show feature tips" off', $t['tipsOff'], ['turnedOff' => '<5', 'offNow' => '<5', 'pct' => null, 'active' => 12]);
 $r17 = null;
 foreach ($t['whatsNew']['releases'] as $r) if ($r['date'] === '2026-10-17') $r17 = $r;
-check('tips: What\'s New opened after the 2026-10-17 release', [$r17['active'], $r17['opened'], $r17['pct'], $r17['complete']], [10, 5, 50, true]);
+check('tips: What\'s New opened after the 2026-10-17 release (Ctrl+K included)', [$r17['active'], $r17['opened'], $r17['pct'], $r17['complete']], [10, 6, 60, true]);
+check('tips: users who opened What\'s New themselves (Ctrl+K included)', $t['whatsNew']['opened'], 6);
 
 // Salt replaced on 2026-10-25 (rows from before exist): every view says so; per-uid measures keep all data
 set_salt_date('2026-10-25');

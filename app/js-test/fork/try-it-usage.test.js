@@ -127,3 +127,93 @@ describe('featuresHub.open counts opened once', () => {
 		featuresHub.state = { section: '', stage: '', status: '', text: '' };
 	});
 });
+
+// One Ctrl+K open is one use: forkUsage's forkCommands hook counts <feature>.command, so the open code must not add
+// <feature>.opened as well (it still does from the user menu (dashboard) or Settings > General (What's New); never for the auto-open).
+describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () => {
+	before(() => {
+		loadFiles();
+		include('app/js/fork/analytics-dashboard');
+		include('app/js/fork/command-palette');
+	});
+	const catalog = { internal: ['app'], features: [
+		{ id: 'whatsNew', try: 'app.whatsNew', settingsKey: null, commands: ['app.whatsNew'], panels: [], use: ['opened'] },
+		{ id: 'analyticsDashboard', try: 'analytics.open', settingsKey: null, commands: ['analytics.open'], panels: [], use: ['opened'] }
+	] };
+	const NAMES = ['forkCommands', 'commandPalette', 'whatsNew', 'panelHost', 'panelModes', 'forkSettings', 'document', 'window', 'setInterval', 'options', '$'];
+	let saved, savedUsage, commands, handlers;
+	const flush = () => new Promise(r => setImmediate(r));
+	// The palette's run: execute calls command.run() and resolves ok, as forkCommands.execute does
+	const runCommand = async (id) => {
+		const command = commands.find(c => c.id === id);
+		assert.ok(command, id + ' registered');
+		forkUsage.lastInput = Date.now();	// Enter in the palette
+		await forkCommands.execute(command, {}, {});
+		await flush();
+	};
+
+	beforeEach(() => {
+		saved = {};
+		NAMES.forEach(n => { saved[n] = global[n]; global[n] = undefined; });
+		savedUsage = { pending: forkUsage.pending, index: forkUsage.index, serverKnown: forkUsage.serverKnown, server: forkUsage.server, queue: forkUsage.queue, listeners: forkUsage.listeners, debugOn: forkUsage.debugOn, lastInput: forkUsage.lastInput };
+		global.document = { addEventListener: () => {} };
+		global.window = { addEventListener: () => {} };
+		global.setInterval = () => 0;
+		global.options = { saveDelay: () => {} };
+		// A chainable jQuery stand-in with no elements, so setup() adds its menu button and command; it keeps the
+		// handlers bound with $(selector).on(event, fn) as handlers["<selector> <event>"]
+		handlers = {};
+		const chain = (sel) => new Proxy(function() {}, {
+			get: (t, p) => p === 'then' ? undefined : p === 'length' ? 0
+				: p === 'on' ? (ev, fn) => { handlers[sel + ' ' + ev] = fn; return chain(sel); } : chain(sel),
+			apply: (t, self, args) => chain(typeof args[0] === 'string' ? args[0] : sel)
+		});
+		global.$ = chain('');
+		commands = [];
+		global.forkCommands = {
+			register: (def) => commands.push(def),
+			execute: (command) => { command.run(); return Promise.resolve({ ok: true }); }
+		};
+		global.whatsNew = { open: () => {} };
+		forkUsage.pending = {};
+		forkUsage.queue = [];
+		forkUsage.listeners = [];
+		forkUsage.debugOn = false;
+		forkUsage.lastInput = 0;
+		forkUsage.index = forkUsage.buildIndex(catalog);
+		forkUsage.serverKnown = true;
+		forkUsage.server = { enabled: true, token: 't'.repeat(64) };
+		forkFeatureActions.trying = null;
+		saved.commandPalette.registerCommands.call(saved.commandPalette);
+		analyticsDashboard.setup();
+		forkUsage.installHooks();
+	});
+	afterEach(() => {
+		NAMES.forEach(n => { global[n] = saved[n]; });
+		Object.assign(forkUsage, savedUsage);
+		forkFeatureActions.trying = null;
+	});
+
+	it('What\'s New from Ctrl+K: whatsNew.command only', async () => {
+		await runCommand('app.whatsNew');
+		assert.deepStrictEqual(forkUsage.pending, { 'whatsNew.command': 1 });
+	});
+	it('What\'s New from Settings > General (a click): whatsNew.opened', () => {
+		forkUsage.lastInput = Date.now();
+		whatsNew.open();
+		assert.deepStrictEqual(forkUsage.pending, { 'whatsNew.opened': 1 });
+	});
+	it('What\'s New opening by itself after an update: nothing', () => {
+		whatsNew.open();
+		assert.deepStrictEqual(forkUsage.pending, {});
+	});
+	it('Usage analytics from Ctrl+K: analyticsDashboard.command only', async () => {
+		await runCommand('analytics.open');
+		assert.deepStrictEqual(forkUsage.pending, { 'analyticsDashboard.command': 1 });
+	});
+	it('Usage analytics from the user menu: analyticsDashboard.opened', () => {
+		assert.strictEqual(typeof handlers['#analytics-open click'], 'function', 'menu button bound');
+		handlers['#analytics-open click']();
+		assert.deepStrictEqual(forkUsage.pending, { 'analyticsDashboard.opened': 1 });
+	});
+});
