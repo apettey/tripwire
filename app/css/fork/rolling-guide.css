@@ -1,0 +1,68 @@
+/* Rolling guide panel (fork-owned, see app/js/fork/rolling-guide.js): size buttons, caption, the flowchart image */
+
+/* The panel (a layout panel or a window, panel-modes.js): the head stays, the image scrolls */
+#rollingGuideWidget > .content { overflow: hidden; }
+#rollingGuideWidget .rg-title { color: #ccc; }
+#rollingGuideWidget .controls .rg-close { color: #888; cursor: pointer; }
+#rollingGuideWidget .controls .rg-close:hover { color: #fff; }
+
+#rollingGuideWidget .rg-wrap {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	overflow: hidden;
+	text-align: left;
+	font-size: 11px;
+	color: #ccc;
+}
+#rollingGuideWidget .rg-tabs, #rollingGuideWidget .rg-caption, #rollingGuideWidget .rg-note, #rollingGuideWidget .rg-foot { flex: 0 0 auto; }
+
+/* Size buttons: one segmented row, like the Jump planner's */
+#rollingGuideWidget .rg-tabs {
+	display: inline-flex;
+	align-self: flex-start;
+	flex-wrap: wrap;
+	margin: 4px 4px 6px;
+	border: 1px solid #444;
+	border-radius: 3px;
+	overflow: hidden;
+}
+#rollingGuideWidget .rg-tab {
+	background: transparent;
+	color: #999;
+	border: 0;
+	border-left: 1px solid #444;
+	padding: 2px 9px;
+	font: inherit;
+	font-weight: bold;
+	cursor: pointer;
+}
+#rollingGuideWidget .rg-tab:first-child { border-left: 0; }
+#rollingGuideWidget .rg-tab:hover { color: #fff; background: #2a2e35; }
+#rollingGuideWidget .rg-tab.rg-active { color: #fff; background: #3a5068; }
+
+#rollingGuideWidget .rg-caption { padding: 0 4px 4px; color: #ddd; font-weight: bold; }
+#rollingGuideWidget .rg-note { padding: 0 4px 6px; color: #d8b878; }
+
+/* The flowchart: as wide as the panel, scrolls down */
+#rollingGuideWidget .rg-image {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	background: #0a0f1d;	/* the image's own background, so the edges don't flash while it loads */
+	border: 1px solid #333;
+}
+#rollingGuideWidget .rg-image a { display: block; cursor: zoom-in; }
+#rollingGuideWidget .rg-image img { display: block; width: 100%; height: auto; }
+#rollingGuideWidget .rg-foot { padding: 3px 4px 0; text-align: right; }
+#rollingGuideWidget .rg-foot a { color: #8ab4d8; }
+#rollingGuideWidget .rg-foot a:hover { color: #fff; }
+
+/* Mass dialog: the link next to "Rolling…" (rolling.js); under the amber line when the hole is being rolled */
+#hole-rolling-panel .rg-mass-link a { color: #d8b878; font-size: 11px; }
+#hole-rolling-panel .rg-mass-link a:hover { color: #ffd27a; }
+#hole-rolling-panel .rg-mass-link::before { content: "· "; color: #777; font-size: 11px; }
+#hole-rolling-panel.hr-flagged .rg-mass-link { display: block; margin-top: 3px; }
+#hole-rolling-panel.hr-flagged .rg-mass-link::before { content: none; }
