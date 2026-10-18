@@ -237,6 +237,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			$panel.append($label, $button, $close);
 
 			function copy() {
+				if (typeof forkUsage !== "undefined") { forkUsage.track("jumpReturn", "copied"); }
 				const copier = holeNaming.copyText;
 				const promise = copier ? copier(result.text) : Promise.resolve(false);
 				promise.then(function(ok) {

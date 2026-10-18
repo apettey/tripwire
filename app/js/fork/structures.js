@@ -946,6 +946,7 @@ const structures = {
 
 	/** Send a form; an ambiguous owner (several corporations with that ticker) is answered with a pick list */
 	submitForm: function($form, params) {
+		if (typeof forkUsage !== "undefined") { forkUsage.track("structures", "saved"); }
 		structures.post(params).done(function(response) {
 			if (response && response.ownerChoices) {
 				const html = response.ownerChoices.map(function(c) {
@@ -988,6 +989,7 @@ const structures = {
 
 	setView: function(view) {
 		structures.view = view === "timers" ? "timers" : "system";
+		if (view === "timers" && typeof forkUsage !== "undefined") { forkUsage.track("structureTimers", "opened"); }
 		structures.editing = null; structures.moreID = null;
 		if (structures.view === "timers" && typeof structureTimers !== "undefined") { structureTimers.fetchBoard(); }
 		structures.redraw();

@@ -221,6 +221,7 @@ const bookmarkTemplate = {
 	},
 
 	request: function(mode, data) {
+		if (typeof forkUsage !== "undefined") { forkUsage.track("bookmarkTemplate", "configured"); }
 		const t = bookmarkTemplate;
 		return $.ajax({
 			url: t.URL, type: "POST", contentType: "application/json", dataType: "JSON",

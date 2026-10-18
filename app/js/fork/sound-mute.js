@@ -90,6 +90,7 @@ const soundMute = {
 		if (!opts) { return; }
 		const muted = !soundMute.muted(opts);
 		soundMute.withMuted(opts, muted);
+		if (typeof forkUsage !== "undefined") { forkUsage.track("soundMute", "toggled"); }
 		if (muted) { soundMute.silence(); }
 		soundMute.render();
 		if (typeof opts.save === "function") { opts.save(); }

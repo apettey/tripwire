@@ -732,6 +732,8 @@ const chainKillFeed = {
 	init: function() {
 		if (typeof systemKillFeed === "undefined") { return; }
 		panelHost.register(chainKillFeed.panel());
+		// A kill opened from the feed (the rows are zKillboard links) is a use of it
+		$(document).on("click", "#" + chainKillFeed.WIDGET_ID + " a.skf-row", function() { if (typeof forkUsage !== "undefined") { forkUsage.track("chainKillFeed", "clicked"); } });
 		chainKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.chainKills", title: "Toggle chain kills panel", key: "chainKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });

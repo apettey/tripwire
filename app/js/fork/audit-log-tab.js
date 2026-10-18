@@ -196,6 +196,7 @@ const auditLogTab = {
 
 	open: function() {
 		const t = auditLogTab;
+		if (typeof forkUsage !== "undefined") { forkUsage.track("auditLog", "opened"); }
 		t.$window().html("<h3>Audit log</h3><p class='al-dim al-note'></p>" + t.filtersHtml(t.filters) + "<div class='al-results'></div>");
 		t.load(1);
 	},

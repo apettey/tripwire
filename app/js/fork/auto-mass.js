@@ -348,6 +348,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		// --- Reporting a jump ---
 		function post(payload) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("autoMass", "logged"); }
 			return $.ajax({ url: "jump_fit.php", type: "POST", data: payload, dataType: "JSON", headers: { "X-Requested-With": "XMLHttpRequest" } });
 		}
 

@@ -108,6 +108,40 @@ describe('feature catalog', () => {
 		}));
 	});
 
+	// Explicit emitters: forkUsage.track("id", "action") calls and data-track="id.action" attributes in the app's JS
+	const emitted = new Set();
+	sources.forEach(s => {
+		[...s.text.matchAll(/forkUsage\.track\(\s*"([A-Za-z0-9]+)"\s*,\s*"([a-z_]+)"\s*\)/g)].forEach(m => emitted.add(m[1] + '.' + m[2]));
+		[...s.text.matchAll(/data-track=\\?['"]([A-Za-z0-9]+)\.([a-z_]+)\\?['"]/g)].forEach(m => emitted.add(m[1] + '.' + m[2]));
+	});
+
+	it('every use action has something that sends it (or is counted automatically)', () => {
+		const missing = [];
+		features.forEach(f => f.use.forEach(a => {
+			if (a === 'command' && f.commands.length) { return; }			// forkCommands.execute hook
+			if (a === 'opened' && f.panels.length) { return; }			// panelHost / panelModes hooks
+			if (/^setting_/.test(a) && f.settingsKey) { return; }			// Settings Save diff
+			if (!emitted.has(f.id + '.' + a)) { missing.push(f.id + '.' + a); }
+		}));
+		assert.deepStrictEqual(missing, [], 'add forkUsage.track("<id>", "<action>") (or data-track) where the feature is used');
+	});
+
+	it('every active feature can record a use', () => {
+		features.filter(f => f.kind === 'active').forEach(f => assert.ok(f.commands.length || f.panels.length || f.use.length, f.id));
+	});
+
+	it('every explicit track call names a catalog feature and an action it accepts', () => {
+		const byId = {};
+		features.forEach(f => { byId[f.id] = f; });
+		const GENERIC = ['command', 'opened', 'shown', 'disabled', 'setting_on', 'setting_off', 'setting_changed'];
+		[...emitted].forEach(e => {
+			const [id, a] = e.split('.');
+			if (catalog.internal.includes(id)) { return; }
+			assert.ok(byId[id], e + ': unknown feature');
+			assert.ok(byId[id].use.includes(a) || GENERIC.includes(a), e + ': action not in the feature\'s use list');
+		});
+	});
+
 	it('the server whitelist reads the same file', () => {
 		const php = fs.readFileSync(path.join(root, 'analytics/analytics.inc.php'), 'utf8');
 		assert.ok(php.includes('public/fork/feature-catalog.json'));

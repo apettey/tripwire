@@ -233,6 +233,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function link(seq, from, to, hole, candidate) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("jumpSigPrompt", "linked"); }
 			const plan = jumpSigPrompt.plan(candidate, from, to, hole);
 			let classText = "";
 			try { classText = holeNaming.classText(systemAnalysis.analyse(to).systemTypeName); } catch (e) { classText = ""; }

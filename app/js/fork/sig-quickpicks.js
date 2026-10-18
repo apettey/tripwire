@@ -100,6 +100,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		// Picking a static with Leads To empty also fills Leads To with the static's destination class.
 		// Upstream's own click handler (bound directly on the span) has already set the type input.
 		$(document).on("click", dialogSel + " #wormholeTypeQuickSelectFrom button.static", function() {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("sigQuickpicks", "picked"); }
 			const leadsTo = $(dialogSel + " [name='leadsTo']");
 			if ((leadsTo.val() || '').trim()) { return; }
 			const dest = sigQuickPicks.leadsToFor(this.value);

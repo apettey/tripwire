@@ -860,6 +860,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function open(target) {
 			const where = rm.targetRegion(target, appData.systems);
 			if (!where) { notify("Region map: that is not a k-space system or region.", "yellow", 5000); return null; }
+			if (typeof forkUsage !== "undefined") { forkUsage.track("regionMap", "opened"); }
 			return show(where.regionID, where.systemID);
 		}
 
@@ -890,10 +891,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// Overlay toggles and heat: saved as the user's choice
 			$d.on("change", "input[data-ov]", function() {
 				saveSetting({ overlay: { name: $(this).attr("data-ov"), on: this.checked } });
+				if (this.checked && $(this).attr("data-ov") === "skyhooks" && typeof forkUsage !== "undefined") { forkUsage.track("skyhooks", "opened"); }
 				paint(true);
 			});
 			$d.on("change", ".rm-heat", function() { saveSetting({ heat: this.value }); paint(true); });
-			$d.on("change", "input[data-jump]", function() { state.jumpOn = this.checked; paint(true); });
+			$d.on("change", "input[data-jump]", function() {
+				state.jumpOn = this.checked;
+				if (this.checked && typeof forkUsage !== "undefined") { forkUsage.track("regionMapJumps", "shown_range"); }
+				paint(true);
+			});
 			$d.on("change", ".rm-jship", function() { saveSetting({ jump: rj.withJump(options, { ship: this.value }) }); paint(true); });
 			$d.on("change", ".rm-jdc", function() { saveSetting({ jump: rj.withJump(options, { jdc: this.value }) }); paint(true); });
 			$d.on("change", ".rm-jorigin", function() { if (this.value) { state.sessionOrigin = null; saveSetting({ jump: rj.withJump(options, { origin: this.value }) }); paint(true); } });

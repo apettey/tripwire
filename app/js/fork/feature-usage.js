@@ -13,9 +13,12 @@ const forkUsage = {
 	//       forkUsage.used(featureId) -> bool      has the user ever used it (a use action, see isUse)
 	//       forkUsage.on(fn) -> off()              fn(featureId, action) after every accepted track (e.g. tips)
 	//       forkUsage.debug(true|false)            log every event as "[usage] feature.action" and send at once (localStorage)
-	//       <button data-track="feature.action">   a click on it tracks that (explicit attributes only)
-	// Automatic (no code in the feature): palette commands (catalog `commands`) -> "command"; panels added by the user or
-	// switched to another mode (catalog `panels`) -> "opened"; Settings Save -> "setting_on" / "setting_off" /
+	//       <button data-track="<id>.<action>">  a click on it tracks that (explicit attributes only)
+	// Explicit: each feature calls forkUsage.track("<id>", "<use word>") where it is really used (a menu choice, a button,
+	// a dialog save, a paste...): menus and buttons don't go through forkCommands. app/js-test/fork/feature-catalog.test.js
+	// checks every catalog `use` word has such a call.
+	// Automatic (no code in the feature): Ctrl+K palette commands (catalog `commands`) that succeeded -> "command"; panels
+	// added by the user or switched to a shown mode (catalog `panels`) -> "opened"; Settings Save -> "setting_on" / "setting_off" /
 	// "setting_changed" for a feature's settingsKey; once a minute while the tab is visible, a catalog `exposed` selector or
 	// panel on screen -> "shown" (once a day); the first send of a UTC day -> "disabled" for each feature turned off;
 	// "app.active" at most every 5 minutes on real keyboard/mouse input while visible (polling never counts).
@@ -24,6 +27,7 @@ const forkUsage = {
 	URL: "fork_events.php",
 	CATALOG_URL: "fork/feature-catalog.json",
 	FLUSH_MS: 60000,
+	DEBUG_FLUSH_MS: 2500,
 	EXPOSURE_MS: 60000,
 	ACTIVE_MS: 5 * 60000,
 	USER_ACTION_MS: 3000,		// a panel added within this long of real input was opened by the user (not by page load)
@@ -204,8 +208,9 @@ const forkUsage = {
 	queue: [],				// [feature, action] tracked before both arrived
 	pending: {},			// counters waiting to be sent
 	listeners: [],
-	server: { enabled: false, token: "" },
-	seen: null,				// {key: day}: shown / snapshot once a day (localStorage)
+	server: { enabled: false, token: "", key: "" },
+	seen: null,				// {key: day}: shown / snapshot once a day (localStorage, per account: seenFor)
+	seenFor: "",
 	lastActive: 0,
 	lastInput: 0,
 	flushTimer: null,
@@ -273,18 +278,26 @@ const forkUsage = {
 
 	// ---- Browser-only code below (not run under mocha) ----
 
+	/** localStorage key of the once-a-day marks: per account (an opaque key from fork_events.php), so two accounts in
+	 *  one browser each get their own `shown` and snapshot */
+	seenStorageKey: function() {
+		return forkUsage.SEEN_KEY + "." + (forkUsage.server.key || "anon");
+	},
+
 	loadSeen: function() {
-		if (forkUsage.seen) { return forkUsage.seen; }
+		const storageKey = forkUsage.seenStorageKey();
+		if (forkUsage.seen && forkUsage.seenFor === storageKey) { return forkUsage.seen; }
 		let seen = {};
-		try { seen = JSON.parse(localStorage.getItem(forkUsage.SEEN_KEY) || "{}") || {}; } catch (e) { seen = {}; }
+		try { seen = JSON.parse(localStorage.getItem(storageKey) || "{}") || {}; } catch (e) { seen = {}; }
 		forkUsage.seen = seen && typeof seen === "object" ? seen : {};
+		forkUsage.seenFor = storageKey;
 		return forkUsage.seen;
 	},
 
 	firstTodayStored: function(key) {
 		const seen = forkUsage.loadSeen();
 		const first = forkUsage.firstToday(seen, key, forkUsage.day(Date.now()));
-		if (first) { try { localStorage.setItem(forkUsage.SEEN_KEY, JSON.stringify(seen)); } catch (e) { /* this page only */ } }
+		if (first) { try { localStorage.setItem(forkUsage.seenFor, JSON.stringify(seen)); } catch (e) { /* this page only */ } }
 		return first;
 	},
 
@@ -317,12 +330,13 @@ const forkUsage = {
 
 	flushSoon: function() {
 		if (forkUsage.flushTimer) { return; }
-		forkUsage.flushTimer = setTimeout(function() { forkUsage.flushTimer = null; forkUsage.flush(false); }, 250);
+		// Debug sends "at once", batched over DEBUG_FLUSH_MS: well under the server's limit of requests a minute
+		forkUsage.flushTimer = setTimeout(function() { forkUsage.flushTimer = null; forkUsage.flush(false); }, forkUsage.DEBUG_FLUSH_MS);
 	},
 
 	/** Once a minute while visible: catalog `exposed` selectors and panels on screen -> "shown" once a day */
 	checkExposure: function() {
-		if (!forkUsage.index || !forkUsage.visible()) { return; }
+		if (!forkUsage.index || !forkUsage.serverKnown || !forkUsage.visible()) { return; }
 		const onScreen = function(selector) {
 			let els;
 			try { els = document.querySelectorAll(selector); } catch (e) { return false; }
@@ -371,12 +385,15 @@ const forkUsage = {
 
 	installHooks: function() {
 		const idx = function() { return forkUsage.index; };
-		// Palette commands (palette, keys and menus all run them through forkCommands.execute)
+		// Commands run from the Ctrl+K palette (the only caller of forkCommands.execute), once they succeeded. Menus,
+		// buttons and map clicks call the feature's code directly: those features track their own use (forkUsage.track
+		// at the action, see the catalog test that every `use` action has a sender).
 		if (typeof forkCommands !== "undefined") {
 			forkUsage.wrap(forkCommands, "execute", function(result, args) {
 				const id = args[0] && args[0].id;
 				const feature = idx() ? idx().commands[id] : null;
-				if (feature) { forkUsage.track(feature, "command"); }
+				if (!feature || !result || typeof result.then !== "function") { return; }
+				result.then(function(r) { if (r && r.ok) { forkUsage.track(feature, "command"); } });
 			});
 		}
 		if (typeof commandPalette !== "undefined") {
@@ -394,10 +411,14 @@ const forkUsage = {
 			});
 		}
 		if (typeof panelModes !== "undefined") {
-			forkUsage.wrap(panelModes, "setMode", function(result, args) {
+			// setMode returns early (changes nothing) without options or an unknown panel; minimizing isn't opening it
+			forkUsage.wrap(panelModes, "setMode", function(result, args, known) {
+				if (!known) { return; }
 				forkUsage.track("panelModes", "mode");
 				const feature = idx() ? idx().panels[args[0]] : null;
-				if (feature) { forkUsage.track(feature, "opened"); }
+				if (feature && panelModes.modeFor(args[0]) !== "minimized") { forkUsage.track(feature, "opened"); }
+			}, function(id) {
+				return !!(panelModes.opts() && panelModes.defOf(id));
 			});
 		}
 		// Settings Save: what each feature's setting changed to (before/after forkSettings writes the rows into options)
@@ -453,7 +474,8 @@ const forkUsage = {
 		forkUsage.registerSetting();
 		forkUsage.installHooks();
 		$.ajax({ url: forkUsage.URL, data: { mode: "get" }, dataType: "json", cache: false }).done(function(data) {
-			forkUsage.server = { enabled: !!(data && data.enabled), token: data && typeof data.token === "string" ? data.token : "" };
+			const str = function(v) { return data && typeof data[v] === "string" ? data[v] : ""; };
+			forkUsage.server = { enabled: !!(data && data.enabled), token: str("token"), key: /^[0-9a-f]{16}$/.test(str("key")) ? str("key") : "" };
 			if (!forkUsage.server.enabled) {
 				$("#usageStats-enabled").prop("disabled", true).closest("td").find(".fs-hint").text("This server collects no usage statistics.");
 			}

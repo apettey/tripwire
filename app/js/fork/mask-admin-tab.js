@@ -164,6 +164,7 @@ const maskAdminTab = {
 
 	load: function() {
 		const t = maskAdminTab;
+		if (typeof forkUsage !== "undefined") { forkUsage.track("maskAdmins", "opened"); }
 		return $.ajax({ url: t.URL, type: "GET", data: { mode: "get", q: t.query }, dataType: "JSON", cache: false }).done(function(data) {
 			t.state = data;
 			t.csrf = data.csrf || t.csrf;

@@ -57,7 +57,7 @@
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["linked"], "exposed": "#jump-sig-panel" },
 
     { "id": "sigQuickpicks", "title": "Statics in the signature Type quick picks", "section": "signatures", "prs": [2], "settingsKey": null,
-      "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".wormholeTypeQuickSelect" },
+      "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["picked"], "exposed": ".wormholeTypeQuickSelect" },
     { "id": "holeNaming", "title": "Automatic wormhole names", "section": "signatures", "prs": [6, 74, 103], "settingsKey": "holeNaming",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "sigAge", "title": "Signature age colouring", "section": "signatures", "prs": [26], "settingsKey": "sigAge",
@@ -73,7 +73,7 @@
     { "id": "destinations", "title": "Saved destinations", "section": "routes", "prs": [7], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["destinations.open", "destinations.add"], "panels": [], "use": ["opened"] },
     { "id": "favouritesPanel", "title": "Favourites panel", "section": "routes", "prs": [17], "settingsKey": "favoritesPanel",
-      "stage": "core", "audience": "all", "kind": "active", "commands": ["favourites.add", "panel.favourites"], "panels": ["favouritesWidget"], "use": [] },
+      "stage": "core", "audience": "all", "kind": "active", "commands": ["favourites.add", "panel.favourites"], "panels": ["favouritesWidget"], "use": ["added"] },
     { "id": "favouritesRouteStrip", "title": "Favourites: route as jump markers", "section": "routes", "prs": [40], "settingsKey": "favouritesRouteStrip",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".fav-strip" },
     { "id": "setRouteInGame", "title": "Set route in game", "section": "routes", "prs": [25, 101], "settingsKey": null,
@@ -96,9 +96,9 @@
       "use": ["opened", "route_planned"], "exposed": ".jp-ring" },
 
     { "id": "systemKillFeed", "title": "System kill feed", "section": "intel", "prs": [18], "settingsKey": "systemKillFeed",
-      "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.systemKills"], "panels": ["systemKillFeedWidget"], "use": [] },
+      "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.systemKills"], "panels": ["systemKillFeedWidget"], "use": ["clicked"] },
     { "id": "chainKillFeed", "title": "Chain kill feed", "section": "intel", "prs": [21], "settingsKey": "chainKillFeed",
-      "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.chainKills"], "panels": ["chainKillFeedWidget"], "use": [] },
+      "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.chainKills"], "panels": ["chainKillFeedWidget"], "use": ["clicked"] },
     { "id": "systemResidents", "title": "Threat & residents", "section": "intel", "prs": [69, 76], "settingsKey": "systemResidents",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "intelScans", "title": "D-scan and local scans", "section": "intel", "prs": [43, 61, 113], "settingsKey": "intelScans",
@@ -107,15 +107,15 @@
     { "id": "dscanPaste", "title": "Paste a d-scan anywhere", "section": "intel", "prs": [48], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["pasted"] },
     { "id": "smartNotes", "title": "Smart notes: kill cards and link chips", "section": "intel", "prs": [53], "settingsKey": "smartNotes",
-      "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".commentBody a.sn, .commentBody a.sn-chip" },
+      "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["clicked"], "exposed": ".commentBody a.sn, .commentBody a.sn-chip" },
     { "id": "watchlist", "title": "Watchlist", "section": "intel", "prs": [41, 58], "settingsKey": "watchlist",
-      "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["panel.watchlist"], "panels": ["watchlistWidget"], "use": [] },
+      "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["panel.watchlist"], "panels": ["watchlistWidget"], "use": ["configured"] },
     { "id": "structures", "title": "Structures panel", "section": "intel", "prs": [70, 82], "settingsKey": "structures",
-      "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.show", "panel.structures"], "panels": ["structuresWidget"], "use": [] },
+      "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.show", "panel.structures"], "panels": ["structuresWidget"], "use": ["saved"] },
     { "id": "structureTimers", "title": "Structure timers", "section": "intel", "prs": [81, 83], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.timers"], "panels": [], "use": ["opened"], "exposed": ".str-marker" },
     { "id": "killReporting", "title": "Kill Reporting", "section": "killReporting", "prs": [16, 112], "settingsKey": "killReporting",
-      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".kill-toast-text" },
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["clicked"], "exposed": ".kill-toast-text" },
 
     { "id": "discordNotifications", "title": "Discord notifications", "section": "maskAdmin", "prs": [27, 45, 46, 56, 60], "settingsKey": null,
       "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["configured"] },
@@ -126,6 +126,9 @@
     { "id": "bookmarkTemplate", "title": "Bookmark names set by your mask", "section": "maskAdmin", "prs": [97], "settingsKey": null,
       "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["configured"] },
     { "id": "maskAdmins", "title": "Mask admins, blocking and mask defaults", "section": "maskAdmin", "prs": [], "settingsKey": null,
-      "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["opened"] }
+      "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["opened"] },
+
+    { "id": "usageStats", "title": "Usage statistics", "section": "general", "prs": [], "settingsKey": "usageStats",
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] }
   ]
 }

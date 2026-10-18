@@ -361,7 +361,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				$t = $("<span id='staging-scan-toggle' class='staging-toggle' role='button' tabindex='0' data-tooltip='Staging scan'>Staging</span>");
 				const anchor = $("#chainWidget .controls #higgs-jump");
 				if (anchor.length) { anchor.after($t).after(" "); } else { $("#chainWidget .controls").append($t); }
-				$t.on("click", function(e) { e.preventDefault(); setEnabled(!ss.enabled(opts())); });
+				$t.on("click", function(e) {
+					e.preventDefault();
+					const on = !ss.enabled(opts());
+					if (on && typeof forkUsage !== "undefined") { forkUsage.track("stagingScan", "opened"); }
+					setEnabled(on);
+				});
 				$t.on("keydown", function(e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEnabled(!ss.enabled(opts())); } });
 				if (typeof Tooltips !== "undefined" && Tooltips.attach) { Tooltips.attach($t); }
 			}

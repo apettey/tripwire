@@ -298,6 +298,7 @@ const discordNotifications = {
 	},
 
 	request: function(mode, data) {
+		if (typeof forkUsage !== "undefined") { forkUsage.track("discordNotifications", "configured"); }
 		return $.ajax({
 			url: discordNotifications.URL,
 			type: "POST",

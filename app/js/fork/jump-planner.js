@@ -1998,6 +1998,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function pickStart(id) {
 			if (!id) { return; }
 			state.start = id;
+			if (typeof forkUsage !== "undefined") { forkUsage.track("jumpPlanner", "route_planned"); }
 			state.pinnedID = null;
 			state.hoverID = null;
 			closeFromMenu();

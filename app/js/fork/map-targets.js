@@ -273,6 +273,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function add(id, note, choice) {
 			id = Number(id);
 			if (!mt.canTarget(appData.systems[id])) { notify("Targets: only k-space systems can be targets.", "yellow", 5000); return null; }
+			if (typeof forkUsage !== "undefined") { forkUsage.track("mapTargets", "marked"); }
 			const existing = find(id);
 			if (!existing && mt.live(state.list, now()).length >= mt.MAX) { notify("Targets: at most " + mt.MAX + " targets per mask. Remove one first.", "yellow", 6000); return null; }
 			const def = mt.defaultExpiry(skyhookEnd(id), now());

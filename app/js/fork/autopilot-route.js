@@ -348,6 +348,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function send(targets, target) {
+			if (typeof forkUsage !== "undefined") { forkUsage.track("setRouteInGame", "sent"); }
 			const dest = systemName(target.destID);
 			busy = true;		// covers the whole run, every character
 			ap.sendToCharacters(targets, target.destID, function(characterID, systemID, clear) {

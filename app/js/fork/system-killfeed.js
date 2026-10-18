@@ -467,6 +467,8 @@ const systemKillFeed = {
 
 	init: function() {
 		panelHost.register(systemKillFeed.panel());
+		// A kill opened from the feed (the rows are zKillboard links) is a use of it
+		$(document).on("click", "#" + systemKillFeed.WIDGET_ID + " a.skf-row", function() { if (typeof forkUsage !== "undefined") { forkUsage.track("systemKillFeed", "clicked"); } });
 		systemKillFeed.setupSettings();
 		if (typeof forkCommands !== "undefined") {	// command palette (Ctrl+K)
 			forkCommands.panelToggle({ id: "panel.systemKills", title: "Toggle system kills panel", key: "systemKillFeed", icon: "alert", keywords: ["kills", "killboard", "feed"] });

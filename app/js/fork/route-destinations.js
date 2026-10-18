@@ -423,6 +423,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function open() {
 			const $dialog = $("#dialog-routeDestinations");
+			if (typeof forkUsage !== "undefined") { forkUsage.track("destinations", "opened"); }
 			if (!$dialog.hasClass("ui-dialog-content")) {
 				$dialog.dialog({
 					autoOpen: false,

@@ -697,6 +697,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const value = $.trim($input.val());
 			if (!value) { return; }
 			const result = fp.add(options.favorites, value, appData.systems, routeDestinations.findByName);
+			if (!result.error && typeof forkUsage !== "undefined") { forkUsage.track("favouritesPanel", "added"); }
 			if (result.error) {
 				if (typeof ValidationTooltips !== "undefined") {
 					ValidationTooltips.open({ target: $input }).setContent(fp.escape(result.error));

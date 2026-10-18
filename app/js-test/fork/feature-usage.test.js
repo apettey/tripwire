@@ -213,6 +213,15 @@ describe('forkUsage', () => {
 		});
 	});
 
+	describe('per-account daily marks', () => {
+		it('the localStorage key carries the account key from the server', () => {
+			forkUsage.server = { enabled: true, token: 't', key: '0123456789abcdef' };
+			assert.strictEqual(forkUsage.seenStorageKey(), 'forkUsage.seen.0123456789abcdef');
+			forkUsage.server = { enabled: false, token: '', key: '' };
+			assert.strictEqual(forkUsage.seenStorageKey(), 'forkUsage.seen.anon');
+		});
+	});
+
 	describe('data-track', () => {
 		it('takes feature.action only', () => {
 			assert.deepStrictEqual(forkUsage.parseTrack('jumpPlanner.route_planned'), { feature: 'jumpPlanner', action: 'route_planned' });

@@ -337,6 +337,7 @@ const holeRolling = {
 	set: function(wormholeID, note) {
 		if (!preserveMass.isWormholeID(wormholeID)) { return; }
 		const body = holeRolling.payload("set", wormholeID, note);
+		if (typeof forkUsage !== "undefined") { forkUsage.track("rolling", "marked"); }
 		const eve = tripwire.client && tripwire.client.EVE ? tripwire.client.EVE : null;
 		holeRolling.optimistic(wormholeID, { wormholeID: Number(wormholeID), setByID: eve ? Number(eve.characterID) || null : null,
 			setBy: eve ? eve.characterName : null, setAt: Math.floor(Date.now() / 1000), note: body.note });
