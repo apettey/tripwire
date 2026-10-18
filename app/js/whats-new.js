@@ -55,8 +55,40 @@ const whatsNew = {
 		return (features || []).filter(function(f) { return f && f.pr; }).slice().sort(function(a, b) { return b.pr - a.pr; });
 	},
 
-	// HTML for the given features (all of them, newest first); unseen ones get a NEW badge
-	render: function(features, lastSeenPR) {
+	// A new account (created less than NEW_DAYS ago) that has never seen What's New: "new" (mark everything seen silently and
+	// let Getting started introduce the app, instead of ~90 NEW entries). "seen": it has What's New state (today's behaviour).
+	// "unknown": no What's New state but not known to be new (old account, or the server's answer failed): today's behaviour.
+	// serverHadOptions false: the server had no options for this account (init.options empty), so any What's New state in the
+	// options came from this browser's copy of another account's (upstream's localStorage fallback): a new account ignores it.
+	NEW_DAYS: 14,
+	firstRun: function(opts, accountAgeDays, serverHadOptions) {
+		const age = typeof accountAgeDays === "number" && isFinite(accountAgeDays) ? accountAgeDays : null;
+		const isNew = age !== null && age >= 0 && age < whatsNew.NEW_DAYS;
+		if (isNew && serverHadOptions === false) { return "new"; }
+		if (opts && opts.whatsNew) { return "seen"; }
+		return isNew ? "new" : "unknown";
+	},
+
+	// Whether the server sent stored options for this account (the page's init.options); false for an account that never saved any
+	serverHadOptions: function(initData) {
+		const o = initData && initData.options;
+		return !!(o && typeof o === "object" && Object.keys(o).length > 0);
+	},
+
+	// The line under an entry's date: a tick when used, "Turned off", and a Try it button. info: {feature, status, canTry}
+	actionsHtml: function(info) {
+		if (!info || !info.feature) { return ""; }
+		const esc = whatsNew.escape;
+		const status = info.status === "used" ? "<span class='whats-new-used' title='You have used this'>&#10003; You've used this</span>"
+			: info.status === "off" ? "<span class='whats-new-off' title='Turned off in Settings'>Turned off</span>" : "";
+		const tryIt = info.canTry && info.feature !== "whatsNew" ? "<button type='button' class='whats-new-try' data-feature='" + esc(info.feature) + "'>"
+			+ (info.status === "off" ? "Turn it on" : "Try it") + "</button>" : "";
+		return status || tryIt ? "<div class='whats-new-actions'>" + tryIt + status + "</div>" : "";
+	},
+
+	// HTML for the given features (all of them, newest first); unseen ones get a NEW badge. infoFor(pr) (optional): the
+	// entry's feature, status and whether it can be tried (actionsHtml)
+	render: function(features, lastSeenPR, infoFor) {
 		const esc = whatsNew.escape;
 		const seen = parseInt(lastSeenPR, 10) || 0;
 		const list = whatsNew.sorted(features);
@@ -77,6 +109,7 @@ const whatsNew = {
 				+ "<a href='" + esc(whatsNew.repoURL + pr) + "' target='_blank' rel='noopener'>#" + pr + "</a> — " + esc(f.title)
 				+ "</h4>"
 				+ (f.date ? "<div class='whats-new-date'>" + esc(f.date) + "</div>" : "")
+				+ (infoFor ? whatsNew.actionsHtml(infoFor(pr)) : "")
 				+ paragraphs.map(function(p) { return "<p class='whats-new-description'>" + esc(p.trim()) + "</p>"; }).join("")
 				+ images.filter(function(img) { return img && img.src; }).map(function(img) {
 					return "<figure class='whats-new-image'>"
@@ -97,13 +130,70 @@ const whatsNew = {
 	// Open the dialog showing all features; unseen ones (relative to the stored state) are badged NEW
 	open: function() {
 		const $dialog = $("#dialog-whatsNew");
-		$dialog.html(whatsNew.render(whatsNew.features, whatsNew.lastSeenPR())
+		whatsNew.fill();
+		$dialog.dialog("open");
+		$dialog.scrollTop(0);
+	},
+
+	// (Re)write the dialog's content; counts the NEW entries' exposure once the catalog is in
+	fill: function() {
+		const $dialog = $("#dialog-whatsNew");
+		const scroll = $dialog.scrollTop();
+		whatsNew.trackExposure();
+		$dialog.html(whatsNew.render(whatsNew.features, whatsNew.lastSeenPR(), whatsNew.infoFor())
 			+ "<div class='whats-new-version'>" + whatsNew.escape(whatsNew.formatVersion(whatsNew.version)) + "</div>");
 		$dialog.find(".whats-new-image img").on("error", function() {
 			$(this).closest(".whats-new-image").hide();
 		});
-		$dialog.dialog("open");
-		$dialog.scrollTop(0);
+		$dialog.scrollTop(scroll);
+	},
+
+	// Promise of firstRun(): no waiting when the server's options say What's New was seen before; otherwise the server's
+	// account age (feature-usage.js asks fork_events.php once), "unknown" when it fails or takes longer than 5 s
+	firstRunKind: function() {
+		const opts = typeof options !== "undefined" ? options : null;
+		const serverHad = whatsNew.serverHadOptions(typeof init !== "undefined" ? init : null);
+		if (serverHad && whatsNew.firstRun(opts, null) === "seen") { return Promise.resolve("seen"); }
+		const info = typeof forkUsage !== "undefined" && forkUsage.serverInfo ? forkUsage.serverInfo : Promise.resolve(null);
+		let timer = null;
+		const timeout = new Promise(function(resolve) { timer = setTimeout(function() { resolve(null); }, 5000); });
+		return Promise.race([info, timeout]).then(function(data) {
+			clearTimeout(timer);
+			return whatsNew.firstRun(opts, data ? data.accountAgeDays : null, serverHad);
+		}, function() { clearTimeout(timer); return "unknown"; });
+	},
+
+	// Feature, status and Try it of an entry (forkFeatureActions, app/js/fork/feature-actions.js), once its catalog is in
+	infoFor: function() {
+		if (typeof forkFeatureActions === "undefined" || !forkFeatureActions.catalog()) { return null; }
+		return function(pr) {
+			const entry = forkFeatureActions.byPR(pr);
+			if (!entry) { return null; }
+			return { feature: entry.id, status: forkFeatureActions.status(entry.id), canTry: forkFeatureActions.canTry(entry.id) };
+		};
+	},
+
+	// Opening What's New lists the features of its NEW entries: "wn_listed" for each (a catalog `generic` action: not use, and
+	// not "shown", which stays the on-screen exposure of feature-usage.js), once a day
+	trackExposure: function() {
+		if (typeof forkFeatureActions === "undefined" || typeof forkUsage === "undefined" || !forkFeatureActions.catalog()) { return; }
+		const done = {};
+		whatsNew.unseen(whatsNew.features, whatsNew.lastSeenPR()).forEach(function(f) {
+			const entry = forkFeatureActions.byPR(f.pr);
+			if (!entry || done[entry.id]) { return; }
+			done[entry.id] = true;
+			if (forkUsage.firstTodayStored(entry.id + ".wn_listed")) { forkUsage.track(entry.id, "wn_listed"); }
+		});
+	},
+
+	// "Try it": close What's New (it is modal), then show the feature
+	tryIt: function(feature) {
+		if (typeof forkUsage !== "undefined") { forkUsage.track("whatsNew", "tried"); }
+		$("#dialog-whatsNew").dialog("close");
+		setTimeout(function() {
+			const did = typeof forkFeatureActions !== "undefined" ? forkFeatureActions.tryIt(feature) : null;
+			if (!did && typeof Notify !== "undefined") { Notify.trigger("Nothing to show for this right now", "yellow"); }
+		}, 0);
 	},
 
 	// Remember that everything currently listed has been seen
@@ -161,6 +251,11 @@ const whatsNew = {
 			e.preventDefault();
 			whatsNew.open();
 		});
+		$(document).on("click", "#dialog-whatsNew .whats-new-try", function(e) {
+			e.preventDefault();
+			whatsNew.tryIt($(this).attr("data-feature"));
+		});
+		const catalog = typeof forkFeatureActions !== "undefined" ? forkFeatureActions.load() : Promise.resolve(null);
 
 		// Not cached: the file changes with every announced feature, independently of the app version
 		$.ajax({
@@ -169,9 +264,17 @@ const whatsNew = {
 			cache: false
 		}).done(function(data) {
 			whatsNew.features = (data && Array.isArray(data.features)) ? data.features : [];
-			if (whatsNew.latestPR(whatsNew.features) > whatsNew.lastSeenPR()) {
+			if (whatsNew.latestPR(whatsNew.features) <= whatsNew.lastSeenPR()) { return; }
+			whatsNew.firstRunKind().then(function(kind) {
+				if (kind === "new") {
+					// A new account: no list of every feature so far (Getting started introduces the app instead)
+					whatsNew.markSeen();
+					return;
+				}
 				setTimeout(whatsNew.open, 2000);
-			}
+			});
+			// Try it buttons and ticks once the catalog is in (if it came after the dialog opened)
+			catalog.then(function(c) { if (c && $("#dialog-whatsNew").dialog("isOpen")) { whatsNew.fill(); } });
 		}).fail(function(xhr, status, error) {
 			console.warn("What's New: could not load " + whatsNew.dataURL, status, error);
 		});

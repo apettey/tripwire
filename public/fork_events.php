@@ -4,9 +4,11 @@
 //	Author: 	Tripwire fork
 //
 //	Purpose:	First-party usage statistics (docker/README.md#product-analytics, analytics/analytics.inc.php).
-//				GET  ?mode=get -> {enabled, token, key}: whether statistics are collected on this server and, for a
-//				                  logged-in user, the per-session token the POSTs carry and an opaque per-account key
-//				                  for the browser's once-a-day marks. 403 without a session cookie (no session is made).
+//				GET  ?mode=get -> {enabled, token, key, accountAgeDays}: whether statistics are collected on this server
+//				                  and, for a logged-in user, the per-session token the POSTs carry, an opaque per-account
+//				                  key for the browser's once-a-day marks, and the account's age in whole days capped at
+//				                  14 (null when unknown; What's New first run, Getting started). 403 without a session
+//				                  cookie (no session is made).
 //				POST {"t": token, "e": [{"f": feature, "a": action, "n": count}, ...]} (text/plain or application/json,
 //				     at most 8 KB / 50 counters) -> always 204, whatever happened. Sent by app/js/fork/feature-usage.js
 //				     with fetch(keepalive) or navigator.sendBeacon (which can't set headers: the token is in the body).
@@ -43,15 +45,18 @@ if ($method === 'GET') {
 	}
 	session_write_close();
 	$key = '';
-	if ($enabled) {
-		try {
-			require_once('../db.inc.php');
-			if (isset($mysql) && $mysql instanceof PDO) $key = analytics_client_key($mysql, $userID);
-		} catch (Throwable $e) {
-			error_log('fork_events: ' . $e->getMessage());
+	$age = null;
+	try {
+		require_once('../db.inc.php');
+		if (isset($mysql) && $mysql instanceof PDO) {
+			// Whether statistics are on or not: What's New and Getting started tell a new account by it
+			$age = analytics_account_age_days($mysql, $userID);
+			if ($enabled) $key = analytics_client_key($mysql, $userID);
 		}
+	} catch (Throwable $e) {
+		error_log('fork_events: ' . $e->getMessage());
 	}
-	echo json_encode(['enabled' => $enabled, 'token' => $token, 'key' => $key]);
+	echo json_encode(['enabled' => $enabled, 'token' => $token, 'key' => $key, 'accountAgeDays' => $age]);
 	exit();
 }
 

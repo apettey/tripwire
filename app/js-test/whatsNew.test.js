@@ -75,5 +75,92 @@ describe('What\'s New', () => {
 			const html = whatsNew.render([{ pr: 1, title: 't', description: 'one\n\ntwo' }], 0);
 			assert.equal((html.match(/<p class='whats-new-description'>/g) || []).length, 2);
 		});
+
+		it('Try it, used tick and Turned off from infoFor(pr)', () => {
+			const info = { 7: { feature: 'jumpPlanner', status: 'used', canTry: true }, 5: { feature: 'sizeTags', status: 'off', canTry: true },
+				3: { feature: 'apiTokens', status: 'new', canTry: false } };
+			const html = whatsNew.render(features, 0, pr => info[pr] || null);
+			const item = pr => html.split("data-pr='" + pr + "'")[1].split('whats-new-item')[0];
+			assert.ok(item(7).includes("class='whats-new-try' data-feature='jumpPlanner'>Try it</button>"));
+			assert.ok(item(7).includes("You've used this"));
+			assert.ok(item(5).includes('Turned off') && item(5).includes('>Turn it on</button>'));
+			assert.ok(!item(3).includes('whats-new-actions'), 'nothing to try, not used: no line');
+			assert.ok(!item(1).includes('whats-new-actions'), 'no feature (skipped PR): no line');
+		});
+
+		it('No actions without infoFor (catalog not loaded): as before', () => assert.ok(!whatsNew.render(features, 0).includes('whats-new-actions')));
+
+		it('No Try it on What\'s New\'s own entry (it would only reopen this dialog)', () => {
+			assert.ok(!whatsNew.actionsHtml({ feature: 'whatsNew', status: 'new', canTry: true }).includes('whats-new-try'));
+		});
+
+		it('Escapes the feature id', () => assert.ok(!whatsNew.actionsHtml({ feature: "x' onclick='y", canTry: true }).includes("' onclick")));
+	});
+
+	describe('firstRun (new account vs veteran)', () => {
+		it('What\'s New seen before: today\'s behaviour, whatever the age', () => {
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 0), 'seen');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, null), 'seen');
+		});
+		it('Never seen, account under 14 days: new', () => {
+			assert.equal(whatsNew.firstRun({}, 0), 'new');
+			assert.equal(whatsNew.firstRun({}, 13), 'new');
+		});
+		it('Never seen, older account (a veteran who never opened it): unknown, today\'s behaviour', () => assert.equal(whatsNew.firstRun({}, 14), 'unknown'));
+		it('Server answer failed or odd: unknown, today\'s behaviour', () => {
+			[null, undefined, 'x', NaN, -1].forEach(a => assert.equal(whatsNew.firstRun({}, a), 'unknown', String(a)));
+			assert.equal(whatsNew.firstRun(null, 3), 'new');
+		});
+
+		it('A new account ignores What\'s New state the server didn\'t send (another account\'s, from this browser)', () => {
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 2, false), 'new');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 2, true), 'seen');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 20, false), 'seen', 'an old account keeps today\'s behaviour');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, null, false), 'seen', 'age unknown: today\'s behaviour');
+		});
+		it('serverHadOptions', () => {
+			assert.equal(whatsNew.serverHadOptions({ options: null }), false);
+			assert.equal(whatsNew.serverHadOptions({ options: {} }), false);
+			assert.equal(whatsNew.serverHadOptions(null), false);
+			assert.equal(whatsNew.serverHadOptions({ options: { whatsNew: { lastSeenPR: 1 } } }), true);
+		});
+
+		describe('firstRunKind', () => {
+			const saved = {};
+			before(() => { saved.options = global.options; saved.forkUsage = global.forkUsage; saved.init = global.init; });
+			afterEach(() => { global.options = saved.options; global.forkUsage = saved.forkUsage; global.init = saved.init; });
+
+			it('local state from another account (server had none) waits for the account age', async () => {
+				global.options = { whatsNew: { lastSeenPR: 1 } };
+				global.init = { options: null };
+				global.forkUsage = { serverInfo: Promise.resolve({ accountAgeDays: 0 }) };
+				assert.equal(await whatsNew.firstRunKind(), 'new');
+			});
+			it('seen: no wait for the server', async () => {
+				global.init = { options: { whatsNew: { lastSeenPR: 1 } } };
+				global.options = { whatsNew: { lastSeenPR: 1 } };
+				global.forkUsage = { serverInfo: new Promise(() => {}) };
+				assert.equal(await whatsNew.firstRunKind(), 'seen');
+			});
+			it('new from the server\'s account age', async () => {
+				global.options = {};
+				global.forkUsage = { serverInfo: Promise.resolve({ accountAgeDays: 2 }) };
+				assert.equal(await whatsNew.firstRunKind(), 'new');
+			});
+			it('veteran account', async () => {
+				global.options = {};
+				global.forkUsage = { serverInfo: Promise.resolve({ accountAgeDays: 14 }) };
+				assert.equal(await whatsNew.firstRunKind(), 'unknown');
+			});
+			it('server failure (null answer, rejected, no forkUsage): unknown', async () => {
+				global.options = {};
+				global.forkUsage = { serverInfo: Promise.resolve(null) };
+				assert.equal(await whatsNew.firstRunKind(), 'unknown');
+				global.forkUsage = { serverInfo: Promise.reject(new Error('x')) };
+				assert.equal(await whatsNew.firstRunKind(), 'unknown');
+				global.forkUsage = undefined;
+				assert.equal(await whatsNew.firstRunKind(), 'unknown');
+			});
+		});
 	});
 });

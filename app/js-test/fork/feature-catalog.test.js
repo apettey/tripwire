@@ -78,6 +78,32 @@ describe('feature catalog', () => {
 		(catalog.generic || []).forEach(a => assert.ok(/^[a-z_]{1,24}$/.test(a), 'generic action ' + a));
 	});
 
+	// Settings rows: their ids and the `key` they declare (forkFeatureActions finds a feature's row by its catalog
+	// `settingsRow`, else by a row whose `key` is the settingsKey: What's New "Turn it on", the features hub)
+	const rowIds = new Set();
+	const rowKeys = new Set();
+	sources.forEach(s => s.text.split('forkSettings.register(').slice(1).forEach(chunk => {
+		const head = chunk.slice(0, 1500);
+		const id = head.match(/\bid:\s*"([A-Za-z0-9_-]+)"/);
+		if (id) { rowIds.add(id[1]); }
+		const key = head.match(/\bkey:\s*"([A-Za-z0-9_]+)"/);
+		if (key) { rowKeys.add(key[1]); }
+	}));
+
+	it('every settingsRow is a registered Settings row id', () => {
+		assert.ok(rowIds.has('jumpPlanner-enabled-general') && rowIds.has('hints-enabled'), 'scan found the rows');
+		features.filter(f => f.settingsRow !== undefined).forEach(f =>
+			assert.ok(typeof f.settingsRow === 'string' && rowIds.has(f.settingsRow), f.id + ': settingsRow ' + f.settingsRow + ' is not a forkSettings.register id'));
+	});
+
+	it('every feature with a toggle has a findable Settings row (a row with its key, or settingsRow)', () => {
+		// Toggles with no Settings row of their own on purpose: Mask Admin settings (fightHereDiscord: rallyDiscord)
+		const NO_ROW = ['fightHereDiscord'];
+		const missing = features.filter(f => f.settingsKey && !rowKeys.has(f.settingsKey) && !f.settingsRow && !NO_ROW.includes(f.id))
+			.map(f => f.id + ' (' + f.settingsKey + ')');
+		assert.deepStrictEqual(missing, [], 'add "settingsRow": "<forkSettings.register id>" to these catalog entries');
+	});
+
 	it('every settingsKey is a key a Settings row stores', () => {
 		features.filter(f => f.settingsKey).forEach(f => assert.ok(settingsKeys.has(f.settingsKey), f.id + ': no Settings row stores ' + f.settingsKey));
 	});
@@ -106,6 +132,23 @@ describe('feature catalog', () => {
 			assert.ok(!seen[c], c + ' in both ' + seen[c] + ' and ' + f.id);
 			seen[c] = f.id;
 		}));
+	});
+
+	// "Try it" (What's New, features hub) runs only a feature's `try` command: it must be one of the feature's own registered
+	// commands and match forkFeatureActions.TRY_SAFE, the allow-list of commands that only open or show something (a panel,
+	// a window, a map) and never write for the mask. Fight here, Mark rolling, Preserve mass, targets, flares... never qualify.
+	it('every `try` command is the feature\'s own, registered and on the Try it allow-list', () => {
+		const { include } = require('../helpers/helpers');
+		include('app/js/fork/feature-actions');
+		const tried = features.filter(f => f.try !== undefined);
+		assert.ok(tried.length > 0);
+		tried.forEach(f => {
+			assert.ok(typeof f.try === 'string' && f.commands.includes(f.try), f.id + ': try ' + f.try + ' is not one of its commands');
+			assert.ok(commandIds.has(f.try), f.id + ': try ' + f.try + ' is not registered');
+			assert.ok(forkFeatureActions.TRY_SAFE.test(f.try), f.id + ': try ' + f.try + ' is not on the allow-list (feature-actions.js TRY_SAFE)');
+		});
+		['rally.fightHere', 'rolling.mark', 'preserveMass.set', 'targets.add', 'hole.set', 'chain.flareRed', 'sig.undo', 'sound.toggle', 'favourites.add', 'destinations.add']
+			.forEach(id => assert.ok(!forkFeatureActions.TRY_SAFE.test(id), id + ' must never be allowed'));
 	});
 
 	it('every panel is a panel id and belongs to one feature', () => {

@@ -27,7 +27,8 @@ const forkHints = {
 	//     priority: 50, maxShows: 2, cooldownHours: 72, ttlSeconds: 600
 	//   });
 	//
-	// API: emit(event, data) | show(id, {force, data}) -> bool | list() | reset() | debug(true|false)
+	// API: emit(event, data) | show(id, {force, data}) -> bool | list() | reset() | debug(true|false) |
+	//      hold(feature, by) (hold its tips back while something else teaches it) | listen(fn(event, data)) -> stop()
 	// show(id, {force: true}) (What's New / features hub, later) skips the caps, the quiet check and the retire rules; it
 	// still needs the anchor. Keep `const forkHints` on the first line: the test helper strips it to define a global.
 
@@ -164,6 +165,7 @@ const forkHints = {
 		if (hint.audience === "new" && !ctx.isNew) { return "not a new account"; }
 		const retired = forkHints.retiredReason(hint, ctx);
 		if (retired) { return retired; }
+		if (ctx.held && ctx.held(hint.feature)) { return "held: " + ctx.held(hint.feature) + " teaches it now"; }
 		const e = st.state[hint.id] || { shows: 0, last: 0 };
 		if (forkHints.DONE.indexOf(e.outcome) >= 0) { return "done (" + e.outcome + ")"; }
 		if ((e.shows || 0) >= hint.maxShows) { return "shown " + e.shows + " times"; }
@@ -330,6 +332,8 @@ const forkHints = {
 	lastLog: "",
 	pumpTimer: null,
 	current: null,			// {hint, data, section} of the pop-up tip on screen
+	holds: {},				// feature -> who holds its tips back for now (hold())
+	listeners: [],			// fn(event, data) after every emit (listen())
 
 	opts: function() {
 		return typeof options !== "undefined" && options ? options : null;
@@ -354,6 +358,7 @@ const forkHints = {
 				return !!(key && opts && opts[key] && typeof opts[key] === "object" && opts[key].enabled === false);
 			},
 			sectionOf: function(hint) { return forkHints.sectionOf(hint, index); },
+			held: function(feature) { return forkHints.holds[feature] || ""; },
 			isMaskAdmin: forkHints.isMaskAdmin(),
 			isNew: !!(st && st.newUntil && Date.now() < st.newUntil)
 		};
@@ -417,7 +422,23 @@ const forkHints = {
 			forkHints.log(id + " on " + event + ": queued for " + hint.ttlSeconds + " s");
 		});
 		if (changed) { forkHints.save(); }
+		forkHints.listeners.slice().forEach(function(fn) {
+			try { fn(event, data); } catch (e) { console.error("forkHints listener failed", e); }
+		});
 		if (event !== "idle") { forkHints.pump(); }
+	},
+
+	/** Hold a feature's tips back while something else teaches it (e.g. the Getting started card): by = a name for the debug
+	 *  log, or "" to let them go again. A forced show (What's New "Try it") still shows them. */
+	hold: function(feature, by) {
+		if (by) { forkHints.holds[feature] = String(by); } else { delete forkHints.holds[feature]; }
+	},
+
+	/** fn(event, data) after every emitted event (paste.sigs, system.viewed, ...); returns a function that stops it */
+	listen: function(fn) {
+		if (typeof fn !== "function") { throw new Error("forkHints.listen: function required"); }
+		forkHints.listeners.push(fn);
+		return function() { forkHints.listeners = forkHints.listeners.filter(function(f) { return f !== fn; }); };
 	},
 
 	/** Show the best queued tip if the caps and the moment allow it; re-arms itself while anything is queued */

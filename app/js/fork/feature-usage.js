@@ -214,6 +214,7 @@ const forkUsage = {
 	pending: {},			// counters waiting to be sent
 	listeners: [],
 	server: { enabled: false, token: "", key: "" },
+	serverInfo: null,		// Promise of the mode=get answer {enabled, token, key, accountAgeDays}, null when it failed (What's New, Getting started)
 	seen: null,				// {key: day}: shown / snapshot once a day (localStorage, per account: seenFor)
 	seenFor: "",
 	lastActive: 0,
@@ -234,6 +235,11 @@ const forkUsage = {
 		}
 		if (!forkUsage.allowed(forkUsage.index, feature, action)) {
 			console.warn("forkUsage.track: unknown feature or action " + feature + "." + action + " (public/fork/feature-catalog.json)");
+			return;
+		}
+		// "Try it" / "Show me" running the feature (its command, panel, own open code) is not the user using it
+		if (forkUsage.isUse(forkUsage.index, feature, action) && forkUsage.fromTry(feature)) {
+			if (forkUsage.debugOn) { console.log("[usage] " + feature + "." + action + " (not counted: Try it)"); }
 			return;
 		}
 		const now = Date.now();
@@ -373,6 +379,11 @@ const forkUsage = {
 		return Date.now() - forkUsage.lastInput <= forkUsage.USER_ACTION_MS;
 	},
 
+	/** "Try it" / "Show me" is running the feature right now (forkFeatureActions): not the user using it */
+	fromTry: function(feature) {
+		return typeof forkFeatureActions !== "undefined" && typeof forkFeatureActions.isTrying === "function" && forkFeatureActions.isTrying(feature);
+	},
+
 	/** Wrap a method of a global object (once): after(result, args) runs after it, and never breaks it */
 	wrap: function(obj, name, after, before) {
 		if (!obj || typeof obj[name] !== "function" || obj[name].forkUsageWrapped) { return; }
@@ -419,8 +430,9 @@ const forkUsage = {
 			// setMode returns early (changes nothing) without options or an unknown panel; minimizing isn't opening it
 			forkUsage.wrap(panelModes, "setMode", function(result, args, known) {
 				if (!known) { return; }
-				forkUsage.track("panelModes", "mode");
 				const feature = idx() ? idx().panels[args[0]] : null;
+				if (feature && forkUsage.fromTry(feature)) { return; }	// "Try it" restoring the panel
+				forkUsage.track("panelModes", "mode");
 				if (feature && panelModes.modeFor(args[0]) !== "minimized") { forkUsage.track(feature, "opened"); }
 			}, function(id) {
 				return !!(panelModes.opts() && panelModes.defOf(id));
@@ -478,14 +490,17 @@ const forkUsage = {
 		try { forkUsage.debugOn = localStorage.getItem(forkUsage.DEBUG_KEY) === "1"; } catch (e) { forkUsage.debugOn = false; }
 		forkUsage.registerSetting();
 		forkUsage.installHooks();
+		let settle = function() {};
+		forkUsage.serverInfo = new Promise(function(resolve) { settle = resolve; });
 		$.ajax({ url: forkUsage.URL, data: { mode: "get" }, dataType: "json", cache: false }).done(function(data) {
+			settle(data && typeof data === "object" ? data : null);
 			const str = function(v) { return data && typeof data[v] === "string" ? data[v] : ""; };
 			forkUsage.server = { enabled: !!(data && data.enabled), token: str("token"), key: /^[0-9a-f]{16}$/.test(str("key")) ? str("key") : "" };
 			if (!forkUsage.server.enabled) {
 				$("#usageStats-enabled").prop("disabled", true).closest("td").find(".fs-hint").text("This server collects no usage statistics.");
 			}
 			if (forkUsage.debugOn) { console.log("[usage] debug on; server " + (forkUsage.server.enabled ? "collects statistics" : "collects none")); }
-		}).always(function() {
+		}).fail(function() { settle(null); }).always(function() {
 			forkUsage.serverKnown = true;
 			forkUsage.replay();
 		});

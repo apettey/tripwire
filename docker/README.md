@@ -723,6 +723,10 @@ first use, `docker/sql/analytics.sql` is the reference). Users turn it off in Se
   so older rows can't be tied to anyone. A user is an account, so alts don't count twice.
 - **What is never stored.** Account, character, corporation or mask ids and names, systems, signatures, wormholes, IP
   addresses, user agents, page URLs or any typed text.
+- **Account age.** `fork_events.php?mode=get` also tells the logged-in user's own browser how old the account is, in
+  whole days capped at 14 (`accountAgeDays`, from `accounts.created`; sent even with statistics off, stored nowhere).
+  What's New uses it to skip the list of every feature so far for a brand-new account, and the Getting started card
+  shows only to accounts younger than 14 days (`app/js/whats-new.js`, `app/js/fork/getting-started.js`).
 - **Retention.** `ANALYTICS_DAYS` (default 90); `analytics_prune.cron.php` deletes older rows hourly (`DELETE ... LIMIT
   5000`, from `docker/crontab`, no MySQL event scheduler needed). `ANALYTICS_RAW_DAYS` (default 0) keeps single events in
   `fork_analytics_raw` for debugging only.
