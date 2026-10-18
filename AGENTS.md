@@ -86,7 +86,7 @@ own Save/open/Reset hooks. Give the row an `order` so its place doesn't depend o
 | Jump Planner (`jumpPlanner`) | One feature's own cluster: jump ship, range, mini-map | jump planner |
 | Kills & Intel (`intel`) | Kill feeds, threat info, intel panels | system/chain kill feed, threat & residents, d-scan & local, Watchlist, smart notes |
 | Kill Reporting (`killReporting`) | One feature's own cluster: kill sounds and pop-ups | kill reporting |
-| General (`general`) | The whole app rather than one area | background, UI scale, What's new, usage statistics |
+| General (`general`) | The whole app rather than one area | background, UI scale, What's new, usage statistics, feature tips |
 
 Drawn on the map means Map Markers, even when it is about mass or kills; a panel or pop-up goes with its
 topic. Account Settings and Personal Statistics stay as upstream has them.
@@ -95,6 +95,25 @@ topic. Account Settings and Personal Statistics stay as upstream has them.
 cluster of 3+); never a one-row section. Add it with `forkSettings.section(key, title, {after: <key>})` from
 the feature's JS, choose its position, and add it to this table in the same PR. Aim for 3-10 rows per section.
 Don't move settings between sections casually (users learn where things are); if you do, say so in What's New.
+
+### Ask for every feature: does it need a tip?
+
+Feature tips show one short hint at a quiet moment, where the feature helps, and never for a feature the user already
+uses or turned off. Every user-facing feature answers this question too, in the PR (the PR template asks it) and in the
+change-log entry.
+
+- **A tip only when the feature is easy to miss:** reached by right-click, keyboard or Shift+click, only in Mask Admin,
+  or only useful in certain situations (null-sec viewed, a jump, a kill in the chain, a d-scan paste). Features with a
+  visible button or panel don't need one; say so.
+- **One tip per feature**, unless the PR says why it needs more.
+- **How:** call `forkHints.register({...})` from the feature's own JS file (fields documented at the top of
+  [app/js/fork/hints.js](app/js/fork/hints.js); the command palette and Hide anomalies tips are examples). Pick a
+  trigger event, `feature` = its catalog id (the tip retires once that feature is used), an anchor that is on screen
+  then, and `kind` (callout, beacon or toast). The engine handles the caps, quiet moments, Settings and statistics.
+- **Text:** one or two sentences, plain EVE terms (the tripwire-domain skill), say where the setting is, and end with
+  "Turn tips off in Settings > General."
+- Check it in the dev stack with `forkHints.debug(true)` (logs every decision, skips the 2-minute grace and 30-minute
+  gap) and `forkHints.show("<id>", {force: true})`.
 
 ## 3. Stay easy to sync with upstream
 

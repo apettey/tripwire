@@ -89,6 +89,11 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
       events appear as `[usage] id.action` lines and in `fork_analytics_daily` (SQL in
       [docker/README.md](../../../docker/README.md#product-analytics)).
 - [ ] Paste that evidence (the console lines or the SQL result) in the PR body. The reviewer checks this step.
+- [ ] **Does it need a tip?** (AGENTS.md section 2.) Only for a feature that is easy to miss (right-click, keyboard,
+      Mask Admin, only in certain situations); one per feature. Register it with `forkHints.register({...})` from the
+      feature's own file, then check it with `forkHints.debug(true)` and `forkHints.show("<id>", {force: true})`: it shows,
+      its buttons work, and `hints.shown` / `<feature>.hint_shown` appear in `forkUsage.debug`. Write the answer in the PR
+      and the change-log entry.
 
 ## 7. Change log (required)
 - [ ] `changes/YYYY-MM-DD-<feature>/README.md` from `changes/_template.md` with `before.png` /
