@@ -139,8 +139,49 @@ const sigAnomalies = {
 		}
 	},
 
+	// ---- Tip (hints.js): after a paste with anomalies, while the user never chose what to do with them ----
+
+	/** Tip text for a paste with `count` anomalies */
+	tipBody: function(count) {
+		const n = count === 1 ? "1 cosmic anomaly" : count + " cosmic anomalies";
+		return "This paste had " + n + " (combat and ore sites, no scanning needed). Tripwire can fold them away behind one line, "
+			+ "or not import them at all (Settings > Signatures).\n\nTurn tips off in Settings > General.";
+	},
+
+	/** The first visible anomaly row of the viewed system (the tip points at it), or null */
+	firstAnomalyRow: function() {
+		const sigs = typeof tripwire !== "undefined" && tripwire.client ? tripwire.client.signatures : {};
+		const rows = $("#sigTable tbody tr[data-id]:visible").filter(function() { return sigAnomalies.isAnomaly(sigs[$(this).attr("data-id")]); });
+		return rows[0] || null;
+	},
+
+	/** The tip's action: hide anomalies (the same as choosing Hide in Settings) */
+	hideFromTip: function() {
+		if (typeof options === "undefined") { return; }
+		options.sigAnomalies = { mode: "hide" };
+		if (typeof options.save === "function") { options.save(); }
+		if (typeof forkUsage !== "undefined") { forkUsage.track("sigAnomalies", "setting_changed"); }
+		sigAnomalies.revealed = false;
+		sigAnomalies.apply();
+	},
+
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "sigAnomalies.paste", feature: "sigAnomalies", section: "signatures",
+			trigger: "paste.sigs", kind: "callout", placement: "left",	// left of the list: covers no rows
+			eligible: function(ctx, data) { return !!data && data.anomalies > 0 && !(ctx.options && ctx.options.sigAnomalies); },
+			anchor: function() { return sigAnomalies.firstAnomalyRow(); },
+			title: "Hide cosmic anomalies?",
+			body: function(ctx, data) { return sigAnomalies.tipBody(data.anomalies); },
+			action: { label: "Hide them", run: function() { sigAnomalies.hideFromTip(); } },
+			priority: 50, maxShows: 2, cooldownHours: 72, ttlSeconds: 600
+		});
+	},
+
 	init: function() {
 		sigAnomalies.setupSettings();
+		sigAnomalies.setupTip();
 		$("body").on("click", "#sigAnomalyBar a", function(e) {
 			e.preventDefault();
 			sigAnomalies.revealed = !sigAnomalies.revealed;

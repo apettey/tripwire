@@ -316,12 +316,56 @@ const commandPalette = {
 		}
 		commandPalette.registerCommands();
 		commandPalette.registerProviders();
+		commandPalette.setupTip();
 		// Capture phase: works inside text inputs and runs before upstream's jQuery key handler
 		document.addEventListener("keydown", commandPalette.onGlobalKey, true);
 		const idle = function() { commandPalette.ensureEve(); };
 		setTimeout(function() {
 			if (typeof requestIdleCallback === "function") { requestIdleCallback(idle, { timeout: 4000 }); } else { idle(); }
 		}, commandPalette.EVE_INDEX_DELAY);
+	},
+
+	// ---- Tip (hints.js): "do it with Ctrl+K" after the 5th time an action that has a command was done with the mouse ----
+
+	// Buttons that have a palette command. A real mouse click on one emits "mouse.action" {command}. Another feature does
+	// the same from its own click handler (menus, map clicks):
+	//   if (typeof forkHints !== "undefined") { forkHints.emit("mouse.action", { command: "<its command id>" }); }
+	MOUSE_COMMANDS: { "#add-signature": "sig.add", "#edit-signature": "sig.edit", "#undo": "sig.undo", "#redo": "sig.redo", "#follow": "nav.toggleFollow" },
+
+	/** The command of the (enabled) button a click landed on, or null */
+	mouseCommand: function(target) {
+		if (!target || !target.closest) { return null; }
+		const sels = Object.keys(commandPalette.MOUSE_COMMANDS);
+		for (let i = 0; i < sels.length; i++) {
+			const el = target.closest(sels[i]);
+			if (el) { return el.classList.contains("disabled") ? null : commandPalette.MOUSE_COMMANDS[sels[i]]; }
+		}
+		return null;
+	},
+
+	/** "Next time: Ctrl+K, <command>" for a mouse.action */
+	tipBody: function(commandID) {
+		const c = typeof forkCommands !== "undefined" ? forkCommands.commands.filter(function(x) { return x.id === commandID; })[0] : null;
+		const what = c ? "type \"" + c.title.toLowerCase() + "\" and press Enter" : "type what you want to do";
+		return "Next time, press Ctrl+K (Cmd+K on Mac), " + what + ". The same box finds systems, signatures and settings.\n\n"
+			+ "Turn tips off in Settings > General.";
+	},
+
+	setupTip: function() {
+		document.addEventListener("click", function(e) {
+			if (e.isTrusted === false || $(e.target).closest("#cp-overlay").length) { return; }
+			const id = commandPalette.mouseCommand(e.target);
+			if (id && typeof forkHints !== "undefined") { forkHints.emit("mouse.action", { command: id }); }
+		}, true);
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "commandPalette.mouse", feature: "commandPalette", section: "general",
+			trigger: "mouse.action", minCount: 5, kind: "toast",
+			title: "Do it from the keyboard",
+			body: function(ctx, data) { return commandPalette.tipBody(data && data.command); },
+			action: { label: "Try Ctrl+K", run: function() { commandPalette.open(); } },
+			priority: 40, maxShows: 2, cooldownHours: 72, ttlSeconds: 300
+		});
 	},
 
 	currentOptions: function() { return typeof options !== "undefined" ? options : null; },
