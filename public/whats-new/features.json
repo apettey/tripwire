@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 119,
+      "date": "2026-10-18",
+      "title": "Small views for more panels",
+      "description": "Signatures, Watchlist, Structures and System info now have a small view: a small popped-out window with just the essentials. Signatures shows how many are still unscanned and the newest ones, Watchlist only its current hits, Structures the next timer with a countdown, and System info the name, class and statics.\n\nUse the Small view button at the top right of the panel, or the Panels menu next to Customize layout.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-119-small-views.png",
+          "caption": "System info, Signatures, Watchlist and Structures in their small views"
+        }
+      ]
+    },
+    {
       "pr": 118,
       "date": "2026-10-18",
       "title": "Rolling guide for every battleship hole",
