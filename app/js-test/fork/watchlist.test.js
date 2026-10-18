@@ -421,3 +421,30 @@ describe('Watchlist', () => {
 		it('null and undefined', () => assert.equal(wl.escape(null) + wl.escape(undefined), ''));
 	});
 });
+
+describe('Watchlist small view: hits', () => {
+	const m = (filterID, systemID, name) => ({ key: filterID + '|' + systemID, filterID: filterID, filterName: name || filterID, systemID: systemID });
+	it('first seen: kept while it matches, new ones now, gone ones dropped; never mutates', () => {
+		const before = { 'a|1': 1000, 'b|2': 2000 };
+		const out = watchlist.hitSince(before, [m('a', 1), m('c', 3), m('c', 3)], 5000);
+		assert.deepEqual(out, { 'a|1': 1000, 'c|3': 5000 });
+		assert.deepEqual(before, { 'a|1': 1000, 'b|2': 2000 });
+		assert.deepEqual(watchlist.hitSince(null, [m('a', 1)], 7), { 'a|1': 7 });
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 'x' }, [m('a', 1)], 7), { 'a|1': 7 });
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 1 }, [], 7), {});
+	});
+	it('rows: the current hits once each, newest first, ties in the filters\' order', () => {
+		const matches = [m('a', 1, 'Pulsar C5'), m('b', 2, 'High-sec'), m('a', 3, 'Pulsar C5'), m('a', 1, 'Pulsar C5')];
+		const rows = watchlist.hitRows(matches, { 'a|1': 100, 'b|2': 300, 'a|3': 100 });
+		assert.deepEqual(rows.map(r => r.key), ['b|2', 'a|1', 'a|3']);
+		assert.deepEqual(rows[0], { key: 'b|2', filterName: 'High-sec', systemID: 2, since: 300 });
+		assert.deepEqual(watchlist.hitRows([], {}), []);
+		assert.deepEqual(watchlist.hitRows(matches).map(r => r.since), [0, 0, 0]);	// no times: the filters' order
+	});
+	it('"since": now, minutes, hours, days', () => {
+		assert.equal(watchlist.ago(30000), 'now');
+		assert.equal(watchlist.ago(5 * 60000), '5m');
+		assert.equal(watchlist.ago(2 * 3600000), '2h');
+		assert.equal(watchlist.ago(2 * 86400000), '2d');
+	});
+});
