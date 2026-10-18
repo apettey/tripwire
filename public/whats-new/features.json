@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 124,
+      "date": "2026-10-18",
+      "title": "Features you have not tried",
+      "description": "See every Tripwire feature in one list, with the ones you have not tried yet first and those closest to what you already use at the top. Show me points each one out, and Settings opens its options.\n\nOpen it with Ctrl+K and \"features\", from Settings > General > Features, from the link at the bottom of What's New, or from the Getting started card.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-124-features-hub.png",
+          "caption": "Every feature with its status, Show me and Settings"
+        }
+      ]
+    },
+    {
       "pr": 123,
       "date": "2026-10-18",
       "title": "Getting started, and Try it in What's New",
