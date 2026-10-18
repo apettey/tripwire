@@ -475,6 +475,17 @@ describe('forkHints', () => {
 			assert.strictEqual(forkHints.show('nope', { force: true }), false);
 		});
 
+		it('show(force) opens a beacon tip as its callout (the user asked: no dot to click first)', () => {
+			const kinds = [];
+			ui.render = (hint) => { kinds.push(hint.kind); if (hint.kind !== 'beacon') { ui.tip = hint.id; } return true; };
+			forkHints.register(def({ kind: 'beacon' }));
+			assert.strictEqual(forkHints.show('t.a', { force: true }), true);
+			assert.deepStrictEqual(kinds, ['callout']);
+			assert.strictEqual(forkHints.current.hint.id, 't.a');
+			assert.strictEqual(forkHints.hints['t.a'].kind, 'beacon', 'the registered tip stays a beacon');
+			assert.strictEqual(forkHints.session.shown, 0);
+		});
+
 		it('tips turned off: nothing is queued', () => {
 			forkHints.register(def());
 			options.hints = { enabled: false };

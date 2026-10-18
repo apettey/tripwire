@@ -30,7 +30,8 @@ const forkHints = {
 	// API: emit(event, data) | show(id, {force, data}) -> bool | list() | reset() | debug(true|false) |
 	//      hold(feature, by) (hold its tips back while something else teaches it) | listen(fn(event, data)) -> stop()
 	// show(id, {force: true}) (What's New / features hub, later) skips the caps, the quiet check and the retire rules; it
-	// still needs the anchor. Keep `const forkHints` on the first line: the test helper strips it to define a global.
+	// still needs the anchor, and a beacon opens straight as its callout (the user asked: no dot to click first).
+	// Keep `const forkHints` on the first line: the test helper strips it to define a global.
 
 	KINDS: ["callout", "beacon", "toast"],
 	AUDIENCES: ["all", "maskAdmin", "new"],
@@ -486,7 +487,9 @@ const forkHints = {
 			console.warn("forkHints: body() of " + hint.id + " failed", e);
 			return false;
 		}
-		const shown = forkHintsUI.render(hint, { title: hint.title, body: body, actionLabel: hint.action ? (hint.action.label || "Show me") : "" }, data, ctx);
+		// Asked for (Try it, features hub): a beacon opens as its callout at once
+		const as = forced && hint.kind === "beacon" ? Object.assign({}, hint, { kind: "callout" }) : hint;
+		const shown = forkHintsUI.render(as, { title: hint.title, body: body, actionLabel: hint.action ? (hint.action.label || "Show me") : "" }, data, ctx);
 		if (!shown) { return false; }
 		const now = Date.now();
 		if (opts) {
@@ -494,11 +497,11 @@ const forkHints = {
 			forkHints.recordShow(st, hint, section, now, forced);
 			forkHints.save();
 		}
-		if (forkHints.interruptive(hint)) {
+		if (forkHints.interruptive(as)) {
 			if (!forced) { forkHints.session.shown++; }	// asked for (What's New, features hub): not a push, no cap
 			forkHints.current = { hint: hint, data: data, section: section };
 		}
-		forkHints.log(hint.id + ": shown as " + hint.kind + (forced ? " (forced)" : ""));
+		forkHints.log(hint.id + ": shown as " + as.kind + (forced ? " (forced)" : ""));
 		forkHints.track("shown", hint);
 		return true;
 	},
