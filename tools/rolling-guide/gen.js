@@ -1,4 +1,4 @@
-// Builds fleet-src.html: the poster with one Mermaid flowchart per hole, generated from the fleet plans.
+// Builds build/cards.json (read by build.mjs): one card per hole size with its Mermaid flowchart, generated from the fleet plans.
 const fs = require('fs'), path = require('path');
 // Inputs next to this script; cards.json goes to the git-ignored build/ folder (build.mjs reads it)
 const DIR = __dirname, OUT = path.join(DIR, 'build');

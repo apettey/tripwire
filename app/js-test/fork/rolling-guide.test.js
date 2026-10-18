@@ -117,6 +117,28 @@ describe('Rolling guide', () => {
 		});
 	});
 
+	describe('lastSizeState (opening without a hole)', () => {
+		const h296 = { size: '3-3b', caption: 'H296 · 3.3B kg · Max jump 2,000,000 t', holeGuide: '3-3b', note: '' };
+		it('closed: forgets the hole, keeps its size', () => {
+			assert.deepStrictEqual(rollingGuide.lastSizeState(h296, false, '1b'), { size: '3-3b', caption: '', holeGuide: null, note: '' });
+		});
+		it('closed with no size: the saved size, else pick one', () => {
+			assert.deepStrictEqual(rollingGuide.lastSizeState({}, false, '5b'), { size: '5b', caption: '', holeGuide: null, note: '' });
+			assert.deepStrictEqual(rollingGuide.lastSizeState(undefined, false, 'zz'), { size: null, caption: '', holeGuide: null, note: "Pick the hole's size" });
+		});
+		it('open: keeps the hole it shows', () => {
+			assert.deepStrictEqual(rollingGuide.lastSizeState(h296, true, '1b'), h296);
+			const small = { size: null, caption: 'Z971 · 100M kg · Max jump 62,000 t', holeGuide: null, note: 'too small' };
+			assert.deepStrictEqual(rollingGuide.lastSizeState(small, true, null), small);
+		});
+		it('closing then opening from the palette shows no caption', () => {
+			const closed = rollingGuide.lastSizeState(h296, false, null);
+			const reopened = rollingGuide.lastSizeState(closed, false, '3-3b');
+			assert.ok(rollingGuide.bodyHtml(reopened).indexOf('rg-caption') < 0);
+			assert.ok(rollingGuide.bodyHtml(reopened).indexOf('3-3b.png') >= 0);
+		});
+	});
+
 	describe('bodyHtml', () => {
 		it('six size buttons, the current one highlighted, then the image linking to the full size in a new tab', () => {
 			const html = rollingGuide.bodyHtml({ size: '3-3b', caption: 'H296 · 3.3B kg · Max jump 2,000,000 t', holeGuide: '3-3b', note: '' });
@@ -124,7 +146,8 @@ describe('Rolling guide', () => {
 			assert.ok(/class='rg-tab rg-active' data-rg-size='3-3b' aria-pressed='true'>3.3B</.test(html));
 			assert.strictEqual((html.match(/rg-active/g) || []).length, 1);
 			assert.ok(html.indexOf("<img src='images/rolling-guide/3-3b.png?v=") >= 0);
-			assert.strictEqual((html.match(/target='_blank' rel='noopener'/g) || []).length, 2);
+			assert.strictEqual((html.match(/target='_blank' rel='noopener'/g) || []).length, 3);
+			assert.ok(html.indexOf("<a href='images/rolling-guide/poster.png?v=1' target='_blank' rel='noopener' class='rg-poster'>All sizes</a>") >= 0);
 			assert.ok(html.indexOf('Open full size') >= 0);
 			assert.ok(html.indexOf("<div class='rg-caption'>H296 · 3.3B kg") >= 0);
 			assert.ok(html.indexOf('rg-note') < 0);

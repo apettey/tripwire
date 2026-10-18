@@ -102,6 +102,22 @@ const rollingGuide = {
 		return { open: raw.open === true, size: rollingGuide.guide(raw.size) ? raw.size : null };
 	},
 
+	/**
+	 * The state for opening without a hole (palette, reload): the last size. While the panel is open it keeps the hole it
+	 * shows; once closed that hole is forgotten (its caption would name a hole nobody picked).
+	 * @param state the current state {size, caption, holeGuide, note}; @param shown whether the panel is open
+	 * @param savedSize options.rollingGuide.size (settings().size)
+	 */
+	lastSizeState: function(state, shown, savedSize) {
+		const cur = state || {};
+		const size = rollingGuide.guide(cur.size) ? cur.size : (rollingGuide.guide(savedSize) ? savedSize : null);
+		const note = size ? "" : "Pick the hole's size";
+		if (shown) { return Object.assign({}, cur, { size: size, note: size ? "" : (cur.note || note) }); }
+		return { size: size, caption: "", holeGuide: null, note: note };
+	},
+
+	POSTER_URL: "images/rolling-guide/poster.png?v=1",
+
 	imageUrl: function(key) {
 		return rollingGuide.guide(key) ? rollingGuide.IMAGE_DIR + key + ".png?v=" + rollingGuide.IMAGE_VERSION : "";
 	},
@@ -125,7 +141,8 @@ const rollingGuide = {
 			const url = rollingGuide.imageUrl(current.key);
 			html += "<div class='rg-image'><a href='" + e(url) + "' target='_blank' rel='noopener' class='rg-full' data-tooltip='Open full size in a new tab'>"
 				+ "<img src='" + e(url) + "' alt='" + e("Fleet rolling flowchart for " + current.label + " kg holes") + "'></a></div>"
-				+ "<div class='rg-foot'><a href='" + e(url) + "' target='_blank' rel='noopener'>Open full size</a></div>";
+				+ "<div class='rg-foot'><a href='" + e(url) + "' target='_blank' rel='noopener'>Open full size</a> · "
+				+ "<a href='" + rollingGuide.POSTER_URL + "' target='_blank' rel='noopener' class='rg-poster'>All sizes</a></div>";
 		}
 		return html;
 	},
@@ -230,8 +247,7 @@ const rollingGuide = {
 			const view = rollingGuide.forType(rollingGuide.holeType(wormhole, rollingGuide.wormholes()), rollingGuide.wormholes());
 			rollingGuide.state = { size: view.guide, caption: view.caption, holeGuide: view.guide, note: view.note };
 		} else {
-			const size = rollingGuide.state.size || rollingGuide.settings(rollingGuide.opts()).size;
-			rollingGuide.state = Object.assign({}, rollingGuide.state, { size: size, note: size ? "" : "Pick the hole's size" });
+			rollingGuide.state = rollingGuide.lastSizeState(rollingGuide.state, rollingGuide.isShown(), rollingGuide.settings(rollingGuide.opts()).size);
 		}
 		if (!rollingGuide.addWidget()) { return; }
 		// Opened again while minimized: it comes back (in the window it had)
@@ -253,6 +269,8 @@ const rollingGuide = {
 	close: function() {
 		if (typeof Tooltips !== "undefined" && Tooltips.close) { Tooltips.close(); }
 		rollingGuide.removeWidget();
+		// Forget the hole (as sync() does): opening again without one shows the last size, not that hole's caption
+		rollingGuide.state = rollingGuide.lastSizeState(rollingGuide.state, false, null);
 		rollingGuide.store({ open: false });
 	},
 
