@@ -1,0 +1,157 @@
+/* Getting started card (fork-owned, see app/js/fork/getting-started.js): bottom left, small, non-modal, under feature tips
+   (.fh-tip, z-index 9500) and dialogs. Also the flash forkFeatureActions (feature-actions.js) puts on what "Try it" shows. */
+#gettingStarted {
+	position: fixed;
+	left: 12px;
+	bottom: 12px;
+	z-index: 9400;
+	box-sizing: border-box;
+	width: 270px;
+	max-width: calc(100vw - 24px);
+	padding: 6px 8px 7px 8px;
+	background: rgba(16, 22, 30, 0.96);
+	border: 1px solid #3B6E99;
+	border-radius: 4px;
+	box-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+	color: #E4EEF7;
+	font-size: 11px;
+	line-height: 15px;
+	text-align: left;
+}
+
+#gettingStarted.gs-collapsed {
+	width: auto;
+	padding: 3px 6px;
+}
+
+#gettingStarted .gs-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#gettingStarted button {
+	font-family: inherit;
+	cursor: pointer;
+}
+
+#gettingStarted .gs-toggle {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 0;
+	background: none;
+	border: 0;
+	color: inherit;
+	font-size: 12px;
+	text-align: left;
+}
+
+#gettingStarted .gs-title {
+	color: #9CCBF2;
+	font-weight: bold;
+}
+
+#gettingStarted .gs-count {
+	color: #9FB3C6;
+}
+
+#gettingStarted .gs-fold {
+	margin-left: auto;
+	color: #9FB3C6;
+	font-size: 11px;
+}
+
+#gettingStarted .gs-hide {
+	padding: 0 2px;
+	background: none;
+	border: 0;
+	color: #8EA4B8;
+	font-size: 10px;
+	text-decoration: underline;
+}
+
+#gettingStarted .gs-toggle:hover .gs-fold, #gettingStarted .gs-toggle:focus .gs-fold,
+#gettingStarted .gs-hide:hover, #gettingStarted .gs-hide:focus {
+	color: #FFFFFF;
+}
+
+#gettingStarted .gs-list {
+	margin: 5px 0 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+#gettingStarted .gs-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+}
+
+#gettingStarted .gs-check {
+	flex: 0 0 12px;
+	height: 12px;
+	border: 1px solid #56708A;
+	border-radius: 2px;
+	color: #6FD36F;
+	font-size: 11px;
+	line-height: 12px;
+	text-align: center;
+}
+
+#gettingStarted .gs-done .gs-check {
+	border-color: #4E9A4E;
+}
+
+#gettingStarted .gs-text {
+	flex: 1 1 auto;
+}
+
+#gettingStarted .gs-done .gs-text {
+	color: #8EA4B8;
+	text-decoration: line-through;
+}
+
+#gettingStarted .gs-how {
+	flex: 0 0 auto;
+	padding: 0 7px;
+	border: 1px solid #4A9EE0;
+	border-radius: 3px;
+	background: #1C3A57;
+	color: #FFFFFF;
+	font-size: 10px;
+	line-height: 15px;
+}
+
+#gettingStarted .gs-how:hover, #gettingStarted .gs-how:focus {
+	background: #275684;
+}
+
+#gettingStarted .gs-foot {
+	margin-top: 4px;
+	color: #9FB3C6;
+}
+
+#gettingStarted .gs-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+}
+
+/* What "Try it" / "How" points at */
+.ffa-flash {
+	animation: ffa-flash 1.5s ease-out;
+}
+
+@keyframes ffa-flash {
+	0%, 60% { box-shadow: 0 0 0 3px rgba(108, 184, 238, 0.85); }
+	100% { box-shadow: 0 0 0 3px rgba(108, 184, 238, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ffa-flash { animation: none; box-shadow: 0 0 0 3px rgba(108, 184, 238, 0.85); }
+}

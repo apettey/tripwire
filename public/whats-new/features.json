@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 123,
+      "date": "2026-10-18",
+      "title": "Getting started, and Try it in What's New",
+      "description": "New accounts now start with a small Getting started card instead of a long list: five first steps (pick a mask, add a home tab, paste signatures, track a character with the automapper, try Ctrl+K) that tick themselves off, each with a How button. Fold it to one line or Hide it for good.\n\nEvery entry in What's New now has a Try it button that shows you the feature, and a tick when you have already used it.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-123-whats-new-first-run.png",
+          "caption": "Try it and the used tick in What's New"
+        }
+      ]
+    },
+    {
       "pr": 122,
       "date": "2026-10-18",
       "title": "Feature tips",

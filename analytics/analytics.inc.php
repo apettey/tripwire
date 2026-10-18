@@ -27,6 +27,7 @@ const ANALYTICS_FEATURE_RE = '/^[a-z][A-Za-z0-9]{1,39}$/';
 const ANALYTICS_GENERIC_ACTIONS = ['command', 'opened', 'shown', 'disabled', 'setting_on', 'setting_off', 'setting_changed'];
 const ANALYTICS_INTERNAL_ACTIONS = ['app' => ['active']];
 const ANALYTICS_USE_ACTIONS = ['command', 'opened'];   // count as use for every feature (plus its `use` list)
+const ANALYTICS_AGE_CAP = 14;           // mode=get's accountAgeDays: 0..13 days, or 14 = two weeks or more
 const ANALYTICS_MAX_DAILY = 10000;     // one counter (day, user, feature, action) in a day: no inflating it past this
 // Requests per user and window: 1 a minute normally, plus one each time the tab is hidden and short bursts in
 // forkUsage.debug (a send every 2.5 s at most). Over the limit a request is dropped; it still gets 204.
@@ -289,6 +290,16 @@ function analytics_opted_out(PDO $db, $accountID) {
     $o = json_decode($json, true);
     return is_array($o) && isset($o['usageStats']) && is_array($o['usageStats'])
         && array_key_exists('enabled', $o['usageStats']) && $o['usageStats']['enabled'] === false;
+}
+
+/** Whole days since the account was created (accounts.created), capped at ANALYTICS_AGE_CAP ("that many or more"): all the
+ *  browser needs to tell a new account (What's New first run, Getting started) from a veteran. null when unknown. */
+function analytics_account_age_days(PDO $db, $accountID) {
+    $stmt = $db->prepare('SELECT TIMESTAMPDIFF(DAY, created, NOW()) FROM accounts WHERE id = ?');
+    $stmt->execute([(int) $accountID]);
+    $days = $stmt->fetchColumn();
+    if ($days === false || $days === null) return null;
+    return max(0, min(ANALYTICS_AGE_CAP, (int) $days));
 }
 
 /** The browser's key for its once-a-day marks: opaque, per account, not the stored uid */
