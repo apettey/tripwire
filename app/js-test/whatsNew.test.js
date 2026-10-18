@@ -90,6 +90,10 @@ describe('What\'s New', () => {
 
 		it('No actions without infoFor (catalog not loaded): as before', () => assert.ok(!whatsNew.render(features, 0).includes('whats-new-actions')));
 
+		it('No Try it on What\'s New\'s own entry (it would only reopen this dialog)', () => {
+			assert.ok(!whatsNew.actionsHtml({ feature: 'whatsNew', status: 'new', canTry: true }).includes('whats-new-try'));
+		});
+
 		it('Escapes the feature id', () => assert.ok(!whatsNew.actionsHtml({ feature: "x' onclick='y", canTry: true }).includes("' onclick")));
 	});
 

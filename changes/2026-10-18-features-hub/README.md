@@ -17,6 +17,10 @@ re-teach.
 
 Before: Settings > General with no Features row. After: the Features dialog.
 
+The "See all features" link in the Getting started card:
+
+![Getting started card with the See all features link](after-getting-started-link.png)
+
 ## Settings
 
 No toggle: the dialog only opens when the user asks for it (pull, never pushed), so there is nothing to turn off.
@@ -44,9 +48,12 @@ No tip: the Getting started card ("See all features") and the What's New footer 
   use actions meanwhile (`feature-usage.js`); panel restores by Try it don't count as `panelModes.mode`. The user's own
   later use counts as before. This also fixes What's New's Try it.
 - `app/js/fork/feature-actions.js`: `features.open` and `app.whatsNew` added to the Try it allow-list (`TRY_SAFE`);
-  catalog `try` for `featuresHub` and `whatsNew`.
+  catalog `try` for `featuresHub` and `whatsNew`. `app/js/whats-new.js` (fork file, one line): no Try it on What's
+  New's own entry (it would only reopen the dialog).
 - Catalog: `featuresHub` (use: `opened`, `tried`; event: `settings`; command `features.open`, which counts as
   `featuresHub.command` from Ctrl+K instead of also `opened`).
 - Tests: `app/js-test/fork/features-hub.test.js` (audience, description, sort, filter, summary, markup), plus Try it
-  tests in `feature-actions.test.js` / `feature-usage.test.js` and the card link in `getting-started.test.js`.
+  tests in `feature-actions.test.js` / `feature-usage.test.js`, `try-it-usage.test.js` (forkUsage's real hooks: a
+  command and a panel restore run by Try it aren't counted, the user's own later use is; `featuresHub.open` counts
+  `opened` once) and the card link in `getting-started.test.js`.
 - No upstream files touched.
