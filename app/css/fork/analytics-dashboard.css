@@ -1,0 +1,69 @@
+/* Usage analytics dashboard (fork-owned, see app/js/fork/analytics-dashboard.js) */
+
+.dialog-analytics .ui-dialog-content { padding: 0; overflow: hidden; }
+.dialog-analytics .an-wrap { display: flex; flex-direction: column; height: 100%; font-size: 12px; text-align: left; color: #ccc; }
+.dialog-analytics .an-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #151515; border-bottom: 1px solid #333; }
+.dialog-analytics .an-tabs { display: flex; flex-wrap: wrap; gap: 2px; }
+.dialog-analytics .an-head button { background: #222; color: #ccc; border: 1px solid #444; border-radius: 3px; padding: 3px 9px; cursor: pointer; font-size: 12px; }
+.dialog-analytics .an-head button:hover { background: #333; border-color: #777; }
+.dialog-analytics .an-tabs button.an-active { background: #2d3d52; border-color: #6b8cb3; color: #fff; }
+.dialog-analytics .an-refresh { margin-left: auto; }
+.dialog-analytics .an-caveat { flex: 0 0 auto; margin: 0; padding: 4px 10px; background: #1c1a12; color: #c9b77a; border-bottom: 1px solid #3a3420; font-size: 11px; }
+.dialog-analytics .an-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 6px 10px 12px; }
+.dialog-analytics .an-sub { margin: 4px 0 8px; color: #aaa; }
+.dialog-analytics .an-warn { margin: 4px 0; color: #e8a33d; }
+.dialog-analytics .an-empty { margin: 10px 0; color: #888; font-style: italic; }
+.dialog-analytics .an-dim { color: #888; font-size: 11px; }
+.dialog-analytics h4 { margin: 14px 0 6px; font-size: 13px; color: #ddd; border-bottom: 1px solid #333; font-weight: normal; }
+.dialog-analytics select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 2px 4px; }
+
+.dialog-analytics .an-table { border-collapse: collapse; width: 100%; }
+.dialog-analytics .an-table th { position: sticky; top: -6px; background: #181818; text-align: left; color: #aaa; font-weight: normal; border-bottom: 1px solid #444; padding: 4px 6px; white-space: nowrap; }
+.dialog-analytics .an-table td { padding: 3px 6px; border-bottom: 1px solid #262626; vertical-align: middle; }
+.dialog-analytics .an-table tbody tr:hover td { background: #1b2230; }
+.dialog-analytics .an-row-link { cursor: pointer; }
+.dialog-analytics .an-num { text-align: right; white-space: nowrap; }
+.dialog-analytics .an-nowrap { white-space: nowrap; }
+.dialog-analytics .an-name { color: #e6e6e6; }
+.dialog-analytics th.an-sortable { cursor: pointer; user-select: none; }
+.dialog-analytics th.an-sortable:hover { color: #fff; }
+.dialog-analytics th.an-sorted-desc::after { content: " \25BE"; color: #8fb3e0; }
+.dialog-analytics th.an-sorted-asc::after { content: " \25B4"; color: #8fb3e0; }
+
+.dialog-analytics .an-flag { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; background: #4a2a1a; color: #f0a070; font-size: 10px; white-space: nowrap; }
+.dialog-analytics .an-flag-silent { background: #4a1a1a; color: #ff8a80; }
+
+.dialog-analytics .an-bar { position: relative; display: inline-block; width: 130px; height: 15px; background: #1d1d1d; border: 1px solid #333; border-radius: 2px; vertical-align: middle; }
+.dialog-analytics .an-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #2f5d8a; }
+.dialog-analytics .an-bar-warn .an-bar-fill { background: #7a4a20; }
+.dialog-analytics .an-bar-text { position: relative; padding: 0 4px; line-height: 15px; white-space: nowrap; color: #eee; font-size: 11px; }
+.dialog-analytics .an-funnel-bar .an-bar { width: 320px; }
+
+.dialog-analytics .an-spark { display: inline-block; vertical-align: middle; overflow: visible; }
+.dialog-analytics .an-spark path { fill: none; stroke: #7fb0e6; stroke-width: 1.5; stroke-linejoin: round; }
+.dialog-analytics .an-spark circle { fill: #cfe3ff; }
+.dialog-analytics .an-spark .an-spark-base { stroke: #3a3a3a; stroke-width: 1; }
+
+.dialog-analytics .an-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.dialog-analytics .an-tile { min-width: 120px; padding: 6px 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; }
+.dialog-analytics .an-tile-v { font-size: 20px; color: #fff; }
+.dialog-analytics .an-tile-l { font-size: 11px; color: #999; }
+
+.dialog-analytics .an-cols { display: flex; align-items: flex-end; gap: 2px; height: 80px; max-width: 700px; padding: 2px 0; border-bottom: 1px solid #444; }
+.dialog-analytics .an-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; }
+.dialog-analytics .an-col span { display: block; width: 100%; background: #2f5d8a; min-height: 1px; }
+.dialog-analytics .an-col:hover span { background: #4f86c0; }
+.dialog-analytics .an-cols-axis { display: flex; justify-content: space-between; max-width: 700px; color: #888; font-size: 10px; }
+
+.dialog-analytics .an-heat { border-collapse: separate; border-spacing: 2px; }
+.dialog-analytics .an-heat th { font-weight: normal; color: #888; font-size: 10px; padding: 0 3px; text-align: right; }
+.dialog-analytics .an-heat td { width: 18px; height: 14px; border-radius: 2px; background: #1a1a1a; }
+.dialog-analytics .an-heat td.an-heat-1 { background: #1d2f42; }
+.dialog-analytics .an-heat td.an-heat-2 { background: #24486b; }
+.dialog-analytics .an-heat td.an-heat-3 { background: #2f6496; }
+.dialog-analytics .an-heat td.an-heat-4 { background: #4383c0; }
+.dialog-analytics .an-heat td.an-heat-5 { background: #6aaeea; }
+
+/* The user menu's button */
+#logoutTable tr.analytics-menu-row td { padding-top: 4px; }
+#logoutTable #analytics-open { width: 100%; }
