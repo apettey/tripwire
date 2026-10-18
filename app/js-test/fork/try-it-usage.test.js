@@ -141,7 +141,7 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 		{ id: 'analyticsDashboard', try: 'analytics.open', settingsKey: null, commands: ['analytics.open'], panels: [], use: ['opened'] }
 	] };
 	const NAMES = ['forkCommands', 'commandPalette', 'whatsNew', 'panelHost', 'panelModes', 'forkSettings', 'document', 'window', 'setInterval', 'options', '$'];
-	let saved, savedUsage, savedPalette, commands;
+	let saved, savedUsage, savedPalette, commands, handlers;
 	const flush = () => new Promise(r => setImmediate(r));
 	// The palette's run: execute calls command.run() and resolves ok, as forkCommands.execute does
 	const runCommand = async (id) => {
@@ -161,9 +161,15 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 		global.window = { addEventListener: () => {} };
 		global.setInterval = () => 0;
 		global.options = { saveDelay: () => {} };
-		// A chainable jQuery stand-in with no elements, so setup() adds its menu button and command
-		const chain = new Proxy(function() {}, { get: (t, p) => p === 'then' ? undefined : p === 'length' ? 0 : chain, apply: () => chain });
-		global.$ = chain;
+		// A chainable jQuery stand-in with no elements, so setup() adds its menu button and command; it keeps the
+		// handlers bound with $(selector).on(event, fn) as handlers["<selector> <event>"]
+		handlers = {};
+		const chain = (sel) => new Proxy(function() {}, {
+			get: (t, p) => p === 'then' ? undefined : p === 'length' ? 0
+				: p === 'on' ? (ev, fn) => { handlers[sel + ' ' + ev] = fn; return chain(sel); } : chain(sel),
+			apply: (t, self, args) => chain(typeof args[0] === 'string' ? args[0] : sel)
+		});
+		global.$ = chain('');
 		commands = [];
 		global.forkCommands = {
 			register: (def) => commands.push(def),
@@ -207,7 +213,8 @@ describe('a Ctrl+K open counts command only (analyticsDashboard, whatsNew)', () 
 		assert.deepStrictEqual(forkUsage.pending, { 'analyticsDashboard.command': 1 });
 	});
 	it('Usage analytics from the user menu: analyticsDashboard.opened', () => {
-		analyticsDashboard.open();
+		assert.strictEqual(typeof handlers['#analytics-open click'], 'function', 'menu button bound');
+		handlers['#analytics-open click']();
 		assert.deepStrictEqual(forkUsage.pending, { 'analyticsDashboard.opened': 1 });
 	});
 });
