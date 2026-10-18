@@ -86,3 +86,37 @@
 .whats-new-version-inline {
 	color: #888;
 }
+
+/* Try it, "You've used this", "Turned off" (forkFeatureActions) */
+#dialog-whatsNew .whats-new-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: -2px 0 6px 0;
+}
+
+#dialog-whatsNew .whats-new-try {
+	padding: 1px 9px;
+	border: 1px solid #4A9EE0;
+	border-radius: 3px;
+	background: #1C3A57;
+	color: #FFF;
+	font-size: 0.85em;
+	cursor: pointer;
+}
+
+#dialog-whatsNew .whats-new-try:hover,
+#dialog-whatsNew .whats-new-try:focus {
+	background: #275684;
+}
+
+#dialog-whatsNew .whats-new-used {
+	color: #6FD36F;
+	font-size: 0.85em;
+}
+
+#dialog-whatsNew .whats-new-off {
+	color: #A0A0A0;
+	font-size: 0.85em;
+	font-style: italic;
+}
