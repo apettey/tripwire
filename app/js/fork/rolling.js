@@ -559,8 +559,29 @@ const holeRolling = {
 			holeRolling.clear($("#dialog-mass").data("id"), true);
 		});
 
+		holeRolling.setupTip();
 		holeRolling.fetch();
 		setInterval(holeRolling.fetch, holeRolling.POLL_MS);
+	},
+
+	// Tip (hints.js): in the Mass dialog, at its "Rolling..." link, for someone who never marked rolling or preserve mass.
+	// One tip for both marks (preserve-mass.js has none of its own): the map's right-click menu has them too.
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "rolling.massDialog", feature: "rolling", section: "markers",
+			trigger: "dialog.open", kind: "callout", placement: "left", dialog: "#dialog-mass",
+			eligible: function(ctx, data) { return !!data && data.id === "dialog-mass" && holeRolling.enabled(ctx.options) && !ctx.used("preserveMass"); },
+			anchor: function() { return $("#hole-rolling-panel .hr-mark:visible")[0] || null; },
+			title: "Rolling this hole?",
+			body: "Mark it with Rolling... here, or right-click the system on the map: everyone on your mask sees " + holeRolling.GLYPH
+				+ " on the connection. Preserve mass... marks a hole nobody should roll.\n\nTurn tips off in Settings > General.",
+			action: { label: "Mark rolling", run: function() {
+				const id = $("#dialog-mass").data("id");
+				if (preserveMass.isWormholeID(id)) { holeRolling.openDialog(id); }
+			} },
+			priority: 45, maxShows: 2, cooldownHours: 72, ttlSeconds: 120
+		});
 	}
 };
 

@@ -1081,9 +1081,32 @@ const intelScans = {
 		forkCommands.panelToggle({ id: "panel.intelScans", title: "Toggle d-scan & local panel", key: "intelScans", icon: "search", keywords: ["intel", "local", "d-scan"] });
 	},
 
+	// ---- Tip (hints.js): a d-scan pasted anywhere opened the paste box but wasn't shared ----
+	// paste.dscan queues it; the quiet check holds it while the box is open and for 30 s after the paste. Share counts as
+	// use (intelScans.pasted), which drops it, so it only shows after the box was closed without sharing. A toast, not a
+	// callout on the Intel panel: the panel is often below the fold; "Show me" brings it into view.
+
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "intelScans.paste", feature: "intelScans", section: "intel",
+			trigger: "paste.dscan", kind: "toast",
+			eligible: function(ctx) { return intelScans.enabled(ctx.options); },
+			title: "Share d-scans with your mask",
+			body: "Next time you paste a d-scan or local list, click Share: it stays in the Intel panel for everyone on your "
+				+ "mask, pinned to the system, with a dot on the map.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() {
+				const $w = intelScans.$widget();
+				if ($w.length && typeof forkHintsUI !== "undefined") { forkHintsUI.flash($w); }
+			} },
+			priority: 60, maxShows: 2, cooldownHours: 72, ttlSeconds: 900
+		});
+	},
+
 	init: function() {
 		panelHost.register(intelScans.panel());
 		intelScans.registerCommands();
+		intelScans.setupTip();
 		intelScans.setupSettings();
 		intelScans.setupMenu();
 		intelScans.setupPasteDetect();

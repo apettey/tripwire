@@ -347,6 +347,19 @@ const rollingCalc = {
 		return !(opts && opts.rollingCalc && opts.rollingCalc.enabled === false);
 	},
 
+	/** The mapped wormhole a jump from -> to went through (either direction), or null */
+	jumpHole: function(from, to, wormholes, signatures) {
+		if (!from || !to || String(from) === String(to)) { return null; }
+		const ids = Object.keys(wormholes || {});
+		for (let i = 0; i < ids.length; i++) {
+			const w = wormholes[ids[i]];
+			const a = w && signatures ? signatures[w.initialID] : null, b = w && signatures ? signatures[w.secondaryID] : null;
+			if (!a || !b) { continue; }
+			if ((a.systemID == from && b.systemID == to) || (a.systemID == to && b.systemID == from)) { return w; }
+		}
+		return null;
+	},
+
 	/** Whether the "How to roll this hole" panel is on (options.rollPlan.enabled; on unless explicitly false) */
 	planEnabled: function(opts) {
 		return rollingCalc.enabled(opts) && !(opts && opts.rollPlan && opts.rollPlan.enabled === false);
@@ -688,5 +701,32 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				o.rollPlan = p;
 			}
 		});
+
+		// Tip (hints.js): after a jump through a mapped hole, where its mass log and rolling guidance are (right-click > Mass).
+		// The chain node a hole leads into carries the hole's id (data-sigid); the Mass dialog opens on it like the menu does.
+		if (typeof forkHints !== "undefined") {
+			const holeOf = function(data) {
+				const client = typeof tripwire !== "undefined" && tripwire.client ? tripwire.client : {};
+				return data ? rollingCalc.jumpHole(data.from, data.to, client.wormholes, client.signatures) : null;
+			};
+			const nodeOf = function(data) {
+				const w = holeOf(data);
+				return w ? $("#chainMap [data-nodeid][data-sigid='" + (parseInt(w.id, 10) || 0) + "']:visible")[0] || null : null;
+			};
+			forkHints.register({
+				id: "rollingCalc.jump", feature: "rollingCalc", section: "jumps",
+				trigger: "jump.done", kind: "callout", placement: "right",
+				eligible: function(ctx, data) { return rollingCalc.enabled(ctx.options) && !!holeOf(data); },
+				anchor: function(ctx, data) { return nodeOf(data); },
+				title: "How much mass is left?",
+				body: "Jumps through this hole are logged with their mass. Right-click the system on the map and pick Mass to see "
+					+ "what went through, what is left and how to roll it.\n\nTurn tips off in Settings > General.",
+				action: { label: "Show me", run: function(ctx, data) {
+					const w = holeOf(data), node = nodeOf(data);
+					if (w && node) { $("#dialog-mass").data("id", w.id).data("systemID", node.getAttribute("data-nodeid")).dialog("open"); }
+				} },
+				priority: 55, maxShows: 2, cooldownHours: 72, ttlSeconds: 600
+			});
+		}
 	});
 }

@@ -142,6 +142,14 @@ const bookmarkTemplate = {
 		return bookmarkTemplate.JUMP_PROMPTS.some(function(m) { return m.value === value; }) ? value : "nomatch";
 	},
 
+	/** The mask still uses the built-in names (no template of its own, or the same text as the default) */
+	isDefault: function(templates) {
+		return bookmarkTemplate.KINDS.every(function(kind) {
+			const own = templates && templates[kind];
+			return typeof own !== "string" || !own || own === bookmarkTemplate.DEFAULTS[kind];
+		});
+	},
+
 	/** Take the templates of a server answer ({templates: {hole, back}, jumpPrompt}); bad or missing ones fall back to the defaults */
 	use: function(templates, jumpPrompt) {
 		const t = bookmarkTemplate;
@@ -207,6 +215,24 @@ const bookmarkTemplate = {
 		}).fail(function(xhr) {
 			t.loadFailed = true;
 			console.warn("bookmark-template: could not load the mask's templates, using the built-in names", t.errorText(xhr));
+		});
+	},
+
+	/** Tip (hints.js): Mask Admin opened, the mask still has the built-in bookmark names (read by every member at load).
+	 *  After the Discord and Watchlist tips by priority; one pop-up tip a session. */
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		const t = bookmarkTemplate;
+		forkHints.register({
+			id: "bookmarkTemplate.maskAdmin", feature: "bookmarkTemplate", section: "maskAdmin", audience: "maskAdmin",
+			trigger: "maskAdmin.open", kind: "callout", placement: "left", dialog: "#dialog-admin",
+			eligible: function() { return !!t.state && !!t.canEdit && t.isDefault(t.state.templates); },
+			anchor: function() { return $("#dialog-admin .menu li[data-window='bookmarks']:visible")[0] || null; },
+			title: "Your mask's bookmark names",
+			body: "Choose how the hole and return bookmarks Tripwire copies for your pilots are named (\"=A C5 ABC EOL\", "
+				+ "\"!A\"), for everyone on the mask, on the Bookmarks page.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() { $("#dialog-admin .menu li[data-window='bookmarks']").trigger("click"); } },
+			priority: 20, maxShows: 2, cooldownHours: 72, ttlSeconds: 120
 		});
 	},
 
@@ -295,6 +321,7 @@ const bookmarkTemplate = {
 			$dialog.find(".window").append("<div data-window='bookmarks' class='hidden'></div>");
 		}
 		t.bind();
+		t.setupTip();
 		$(document).on("click", "#dialog-admin .menu li", function() {
 			const mine = $(this).attr("data-window") === "bookmarks";
 			const $d = $("#dialog-admin");

@@ -12,13 +12,15 @@ const forkHints = {
 	//     section: "signatures",           Settings section (default: the feature's catalog section): per-section daily cap and
 	//                                      "Don't show tips like this"
 	//     trigger: "paste.sigs",           event name or names (forkHints.emit(name, data)), see EVENTS
-	//     minCount: 1,                     show on the Nth time the trigger fires (counted across sessions)
+	//     minCount: 1,                     show on the Nth time the trigger fires while eligible (counted across sessions)
 	//     eligible: (ctx, data) => bool,   optional; an exception counts as false
 	//     after: ["other.hint"],           optional; those tips must have been shown (or retired) first
 	//     audience: "all",                 all | maskAdmin | new (accounts in their first 14 days)
 	//     kind: "callout",                 callout (points at the anchor) | beacon (pulsing dot; click opens the callout) |
 	//                                      toast (bottom corner, a nudge after an action). An "idle" line is not built yet.
 	//     anchor: "#sel" or (ctx, data) => element,   callout/beacon: skipped while it isn't visible; toast: optional
+	//     dialog: "#dialog-mass",          optional: the tip lives inside this dialog (its anchor is in it), so that dialog
+	//                                      being open is no reason to wait or to hide; any other open dialog still is
 	//     placement: "bottom",             top | bottom | left | right (flips when there's no room)
 	//     title: "...", body: "..." or (ctx, data) => "...",   plain text; say how to turn tips off
 	//     action: {label: "Show me", run: (ctx, data) => {}},   optional
@@ -33,8 +35,13 @@ const forkHints = {
 	AUDIENCES: ["all", "maskAdmin", "new"],
 	PLACEMENTS: ["top", "bottom", "left", "right"],
 	// Core events (emitted from fork files with `typeof forkHints !== "undefined" && forkHints.emit(...)`):
+	//   session.start, idle (15 s tick), paste.sigs {rows, anomalies}, system.viewed {systemID, kind, typeName},
+	//   dialog.open / dialog.close {id} (hints.js); jump.done {from, to} (jump-return.js); paste.dscan {systemID}
+	//   (intel-scans.js); kill.chain {killIDs} (kill-reporting.js, chain-killfeed.js); panel.open {id, popped}
+	//   (panel-host.js); maskAdmin.open (mask-admin-tab.js); mouse.action {command} (command-palette.js);
+	//   chain.exit {systemIDs: exits that just got a jump range ring} (jump-planner.js)
 	EVENTS: ["session.start", "idle", "jump.done", "paste.sigs", "paste.dscan", "kill.chain", "system.viewed", "panel.open",
-		"dialog.close", "maskAdmin.open", "mouse.action"],
+		"dialog.open", "dialog.close", "maskAdmin.open", "mouse.action", "chain.exit"],
 	DONE: ["acted", "got_it", "section_off"],	// outcomes after which a tip never comes back
 	DEFAULTS: { kind: "callout", placement: "bottom", priority: 50, maxShows: 2, cooldownHours: 72, ttlSeconds: 600, minCount: 1, audience: "all" },
 	CAPS: {
@@ -78,6 +85,7 @@ const forkHints = {
 		if (typeof hint.body !== "string" && typeof hint.body !== "function") { throw new Error(name + "body is required"); }
 		if (hint.eligible !== undefined && typeof hint.eligible !== "function") { throw new Error(name + "eligible must be a function"); }
 		if (hint.action !== undefined && (!hint.action || typeof hint.action.run !== "function")) { throw new Error(name + "action needs run(ctx, data)"); }
+		if (hint.dialog !== undefined && (typeof hint.dialog !== "string" || !hint.dialog)) { throw new Error(name + "dialog must be a selector"); }
 		hint.after = Array.isArray(def.after) ? def.after.slice() : [];
 		["priority", "maxShows", "cooldownHours", "ttlSeconds", "minCount"].forEach(function(k) {
 			if (typeof hint[k] !== "number" || !isFinite(hint[k])) { throw new Error(name + k + " must be a number"); }
@@ -272,7 +280,6 @@ const forkHints = {
 		return st;
 	},
 
-	/** Count a trigger toward minCount (mutates st); true once the count is reached */
 	/** Count a trigger toward minCount (mutates st): {reached, changed}. The count stops at minCount (no save per trigger
 	 *  once reached) and starts again after the tip was shown (recordShow). */
 	counted: function(st, hint) {
@@ -402,10 +409,10 @@ const forkHints = {
 			if (!forkHints.matches(hint, event)) { return; }
 			const blocked = forkHints.blockedReason(hint, st, ctx, now);
 			if (blocked) { forkHints.log(id + " on " + event + ": no, " + blocked); return; }
-			const count = forkHints.counted(st, hint);
+			if (!forkHints.eligibleSafe(hint, ctx, data)) { forkHints.log(id + " on " + event + ": not eligible"); return; }
+			const count = forkHints.counted(st, hint);	// only eligible triggers count ("the 3rd k-space system")
 			changed = changed || count.changed;
 			if (!count.reached) { forkHints.log(id + " on " + event + ": counted " + st.state[id].n + "/" + hint.minCount); return; }
-			if (!forkHints.eligibleSafe(hint, ctx, data)) { forkHints.log(id + " on " + event + ": not eligible"); return; }
 			forkHints.enqueue(forkHints.queue, hint, data, now);
 			forkHints.log(id + " on " + event + ": queued for " + hint.ttlSeconds + " s");
 		});
@@ -426,7 +433,6 @@ const forkHints = {
 		if (forkHintsUI.busy()) { forkHints.log("waiting: a tip is on screen"); return; }
 		const st = forkHints.stateOf(opts);
 		const ctx = forkHints.ctx();
-		const quiet = forkHints.quietReason(forkHintsUI.quietSignals(now));
 		const reasons = [];
 		const items = forkHints.ordered(forkHints.queue, forkHints.hints);
 		for (let i = 0; i < items.length; i++) {
@@ -436,6 +442,7 @@ const forkHints = {
 			const section = ctx.sectionOf(hint);
 			const caps = forkHints.capsReason(hint, st, section, forkHints.session, now, { debug: forkHints.debugOn, beacons: forkHintsUI.beaconCount() });
 			if (caps) { reasons.push(item.id + ": " + caps); continue; }
+			const quiet = forkHints.quietReason(forkHintsUI.quietSignals(now, hint));	// a tip in a dialog: that one doesn't count
 			if (quiet) { reasons.push(item.id + ": " + quiet); continue; }
 			if (!forkHintsUI.anchorFor(hint, ctx, item.data)) { reasons.push(item.id + ": anchor not visible"); continue; }
 			forkHints.unqueue(item.id);
@@ -530,7 +537,7 @@ const forkHints = {
 			const section = ctx.sectionOf(hint);
 			const why = !st ? "no options" : forkHints.blockedReason(hint, st, ctx, now)
 				|| forkHints.capsReason(hint, st, section, forkHints.session, now, { debug: forkHints.debugOn, beacons: forkHintsUI.beaconCount() })
-				|| forkHints.quietReason(forkHintsUI.quietSignals(now));
+				|| forkHints.quietReason(forkHintsUI.quietSignals(now, hint));
 			if (why) { forkHints.log(id + ": not shown, " + why); return false; }
 		}
 		if (!forkHintsUI.anchorFor(hint, ctx, o.data)) { forkHints.log(id + ": not shown, anchor not visible"); return false; }
@@ -604,7 +611,7 @@ const forkHints = {
 		});
 	},
 
-	/** Core events no feature file sees: session.start, idle, paste.sigs, system.viewed, dialog.close; What's New this session */
+	/** Core events no feature file sees: session.start, idle, paste.sigs, system.viewed, dialog.open / close; What's New this session */
 	installHooks: function() {
 		["keydown", "pointerdown", "wheel"].forEach(function(type) {
 			document.addEventListener(type, function(e) {
@@ -625,6 +632,7 @@ const forkHints = {
 			CKEDITOR.on("instanceReady", function(e) { watch(e.editor); });
 		}
 		$(document).on("dialogopen", "#dialog-whatsNew", function() { forkHints.session.whatsNew = true; });
+		$(document).on("dialogopen", function(e) { forkHints.emit("dialog.open", { id: e.target && e.target.id || "" }); });
 		$(document).on("dialogclose", function(e) { forkHints.emit("dialog.close", { id: e.target && e.target.id || "" }); });
 		if (typeof tripwire !== "undefined" && tripwire.pasteSignatures && typeof tripwire.pasteSignatures.parsePaste === "function" && !tripwire.pasteSignatures.parsePaste.forkHintsWrapped) {
 			const parsePaste = tripwire.pasteSignatures.parsePaste;

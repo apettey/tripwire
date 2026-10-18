@@ -840,8 +840,42 @@ const panelModes = {
 		});
 	},
 
+	// ---- Tip (hints.js): a crowded layout and the modes never used: a beacon on a panel's Pop out button ----
+	// Checked on the 15 s idle tick (a count of the panels on screen; nothing once the modes were used or the tip is done).
+	// A beacon rather than an "idle" line: the button it sits on is the feature, and a full layout has no empty corner.
+	TIP_MIN_PANELS: 5,
+	TIP_AFTER_MS: 10 * 60000,
+
+	/** Enough panels on screen for the tip */
+	crowded: function(count) {
+		return Number(count) >= panelModes.TIP_MIN_PANELS;
+	},
+
+	/** The Pop out button the tip points at: the Signatures panel's, else the first docked panel's on screen */
+	tipAnchor: function() {
+		const sel = ".ph-btn[data-ph-to='floating']:visible";
+		return $("#signaturesWidget " + sel)[0] || $(".gridster .gridWidget " + sel)[0] || null;
+	},
+
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "panelModes.crowded", feature: "panelModes", section: "general",
+			trigger: "idle", kind: "beacon", placement: "bottom",
+			// The default layout already has 5+ panels: wait until the session is 10 minutes old, not at page load
+			eligible: function() { return Date.now() - forkHints.session.start >= panelModes.TIP_AFTER_MS && panelModes.crowded($(".gridWidget:visible").length); },
+			anchor: function() { return panelModes.tipAnchor(); },
+			title: "Pop out, shrink or hide panels",
+			body: "Any panel can pop out into a window you move anywhere, shrink to a small view or minimize. "
+				+ "The Panels menu at the top right brings them back.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() { panelModes.openMenu(); } },
+			priority: 30, maxShows: 2, cooldownHours: 72, ttlSeconds: 60
+		});
+	},
+
 	init: function() {
 		panelModes.installMenu();
+		panelModes.setupTip();
 		// Buttons in panel headers and window title bars
 		$(document).on("mousedown", ".ph-btn", function(e) { e.stopPropagation(); });
 		$(document).on("click", ".ph-btn", function(e) {

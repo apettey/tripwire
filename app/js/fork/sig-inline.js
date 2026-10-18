@@ -525,9 +525,49 @@ const sigInline = {
 		});
 	},
 
+	// ---- Tip (hints.js): after the user changed a hole's life or mass in the Edit signature dialog ----
+
+	dialogEdit: null,	// {sigID}: life / mass changed by the user since the Edit signature dialog opened (null: not)
+	lastEdit: null,		// the last such change (the tip's "Show me" opens that row's Mass cell)
+
+	/** The dialog close a tip follows: the Edit signature dialog, after a life or mass change in it */
+	tipEligible: function(data, dialogEdit, opts) {
+		return !!data && data.id === "dialog-signature" && !!dialogEdit && sigInline.enabled(opts);
+	},
+
+	/** "Show me": the Mass popover on the edited row, else on the first wormhole row */
+	showFromTip: function() {
+		const id = sigInline.lastEdit && sigInline.lastEdit.sigID;
+		const rows = $("#sigTable tbody tr[data-id]:visible").filter(function() { return !!sigInline.findWormhole(tripwire.client.wormholes, this.dataset.id); });
+		const row = (id ? rows.filter("[data-id='" + String(id).replace(/[^0-9A-Za-z_-]/g, "") + "']")[0] : null) || rows[0];
+		const cell = row ? row.children[sigInline.FIELDS.mass.column - 1] : null;
+		if (cell) { sigInline.open(cell); }
+	},
+
+	setupTip: function() {
+		$(document).on("dialogopen", "#dialog-signature", function() { sigInline.dialogEdit = null; });
+		$(document).on("change", "#dialog-signature [name='wormholeLife'], #dialog-signature [name='wormholeMass']", function(e) {
+			if (!e.originalEvent) { return; }	// the dialog filling itself in, not the user
+			if (typeof sigDialogVM === "undefined" || sigDialogVM.mode !== "update") { return; }
+			sigInline.dialogEdit = sigInline.lastEdit = { sigID: $("#dialog-signature").data("signatureid") || null };
+		});
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "sigInline.dialog", feature: "sigInline", section: "signatures",
+			trigger: "dialog.close", kind: "toast",
+			eligible: function(ctx, data) { return sigInline.tipEligible(data, sigInline.dialogEdit, ctx.options); },
+			title: "Life and mass without the dialog",
+			body: "Next time, click the Life or Mass cell of the hole in the signature list (or select the row and press L or M) "
+				+ "and pick the new value.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() { sigInline.showFromTip(); } },
+			priority: 60, maxShows: 2, cooldownHours: 72, ttlSeconds: 300
+		});
+	},
+
 	init: function() {
 		sigInline.registerCommands();
 		sigInline.setupSettings();
+		sigInline.setupTip();
 		sigInline.syncBody();
 		document.addEventListener("keydown", sigInline.onKeydown, true);
 		// Delegated on the cells of the Life (5) and Mass (6) columns; non-wormhole rows have no such cells

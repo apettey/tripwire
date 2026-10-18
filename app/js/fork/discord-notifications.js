@@ -674,6 +674,37 @@ const discordNotifications = {
 		});
 	},
 
+	// ---- Tip (hints.js): Mask Admin opened on a mask that posts nothing to Discord ----
+	// The first of the Mask Admin tips (then Watchlist, then Bookmarks, by priority; one pop-up tip a session, so at most
+	// one per open). Whether the mask has a channel isn't loaded until the Discord page opens: the
+	// Fight here state (rally.php, polled anyway) says whether a Fight here channel or the server webhook is there, the
+	// cheap stand-in used here.
+
+	/** Mask Admin tab menu entry of a page (the Mask Admin tips point at it) */
+	menuItem: function(windowName) {
+		return $("#dialog-admin .menu li[data-window='" + windowName + "']:visible")[0] || null;
+	},
+
+	/** Open that Mask Admin page (a tip's "Show me") */
+	openPage: function(windowName) {
+		$("#dialog-admin .menu li[data-window='" + windowName + "']").trigger("click");
+	},
+
+	setupTip: function() {
+		if (typeof forkHints === "undefined") { return; }
+		forkHints.register({
+			id: "discordNotifications.maskAdmin", feature: "discordNotifications", section: "maskAdmin", audience: "maskAdmin",
+			trigger: "maskAdmin.open", kind: "callout", placement: "left", dialog: "#dialog-admin",
+			eligible: function() { return typeof rally !== "undefined" && !rally.discordAvailable; },
+			anchor: function() { return discordNotifications.menuItem("discord"); },
+			title: "Post to Discord",
+			body: "Your mask can post to a Discord channel: kills in the chain, Fight here, new k-space exits, rolling and more. "
+				+ "Add a webhook on the Discord page.\n\nTurn tips off in Settings > General.",
+			action: { label: "Show me", run: function() { discordNotifications.openPage("discord"); } },
+			priority: 22, maxShows: 2, cooldownHours: 72, ttlSeconds: 120
+		});
+	},
+
 	init: function() {
 		const dn = discordNotifications;
 		const $dialog = $("#dialog-admin");
@@ -687,6 +718,7 @@ const discordNotifications = {
 			$dialog.find(".window").append("<div data-window='discord' class='hidden'></div>");
 		}
 		dn.bind();
+		dn.setupTip();
 		// Upstream's menu handler shows the window (and asks admin.php, which has nothing for it); load the page
 		$(document).on("click", "#dialog-admin .menu li", function() {
 			const discord = $(this).attr("data-window") === "discord";

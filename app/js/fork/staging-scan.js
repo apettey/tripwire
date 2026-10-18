@@ -573,11 +573,31 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 		}
 
+		// Tip (hints.js): a beacon on the scan's header the first times a null-sec system is viewed (the scan shows by
+		// itself; the tip says what it is). Waits for the scan to load: the anchor appears with it.
+		function setupTip() {
+			if (typeof forkHints === "undefined") { return; }
+			forkHints.register({
+				id: "stagingScan.nullsec", feature: "stagingScan", section: "markers",
+				trigger: "system.viewed", kind: "beacon", placement: "bottom",
+				eligible: function(ctx, data) {
+					return !!data && ss.enabled(ctx.options) && ss.isNullSec(data.systemID, typeof appData !== "undefined" ? appData.systems[data.systemID] : null);
+				},
+				anchor: "#staging-scan:not(.hidden) .ss-head",
+				title: "Staging scan",
+				body: "In null-sec this lists the busiest systems within a few gate jumps and marks likely staging systems "
+					+ "(STG) on the map. Change the radius here; the Staging button above the map turns it off.\n\n"
+					+ "Turn tips off in Settings > General.",
+				priority: 40, maxShows: 2, cooldownHours: 72, ttlSeconds: 300
+			});
+		}
+
 		installHook();
 		$(function() {
 			installHook();
 			installActivityHook();
 			setupSettings();
+			setupTip();
 			if (typeof tripwire !== "undefined" && typeof tripwire.systemChange === "function" && !tripwire.systemChange.stagingScanWrapped) {
 				const systemChange = tripwire.systemChange;
 				const wrapped = function() {

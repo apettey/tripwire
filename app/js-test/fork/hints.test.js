@@ -25,6 +25,11 @@ describe('forkHints', () => {
 				{ anchor: undefined }, { title: '' }, { body: 5 }, { eligible: true }, { action: { label: 'x' } }, { priority: 'high' }]
 				.forEach(o => assert.throws(() => forkHints.normalize(def(o)), JSON.stringify(o)));
 		});
+		it('dialog: a selector or nothing', () => {
+			assert.strictEqual(forkHints.normalize(def({ dialog: '#dialog-mass' })).dialog, '#dialog-mass');
+			assert.throws(() => forkHints.normalize(def({ dialog: 5 })), /dialog/);
+			assert.throws(() => forkHints.normalize(def({ dialog: '' })), /dialog/);
+		});
 		it('a toast needs no anchor', () => {
 			assert.strictEqual(forkHints.normalize(def({ kind: 'toast', anchor: undefined })).kind, 'toast');
 		});
@@ -375,6 +380,28 @@ describe('forkHints', () => {
 			forkHints.pump();
 			assert.deepStrictEqual(ui.shown, []);
 			assert.strictEqual(forkHints.queue.length, 0);
+		});
+
+		it('minCount counts eligible triggers only', () => {
+			forkHints.register(def({ minCount: 2, eligible: (c, d) => d.ok }));
+			quiet = 'user busy';
+			forkHints.emit('paste.sigs', { ok: false });
+			forkHints.emit('paste.sigs', { ok: false });
+			assert.strictEqual(forkHints.queue.length, 0);
+			assert.ok(!options.hints.state['t.a'] || !options.hints.state['t.a'].n, 'not counted');
+			forkHints.emit('paste.sigs', { ok: true });
+			assert.strictEqual(forkHints.queue.length, 0);
+			forkHints.emit('paste.sigs', { ok: true });
+			assert.strictEqual(forkHints.queue.length, 1);
+		});
+
+		it('a tip in a dialog asks the quiet check without its own dialog', () => {
+			forkHints.register(def({ dialog: '#dialog-mass' }));
+			const asked = [];
+			ui.quietSignals = (now, hint) => { asked.push(hint && hint.dialog); return {}; };
+			forkHints.emit('paste.sigs', {});
+			assert.deepStrictEqual(asked, ['#dialog-mass']);
+			assert.strictEqual(ui.shown.length, 1);
 		});
 
 		it('minCount: the 5th trigger; saves stop once counted', () => {
