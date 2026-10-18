@@ -402,7 +402,9 @@ const holeRolling = {
 		if ($anchor.length) { if ($p.next()[0] !== $anchor[0]) { $p.insertBefore($anchor); } }
 		else if (!$p.parent().length) { $dialog.prepend($p); }
 		const flag = holeRolling.flags[String(wormholeID)] || null;
-		$p.toggleClass("hr-flagged", !!flag).html(holeRolling.panelHtml(flag)).show();
+		// Rolling guide (rolling-guide.js): its link after ours
+		const guideLink = typeof rollingGuide !== "undefined" ? rollingGuide.massLinkHtml() : "";
+		$p.toggleClass("hr-flagged", !!flag).html(holeRolling.panelHtml(flag) + guideLink).show();
 	},
 
 	setupSettings: function() {
