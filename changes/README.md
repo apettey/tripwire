@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-18 | [Usage statistics](2026-10-18-usage-tracking/README.md) | First-party feature usage counters (no third parties; pseudonymous, 90 days), feature catalog, Settings > General toggle, analytics check in the feature workflow |
 | 2026-10-17 | [Panel display modes](2026-10-17-panel-modes/README.md) | Every panel but the chain map can be docked, popped out into a window, shown small (kill panels) or minimized, from buttons at its top right, a Panels menu in the top bar and the palette; replaces the kill panels' display modes (#115) |
 | 2026-10-17 | [Shared panel host](2026-10-17-panel-host/README.md) | Internal: the fork panels' gridster plumbing (placing, adding, removing, floating geometry) moves into one file, `app/js/fork/panel-host.js`, with a panel registry; no visible change |
 | 2026-10-17 | [Kill panel display modes](2026-10-17-kill-panel-display-modes/README.md) | System kills and Chain kills panels can be Fixed, Fixed and minimized (header + newest kill) or Floating (movable, resizable window); header buttons, Settings > Kills & Intel selects, command palette |
