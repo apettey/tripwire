@@ -38,14 +38,29 @@ const panelSmallViews = {
 	},
 
 	/**
-	 * The signatures the full list shows: the viewed system's, without the hidden ones (anomalies folded away)
-	 * @param sigs {id: signature}; @param hidden [id] not shown
+	 * Whether upstream draws a signature in the list (addSignature.js, makeSigInfo): a wormhole only with its wormhole
+	 * record and the signature of its other end
+	 * @param holes {sigID: wormhole}; @param all every known signature {id: signature} (tripwire.client.signatures)
 	 */
-	visible: function(sigs, systemID, hidden) {
+	drawn: function(sig, holes, all) {
+		if (!sig) { return false; }
+		if (sig.type !== "wormhole") { return true; }
+		const wh = holes ? holes[sig.id] : null;
+		if (!wh) { return false; }
+		const otherID = String(wh.initialID) === String(sig.id) ? wh.secondaryID : wh.initialID;
+		return !!(all && all[otherID]);
+	},
+
+	/**
+	 * The signatures the full list shows: the viewed system's that upstream draws (drawn), without the hidden ones
+	 * (anomalies folded away)
+	 * @param sigs {id: signature}; @param hidden [id] not shown; @param holes, all: see drawn
+	 */
+	visible: function(sigs, systemID, hidden, holes, all) {
 		const skip = {};
 		(hidden || []).forEach(function(id) { skip[String(id)] = true; });
 		return Object.keys(sigs || {}).map(function(k) { return sigs[k]; }).filter(function(s) {
-			return s && String(s.systemID) === String(systemID) && !skip[String(s.id)];
+			return s && String(s.systemID) === String(systemID) && !skip[String(s.id)] && panelSmallViews.drawn(s, holes, all);
 		});
 	},
 
@@ -153,12 +168,12 @@ const panelSmallViews = {
 		const systemID = typeof viewingSystemID !== "undefined" ? viewingSystemID : null;
 		const sigs = tripwire.signatures.currentSystem || {};
 		const hidden = typeof sigAnomalies !== "undefined" && !sigAnomalies.revealed ? sigAnomalies.hiddenIds(sigs, systemID, opts) : [];
-		const list = panelSmallViews.visible(sigs, systemID, hidden);
+		const holes = panelSmallViews.wormholeIndex();
+		const list = panelSmallViews.visible(sigs, systemID, hidden, holes, tripwire.client ? tripwire.client.signatures : null);
 		const head = panelSmallViews.headText(panelSmallViews.counts(list));
 		$b.find(".ssv-total").text(head.total);
 		$b.find(".ssv-unscanned").text(head.unscanned).toggleClass("ssv-hot", !!head.unscanned);
 		const esc = panelSmallViews.escape;
-		const holes = panelSmallViews.wormholeIndex();
 		const ageOn = typeof sigAge !== "undefined" && sigAge.enabled(opts);
 		const now = typeof sigAge !== "undefined" ? sigAge.now() : Date.now();
 		$b.find(".ssv-list").html(panelSmallViews.newest(list).map(function(s) {

@@ -28,13 +28,26 @@ describe('Small views of upstream panels', () => {
 			3: sig(3, { bookmark: 'anomaly' }),
 			4: sig(4, { type: 'wormhole', systemID: String(SYS) })
 		};
+		const wh = { initialID: '4', secondaryID: '5', parent: 'initial', type: 'H296' };
+		const holes = { 4: wh, 5: wh };
+		const all = Object.assign({ 5: sig(5, { type: 'wormhole', systemID: 30000142 }) }, sigs);
 		it('the viewed system only, without the hidden ones', () => {
-			assert.deepEqual(sv().visible(sigs, SYS, []).map(s => s.id), ['1', '3', '4']);
-			assert.deepEqual(sv().visible(sigs, String(SYS), [3]).map(s => s.id), ['1', '4']);
+			assert.deepEqual(sv().visible(sigs, SYS, [], holes, all).map(s => s.id), ['1', '3', '4']);
+			assert.deepEqual(sv().visible(sigs, String(SYS), [3], holes, all).map(s => s.id), ['1', '4']);
 			assert.deepEqual(sv().visible(null, SYS), []);
 		});
+		it('a wormhole only as upstream draws it: with its wormhole and the signature of its other end', () => {
+			assert.equal(sv().drawn(sigs[4], holes, all), true);
+			assert.equal(sv().drawn(sigs[4], {}, all), false);			// no wormhole record
+			assert.equal(sv().drawn(sigs[4], holes, sigs), false);		// the other end is missing
+			assert.equal(sv().drawn(all[5], holes, all), true);			// the far end works the same way
+			assert.equal(sv().drawn(sigs[1], null, null), true);			// not a wormhole: always
+			assert.equal(sv().drawn(null, holes, all), false);
+			assert.deepEqual(sv().visible(sigs, SYS, [], {}, all).map(s => s.id), ['1', '3']);
+			assert.deepEqual(sv().counts(sv().visible(sigs, SYS, [], {}, all)), { total: 2, unscanned: 1 });
+		});
 		it('counts the total and the unscanned', () => {
-			assert.deepEqual(sv().counts(sv().visible(sigs, SYS, [])), { total: 3, unscanned: 1 });
+			assert.deepEqual(sv().counts(sv().visible(sigs, SYS, [], holes, all)), { total: 3, unscanned: 1 });
 			assert.deepEqual(sv().counts([]), { total: 0, unscanned: 0 });
 		});
 		it('header text: quiet when empty, the unscanned part only when there are some', () => {
