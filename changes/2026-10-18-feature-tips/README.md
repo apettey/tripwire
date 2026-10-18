@@ -36,9 +36,9 @@ This is the tips engine itself. The two pilot tips are registered from their fea
   "Show me" / "Got it" / × / "Don't show tips like this"; Esc closes; never takes focus; polite live region; hides after
   20 s untouched ("ignored"); steps aside for other pop-ups and dialogs. No "idle" (empty-state line) kind yet.
 - Core events: `session.start`, `idle`, `paste.sigs`, `system.viewed`, `dialog.close` (hints.js); `jump.done`
-  (jump-return.js), `kill.chain` (kill-reporting.js), `paste.dscan` (intel-scans.js), `panel.open` (panel-host.js),
-  `maskAdmin.open` (mask-admin-tab.js), `mouse.action` (command-palette.js, Add/Edit signature, Undo/Redo, Follow).
-- Usage statistics: `hints.shown/acted/got_it/closed/ignored/section_off`, plus `<feature>.hint_shown` /
+  (jump-return.js), `kill.chain` (kill-reporting.js and chain-killfeed.js, one kill counted once), `paste.dscan` (intel-scans.js), `panel.open` (panel-host.js),
+  `maskAdmin.open` (mask-admin-tab.js), `mouse.action` (command-palette.js, Add/Edit signature, Follow).
+- Usage statistics: `hints.tip_shown/acted/got_it/closed/ignored/section_off` (not `shown`, which is daily exposure), plus `<feature>.hint_shown` /
   `<feature>.hint_acted` for each tip's funnel (shown, then used, on the same feature). The catalog gets a `hints` entry,
   a top-level `generic` list (actions every feature may send, not use) and per-feature `events` (allowed, not use);
   `feature-usage.js` and `analytics/analytics.inc.php` read both.

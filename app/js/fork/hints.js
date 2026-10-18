@@ -56,6 +56,7 @@ const forkHints = {
 	PUMP_MS: 2500,
 	NEW_MS: 14 * 86400000,
 	MAX_STATE: 200,
+	MAX_KILLS: 500,
 	DEBUG_KEY: "forkHints.debug",
 
 	// ---- Pure logic (tested under mocha) ----
@@ -243,6 +244,7 @@ const forkHints = {
 		e.shows = (e.shows || 0) + 1;
 		e.last = now;
 		e.outcome = "shown";
+		delete e.n;		// a minCount tip needs its count again before it comes back
 		if (forkHints.interruptive(hint) && !forced) {
 			st.log.lastAt = now;
 			st.log.week.push([now, section]);
@@ -271,11 +273,24 @@ const forkHints = {
 	},
 
 	/** Count a trigger toward minCount (mutates st); true once the count is reached */
+	/** Count a trigger toward minCount (mutates st): {reached, changed}. The count stops at minCount (no save per trigger
+	 *  once reached) and starts again after the tip was shown (recordShow). */
 	counted: function(st, hint) {
-		if (hint.minCount <= 1) { return true; }
+		if (hint.minCount <= 1) { return { reached: true, changed: false }; }
 		const e = forkHints.entry(st, hint.id);
-		e.n = Math.min(1e6, (e.n || 0) + 1);
-		return e.n >= hint.minCount;
+		const n = Math.min(hint.minCount, Number(e.n) || 0);
+		if (n >= hint.minCount) { return { reached: true, changed: false }; }
+		e.n = n + 1;
+		return { reached: e.n >= hint.minCount, changed: true };
+	},
+
+	/** Kill ids not seen before (mutates seen: {id: true}, kept to the last MAX_KILLS); kill.chain comes from both Kill
+	 *  Reporting and the Chain kills panel, so one kill counts once */
+	newKills: function(seen, ids) {
+		const fresh = (ids || []).filter(function(id) { return id !== undefined && id !== null && !seen.map[id]; });
+		fresh.forEach(function(id) { seen.map[id] = true; seen.order.push(id); });
+		while (seen.order.length > forkHints.MAX_KILLS) { delete seen.map[seen.order.shift()]; }
+		return fresh;
 	},
 
 	/** "pochven" | "highsec" | "lowsec" | "nullsec" | "wormhole" | "unknown" from systemAnalysis' systemTypeClass */
@@ -303,6 +318,7 @@ const forkHints = {
 	queue: [],				// [{id, data, at, expires}]
 	session: { start: 0, shown: 0, whatsNew: false },
 	signals: { lastInput: 0, lastKill: 0, lastPaste: 0, dragging: false },
+	seenKills: { map: {}, order: [] },
 	debugOn: false,
 	lastLog: "",
 	pumpTimer: null,
@@ -339,7 +355,7 @@ const forkHints = {
 	isMaskAdmin: function() {
 		if (typeof document === "undefined" || !document.getElementById) { return false; }
 		const a = document.getElementById("admin");
-		return !!(a && a.style.display !== "none");
+		return !!(a && typeof getComputedStyle === "function" && getComputedStyle(a).display !== "none");
 	},
 
 	log: function(text) {
@@ -368,7 +384,14 @@ const forkHints = {
 	emit: function(event, data) {
 		const now = Date.now();
 		if (event === "paste.sigs" || event === "paste.dscan") { forkHints.signals.lastPaste = now; }
-		if (event === "kill.chain") { forkHints.signals.lastKill = now; }
+		if (event === "kill.chain") {
+			// Kill Reporting and the Chain kills panel both see a kill: only its first report counts
+			if (data && Array.isArray(data.killIDs)) {
+				data = Object.assign({}, data, { killIDs: forkHints.newKills(forkHints.seenKills, data.killIDs) });
+				if (!data.killIDs.length) { return; }
+			}
+			forkHints.signals.lastKill = now;
+		}
 		const opts = forkHints.opts();
 		if (!opts) { return; }
 		const st = forkHints.stateOf(opts);
@@ -379,8 +402,9 @@ const forkHints = {
 			if (!forkHints.matches(hint, event)) { return; }
 			const blocked = forkHints.blockedReason(hint, st, ctx, now);
 			if (blocked) { forkHints.log(id + " on " + event + ": no, " + blocked); return; }
-			if (hint.minCount > 1) { changed = true; }
-			if (!forkHints.counted(st, hint)) { forkHints.log(id + " on " + event + ": counted " + st.state[id].n + "/" + hint.minCount); return; }
+			const count = forkHints.counted(st, hint);
+			changed = changed || count.changed;
+			if (!count.reached) { forkHints.log(id + " on " + event + ": counted " + st.state[id].n + "/" + hint.minCount); return; }
 			if (!forkHints.eligibleSafe(hint, ctx, data)) { forkHints.log(id + " on " + event + ": not eligible"); return; }
 			forkHints.enqueue(forkHints.queue, hint, data, now);
 			forkHints.log(id + " on " + event + ": queued for " + hint.ttlSeconds + " s");
@@ -451,7 +475,8 @@ const forkHints = {
 		return true;
 	},
 
-	/** Usage statistics for an outcome: hints.<outcome>, and <feature>.hint_shown / hint_acted for the per-tip funnel
+	/** Usage statistics for an outcome: hints.tip_shown / acted / got_it / closed / ignored / section_off, and
+	 *  <feature>.hint_shown / hint_acted for the per-tip funnel
 	 *  (shown -> used, on the tip's own feature). Literal calls: the catalog test looks for them. */
 	track: function(outcome, hint) {
 		if (typeof forkUsage === "undefined") { return; }
@@ -459,7 +484,7 @@ const forkHints = {
 			const index = forkHints.index();
 			if (!index || (index.features && index.features[hint.feature])) { forkUsage.track(hint.feature, action); }
 		};
-		if (outcome === "shown") { forkUsage.track("hints", "shown"); funnel("hint_shown"); }
+		if (outcome === "shown") { forkUsage.track("hints", "tip_shown"); funnel("hint_shown"); }	// not "shown": that is daily exposure
 		else if (outcome === "acted") { forkUsage.track("hints", "acted"); funnel("hint_acted"); }
 		else if (outcome === "got_it") { forkUsage.track("hints", "got_it"); }
 		else if (outcome === "closed") { forkUsage.track("hints", "closed"); }
@@ -592,6 +617,13 @@ const forkHints = {
 			document.addEventListener(type, function() { forkHints.signals.dragging = false; }, { capture: true, passive: true });
 		});
 		window.addEventListener("blur", function() { forkHints.signals.dragging = false; });
+		// CKEditor's iframe keeps its keystrokes from the page's listeners: count them as input too
+		if (typeof CKEDITOR !== "undefined" && CKEDITOR && typeof CKEDITOR.on === "function") {
+			const typed = function() { forkHints.signals.lastInput = Date.now(); };
+			const watch = function(editor) { if (editor && !editor.forkHintsWatched) { editor.forkHintsWatched = true; editor.on("key", typed); editor.on("change", typed); } };
+			Object.keys(CKEDITOR.instances || {}).forEach(function(k) { watch(CKEDITOR.instances[k]); });
+			CKEDITOR.on("instanceReady", function(e) { watch(e.editor); });
+		}
 		$(document).on("dialogopen", "#dialog-whatsNew", function() { forkHints.session.whatsNew = true; });
 		$(document).on("dialogclose", function(e) { forkHints.emit("dialog.close", { id: e.target && e.target.id || "" }); });
 		if (typeof tripwire !== "undefined" && tripwire.pasteSignatures && typeof tripwire.pasteSignatures.parsePaste === "function" && !tripwire.pasteSignatures.parsePaste.forkHintsWrapped) {

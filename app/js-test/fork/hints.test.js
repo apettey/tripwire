@@ -232,12 +232,25 @@ describe('forkHints', () => {
 			assert.strictEqual(Object.keys(st.state).length, forkHints.MAX_STATE);
 			assert.ok(!st.state.h0 && st.state['h' + (forkHints.MAX_STATE + 4)]);
 		});
-		it('minCount counts triggers across calls', () => {
+		it('minCount counts triggers up to the count (no change, so no save, after that); a show starts it again', () => {
 			const st = fresh();
 			const five = forkHints.normalize(def({ minCount: 5 }));
-			const results = [1, 2, 3, 4, 5, 6].map(() => forkHints.counted(st, five));
-			assert.deepStrictEqual(results, [false, false, false, false, true, true]);
-			assert.strictEqual(forkHints.counted(fresh(), h), true);
+			const results = [1, 2, 3, 4, 5, 6, 7].map(() => forkHints.counted(st, five));
+			assert.deepStrictEqual(results.map(r => r.reached), [false, false, false, false, true, true, true]);
+			assert.deepStrictEqual(results.map(r => r.changed), [true, true, true, true, true, false, false]);
+			assert.strictEqual(st.state['t.a'].n, 5);
+			forkHints.recordShow(st, five, 's', 1000);
+			assert.strictEqual(st.state['t.a'].n, undefined);
+			assert.deepStrictEqual(forkHints.counted(st, five), { reached: false, changed: true });
+			assert.deepStrictEqual(forkHints.counted(fresh(), h), { reached: true, changed: false });
+		});
+		it('newKills: one kill counts once, the memory is bounded', () => {
+			const seen = { map: {}, order: [] };
+			assert.deepStrictEqual(forkHints.newKills(seen, [1, 2]), [1, 2]);
+			assert.deepStrictEqual(forkHints.newKills(seen, [2, 3, null]), [3]);
+			for (let i = 10; i < 10 + forkHints.MAX_KILLS; i++) { forkHints.newKills(seen, [i]); }
+			assert.strictEqual(seen.order.length, forkHints.MAX_KILLS);
+			assert.deepStrictEqual(forkHints.newKills(seen, [1]), [1]);
 		});
 	});
 
@@ -300,7 +313,7 @@ describe('forkHints', () => {
 			assert.deepStrictEqual(ui.shown, []);
 			forkHints.emit('paste.sigs', { anomalies: 3 });
 			assert.deepStrictEqual(ui.shown, [['t.a', '3 anomalies']]);
-			assert.deepStrictEqual(tracked, ['hints.shown', 'sigAnomalies.hint_shown']);
+			assert.deepStrictEqual(tracked, ['hints.tip_shown', 'sigAnomalies.hint_shown']);
 			assert.strictEqual(options.hints.state['t.a'].shows, 1);
 			assert.strictEqual(forkHints.session.shown, 1);
 			assert.ok(options.saves > 0);
@@ -364,12 +377,33 @@ describe('forkHints', () => {
 			assert.strictEqual(forkHints.queue.length, 0);
 		});
 
-		it('minCount: the 5th trigger', () => {
+		it('minCount: the 5th trigger; saves stop once counted', () => {
 			forkHints.register(def({ minCount: 5, kind: 'toast', anchor: undefined }));
+			quiet = 'user busy';
 			for (let i = 0; i < 4; i++) { forkHints.emit('paste.sigs', {}); }
-			assert.deepStrictEqual(ui.shown, []);
+			assert.strictEqual(forkHints.queue.length, 0);
 			forkHints.emit('paste.sigs', {});
+			assert.strictEqual(forkHints.queue.length, 1);
+			const saves = options.saves;
+			forkHints.emit('paste.sigs', {});
+			forkHints.emit('paste.sigs', {});
+			assert.strictEqual(options.saves, saves, 'no save per trigger once the count is reached');
+			quiet = '';
+			forkHints.pump();
 			assert.strictEqual(ui.shown.length, 1);
+			assert.strictEqual(options.hints.state['t.a'].n, undefined);
+		});
+
+		it('kill.chain: the same kill from two sources marks the time once', () => {
+			forkHints.signals.lastKill = 0;
+			forkHints.seenKills = { map: {}, order: [] };
+			forkHints.emit('kill.chain', { killIDs: [7] });
+			assert.strictEqual(forkHints.signals.lastKill, clock);
+			clock += 5 * MIN;
+			forkHints.emit('kill.chain', { killIDs: [7] });
+			assert.strictEqual(forkHints.signals.lastKill, clock - 5 * MIN);
+			forkHints.emit('kill.chain', { killIDs: [7, 8] });
+			assert.strictEqual(forkHints.signals.lastKill, clock);
 		});
 
 		it('outcomes: tracked, acted runs the action, section_off turns the section off', () => {

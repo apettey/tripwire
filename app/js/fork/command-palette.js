@@ -330,7 +330,8 @@ const commandPalette = {
 	// Buttons that have a palette command. A real mouse click on one emits "mouse.action" {command}. Another feature does
 	// the same from its own click handler (menus, map clicks):
 	//   if (typeof forkHints !== "undefined") { forkHints.emit("mouse.action", { command: "<its command id>" }); }
-	MOUSE_COMMANDS: { "#add-signature": "sig.add", "#edit-signature": "sig.edit", "#undo": "sig.undo", "#redo": "sig.redo", "#follow": "nav.toggleFollow" },
+	// (Not Undo / Redo: they have their own keys, Ctrl+Z / Ctrl+Y, a better tip than the palette.)
+	MOUSE_COMMANDS: { "#add-signature": "sig.add", "#edit-signature": "sig.edit", "#follow": "nav.toggleFollow" },
 
 	/** The command of the (enabled) button a click landed on, or null */
 	mouseCommand: function(target) {

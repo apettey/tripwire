@@ -561,7 +561,7 @@ const killReporting = {
 			killReporting.mark(killReporting.marks, Number(r.kill.systemID), r.category, now);
 			return { kill: r.kill, category: r.category, place: place };
 		});
-		if (items.length && typeof forkHints !== "undefined") { forkHints.emit("kill.chain", { count: items.length }); }
+		if (items.length && typeof forkHints !== "undefined") { forkHints.emit("kill.chain", { killIDs: items.map(function(i) { return i.kill.killID; }) }); }
 		if (settings.desktop && items.length) { killReporting.notify(items); }
 		if (items.length) { killReporting.applyMarks(); }
 		if (settings.enabled) {

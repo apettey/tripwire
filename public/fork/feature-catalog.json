@@ -24,7 +24,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["mode"] },
     { "id": "hints", "title": "Feature tips", "section": "general", "prs": [], "settingsKey": "hints",
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["acted", "got_it"],
-      "events": ["closed", "ignored", "section_off"], "success": "acted on >=15% of tips shown, tips turned off by <10% of active users" },
+      "events": ["tip_shown", "closed", "ignored", "section_off"], "success": "acted on >=15% of tips shown, tips turned off by <10% of active users" },
 
     { "id": "sizeTags", "title": "Hole size tags", "section": "markers", "prs": [10, 32], "settingsKey": "sizeTags",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".size-tag" },

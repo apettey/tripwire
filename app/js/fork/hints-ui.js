@@ -141,7 +141,9 @@ const forkHintsUI = {
 			lastKill: s.lastKill,
 			lastPaste: s.lastPaste,
 			dialogOpen: forkHintsUI.dialogOpen(),
-			inputFocused: !!(a && a !== document.body && a.id !== "clipboard" && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))),
+			// CKEditor (comments, notes) types inside an iframe: focus on an IFRAME, or an editor instance with the focus
+			inputFocused: !!(a && a !== document.body && a.id !== "clipboard" && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT|IFRAME)$/.test(a.tagName)))
+				|| !!(typeof CKEDITOR !== "undefined" && CKEDITOR && CKEDITOR.currentInstance),
 			dragging: s.dragging,
 			popupOpen: forkHintsUI.popupOpen(),
 			fightHere: fight
@@ -255,16 +257,23 @@ const forkHintsUI = {
 		if (!forkHintsUI.timer) { forkHintsUI.timer = setInterval(forkHintsUI.tick, forkHintsUI.TICK_MS); }
 	},
 
+	/** The anchor while it is visible; when it isn't (a redraw replaced the element), the tip's anchor found again, or null */
+	reanchor: function(hint, el, data) {
+		if (forkHintsUI.visible(el)) { return el; }
+		const again = typeof forkHints !== "undefined" ? forkHintsUI.anchorFor(hint, forkHints.ctx(), data) : null;
+		return again && again !== document.body ? again : null;
+	},
+
 	/** Follow the anchors; go when the anchor goes or another pop-up / dialog appears; count down while untouched */
 	tick: function() {
 		const now = Date.now();
 		forkHintsUI.removeBeacons(function(h) {
 			const b = forkHintsUI.beacons.filter(function(x) { return x.hint === h; })[0];
-			return !b || !forkHintsUI.visible(b.anchor);
+			return !b || !(b.anchor = forkHintsUI.reanchor(b.hint, b.anchor, b.data));
 		});
 		const tip = forkHintsUI.tip;
 		if (tip) {
-			if (tip.anchor && !forkHintsUI.visible(tip.anchor)) { forkHintsUI.hide("ignored"); }
+			if (tip.anchor && !(tip.anchor = forkHintsUI.reanchor(tip.hint, tip.anchor, tip.data))) { forkHintsUI.hide("ignored"); }
 			else if (forkHintsUI.popupOpen() || forkHintsUI.dialogOpen()) { forkHintsUI.hide("ignored"); }
 			else {
 				if (document.visibilityState !== "hidden" && !tip.hovered) { tip.remaining -= now - tip.lastTick; }

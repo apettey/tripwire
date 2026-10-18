@@ -454,9 +454,11 @@ const chainKillFeed = {
 		if (live) {
 			chainKillFeed.settling = chainKillFeed.pruneSettling(chainKillFeed.settling, now, false);
 			const quiet = Object.assign({}, chainKillFeed.pending, chainKillFeed.settling);
-			chainKillFeed.freshKills(merged.kills, merged.added, quiet, now).forEach(function(id) {
+			const freshIDs = chainKillFeed.freshKills(merged.kills, merged.added, quiet, now);
+			freshIDs.forEach(function(id) {
 				chainKillFeed.fresh[id] = now + chainKillFeed.HIGHLIGHT_MS;
 			});
+			if (freshIDs.length && typeof forkHints !== "undefined") { forkHints.emit("kill.chain", { killIDs: freshIDs }); }
 		}
 		chainKillFeed.kills = merged.kills;
 		chainKillFeed.names = chainKillFeed.mergeNames(chainKillFeed.names, names, merged.kills);
