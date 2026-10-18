@@ -1,0 +1,149 @@
+/* Feature tips (fork-owned, see app/js/fork/hints.js and hints-ui.js): one callout next to what it is about, a toast in
+   the bottom left corner, or a small pulsing beacon. Non-modal and compact, above the panels but below dialogs' overlay. */
+.fh-tip {
+	position: fixed;
+	z-index: 9500;
+	box-sizing: border-box;
+	width: 280px;
+	max-width: calc(100vw - 16px);
+	padding: 8px 10px 8px 10px;
+	background: rgba(16, 22, 30, 0.97);
+	border: 1px solid #4A9EE0;
+	border-radius: 4px;
+	box-shadow: 0 3px 12px rgba(0, 0, 0, 0.75);
+	color: #E4EEF7;
+	font-size: 11px;
+	line-height: 15px;
+	text-align: left;
+}
+
+.fh-toast {
+	left: 12px;
+	bottom: 12px;
+}
+
+.fh-tip .fh-title {
+	margin: 0 16px 4px 0;
+	color: #9CCBF2;
+	font-weight: bold;
+	font-size: 12px;
+}
+
+.fh-tip .fh-body {
+	margin: 0 0 6px 0;
+}
+
+.fh-tip .fh-close {
+	position: absolute;
+	top: 3px;
+	right: 4px;
+	padding: 0 4px;
+	background: none;
+	border: 0;
+	color: #9FB3C6;
+	font-size: 15px;
+	line-height: 15px;
+	cursor: pointer;
+}
+
+.fh-tip .fh-close:hover,
+.fh-tip .fh-close:focus { color: #FFFFFF; }
+
+.fh-tip .fh-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-tip .fh-act,
+.fh-tip .fh-ok {
+	padding: 1px 9px;
+	border: 1px solid #4A9EE0;
+	border-radius: 3px;
+	background: #1C3A57;
+	color: #FFFFFF;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.fh-tip .fh-ok {
+	background: transparent;
+	border-color: #56708A;
+}
+
+.fh-tip .fh-act:hover, .fh-tip .fh-act:focus,
+.fh-tip .fh-ok:hover, .fh-tip .fh-ok:focus {
+	background: #275684;
+	outline: 1px solid #9CCBF2;
+	outline-offset: 1px;
+}
+
+.fh-tip .fh-off {
+	margin-left: auto;
+	color: #8EA4B8;
+	font-size: 10px;
+	text-decoration: underline;
+}
+
+.fh-tip .fh-off:hover,
+.fh-tip .fh-off:focus { color: #E4EEF7; }
+
+/* Arrow: a rotated square on the edge facing the anchor; hints-ui.js sets its offset along that edge */
+.fh-tip .fh-arrow {
+	position: absolute;
+	width: 9px;
+	height: 9px;
+	background: rgba(16, 22, 30, 0.97);
+	border: 1px solid #4A9EE0;
+	transform: rotate(45deg);
+	margin: -5px 0 0 -5px;
+}
+
+.fh-place-bottom .fh-arrow { top: 0; border-right: 0; border-bottom: 0; }
+.fh-place-top .fh-arrow { top: 100%; border-left: 0; border-top: 0; }
+.fh-place-right .fh-arrow { left: 0; border-right: 0; border-top: 0; }
+.fh-place-left .fh-arrow { left: 100%; border-left: 0; border-bottom: 0; }
+
+/* Beacon: a dot at the anchor's top right corner that pulses a few times, then stays still */
+.fh-beacon {
+	position: fixed;
+	z-index: 9400;
+	width: 12px;
+	height: 12px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	cursor: pointer;
+}
+
+.fh-beacon span {
+	position: absolute;
+	inset: 2px;
+	border-radius: 50%;
+	background: #4A9EE0;
+	box-shadow: 0 0 0 0 rgba(74, 158, 224, 0.7);
+	animation: fh-pulse 1.6s ease-out 4;
+}
+
+.fh-beacon:focus { outline: 1px solid #9CCBF2; outline-offset: 1px; }
+
+@keyframes fh-pulse {
+	0% { box-shadow: 0 0 0 0 rgba(74, 158, 224, 0.7); }
+	100% { box-shadow: 0 0 0 9px rgba(74, 158, 224, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fh-beacon span { animation: none; }
+}
+
+/* Screen readers only (the polite live region that reads a tip out) */
+.fh-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
