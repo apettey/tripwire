@@ -214,6 +214,7 @@ const forkUsage = {
 	pending: {},			// counters waiting to be sent
 	listeners: [],
 	server: { enabled: false, token: "", key: "" },
+	serverInfo: null,		// Promise of the mode=get answer {enabled, token, key, accountAgeDays}, null when it failed (What's New, Getting started)
 	seen: null,				// {key: day}: shown / snapshot once a day (localStorage, per account: seenFor)
 	seenFor: "",
 	lastActive: 0,
@@ -478,14 +479,17 @@ const forkUsage = {
 		try { forkUsage.debugOn = localStorage.getItem(forkUsage.DEBUG_KEY) === "1"; } catch (e) { forkUsage.debugOn = false; }
 		forkUsage.registerSetting();
 		forkUsage.installHooks();
+		let settle = function() {};
+		forkUsage.serverInfo = new Promise(function(resolve) { settle = resolve; });
 		$.ajax({ url: forkUsage.URL, data: { mode: "get" }, dataType: "json", cache: false }).done(function(data) {
+			settle(data && typeof data === "object" ? data : null);
 			const str = function(v) { return data && typeof data[v] === "string" ? data[v] : ""; };
 			forkUsage.server = { enabled: !!(data && data.enabled), token: str("token"), key: /^[0-9a-f]{16}$/.test(str("key")) ? str("key") : "" };
 			if (!forkUsage.server.enabled) {
 				$("#usageStats-enabled").prop("disabled", true).closest("td").find(".fs-hint").text("This server collects no usage statistics.");
 			}
 			if (forkUsage.debugOn) { console.log("[usage] debug on; server " + (forkUsage.server.enabled ? "collects statistics" : "collects none")); }
-		}).always(function() {
+		}).fail(function() { settle(null); }).always(function() {
 			forkUsage.serverKnown = true;
 			forkUsage.replay();
 		});

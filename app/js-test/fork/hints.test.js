@@ -62,6 +62,22 @@ describe('forkHints', () => {
 			assert.strictEqual(forkHints.blockedReason(h, fresh(), ctx({ used: f => f === 'sigAnomalies' }), 0), 'feature used');
 			assert.strictEqual(forkHints.blockedReason(h, fresh(), ctx({ featureOff: x => x === h }), 0), 'feature turned off');
 		});
+		it('held back while something else teaches the feature (Getting started)', () => {
+			assert.strictEqual(forkHints.blockedReason(h, fresh(), ctx({ held: f => f === 'sigAnomalies' ? 'Getting started' : '' }), 0), 'held: Getting started teaches it now');
+			assert.strictEqual(forkHints.blockedReason(h, fresh(), ctx({ held: () => '' }), 0), '');
+		});
+		it('hold / listen', () => {
+			forkHints.hold('x', 'Card');
+			assert.strictEqual(forkHints.holds.x, 'Card');
+			forkHints.hold('x', '');
+			assert.ok(!('x' in forkHints.holds));
+			const got = [];
+			const stop = forkHints.listen((e, d) => got.push([e, d]));
+			forkHints.listeners.forEach(fn => fn('paste.sigs', { rows: 2 }));
+			stop();
+			assert.deepStrictEqual(got, [['paste.sigs', { rows: 2 }]]);
+			assert.strictEqual(forkHints.listeners.length, 0);
+		});
 		it('tips off, section off', () => {
 			const st = fresh();
 			st.enabled = false;
