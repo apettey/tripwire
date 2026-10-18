@@ -31,12 +31,15 @@ Getting started card (new accounts only):
 ## Change
 
 - `app/js/fork/feature-actions.js` (new, `forkFeatureActions`): catalog lookups (`byId`, `byPR`), `status(id)`
-  (used / off / new) and `tryIt(id)`: a registered tip (forced) -> a catalog command that only opens something (or one
-  with arguments, opened in the palette so the user picks) -> its panel -> its Settings row. Commands that act at once
-  (undo, ping, follow, flares, mute) are never run as Try it. For What's New now and the features hub later.
-- `app/js/whats-new.js` (fork file): first-run decision (`firstRun`: new account = no What's New state and
-  `accountAgeDays` < 14; server failure or older account = today's behaviour), Try it / ✓ / Turned off per entry,
-  opening What's New counts `shown` (once a day) for the features of its NEW entries, `whatsNew.tried` on Try it.
+  (used / off / new) and `tryIt(id)`: a registered tip (forced) -> the feature's catalog `try` command (a command with
+  arguments opens in the palette so the user picks) -> its panel -> its Settings row -> a toast with the first paragraph
+  of its newest What's New entry. Only `try` commands ever run, and `try` is an allow-list (`TRY_SAFE`: panel toggles and
+  commands that open a window or map; the catalog test checks it), so Try it can never lead to a write for the whole
+  mask (Fight here, Mark rolling, Preserve mass, targets...). For What's New now and the features hub later.
+- `app/js/whats-new.js` (fork file): first-run decision (`firstRun`: new account = no What's New state, or state the
+  server didn't send, and `accountAgeDays` < 14; server failure or older account = today's behaviour), Try it / ✓ /
+  Turned off per entry, opening What's New counts `wn_listed` (catalog `generic`, once a day, not use and not the
+  on-screen `shown`) for the features of its NEW entries, `whatsNew.tried` on Try it.
 - `app/js/fork/getting-started.js` + `app/css/fork/getting-started.css` (new): the card, bottom left. Steps: a mask
   other than the corp mask (or a choice saved in Masks), a chain tab with a home system, a signature paste (feature
   tips' `paste.sigs`), a tracked character with the auto-mapper on, Ctrl+K used. Each has a "How" button.
@@ -44,10 +47,12 @@ Getting started card (new accounts only):
   `accounts.created`, capped at 14; nothing stored). `app/js/fork/feature-usage.js`: `forkUsage.serverInfo` (promise of
   that answer). `app/js/fork/hints.js`: `forkHints.hold(feature, by)` and `forkHints.listen(fn)`.
 - Catalog: new feature `gettingStarted` (use `how`; events `done_<step>`, `all_done`, `collapsed`, `expanded`,
-  `hidden`; exposed `#gettingStarted`), `whatsNew` event `tried`.
+  `hidden`; exposed `#gettingStarted`), `whatsNew` event `tried`, generic action `wn_listed`, optional per-feature
+  `try` (12 features).
 - Tests: `app/js-test/fork/feature-actions.test.js`, `getting-started.test.js`, more in `whatsNew.test.js` and
   `hints.test.js`; `tests/analytics_test.php` checks the account age.
 - No upstream files touched. No new third-party hosts.
-- Known limit (upstream): Tripwire keeps a copy of the options in the browser (`localStorage.tripwire_options`) and
-  uses it when the server has none, so a new account logging in on a browser another account used inherits that
-  account's What's New state and gets the old list.
+- Shared browsers: Tripwire (upstream) keeps a copy of the options in the browser (`localStorage.tripwire_options`) and
+  uses it when the server has none. A new account whose server options are empty ignores the What's New and Getting
+  started state in that copy. Remaining limit: it still inherits the other keys (chain tabs, mask, `usage`...), so some
+  Getting started steps can start ticked.

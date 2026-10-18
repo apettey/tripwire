@@ -8,23 +8,27 @@ const forkFeatureActions = {
 	//      forkFeatureActions.byId(id) / byPR(pr) -> entry | null
 	//      forkFeatureActions.status(id) -> "used" | "off" | "new"   off: its Settings toggle is off (wins over used: it isn't
 	//                                                                 in use now); used: forkUsage.used(id); else new / not tried
-	//      forkFeatureActions.canTry(id) -> bool                  tryIt has something to do
-	//      forkFeatureActions.tryIt(id) -> {did, id} | null       did: "tip" | "command" | "palette" | "panel" | "setting"
+	//      forkFeatureActions.canTry(id) -> bool                  tryIt can show the feature itself (not only the toast)
+	//      forkFeatureActions.tryIt(id) -> {did, id} | null       did: "tip" | "command" | "palette" | "panel" | "setting" | "toast"
 	// tryIt order: a tip registered for the feature, shown with forkHints.show(id, {force: true}) (skipped when it can't show,
-	// e.g. its anchor isn't on screen) -> one of its catalog commands that is registered, available now and safe to try: the
-	// first that runs as it is, else the first with arguments, which opens the palette at it so the user picks (panel toggles
-	// only when the panel is hidden) -> its
-	// first catalog panel that is on the page (restored if minimized, scrolled to and flashed) -> its Settings row
-	// (commandPalette.openSetting). A feature turned off goes to its Settings row first. tryIt sends no statistics of its
-	// own: the caller tracks its click (e.g. whatsNew.tried); a tip counts as tips do, a command as a palette command.
+	// e.g. its anchor isn't on screen) -> the feature's catalog `try` command, if it has one and it is registered and
+	// available now (one with arguments opens the palette at it so the user picks; a panel toggle only while its panel is
+	// hidden) -> its first catalog panel that is on the page (restored if minimized, scrolled to and flashed) -> its Settings
+	// row (commandPalette.openSetting) -> a short toast with the first paragraph of its newest What's New entry. A feature
+	// turned off goes to its Settings row first.
+	// Only `try` commands are ever run, never the feature's other `commands`: `try` is an allow-list of commands that only
+	// open or show something (TRY_SAFE; the catalog test checks every `try` against it), because the palette prefilled at
+	// e.g. Fight here or Mark rolling is two Enters away from a write for the whole mask.
+	// tryIt sends no statistics of its own: the caller tracks its click (e.g. whatsNew.tried); a tip counts as tips do, a
+	// command as a palette command.
 	// Keep `const forkFeatureActions` on the first line: the test helper strips it to define a global. Pure logic first.
 
 	CATALOG_URL: "fork/feature-catalog.json",
-	// Commands never run as "Try it": they'd do something rather than show the feature (or reopen What's New itself)
-	NO_TRY: ["app.whatsNew", "sound.toggle", "palette.clearHistory"],
-	// Commands without arguments that only open something, so "Try it" may run them directly
-	OPENS: /^panel\.|\.(open|show|timers)$|^app\.settings$/,
+	// The only commands a catalog `try` may name: they open a panel, window or map and write nothing for the mask (a panel
+	// toggle changes the user's own options). Add one here only after checking its run() (and the catalog test passes).
+	TRY_SAFE: /^panel\.[A-Za-z]+$|^(destinations|regionmap|jumpPlanner|rollingGuide|analytics)\.open$|^structures\.(show|timers)$/,
 	FLASH_MS: 1500,
+	TOAST_CHARS: 220,
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -51,14 +55,21 @@ const forkFeatureActions = {
 		return used && used(entry.id) ? "used" : "new";
 	},
 
+	/** The entry's `try` command if it is an allowed one (TRY_SAFE), else null */
+	tryCommand: function(entry) {
+		const id = entry && typeof entry.try === "string" ? entry.try : null;
+		return id && forkFeatureActions.TRY_SAFE.test(id) ? id : null;
+	},
+
 	/**
-	 * What "Try it" can do for the entry, best first: [{kind, id}], kind tip | command | palette | panel | setting.
+	 * What "Try it" can do for the entry, best first: [{kind, id}], kind tip | command | palette | panel | setting | toast.
 	 * env (what is on the page now):
 	 *   tips: [tip ids registered for the feature]
 	 *   command(id) -> null (not registered) | {available: bool, hasArgs: bool, panelShown: bool (a panel toggle whose panel
 	 *                  is shown now: running it would hide it)}
 	 *   panel(id) -> bool (on the page)
 	 *   settingRow: id of its Settings row, or null
+	 *   howText: a short how-to text (the toast), or ""
 	 *   off: its toggle is off
 	 */
 	candidates: function(entry, env) {
@@ -66,19 +77,27 @@ const forkFeatureActions = {
 		env = env || {};
 		const out = [];
 		const setting = env.settingRow ? [{ kind: "setting", id: env.settingRow }] : [];
-		if (env.off) { return setting; }	// turned off: the way to try it is turning it on
+		const toast = env.howText ? [{ kind: "toast", id: entry.id }] : [];
+		if (env.off) { return setting.concat(toast); }	// turned off: the way to try it is turning it on
 		(env.tips || []).forEach(function(id) { out.push({ kind: "tip", id: id }); });
-		// One command: the first that only opens something (a window, a panel), else the first that asks for something in the
-		// palette first. A command that would act at once (undo, ping, follow, a flare...) is never run as "Try it".
-		const usable = (entry.commands || []).filter(function(id) { return forkFeatureActions.NO_TRY.indexOf(id) < 0; })
-			.map(function(id) { return { id: id, c: env.command ? env.command(id) : null }; })
-			.filter(function(x) { return x.c && x.c.available && !x.c.panelShown && (x.c.hasArgs || forkFeatureActions.OPENS.test(x.id)); });
-		const pick = usable.filter(function(x) { return !x.c.hasArgs; })[0] || usable[0];
-		if (pick) { out.push({ kind: pick.c.hasArgs ? "palette" : "command", id: pick.id }); }
+		// Only the catalog's `try` command (an allow-list), never any other of the feature's commands
+		const tryId = forkFeatureActions.tryCommand(entry);
+		const c = tryId && env.command ? env.command(tryId) : null;
+		if (c && c.available && !c.panelShown) { out.push({ kind: c.hasArgs ? "palette" : "command", id: tryId }); }
 		for (let i = 0; i < (entry.panels || []).length; i++) {
 			if (env.panel && env.panel(entry.panels[i])) { out.push({ kind: "panel", id: entry.panels[i] }); break; }
 		}
-		return out.concat(setting);
+		return out.concat(setting, toast);
+	},
+
+	/** The first paragraph of the newest What's New entry of the feature (features: features.json's list), cut to max chars */
+	howTextOf: function(entry, features, max) {
+		if (!entry || !Array.isArray(entry.prs) || !Array.isArray(features)) { return ""; }
+		const own = features.filter(function(f) { return f && entry.prs.indexOf(parseInt(f.pr, 10)) >= 0; })
+			.sort(function(a, b) { return b.pr - a.pr; })[0];
+		const p = own ? String(own.description || "").split(/\r?\n\s*\r?\n/)[0].replace(/\s+/g, " ").trim() : "";
+		max = max || forkFeatureActions.TOAST_CHARS;
+		return p.length > max ? p.slice(0, max - 1).replace(/\s+\S*$/, "") + "…" : p;
 	},
 
 	// ---- State ----
@@ -138,7 +157,8 @@ const forkFeatureActions = {
 	},
 
 	canTry: function(id) {
-		return forkFeatureActions.candidates(forkFeatureActions.byId(id), forkFeatureActions.env(forkFeatureActions.byId(id))).length > 0;
+		return forkFeatureActions.candidates(forkFeatureActions.byId(id), forkFeatureActions.env(forkFeatureActions.byId(id)))
+			.some(function(c) { return c.kind !== "toast"; });
 	},
 
 	tryIt: function(id) {
@@ -200,7 +220,8 @@ const forkFeatureActions = {
 			panel: function(id) {
 				return typeof panelHost !== "undefined" && !!panelHost.get(id) && !!document.getElementById(id);
 			},
-			settingRow: item && forkFeatureActions.settingRowEl(item.id) ? item.id : null
+			settingRow: item && forkFeatureActions.settingRowEl(item.id) ? item.id : null,
+			howText: forkFeatureActions.howText(entry)
 		};
 	},
 
@@ -209,6 +230,7 @@ const forkFeatureActions = {
 			return typeof forkHints !== "undefined" && forkHints.show(c.id, { force: true });
 		}
 		if (c.kind === "command" || c.kind === "palette") {
+			if (!forkFeatureActions.TRY_SAFE.test(c.id)) { return false; }	// never anything off the allow-list
 			const command = forkFeatureActions.findCommand(c.id);
 			if (!command) { return false; }
 			if (c.kind === "palette") {
@@ -248,7 +270,20 @@ const forkFeatureActions = {
 			commandPalette.openSetting(tr);
 			return true;
 		}
+		if (c.kind === "toast") {
+			const entry = forkFeatureActions.byId(c.id);
+			const text = forkFeatureActions.howText(entry);
+			if (!text || typeof Notify === "undefined") { return false; }
+			Notify.trigger("<b>" + forkFeatureActions.escape(entry.title) + "</b><br/>" + forkFeatureActions.escape(text), "blue", 15000);
+			return true;
+		}
 		return false;
+	},
+
+	/** The toast's text: from What's New's list (whatsNew.features, loaded by whats-new.js) */
+	howText: function(entry) {
+		const features = typeof whatsNew !== "undefined" && Array.isArray(whatsNew.features) ? whatsNew.features : [];
+		return forkFeatureActions.howTextOf(entry, features);
 	},
 
 	escape: function(s) {

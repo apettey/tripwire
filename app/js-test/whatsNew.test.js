@@ -108,12 +108,32 @@ describe('What\'s New', () => {
 			assert.equal(whatsNew.firstRun(null, 3), 'new');
 		});
 
+		it('A new account ignores What\'s New state the server didn\'t send (another account\'s, from this browser)', () => {
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 2, false), 'new');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 2, true), 'seen');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, 20, false), 'seen', 'an old account keeps today\'s behaviour');
+			assert.equal(whatsNew.firstRun({ whatsNew: { lastSeenPR: 5 } }, null, false), 'seen', 'age unknown: today\'s behaviour');
+		});
+		it('serverHadOptions', () => {
+			assert.equal(whatsNew.serverHadOptions({ options: null }), false);
+			assert.equal(whatsNew.serverHadOptions({ options: {} }), false);
+			assert.equal(whatsNew.serverHadOptions(null), false);
+			assert.equal(whatsNew.serverHadOptions({ options: { whatsNew: { lastSeenPR: 1 } } }), true);
+		});
+
 		describe('firstRunKind', () => {
 			const saved = {};
-			before(() => { saved.options = global.options; saved.forkUsage = global.forkUsage; });
-			afterEach(() => { global.options = saved.options; global.forkUsage = saved.forkUsage; });
+			before(() => { saved.options = global.options; saved.forkUsage = global.forkUsage; saved.init = global.init; });
+			afterEach(() => { global.options = saved.options; global.forkUsage = saved.forkUsage; global.init = saved.init; });
 
+			it('local state from another account (server had none) waits for the account age', async () => {
+				global.options = { whatsNew: { lastSeenPR: 1 } };
+				global.init = { options: null };
+				global.forkUsage = { serverInfo: Promise.resolve({ accountAgeDays: 0 }) };
+				assert.equal(await whatsNew.firstRunKind(), 'new');
+			});
 			it('seen: no wait for the server', async () => {
+				global.init = { options: { whatsNew: { lastSeenPR: 1 } } };
 				global.options = { whatsNew: { lastSeenPR: 1 } };
 				global.forkUsage = { serverInfo: new Promise(() => {}) };
 				assert.equal(await whatsNew.firstRunKind(), 'seen');

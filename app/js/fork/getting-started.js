@@ -219,7 +219,7 @@ const gettingStarted = {
 			$("#mask-link").trigger("click");
 		} else if (id === "tab") {
 			$("#newTab").trigger("click");
-			gettingStarted.notify("Give the tab a name and your home system, then press OK." + item.how);
+			gettingStarted.notify("Give the tab a name and your home system, then press OK. " + item.how);
 		} else if (id === "paste") {
 			gettingStarted.flash("#signaturesWidget");
 			gettingStarted.notify(item.how);
@@ -270,13 +270,15 @@ const gettingStarted = {
 		if (typeof forkUsage !== "undefined") {
 			forkUsage.on(function(feature) { if (feature === "commandPalette") { setTimeout(gettingStarted.update, 0); } });
 		}
-		// A mask chosen in Masks (Save) or from the palette, even the one it already was
+		// A mask chosen in Masks (Save) or from the palette, even the one it already was: ticked once the choice is saved
+		// (updateActiveMask(newActive, afterFunction) calls afterFunction when options.save() is done)
 		if (typeof maskFunctions !== "undefined" && typeof maskFunctions.updateActiveMask === "function" && !maskFunctions.updateActiveMask.gettingStartedWrapped) {
 			const orig = maskFunctions.updateActiveMask;
-			const wrapped = function() {
-				const result = orig.apply(this, arguments);
-				try { gettingStarted.update("mask"); } catch (e) { console.error("gettingStarted: mask", e); }
-				return result;
+			const wrapped = function(newActive, afterFunction) {
+				return orig.call(this, newActive, function() {
+					try { gettingStarted.update("mask"); } catch (e) { console.error("gettingStarted: mask", e); }
+					if (typeof afterFunction === "function") { return afterFunction.apply(this, arguments); }
+				});
 			};
 			wrapped.gettingStartedWrapped = true;
 			maskFunctions.updateActiveMask = wrapped;
@@ -285,6 +287,10 @@ const gettingStarted = {
 
 	init: function() {
 		const opts = gettingStarted.opts();
+		// The server had no options for this account: a gettingStarted in them is another account's, from this browser's copy
+		// (upstream's localStorage fallback). Not this account's state: start without it.
+		if (opts && opts.gettingStarted && typeof whatsNew !== "undefined" && typeof whatsNew.serverHadOptions === "function"
+			&& !whatsNew.serverHadOptions(typeof init !== "undefined" ? init : null)) { delete opts.gettingStarted; }
 		if (!opts || gettingStarted.stateOf(opts).hidden) { return; }
 		if (typeof forkUsage === "undefined" || !forkUsage.serverInfo) { return; }
 		forkUsage.serverInfo.then(function(data) {
@@ -296,6 +302,7 @@ const gettingStarted = {
 };
 
 if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn && jQuery.fn.dialog) {
-	// After forkUsage.init (feature-usage.js sorts after this file): it makes forkUsage.serverInfo
+	// forkUsage.init makes forkUsage.serverInfo; feature-usage.js sorts before this file, so its ready handler has already
+	// run, and the timeout lets every other ready handler (tips, What's New) run first too
 	jQuery(function() { setTimeout(gettingStarted.init, 0); });
 }

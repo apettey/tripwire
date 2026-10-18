@@ -1,13 +1,16 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { include } = require('../helpers/helpers');
 include('app/js/fork/feature-actions');
 
 describe('forkFeatureActions', () => {
 	const catalog = { features: [
-		{ id: 'jumpPlanner', prs: [50, 52], settingsKey: 'jumpRange', commands: ['jumpPlanner.open', 'panel.jumpPlanner'], panels: ['jumpPlannerWidget'] },
+		{ id: 'jumpPlanner', prs: [50, 52], settingsKey: 'jumpRange', commands: ['jumpPlanner.open', 'panel.jumpPlanner'], panels: ['jumpPlannerWidget'], try: 'jumpPlanner.open' },
 		{ id: 'sizeTags', prs: [3], settingsKey: 'sizeTags', commands: [], panels: [] },
 		{ id: 'whatsNew', prs: [1], settingsKey: null, commands: ['app.whatsNew'], panels: [] },
-		{ id: 'apiTokens', prs: [7], settingsKey: null, commands: [], panels: [] }
+		{ id: 'apiTokens', prs: [7], settingsKey: null, commands: [], panels: [] },
+		{ id: 'fightHere', prs: [9], settingsKey: null, commands: ['rally.fightHere'], panels: [], try: 'rally.fightHere' }
 	] };
 
 	const saved = {};
@@ -56,46 +59,73 @@ describe('forkFeatureActions', () => {
 			tips: ['jumpPlanner.lowsec'],
 			command: cmd({ 'jumpPlanner.open': { available: true, hasArgs: true }, 'panel.jumpPlanner': { available: true, hasArgs: false } }),
 			panel: () => true,
-			settingRow: 'jumpRange-enabled'
+			settingRow: 'jumpRange-enabled',
+			howText: 'How to use it'
 		};
 		const kinds = list => list.map(c => c.kind + ':' + c.id);
 
-		it('tip, then one command (one that runs as it is first), then the panel, then the setting', () =>
+		it('tip, then its `try` command, then the panel, then the setting, then the toast', () =>
 			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, full)),
-				['tip:jumpPlanner.lowsec', 'command:panel.jumpPlanner', 'panel:jumpPlannerWidget', 'setting:jumpRange-enabled']));
-		it('a command with arguments opens the palette at it when it is the only one', () => {
-			const env = Object.assign({}, full, { tips: [], command: cmd({ 'jumpPlanner.open': { available: true, hasArgs: true } }) });
-			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, env)), ['palette:jumpPlanner.open', 'panel:jumpPlannerWidget', 'setting:jumpRange-enabled']);
+				['tip:jumpPlanner.lowsec', 'palette:jumpPlanner.open', 'panel:jumpPlannerWidget', 'setting:jumpRange-enabled', 'toast:jumpPlanner']));
+		it('a `try` command without arguments runs as it is', () => {
+			const env = Object.assign({}, full, { tips: [], command: cmd({ 'jumpPlanner.open': { available: true, hasArgs: false } }) });
+			assert.strictEqual(kinds(forkFeatureActions.candidates(jp, env))[0], 'command:jumpPlanner.open');
 		});
-		it('a command that acts at once (no arguments, not an opener) is never run', () => {
-			const pal = { id: 'commandPalette', commands: ['nav.toggleFollow', 'sig.undo', 'chain.ping', 'nav.setDestination'], panels: [] };
-			const env = { command: cmd({ 'nav.toggleFollow': { available: true }, 'sig.undo': { available: true }, 'chain.ping': { available: true },
-				'nav.setDestination': { available: true, hasArgs: false } }) };
-			assert.deepStrictEqual(forkFeatureActions.candidates(pal, env), []);
-			const env2 = { command: cmd({ 'nav.toggleFollow': { available: true }, 'nav.setDestination': { available: true, hasArgs: true } }) };
-			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(pal, env2)), ['palette:nav.setDestination'], 'with arguments: the palette asks first');
+		it('only `try`: no other command of the feature, even an opener', () => {
+			const noTry = Object.assign({}, jp, { try: undefined });
+			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(noTry, Object.assign({}, full, { tips: [] }))),
+				['panel:jumpPlannerWidget', 'setting:jumpRange-enabled', 'toast:jumpPlanner']);
 		});
-		it('only one command: the first that is registered and available', () => {
-			const env = Object.assign({}, full, { tips: [], command: cmd({ 'jumpPlanner.open': { available: false, hasArgs: true }, 'panel.jumpPlanner': { available: true, hasArgs: false } }) });
-			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, env)), ['command:panel.jumpPlanner', 'panel:jumpPlannerWidget', 'setting:jumpRange-enabled']);
+		it('a `try` off the allow-list is never a candidate (Fight here)', () => {
+			assert.deepStrictEqual(forkFeatureActions.candidates(catalog.features[4], { command: () => ({ available: true, hasArgs: true }) }), []);
+			assert.strictEqual(forkFeatureActions.tryCommand(catalog.features[4]), null);
 		});
-		it('unregistered commands are skipped', () => {
-			const env = { command: cmd({}), panel: () => false, settingRow: null };
-			assert.deepStrictEqual(forkFeatureActions.candidates(jp, env), []);
+		it('not registered or not available: skipped', () => {
+			assert.deepStrictEqual(forkFeatureActions.candidates(jp, { command: cmd({}) }), []);
+			assert.deepStrictEqual(forkFeatureActions.candidates(jp, { command: cmd({ 'jumpPlanner.open': { available: false } }) }), []);
 		});
 		it('a panel toggle is skipped while its panel is shown (it would hide it)', () => {
-			const env = { command: cmd({ 'jumpPlanner.open': { available: false }, 'panel.jumpPlanner': { available: true, panelShown: true } }), panel: () => true };
-			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, env)), ['panel:jumpPlannerWidget']);
+			const tog = Object.assign({}, jp, { try: 'panel.jumpPlanner' });
+			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(tog, { command: cmd({ 'panel.jumpPlanner': { available: true, panelShown: true } }), panel: () => true })),
+				['panel:jumpPlannerWidget']);
 		});
-		it('turned off: only its Settings row (to turn it on)', () =>
-			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, Object.assign({}, full, { off: true }))), ['setting:jumpRange-enabled']));
+		it('turned off: its Settings row (to turn it on), then the toast', () =>
+			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(jp, Object.assign({}, full, { off: true }))), ['setting:jumpRange-enabled', 'toast:jumpPlanner']));
 		it('only a setting', () =>
 			assert.deepStrictEqual(kinds(forkFeatureActions.candidates(catalog.features[1], { settingRow: 'sizeTags-enabled' })), ['setting:sizeTags-enabled']));
-		it('never runs the commands that are not a way to try a feature (What\'s New itself)', () =>
-			assert.deepStrictEqual(forkFeatureActions.candidates(catalog.features[2], { command: () => ({ available: true }) }), []));
 		it('nothing to do', () => {
 			assert.deepStrictEqual(forkFeatureActions.candidates(catalog.features[3], {}), []);
 			assert.deepStrictEqual(forkFeatureActions.candidates(null, full), []);
+		});
+
+		it('no command outside the allow-list can ever be a candidate (the real catalog, every command available)', () => {
+			const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'public/fork/feature-catalog.json'), 'utf8'));
+			const everything = { command: () => ({ available: true, hasArgs: true }), panel: () => false };
+			const everythingNoArgs = { command: () => ({ available: true, hasArgs: false }), panel: () => false };
+			const run = [];
+			real.features.forEach(f => {
+				// Even with a `try` naming anything at all, only TRY_SAFE commands come out
+				[f, Object.assign({}, f, { try: f.commands[0] })].forEach(e => [everything, everythingNoArgs].forEach(env => {
+					forkFeatureActions.candidates(e, env).filter(c => c.kind === 'command' || c.kind === 'palette').forEach(c => run.push(c.id));
+				}));
+			});
+			assert.ok(run.length > 0);
+			run.forEach(id => assert.ok(forkFeatureActions.TRY_SAFE.test(id), id));
+			['rally.fightHere', 'targets.add', 'preserveMass.set', 'rolling.mark', 'hole.set', 'sig.undo', 'chain.ping', 'nav.setDestination']
+				.forEach(id => assert.ok(!run.includes(id), id));
+		});
+	});
+
+	describe('howTextOf (the toast)', () => {
+		const wn = [{ pr: 50, description: 'Old text.' }, { pr: 52, description: 'Newest   first\nparagraph.\n\nSecond one.' }, { pr: 99, description: 'Other.' }];
+		it('first paragraph of the newest entry of the feature', () => assert.strictEqual(forkFeatureActions.howTextOf(catalog.features[0], wn), 'Newest first paragraph.'));
+		it('cut at a word with an ellipsis', () => {
+			const t = forkFeatureActions.howTextOf(catalog.features[0], [{ pr: 50, description: 'aaaa bbbb cccc dddd' }], 12);
+			assert.strictEqual(t, 'aaaa bbbb…');
+		});
+		it('nothing without an entry', () => {
+			assert.strictEqual(forkFeatureActions.howTextOf(catalog.features[1], wn), '');
+			assert.strictEqual(forkFeatureActions.howTextOf(null, wn), '');
 		});
 	});
 
@@ -109,7 +139,7 @@ describe('forkFeatureActions', () => {
 		afterEach(() => { forkFeatureActions.env = orig.env; forkFeatureActions.run = orig.run; });
 		const stub = (env, ok) => {
 			forkFeatureActions.env = () => env;
-			forkFeatureActions.run = c => { ran.push(c.kind); if (c.kind === 'boom') { throw new Error('x'); } return ok.includes(c.kind); };
+			forkFeatureActions.run = c => { ran.push(c.kind); return ok.includes(c.kind); };
 		};
 
 		it('the first that works: a tip that can\'t show falls back to the next', () => {
@@ -120,6 +150,11 @@ describe('forkFeatureActions', () => {
 		it('a tip that shows ends it', () => {
 			stub({ tips: ['t'], settingRow: 'r' }, ['tip']);
 			assert.deepStrictEqual(forkFeatureActions.tryIt('sizeTags'), { did: 'tip', id: 't' });
+		});
+		it('the toast when nothing else works', () => {
+			stub({ settingRow: 'r', howText: 'x' }, ['toast']);
+			assert.deepStrictEqual(forkFeatureActions.tryIt('sizeTags'), { did: 'toast', id: 'sizeTags' });
+			assert.deepStrictEqual(ran, ['setting', 'toast']);
 		});
 		it('an error in one way is skipped (and logged)', () => {
 			forkFeatureActions.env = () => ({ tips: ['t'], settingRow: 'r' });
@@ -135,11 +170,16 @@ describe('forkFeatureActions', () => {
 			assert.strictEqual(forkFeatureActions.tryIt('sizeTags'), null);
 			assert.strictEqual(forkFeatureActions.tryIt('nope'), null);
 		});
-		it('canTry says whether there is anything to try', () => {
-			stub({ settingRow: null }, []);
+		it('canTry: something that shows the feature itself (the toast alone doesn\'t count)', () => {
+			stub({ settingRow: null, howText: 'x' }, []);
 			assert.strictEqual(forkFeatureActions.canTry('sizeTags'), false);
 			stub({ settingRow: 'r' }, []);
 			assert.strictEqual(forkFeatureActions.canTry('sizeTags'), true);
+		});
+		it('run never executes a command off the allow-list', () => {
+			forkFeatureActions.run = orig.run;
+			assert.strictEqual(forkFeatureActions.run({ kind: 'command', id: 'rally.fightHere' }), false);
+			assert.strictEqual(forkFeatureActions.run({ kind: 'palette', id: 'rolling.mark' }), false);
 		});
 	});
 });
