@@ -426,12 +426,28 @@ describe('Watchlist small view: hits', () => {
 	const m = (filterID, systemID, name) => ({ key: filterID + '|' + systemID, filterID: filterID, filterName: name || filterID, systemID: systemID });
 	it('first seen: kept while it matches, new ones now, gone ones dropped; never mutates', () => {
 		const before = { 'a|1': 1000, 'b|2': 2000 };
-		const out = watchlist.hitSince(before, [m('a', 1), m('c', 3), m('c', 3)], 5000);
+		const out = watchlist.hitSince(before, [m('a', 1), m('c', 3), m('c', 3)], {}, 5000);
 		assert.deepEqual(out, { 'a|1': 1000, 'c|3': 5000 });
 		assert.deepEqual(before, { 'a|1': 1000, 'b|2': 2000 });
-		assert.deepEqual(watchlist.hitSince(null, [m('a', 1)], 7), { 'a|1': 7 });
-		assert.deepEqual(watchlist.hitSince({ 'a|1': 'x' }, [m('a', 1)], 7), { 'a|1': 7 });
-		assert.deepEqual(watchlist.hitSince({ 'a|1': 1 }, [], 7), {});
+		assert.deepEqual(watchlist.hitSince(null, [m('a', 1)], null, 7), { 'a|1': 7 });
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 'x' }, [m('a', 1)], null, 7), { 'a|1': 7 });
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 1 }, [], undefined, 7), {});
+	});
+	it('a hit whose system left the chain map keeps its time while diff() remembers it (FORGET_MS), as the pop-ups do', () => {
+		const F = watchlist.FORGET_MS;
+		const since = { 'a|1': 1000, 'b|2': 2000 };
+		// You view an unconnected system: the chain shrinks to it, nothing matches
+		const away = watchlist.diff({ 'a|1': 1000, 'b|2': 2000 }, [], [99], 3000);
+		const kept = watchlist.hitSince(since, [], away.seen, 3000);
+		assert.deepEqual(kept, { 'a|1': 1000, 'b|2': 2000 });
+		// ... and come back: the hits keep their first-seen times
+		assert.deepEqual(watchlist.hitSince(kept, [m('a', 1), m('b', 2)], {}, 4000), { 'a|1': 1000, 'b|2': 2000 });
+		// Still on the map but no longer matching: forgotten (diff forgets it too)
+		const still = watchlist.diff({ 'a|1': 1000 }, [], [1], 3000);
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 1000 }, [], still.seen, 3000), {});
+		// Off the map for longer than FORGET_MS: forgotten
+		const later = watchlist.diff({ 'a|1': 1000 }, [], [99], 1000 + F);
+		assert.deepEqual(watchlist.hitSince({ 'a|1': 1000 }, [], later.seen, 1000 + F), {});
 	});
 	it('rows: the current hits once each, newest first, ties in the filters\' order', () => {
 		const matches = [m('a', 1, 'Pulsar C5'), m('b', 2, 'High-sec'), m('a', 3, 'Pulsar C5'), m('a', 1, 'Pulsar C5')];

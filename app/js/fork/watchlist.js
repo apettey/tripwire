@@ -370,16 +370,23 @@ const watchlist = {
 	},
 
 	/**
-	 * When each current match was first seen: {<key>: ms}. A key that still matches keeps its time, a new one gets
-	 * `now`, one that no longer matches is dropped (it is new again when it comes back). Never mutates.
+	 * When each match was first seen: {<key>: ms}. A key that still matches keeps its time, a new one gets `now`. One
+	 * that no longer matches is kept while diff() still remembers it (its system left the chain map less than FORGET_MS
+	 * ago), so viewing an unconnected system and coming back doesn't make every hit new; otherwise it is dropped (new
+	 * again when it comes back). Never mutates.
+	 * @param remembered diff()'s `seen` for the same chain (the keys it keeps)
 	 */
-	hitSince: function(since, matches, now) {
+	hitSince: function(since, matches, remembered, now) {
 		const before = since && typeof since === "object" ? since : {};
+		const keep = remembered && typeof remembered === "object" ? remembered : {};
 		const out = {};
+		const valid = function(v) { const t = Number(v); return isFinite(t) && t > 0 ? t : 0; };
 		(matches || []).forEach(function(m) {
 			if (!m || out[m.key] !== undefined) { return; }
-			const t = Number(before[m.key]);
-			out[m.key] = isFinite(t) && t > 0 ? t : Number(now) || 0;
+			out[m.key] = valid(before[m.key]) || Number(now) || 0;
+		});
+		Object.keys(before).forEach(function(key) {
+			if (out[key] === undefined && keep[key] !== undefined && valid(before[key])) { out[key] = valid(before[key]); }
 		});
 		return out;
 	},
@@ -923,7 +930,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const d = wl.diff(seen[key], matches, onChain, Date.now());
 			seen[key] = d.seen;
 			storeSeen();
-			since[key] = wl.hitSince(since[key], matches, Date.now());
+			since[key] = wl.hitSince(since[key], matches, d.seen, Date.now());
 			storeSince();
 			if (d.fresh.length) { notify(d.fresh, settings); }
 			scheduleRender();

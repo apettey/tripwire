@@ -376,7 +376,8 @@
 
 #watchlistWidget.ph-small > .content {
 	top: 5px;
-	overflow: hidden;
+	overflow-x: hidden;
+	overflow-y: auto;	/* more hits than fit: they scroll */
 }
 
 #watchlistWidget.ph-small .wl-sv {
