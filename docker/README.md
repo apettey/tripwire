@@ -707,6 +707,14 @@ first use, `docker/sql/analytics.sql` is the reference). Users turn it off in Se
   actions, and `app.active` at most once per 5 minutes of real input). Batched every 60 s (and when the tab is hidden),
   at most 50 counters / 8 KB a request, with a per-session token; the server accepts only catalog ids and actions and
   always answers 204.
+- **Where the counts come from.** Automatically: Ctrl+K palette commands that succeeded, panels the user opens or switches
+  to another mode, Settings Save (a feature's setting turned on/off or changed), catalog `exposed` elements on screen
+  (`shown`, once a day per account) and a daily list of features turned off. Everything else is an explicit
+  `forkUsage.track("<id>", "<action>")` call (or `data-track` attribute) in the feature's own code where it is used (a
+  menu choice, a button, a save, a paste); the catalog test checks every `use` action has one.
+- **Limits.** A daily counter stops at 10,000 (`ANALYTICS_MAX_DAILY`); at most 30 requests per user a minute
+  (`fork_analytics_rate`, one row per pseudonymous user); a user who turned statistics off in Settings is dropped
+  server-side too (their stored options), so an old open tab can't keep sending.
 - **What is stored.** Per UTC day: pseudonymous user id, feature, action, count, first minute (`fork_analytics_daily`);
   first/last time per user, feature and action (`fork_analytics_user`); a pseudonymous mask hash per day and used feature,
   only to count masks using it (`fork_analytics_mask`); the salt (`fork_analytics_meta`). The ids are 8 bytes of
