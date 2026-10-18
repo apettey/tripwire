@@ -735,6 +735,38 @@ first use, `docker/sql/analytics.sql` is the reference). Users turn it off in Se
   ```
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/analytics_test.php`.
 
+#### Analytics dashboard
+
+For the people running the server, not for users. Set `ANALYTICS_ADMINS` to a comma-separated list of EVE character IDs
+(the number in the character's zKillboard or evewho URL) and restart the app container; empty (the default) turns the
+dashboard off. A listed character gets a **Usage analytics** button in the user menu (the character name, top right) and
+Ctrl+K "Usage analytics"; nobody else sees either, and `public/fork_analytics.php` answers 403 to anyone not on the list
+(checked on every request against the session's character). It only reads: nothing is created, written or sent anywhere.
+
+What it shows (a user is an account; windows end today, UTC; "use" = a catalog command, a catalog panel opened, or one
+of the feature's `use` actions, never `shown`, `disabled` or a setting change unless the catalog lists it):
+
+| Tab | Shows |
+| --- | --- |
+| Features | Every catalog feature, used or not: release date (earliest What's New date of its PRs), eligible (users active in 28 days minus those whose latest daily snapshot has it off), exposed (had it on screen or used it), used, adoption = used ÷ eligible with a Wilson 95% interval, repeat (share of users with 3+ use-days in 28), opt-out, masks using it, weekly users for 12 weeks. Flags: *no events since release* (released 7+ days ago and nothing at all recorded: check its tracking) and *no use* (an active feature nobody used in 28 days). Click a row for its funnel. |
+| Funnel | One feature: eligible -> exposed -> tried -> repeat -> retained (used in two weeks in a row of the last four), each step as a share of the one before with a 95% interval, and the median time from first seeing it to first using it (from first/last times per user). |
+| Launches | The last 15 What's New PRs: of the users active since the release date, the share who used the feature by day 1, 7, 14 and 28. Flagged when under 10% by day 14. A follow-up PR counts every use of its feature. |
+| Turned off | Features with a Settings toggle: users with it off now, and users who switched it off in 28 days, split into after using it and without trying it. |
+| Never used | Released over 60 days ago and fewer than 5 users in the kept data, or nobody used it on 3+ days: candidates to prune, rethink or make easier to find. Younger features are listed apart. |
+| App health | Daily (median of the last 7 full days), weekly and 28-day active users (real keyboard/mouse input), weekly ÷ 28-day, new users, masks where someone used a feature, and a weekday x UTC-hour heatmap. The heatmap counts user-days by the hour each feature's first event of the day happened (the daily rows keep only that minute), so late hours of long sessions are under-counted. New users: everyone looks new again after the pseudonym salt is replaced (every `ANALYTICS_DAYS`). |
+| Tips & What's New | Feature tip events (`hints` actions, once tips ship) and, per release, the share of active users who opened What's New themselves within 7 days (its automatic opening after an update isn't counted). |
+
+Small numbers: tens of users make every number a direction, not a measurement (the page says so). User counts of 1-4
+show as "<5" and mask counts of 1-2 as "<3"; percentages of such counts are left out, eligible becomes a range when the
+number turned off is under 5, and a split is hidden when one part is. Answers are aggregates only (no ids, no per-user
+rows) and are cached for 2 minutes in `cache/`.
+
+- Try it in the dev stack with made-up data: `docker compose -f docker-compose.dev.yml exec -T app php docker/dev-seed-analytics.php`
+  (40 fake users over 35 days; `--clear` removes them), with `ANALYTICS_ADMINS` set to your dev character's ID
+  (`docker/dev-seed.sh` prints it).
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/analytics_dashboard_test.php` (moves the analytics
+  tables aside for the run and puts them back).
+
 ### REST API
 
 `/api` (`public/api.php`, on when `TRIPWIRE_API=true`) has two ways to log in:
