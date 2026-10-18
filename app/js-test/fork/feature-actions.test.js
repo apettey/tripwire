@@ -116,6 +116,30 @@ describe('forkFeatureActions', () => {
 		});
 	});
 
+	describe('pickerEmpty (palette Try it with nothing to pick falls through)', () => {
+		const jpOpen = { id: 'jumpPlanner.open', args: [{ name: 'exit', type: 'chainSystem' }] };
+		it('empty first picker', () => assert.strictEqual(forkFeatureActions.pickerEmpty(jpOpen, () => []), true));
+		it('candidates there', () => assert.strictEqual(forkFeatureActions.pickerEmpty(jpOpen, () => [{ value: 1 }]), false));
+		it('a failing candidate list counts as empty', () => assert.strictEqual(forkFeatureActions.pickerEmpty(jpOpen, () => { throw new Error('x'); }), true));
+		it('only chain system / hole / signature pickers (a choice or a typed system can always be entered)', () => {
+			assert.strictEqual(forkFeatureActions.pickerEmpty({ args: [{ name: 'where', type: 'choice' }] }, () => []), false);
+			assert.strictEqual(forkFeatureActions.pickerEmpty({ args: [{ name: 's', type: 'system' }] }, () => []), false);
+			assert.strictEqual(forkFeatureActions.pickerEmpty({ args: [{ name: 'h', type: 'hole', optional: true }, { name: 'x', type: 'text' }] }, () => []), false);
+			assert.strictEqual(forkFeatureActions.pickerEmpty({ args: [] }, () => []), false);
+		});
+		it('tryIt then goes on to the next way', () => {
+			const orig = { env: forkFeatureActions.env, run: forkFeatureActions.run };
+			forkFeatureActions.setCatalog(catalog);
+			const ran = [];
+			forkFeatureActions.env = () => ({ command: () => ({ available: true, hasArgs: true }), settingRow: 'r' });
+			// what run() does for a palette whose picker is empty: false
+			forkFeatureActions.run = c => { ran.push(c.kind); return c.kind === 'palette' ? !forkFeatureActions.pickerEmpty(jpOpen, () => []) : true; };
+			try { assert.deepStrictEqual(forkFeatureActions.tryIt('jumpPlanner'), { did: 'setting', id: 'r' }); }
+			finally { forkFeatureActions.env = orig.env; forkFeatureActions.run = orig.run; }
+			assert.deepStrictEqual(ran, ['palette', 'setting']);
+		});
+	});
+
 	describe('howTextOf (the toast)', () => {
 		const wn = [{ pr: 50, description: 'Old text.' }, { pr: 52, description: 'Newest   first\nparagraph.\n\nSecond one.' }, { pr: 99, description: 'Other.' }];
 		it('first paragraph of the newest entry of the feature', () => assert.strictEqual(forkFeatureActions.howTextOf(catalog.features[0], wn), 'Newest first paragraph.'));
