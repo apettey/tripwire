@@ -26,7 +26,7 @@ const forkFeatureActions = {
 	CATALOG_URL: "fork/feature-catalog.json",
 	// The only commands a catalog `try` may name: they open a panel, window or map and write nothing for the mask (a panel
 	// toggle changes the user's own options). Add one here only after checking its run() (and the catalog test passes).
-	TRY_SAFE: /^panel\.[A-Za-z]+$|^(destinations|regionmap|jumpPlanner|rollingGuide|analytics)\.open$|^structures\.(show|timers)$/,
+	TRY_SAFE: /^panel\.[A-Za-z]+$|^(destinations|regionmap|jumpPlanner|rollingGuide|analytics|features)\.open$|^structures\.(show|timers)$/,
 	FLASH_MS: 1500,
 	TOAST_CHARS: 220,
 

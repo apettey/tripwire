@@ -157,6 +157,14 @@ describe('featuresHub', () => {
 			assert.ok(!/fhub-settings/.test(featuresHub.rowHtml(r, {})));
 			assert.ok(/fhub-settings/.test(featuresHub.rowHtml(r, { hasSetting: true })));
 		});
+		it('only a toast left (nothing on screen): an enabled "How?" button', () => {
+			const r = { id: 'a', title: 'A', sectionTitle: 'S', description: '', status: 'new' };
+			const html = featuresHub.rowHtml(r, { canTry: false, canTell: true });
+			assert.ok(html.includes('>How?<') && !/disabled/.test(html), html);
+			assert.strictEqual(featuresHub.tryLabel('off', { canTry: false, canTell: true }), 'How?');
+			assert.strictEqual(featuresHub.tryLabel('off', { canTry: true, canTell: true }), 'Turn on');
+			assert.strictEqual(featuresHub.tryLabel('new', { canTry: true }), 'Show me');
+		});
 		it('badges and the turned-off button text', () => {
 			assert.ok(featuresHub.rowHtml({ id: 'a', title: 'A', status: 'used' }, {}).includes('>Used<'));
 			assert.ok(featuresHub.rowHtml({ id: 'a', title: 'A', status: 'new' }, {}).includes('>Not tried<'));

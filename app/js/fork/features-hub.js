@@ -143,20 +143,29 @@ const featuresHub = {
 		});
 	},
 
-	/** A row's markup. extra: {canTry, hasSetting} */
+	/** Show me's label: it shows the feature (canTry), turns it on (off), or only tells how (canTell: a short toast) */
+	tryLabel: function(status, extra) {
+		extra = extra || {};
+		if (!extra.canTry && extra.canTell) { return "How?"; }
+		return status === "off" ? "Turn on" : "Show me";
+	},
+
+	/** A row's markup. extra: {canTry, canTell, hasSetting} */
 	rowHtml: function(r, extra) {
 		const esc = featuresHub.escape;
 		extra = extra || {};
-		const tryLabel = r.status === "off" ? "Turn on" : "Show me";
+		const tryLabel = featuresHub.tryLabel(r.status, extra);
+		const enabled = extra.canTry || extra.canTell;
 		return "<li class='fhub-row fhub-" + esc(r.status) + "' data-feature='" + esc(r.id) + "'>"
 			+ "<div class='fhub-main'>"
 			+ "<div class='fhub-title'><span class='fhub-name'>" + esc(r.title) + "</span>"
 			+ " <span class='fhub-section'>" + esc(r.sectionTitle) + "</span></div>"
-			+ (r.description ? "<div class='fhub-desc'>" + esc(r.description) + "</div>" : "")
+			+ (r.description ? "<div class='fhub-desc' title='" + esc(r.description) + "'>" + esc(r.description) + "</div>" : "")
 			+ "</div>"
 			+ "<span class='fhub-badge fhub-badge-" + esc(r.status) + "'>" + esc(featuresHub.STATUS_TITLES[r.status]) + "</span>"
 			+ "<span class='fhub-buttons'>"
-			+ "<button type='button' class='fhub-try'" + (extra.canTry ? "" : " disabled title='Nothing to show for this right now'") + ">" + tryLabel + "</button>"
+			+ "<button type='button' class='fhub-try'" + (extra.canTry ? "" : enabled ? " title='Tells you in a few words how to use it'"
+				: " disabled title='Nothing to show for this right now'") + ">" + tryLabel + "</button>"
 			+ (extra.hasSetting ? "<button type='button' class='fhub-settings' title='Open its row in Settings'>Settings</button>" : "")
 			+ "</span></li>";
 	},
@@ -284,9 +293,11 @@ const featuresHub = {
 		const filtered = shown.length !== featuresHub.all.length;
 		$d.find(".fhub-summary").text(featuresHub.summary(featuresHub.all) + (filtered ? " · showing " + shown.length : ""));
 		$d.find(".fhub-list").html(shown.length ? shown.map(function(r) {
-			let canTry = false;
+			let canTry = false, canTell = false;
 			try { canTry = forkFeatureActions.canTry(r.id); } catch (e) { canTry = false; }
-			return featuresHub.rowHtml(r, { canTry: canTry, hasSetting: !!featuresHub.settingRow(r.id) });
+			// Nothing to show on screen: tryIt can still tell how in a toast (the newest What's New text)
+			try { canTell = !canTry && typeof forkFeatureActions.howText === "function" && !!forkFeatureActions.howText(forkFeatureActions.byId(r.id)); } catch (e) { canTell = false; }
+			return featuresHub.rowHtml(r, { canTry: canTry, canTell: canTell, hasSetting: !!featuresHub.settingRow(r.id) });
 		}).join("") : "<li class='fhub-empty'>No features match.</li>");
 	},
 

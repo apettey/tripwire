@@ -15,7 +15,7 @@
 .dialog-featuresHub .fhub-main { flex: 1 1 auto; min-width: 0; }
 .dialog-featuresHub .fhub-name { color: #e6e6e6; font-weight: bold; }
 .dialog-featuresHub .fhub-section { color: #888; font-size: 11px; }
-.dialog-featuresHub .fhub-desc { margin-top: 2px; color: #aaa; line-height: 15px; }
+.dialog-featuresHub .fhub-desc { margin-top: 2px; color: #aaa; line-height: 15px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .dialog-featuresHub .fhub-empty { padding: 12px 2px; color: #888; font-style: italic; }
 
 .dialog-featuresHub .fhub-badge { flex: 0 0 auto; min-width: 62px; padding: 1px 5px; border-radius: 3px; font-size: 10px; text-align: center; white-space: nowrap; }
