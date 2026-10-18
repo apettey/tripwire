@@ -58,11 +58,21 @@ const whatsNew = {
 	// A new account (created less than NEW_DAYS ago) that has never seen What's New: "new" (mark everything seen silently and
 	// let Getting started introduce the app, instead of ~90 NEW entries). "seen": it has What's New state (today's behaviour).
 	// "unknown": no What's New state but not known to be new (old account, or the server's answer failed): today's behaviour.
+	// serverHadOptions false: the server had no options for this account (init.options empty), so any What's New state in the
+	// options came from this browser's copy of another account's (upstream's localStorage fallback): a new account ignores it.
 	NEW_DAYS: 14,
-	firstRun: function(opts, accountAgeDays) {
-		if (opts && opts.whatsNew) { return "seen"; }
+	firstRun: function(opts, accountAgeDays, serverHadOptions) {
 		const age = typeof accountAgeDays === "number" && isFinite(accountAgeDays) ? accountAgeDays : null;
-		return age !== null && age >= 0 && age < whatsNew.NEW_DAYS ? "new" : "unknown";
+		const isNew = age !== null && age >= 0 && age < whatsNew.NEW_DAYS;
+		if (isNew && serverHadOptions === false) { return "new"; }
+		if (opts && opts.whatsNew) { return "seen"; }
+		return isNew ? "new" : "unknown";
+	},
+
+	// Whether the server sent stored options for this account (the page's init.options); false for an account that never saved any
+	serverHadOptions: function(initData) {
+		const o = initData && initData.options;
+		return !!(o && typeof o === "object" && Object.keys(o).length > 0);
 	},
 
 	// The line under an entry's date: a tick when used, "Turned off", and a Try it button. info: {feature, status, canTry}
@@ -138,17 +148,18 @@ const whatsNew = {
 		$dialog.scrollTop(scroll);
 	},
 
-	// Promise of firstRun(): no waiting when What's New was seen before; otherwise the server's account age (feature-usage.js
-	// asks fork_events.php once), "unknown" when it fails or takes longer than 5 s
+	// Promise of firstRun(): no waiting when the server's options say What's New was seen before; otherwise the server's
+	// account age (feature-usage.js asks fork_events.php once), "unknown" when it fails or takes longer than 5 s
 	firstRunKind: function() {
 		const opts = typeof options !== "undefined" ? options : null;
-		if (whatsNew.firstRun(opts, null) === "seen") { return Promise.resolve("seen"); }
+		const serverHad = whatsNew.serverHadOptions(typeof init !== "undefined" ? init : null);
+		if (serverHad && whatsNew.firstRun(opts, null) === "seen") { return Promise.resolve("seen"); }
 		const info = typeof forkUsage !== "undefined" && forkUsage.serverInfo ? forkUsage.serverInfo : Promise.resolve(null);
 		let timer = null;
 		const timeout = new Promise(function(resolve) { timer = setTimeout(function() { resolve(null); }, 5000); });
 		return Promise.race([info, timeout]).then(function(data) {
 			clearTimeout(timer);
-			return whatsNew.firstRun(opts, data ? data.accountAgeDays : null);
+			return whatsNew.firstRun(opts, data ? data.accountAgeDays : null, serverHad);
 		}, function() { clearTimeout(timer); return "unknown"; });
 	},
 
@@ -162,8 +173,8 @@ const whatsNew = {
 		};
 	},
 
-	// Opening What's New shows the user the features of its NEW entries: "shown" for each, once a day (like the on-screen
-	// exposure in feature-usage.js)
+	// Opening What's New lists the features of its NEW entries: "wn_listed" for each (a catalog `generic` action: not use, and
+	// not "shown", which stays the on-screen exposure of feature-usage.js), once a day
 	trackExposure: function() {
 		if (typeof forkFeatureActions === "undefined" || typeof forkUsage === "undefined" || !forkFeatureActions.catalog()) { return; }
 		const done = {};
@@ -171,7 +182,7 @@ const whatsNew = {
 			const entry = forkFeatureActions.byPR(f.pr);
 			if (!entry || done[entry.id]) { return; }
 			done[entry.id] = true;
-			if (forkUsage.firstTodayStored(entry.id + ".shown")) { forkUsage.track(entry.id, "shown"); }
+			if (forkUsage.firstTodayStored(entry.id + ".wn_listed")) { forkUsage.track(entry.id, "wn_listed"); }
 		});
 	},
 

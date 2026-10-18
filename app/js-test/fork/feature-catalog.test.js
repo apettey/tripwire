@@ -108,6 +108,23 @@ describe('feature catalog', () => {
 		}));
 	});
 
+	// "Try it" (What's New, features hub) runs only a feature's `try` command: it must be one of the feature's own registered
+	// commands and match forkFeatureActions.TRY_SAFE, the allow-list of commands that only open or show something (a panel,
+	// a window, a map) and never write for the mask. Fight here, Mark rolling, Preserve mass, targets, flares... never qualify.
+	it('every `try` command is the feature\'s own, registered and on the Try it allow-list', () => {
+		const { include } = require('../helpers/helpers');
+		include('app/js/fork/feature-actions');
+		const tried = features.filter(f => f.try !== undefined);
+		assert.ok(tried.length > 0);
+		tried.forEach(f => {
+			assert.ok(typeof f.try === 'string' && f.commands.includes(f.try), f.id + ': try ' + f.try + ' is not one of its commands');
+			assert.ok(commandIds.has(f.try), f.id + ': try ' + f.try + ' is not registered');
+			assert.ok(forkFeatureActions.TRY_SAFE.test(f.try), f.id + ': try ' + f.try + ' is not on the allow-list (feature-actions.js TRY_SAFE)');
+		});
+		['rally.fightHere', 'rolling.mark', 'preserveMass.set', 'targets.add', 'hole.set', 'chain.flareRed', 'sig.undo', 'sound.toggle', 'favourites.add', 'destinations.add']
+			.forEach(id => assert.ok(!forkFeatureActions.TRY_SAFE.test(id), id + ' must never be allowed'));
+	});
+
 	it('every panel is a panel id and belongs to one feature', () => {
 		const seen = {};
 		features.forEach(f => f.panels.forEach(p => {
