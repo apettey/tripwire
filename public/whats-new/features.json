@@ -1,6 +1,18 @@
 {
   "features": [
     {
+      "pr": 127,
+      "date": "2026-10-19",
+      "title": "Sites last longer and count down before they expire",
+      "description": "Combat, data, relic, gas, ore and unknown signatures now last 7 days by default instead of 72 hours, because unrun sites stay for days. Wormholes keep their own life. Change it in Settings > Signatures > Site default life.\n\nIn a site's last 24 hours its Age counts down to when Tripwire removes it, in orange, then red under 4 hours. Edit the sig's life to keep it longer. Turn the countdown off in Settings > Signatures.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-127-site-expiry.png",
+          "caption": "Sites counting down in their last 24 hours"
+        }
+      ]
+    },
+    {
       "pr": 125,
       "date": "2026-10-18",
       "title": "More feature tips",

@@ -72,7 +72,7 @@ const MASKADMIN_DEFAULTS_MAX_KEYS = 40;
 // The only options a mask default may carry: the top-level options keys the fork's Settings rows store (forkSettings.register
 // with a `key`). The browser has the same list (maskDefaults.ALLOWED); a mocha test keeps both equal to the keys the rows use.
 const MASKADMIN_DEFAULTS_ALLOW = ['autoMass', 'chainKillFeed', 'commandPalette', 'environmentTags', 'favouritesRouteStrip', 'highsecRegion', 'holeNaming', 'homeRegion', 'intelScans', 'jumpReturn', 'jumpSigPrompt',
-    'killReporting', 'lifeStates', 'lootBuyers', 'mapTargets', 'preserveMass', 'regionMap', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sigInline', 'sigAnomalies', 'sizeTags', 'skyhooksPanel', 'smartNotes',
+    'killReporting', 'lifeStates', 'lootBuyers', 'mapTargets', 'preserveMass', 'regionMap', 'rollPlan', 'rolling', 'rollingCalc', 'routeHoleFilters', 'sigAge', 'sigInline', 'sigAnomalies', 'sigExpiry', 'sizeTags', 'skyhooksPanel', 'smartNotes',
     'soundMute', 'stagingScan', 'structures', 'systemKillFeed', 'systemResidents', 'systemThreat', 'theraRoute', 'watchlist'];
 
 function maskadmin_ensure_schema(PDO $db) {

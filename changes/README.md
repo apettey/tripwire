@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-19 | [Site expiry](2026-10-19-site-expiry/README.md) | Sites (non-wormhole sigs, unknown included) get a 7-day default life (Settings > Signatures); in their last 24 h they count down in the Age cell, orange, red under 4 h; sig-age tints sites at 24 h / 72 h instead of 4.5 h / 24 h |
 | 2026-10-18 | [Ctrl+K opens count once](2026-10-18-ctrl-k-open-counts-once/README.md) | A Ctrl+K open of Usage analytics or What's New logs `command` only, not `opened` too (as the features hub does); the dashboard's What's New numbers include Ctrl+K opens |
 | 2026-10-18 | [More feature tips](2026-10-18-more-feature-tips/README.md) | Twelve tips for easy-to-miss features (edit life/mass in place, d-scan sharing, Mass dialog, rolling, region map, staging scan, jump planner, chain kills, panel modes, Mask Admin Discord / Watchlist / Bookmarks); tips inside dialogs |
 | 2026-10-18 | [Features you haven't tried](2026-10-18-features-hub/README.md) | Features dialog: every feature with Used / Not tried / Turned off, Show me and Settings, not-tried first near the sections you use; from Ctrl+K, Settings > General and What's New |
