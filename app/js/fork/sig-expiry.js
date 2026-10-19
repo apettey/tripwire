@@ -4,7 +4,7 @@ const sigExpiry = {
 	// Tripwire life (lifeLength, from creation) runs out. This feature:
 	// - gives sites a longer default life than holes (options.sigExpiry.siteLife hours, default 7 days), used by
 	//   paste and the Add dialog; holes keep the paste default (options.signatures.pasteLife) or their type's life;
-	// - counts a site down in its Age cell for its last 24 h (amber), red in its last 4 h, like EOL holes, with an
+	// - counts a site down in its Age cell for its last 24 h (orange), red in its last 4 h, like EOL holes, with an
 	//   "Expires in ..." line in the Age tooltip.
 	// Settings: options.sigExpiry = {siteLife, enabled}; a missing key means the defaults (7 days, on).
 	// Keep `const sigExpiry` on the first line and no other `const` at the start of a line: the test helper
@@ -56,9 +56,26 @@ const sigExpiry = {
 	@param sig the signature (its lifeTime) @param now current time in ms (server clock) */
 	holeLifeSeconds: function(sig, opts, now) {
 		const base = sigExpiry.pasteLifeHours(opts) * 3600;
+		// a never-expiring sig: the server restarts lifeTime at now when it gets a length (signatures.php)
+		if (sig && Number(sig.lifeLength) === 0) { return base; }
+		return base + sigExpiry.ageSeconds(sig, now);
+	},
+
+	/** lifeLength (seconds) for a paste that updates an existing site with new info (type, name): at least the
+	default life counted from now, never shorter than its current life (a life the user extended stays), and a
+	never-expiring sig (lifeLength 0) stays that way. lifeLength runs from lifeTime, when the sig was first seen.
+	@param sig the signature before the update @param type its new type @param now current time in ms (server clock) */
+	updateLifeSeconds: function(sig, type, opts, now) {
+		if (sig && Number(sig.lifeLength) === 0) { return 0; }
+		const fromNow = sigExpiry.defaultLifeSeconds(type, opts) + sigExpiry.ageSeconds(sig, now);
+		return Math.max(Number(sig && sig.lifeLength) || 0, fromNow);
+	},
+
+	/** Whole seconds since the sig's lifeTime, 0 when unknown or in the future */
+	ageSeconds: function(sig, now) {
 		const created = sigExpiry.parseServerTime(sig && sig.lifeTime);
-		if (isNaN(created) || !(now > created)) { return base; }
-		return base + Math.ceil((now - created) / 1000);
+		if (isNaN(created) || !(now > created)) { return 0; }
+		return Math.ceil((now - created) / 1000);
 	},
 
 	/** Milliseconds since the epoch for a server time 'YYYY-MM-DD HH:mm:ss' (UTC), or NaN */

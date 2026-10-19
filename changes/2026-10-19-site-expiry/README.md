@@ -37,10 +37,15 @@ Tip: no tip, because it is visible: the countdown shows in the signature list an
   non-wormhole sigs) and by the Add dialog when it opens (for the "Add Dialog default type"). In the Add dialog,
   switching the type between a site and Wormhole swaps the life to the new kind's default, but only while it still
   holds the other kind's default (a typed life, or a wormhole type's life, stays). Edit mode never touches the life.
+- **Re-pasting a site with new info** (type or name) sends `sigExpiry.updateLifeSeconds`: at least the default life
+  counted from now, never shorter than its current life (a life someone extended stays), and a never-expiring sig
+  (lifeLength 0) stays never-expiring. Upstream re-sent `pasteLife`, which shortened extended sigs and gave
+  never-expiring ones a life.
 - **Site turned hole.** When a paste turns a site/unknown sig into a wormhole, it now sends a lifeLength so the hole
   gets the paste default counted from now (`sigExpiry.holeLifeSeconds`). Without it the hole would keep the site's
   7-day life; with plain `pasteLife` a sig first seen days ago would come out already expired (life runs from
-  `lifeTime`, when the sig was first seen) and be deleted by the server within a minute.
+  `lifeTime`, when the sig was first seen) and be deleted by the server within a minute. A never-expiring sig gets plain `pasteLife` (the server restarts its
+  `lifeTime` at now when it gets a length).
 - **Countdown and colour.** A site with a life (lifeLength > 0) and 24 h or less left switches its Age span from
   upstream's count-up to a countdown to `lifeLeft` (jQuery countdown with the server clock, as upstream does for EOL
   holes), orange tint and left bar; 4 h or less (or past its end): red (#FF4747) tint and bar. The Age tooltip gets

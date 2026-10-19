@@ -47,10 +47,31 @@ describe('Site expiry', () => {
 			const left = sigExpiry.parseServerTime(sig.lifeTime) + sigExpiry.holeLifeSeconds(sig, opts, now) * 1000;
 			assert.equal(left, now + 72 * H);
 		});
+		it('a never-expiring sig: the paste default (the server restarts its lifeTime)', () => {
+			assert.equal(sigExpiry.holeLifeSeconds({ lifeLength: 0, lifeTime: at(-120) }, opts, now), 72 * 3600);
+			assert.equal(sigExpiry.holeLifeSeconds({ lifeLength: '0', lifeTime: at(-120) }, opts, now), 72 * 3600);
+		});
 		it('unknown or future lifeTime: the paste default', () => {
 			assert.equal(sigExpiry.holeLifeSeconds({}, opts, now), 72 * 3600);
 			assert.equal(sigExpiry.holeLifeSeconds({ lifeTime: at(2) }, opts, now), 72 * 3600);
 			assert.equal(sigExpiry.holeLifeSeconds(undefined, {}, now), 72 * 3600);
+		});
+	});
+
+	describe('updateLifeSeconds (a paste updates an existing site)', () => {
+		const opts = { signatures: { pasteLife: 72 } };
+		it('never-expiring sigs stay that way', () => assert.equal(sigExpiry.updateLifeSeconds({ lifeLength: 0, lifeTime: at(-50) }, 'data', opts, now), 0));
+		it('a life the user extended is kept', () => {
+			assert.equal(sigExpiry.updateLifeSeconds({ lifeLength: 14 * 86400, lifeTime: at(-6.5 * 24) }, 'data', opts, now), 14 * 86400);
+		});
+		it('an old site gets the default counted from now', () => {
+			const sig = { lifeLength: 72 * 3600, lifeTime: at(-60) };
+			assert.equal(sigExpiry.updateLifeSeconds(sig, 'combat', opts, now), (168 + 60) * 3600);
+		});
+		it('a fresh site gets the default', () => assert.equal(sigExpiry.updateLifeSeconds({ lifeLength: 604800, lifeTime: at(0) }, 'relic', opts, now), 604800));
+		it('bad lifeTime: the default', () => {
+			assert.equal(sigExpiry.updateLifeSeconds({ lifeLength: 3600, lifeTime: 'junk' }, 'gas', opts, now), 604800);
+			assert.equal(sigExpiry.updateLifeSeconds(undefined, 'gas', opts, now), 604800);
 		});
 	});
 

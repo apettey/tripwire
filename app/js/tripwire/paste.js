@@ -170,7 +170,7 @@ tripwire.pasteSignatures = function() {
                             "type": scanner.type || 'unknown',
                             "name": scanner.name,
                             "bookmark": sigAnomalies.marker(scanner),
-                            "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.defaultLifeSeconds(scanner.type || 'unknown', options) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
+                            "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.updateLifeSeconds(signature, scanner.type || 'unknown', options, sigExpiry.now()) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
                         });
                         undo.push(tripwire.client.signatures[signature.id]);
                     }
