@@ -12,7 +12,9 @@ const sigAge = {
 
 	/** Hours after the last change at which a sig counts as aging / stale */
 	thresholds: {
-		signature: { aging: 4.5, stale: 24 },
+		// Sites (combat, data, relic, gas, ore, unknown) last days in the game; their default life is 7 days
+		// (sig-expiry.js), which counts them down in their last 24 h
+		signature: { aging: 24, stale: 72 },
 		// Holes live 16-48 h and go EOL 4 h before they die; one nobody has looked at for 12 h may have gone EOL
 		// unnoticed. Holes already marked EOL are left alone: their red countdown says more.
 		wormhole: { aging: 12, stale: 24 }
@@ -142,7 +144,9 @@ const sigAge = {
 			const $cell = $(this).children('td.age-tooltip').first();
 			if (!$cell.length) { return; }
 			const id = $(this).attr('data-id');
-			const result = on ? sigAge.levelFor(signatures[id], wormholes[id], now) : null;
+			// A site counting down to its expiry (sig-expiry.js) shows that instead of its age
+			const expiring = typeof sigExpiry !== "undefined" && sigExpiry.active(signatures[id], now);
+			const result = on && !expiring ? sigAge.levelFor(signatures[id], wormholes[id], now) : null;
 			sigAge.decorate($cell, result);
 		});
 	},
@@ -152,18 +156,39 @@ const sigAge = {
 		const level = result && result.level !== 'fresh' ? result.level : null;
 		$cell.toggleClass('sig-age-aging', level === 'aging').toggleClass('sig-age-stale', level === 'stale');
 
-		// Upstream's tooltip is a <table> of Created / Last Modified; keep the original and append our line
+		sigAge.setNote($cell, 'age', sigAge.note(result));
+	},
+
+	/** Order of the fork's lines in the Age tooltip (sig-expiry.js adds 'expiry') */
+	NOTE_KEYS: ['expiry', 'age'],
+
+	/** Upstream's tooltip (a <table> of Created / Last Modified) with our lines appended as rows.
+	@param base upstream's tooltip markup
+	@param notes [{text, cls}] in display order; empty texts are skipped (texts are our own, not user input) */
+	composeTooltip: function(base, notes) {
+		const rows = (notes || []).filter(function(n) { return n && n.text; });
+		if (!rows.length) { return base; }
+		if (base.indexOf('</table>') < 0) { return base + rows.map(function(n) { return n.text; }).join(' '); }
+		const html = rows.map(function(n) {
+			return "<tr><td colspan=\"3\" class=\"" + n.cls + "\">" + n.text + "</td></tr>";
+		}).join('');
+		return base.replace('</table>', html + '</table>');
+	},
+
+	/** Set one feature's line in the Age cell's tooltip, keeping upstream's tooltip and the other features' lines.
+	@param key 'age' or 'expiry'; text '' removes the line */
+	setNote: function($cell, key, text) {
 		let base = $cell.data('sigAgeBase');
 		if (base === undefined) {
 			base = $cell.attr('data-tooltip') || '';
 			$cell.data('sigAgeBase', base);
 		}
-		const note = sigAge.note(result);
-		let tooltip = base;
-		if (note) {
-			const row = "<tr><td colspan=\"3\" class=\"sig-age-note\">" + note + "</td></tr>";
-			tooltip = base.indexOf('</table>') >= 0 ? base.replace('</table>', row + '</table>') : base + note;
-		}
+		const notes = Object.assign({}, $cell.data('sigAgeNotes'));
+		notes[key] = text || '';
+		$cell.data('sigAgeNotes', notes);
+		const tooltip = sigAge.composeTooltip(base, sigAge.NOTE_KEYS.map(function(k) {
+			return { text: notes[k], cls: k === 'age' ? 'sig-age-note' : 'sig-' + k + '-note' };
+		}));
 		if ($cell.attr('data-tooltip') !== tooltip) { $cell.attr('data-tooltip', tooltip); }
 	},
 
@@ -180,7 +205,7 @@ const sigAge = {
 		// Settings > Signatures row; takes effect on Save (Reset = on)
 		forkSettings.register({
 			section: "signatures", order: 40, id: "sigAge-enabled", type: "checkbox", key: "sigAge",
-			label: "Colour signatures by age:", text: "Tint sigs not updated for 4.5 h (holes 12 h) and 24 h",
+			label: "Colour signatures by age:", text: "Tint sigs not updated for 24 h (holes 12 h) and 72 h (holes 24 h)",
 			get: function(o) { return sigAge.enabled(o); },
 			set: function(o, on) { o.sigAge = { enabled: on }; }
 		});

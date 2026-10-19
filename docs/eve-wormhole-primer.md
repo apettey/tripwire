@@ -105,7 +105,9 @@ game patches; the source of truth for numbers in this repo is `public/js/combine
 - Signature types: **wormhole**, **combat**, **data**, **relic**, **gas**, **ore** (plus `unknown`
   until scanned). Same enum as the `signatures.type` column.
 - Players paste the scanner window into Tripwire (`app/js/tripwire/paste.js`), which creates or
-  updates sigs. Sigs have their own life timer (`lifeLength`, default 72h).
+  updates sigs. Sigs have their own life timer (`lifeLength`); the server deletes a non-wormhole sig when it runs out.
+  Sites (any non-wormhole type, unknown included) default to 7 days (`options.sigExpiry.siteLife`, `app/js/fork/sig-expiry.js`),
+  holes to the paste default (72h) or their type's life.
 - **Bookmarks**: saved in-game locations (on the hole), usually shared via corp folders. Corps name
   them so anyone can read the chain from the bookmark list (see section 3).
 

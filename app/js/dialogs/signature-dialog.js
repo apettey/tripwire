@@ -426,7 +426,7 @@ sigDialog.openSignatureDialog = function(e) {
 				$("#dialog-signature .sideLabel:last").text("Other Side");
 
 				// Default signature life
-				$("#dialog-signature #durationPicker").val(options.signatures.pasteLife * 60 * 60).change();
+				$("#dialog-signature #durationPicker").val(typeof sigExpiry !== "undefined" ? sigExpiry.defaultLifeSeconds(options.signatures.editType || "unknown", options) : options.signatures.pasteLife * 60 * 60).change(); // fork: sig-expiry
 
 				var id = sigDialogVM.sigId;
 				if (sigDialogVM.mode == "update" && id && tripwire.client.signatures[id]) {

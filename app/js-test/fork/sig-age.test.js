@@ -20,11 +20,11 @@ describe('Signature age colouring', () => {
 	});
 
 	describe('levelFor signatures', () => {
-		it('fresh under 4.5 h', () => assert.equal(level(sig(4.4, 4.4)), 'fresh'));
-		it('aging from 4.5 h', () => assert.equal(level(sig(4.5, 4.5)), 'aging'));
-		it('stale from 24 h', () => assert.equal(level(sig(24, 24)), 'stale'));
-		it('uses the last change, not the creation time', () => assert.equal(level(sig(30, 1)), 'fresh'));
-		it('falls back to creation time without modifiedTime', () => assert.equal(level(sig(6, 0, { modifiedTime: null })), 'aging'));
+		it('fresh under 24 h', () => assert.equal(level(sig(23.9, 23.9)), 'fresh'));
+		it('aging from 24 h', () => assert.equal(level(sig(24, 24)), 'aging'));
+		it('stale from 72 h', () => assert.equal(level(sig(72, 72)), 'stale'));
+		it('uses the last change, not the creation time', () => assert.equal(level(sig(80, 1)), 'fresh'));
+		it('falls back to creation time without modifiedTime', () => assert.equal(level(sig(30, 0, { modifiedTime: null })), 'aging'));
 		it('never-expiring sigs (lifeLength 0) are not coloured', () => assert.equal(level(sig(30, 30, { lifeLength: 0 })), null));
 		it('unknown times are not coloured', () => assert.equal(level({ type: 'data', lifeTime: '', modifiedTime: '' }), null));
 		it('no sig, no level', () => assert.equal(sigAge.levelFor(undefined, undefined, now), null));
@@ -78,8 +78,8 @@ describe('Signature age colouring', () => {
 		});
 		it('skewed PC clock no longer changes the level', () => {
 			const clock = { serverMs: null, offset: 0 };
-			const s = sig(3, 3);	// 3 h old by server time: fresh
-			assert.equal(sigAge.levelFor(s, undefined, local).level, 'aging');	// uncorrected: 6 h
+			const s = sig(22, 22);	// 22 h old by server time: fresh
+			assert.equal(sigAge.levelFor(s, undefined, local).level, 'aging');	// uncorrected: 25 h
 			assert.equal(sigAge.levelFor(s, undefined, sigAge.serverNow(new Date(now), local, clock)).level, 'fresh');
 		});
 	});

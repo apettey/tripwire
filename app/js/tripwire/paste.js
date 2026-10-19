@@ -142,14 +142,16 @@ tripwire.pasteSignatures = function() {
                                     "signatureID": signature.signatureID,
                                     "systemID": viewingSystemID,
                                     "type": "wormhole",
-                                    "name": signature.name
+                                    "name": signature.name,
+                                    "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.holeLifeSeconds(signature, options, sigExpiry.now()) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
                                 },
                                 {
                                     "id": otherSignature.id || null,
                                     "signatureID": otherSignature.signatureID || null,
                                     "systemID": otherSignature.systemID || null,
                                     "type": "wormhole",
-                                    "name": otherSignature.name
+                                    "name": otherSignature.name,
+                                    "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.holeLifeSeconds(signature, options, sigExpiry.now()) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
                                 }
                             ]
                         });
@@ -168,7 +170,7 @@ tripwire.pasteSignatures = function() {
                             "type": scanner.type || 'unknown',
                             "name": scanner.name,
                             "bookmark": sigAnomalies.marker(scanner),
-                            "lifeLength": options.signatures.pasteLife * 60 * 60
+                            "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.defaultLifeSeconds(scanner.type || 'unknown', options) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
                         });
                         undo.push(tripwire.client.signatures[signature.id]);
                     }
@@ -204,7 +206,7 @@ tripwire.pasteSignatures = function() {
                             "type": scanner.type || 'unknown',
                             "name": scanner.name,
                             "bookmark": sigAnomalies.marker(scanner),
-                            "lifeLength": options.signatures.pasteLife * 60 * 60
+                            "lifeLength": (typeof sigExpiry !== "undefined" ? sigExpiry.defaultLifeSeconds(scanner.type || 'unknown', options) : options.signatures.pasteLife * 60 * 60) // fork: sig-expiry
                         });
                     }
                 }
