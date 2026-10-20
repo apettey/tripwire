@@ -5,7 +5,8 @@
 # Run from the root of a full clone of this repo (tags included). Environment:
 #   VERSION          release to deploy, X.Y.Z (tag vX.Y.Z must exist)
 #   DIGEST           sha256:<hex> of petdog/tripwire:VERSION
-#   INFRA_DIR        full clone of apettey/eve-infrastructure (on main, push credentials set up)
+#   INFRA_DIR        clone of apettey/eve-infrastructure on main (no stored credentials: git gets
+#                    INFRA_TOKEN from this script's environment, after the infra bump tool has run)
 #   INFRA_REPO       e.g. apettey/eve-infrastructure
 #   INFRA_TOKEN      token for INFRA_REPO (gh: PRs, auto-merge); never printed
 #   GH_TOKEN         token for reading this repo's PRs (github.token)
@@ -99,6 +100,12 @@ image_change="\`petdog/tripwire:$current\` -> \`petdog/tripwire:$VERSION@$DIGEST
 echo "eve-infrastructure: $image_change"
 
 cd "$INFRA_DIR"
+
+# Git auth for the fetches and the push below, through the environment only: the checkout does not
+# store the token in .infra/.git/config, so the infra bump tool above never had it.
+infra_auth=$(printf 'x-access-token:%s' "$INFRA_TOKEN" | base64 -w0)
+echo "::add-mask::$infra_auth"
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.$SERVER/.extraheader" GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $infra_auth"
 
 # Fetch only main and the branches we look at, quietly and with full history: a full-depth
 # actions/checkout would list every infra branch name in this public log.

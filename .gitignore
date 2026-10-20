@@ -4,6 +4,13 @@ db.inc.php
 node_modules
 tweetie/config.php
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+acme.json
+/reports/
+/research_notes/
 backup.sql
 traefik-data/acme.json
 # Front-end bundles: built from app/ by the dev assets service, CI and the Docker image, not committed

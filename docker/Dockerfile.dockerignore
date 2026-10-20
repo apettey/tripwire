@@ -2,6 +2,13 @@
 .github
 .idea
 .env
+.env*
+!.env.example
+backup.sql
+*.sql.gz
+*.pem
+*.key
+.claude
 node_modules
 config.php
 db.inc.php

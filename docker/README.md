@@ -10,12 +10,16 @@ Everything fork-specific lives in new files so upstream syncs stay conflict-free
 | --- | --- |
 | `docker/` | Image Dockerfile, env-driven `config.php` / `db.inc.php`, nginx, php-fpm, supervisord, cron, entrypoint |
 | `docker-compose.dev.yml` | Local development stack |
-| `docker-compose.prod.yml` | Example production stack using the published image |
+| `docker-compose.prod.yml` | Example production stack using the published image (port bound to `127.0.0.1`, for a TLS proxy on the same host) |
 | `.env.example` | Settings template for both compose files |
 | `.github/` | Release + Docker Hub publish and weekly upstream sync workflows, `upstream-base`, version and sync scripts |
 | `AGENTS.md`, `changes/` | Working rules and the change log |
 
 Avoid editing upstream files unless you mean to diverge; every edit is a potential sync conflict.
+
+In production use `docker-compose.prod.yml` (or your own stack built on `petdog/tripwire`), never upstream's
+`docker-compose.yml`: that one is upstream's own setup (Traefik with its insecure API dashboard, its own nginx image, public ports) and does not get
+this fork's hardening, such as the nginx security headers or the loopback-only port.
 
 ## Local development
 

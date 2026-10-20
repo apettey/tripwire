@@ -1,0 +1,33 @@
+# Weekly dependency updates. Workflow actions are pinned to commit SHAs (with a `# vX.Y.Z` comment);
+# Dependabot bumps the SHA and the comment together. Minor/patch updates come as one grouped PR per
+# ecosystem so they don't flood the stack of open feature PRs.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # docker/Dockerfile (base images: node, php-fpm-alpine)
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
+        update-types: [minor, patch]

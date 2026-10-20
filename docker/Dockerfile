@@ -81,6 +81,7 @@ COPY .docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/php-fpm-local.conf /usr/local/etc/php-fpm.d/zz-local.conf
 
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY docker/50x.html 404.html 403.html /usr/share/nginx/tripwire-errors/
 COPY docker/supervisord.conf /etc/supervisord.conf
 COPY docker/crontab /etc/crontabs/www-data
