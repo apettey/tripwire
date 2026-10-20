@@ -92,8 +92,10 @@ logging is on; see `docker-compose.prod.yml`).
 
 The app serves plain HTTP on port 80; put it behind a TLS proxy. nginx passes `HTTPS=on` to PHP when
 the request carries `X-Forwarded-Proto: https`, so don't expose port 80 directly to clients you don't
-trust. As upstream, the PHP session cookie is not marked `Secure` (upstream `php.ini` default), while
-the "remember me" cookie is, so over plain HTTP (dev) logins aren't remembered across sessions.
+trust. `docker/php-security.ini` marks the PHP session cookie `HttpOnly`, `SameSite=Lax` and `Secure`
+(set `SESSION_COOKIE_SECURE=0` to serve plain HTTP), turns on `session.use_strict_mode` and hides the PHP version
+header. The dev stack turns `Secure` off in `docker/php-dev.ini`; the "remember me" cookie is always `Secure`, so
+over plain HTTP (dev) logins aren't remembered across sessions.
 
 ### Environment variables
 
@@ -108,6 +110,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `DB_NAME` | `tripwire_database` | `db.inc.php`, entrypoint | Database name; the entrypoint creates it if missing |
 | `DB_USER` / `DB_PASSWORD` | `tripwire` / empty | `db.inc.php`, entrypoint | App connection (PDO, `charset=utf8mb4`); also the schema import account unless `DB_INIT_*` is set |
 | `DB_INIT_USER` / `DB_INIT_PASSWORD` | `DB_USER` / `DB_PASSWORD` | entrypoint | Separate account for the wait/create/import step |
+| `SESSION_COOKIE_SECURE` | `1` | `docker/php-security.ini` (php-fpm start) | `0` drops the `Secure` flag from the PHP session cookie, for serving plain HTTP |
 | `DB_AUTO_INIT` | `true` | entrypoint | `false` skips waiting for MySQL and the schema import entirely |
 | `DB_WAIT_SECONDS` | `60` | entrypoint | How long to wait for MySQL on start before exiting |
 | `DB_SSL` | `true` | entrypoint | TLS for the schema-import client: `true` = `--ssl --skip-ssl-verify-server-cert` (MySQL 8 default), `false` = `--skip-ssl` for servers without TLS. Does not affect the PHP connection |

@@ -125,6 +125,11 @@ if (isset($_REQUEST['tracking'])) {
 		$track['shipName'] 			= isset($track['shipName']) ? $track['shipName'] : null;
 		$track['shipTypeID'] 		= isset($track['shipTypeID']) ? $track['shipTypeID'] : null;
 		$track['shipTypeName'] 		= isset($track['shipTypeName']) ? $track['shipTypeName'] : null;
+		// fork: only this account's ESI characters, under their ESI name; no markup in the other names (rendered as HTML)
+		$esiName = $mysql->prepare('SELECT characterName FROM esi WHERE userID = :userID AND characterID = :characterID');
+		$esiName->execute(array(':userID' => $userID, ':characterID' => $track['characterID']));
+		if (($track['characterName'] = $esiName->fetchColumn()) === false) { continue; }
+		foreach (array('systemName', 'stationName', 'shipName', 'shipTypeName') as $f) { if (is_string($track[$f])) $track[$f] = str_replace(array('<', '>', '"', '&'), '', $track[$f]); }
 		
 		// Tracking mass mods
 		if($track['shipTypeName'] != null) {			

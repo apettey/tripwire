@@ -140,7 +140,7 @@ if ($mode == 'user') {
 			$stmt->bindValue(':characterID', $esi->characterID);
 			$stmt->execute();
 
-			if (session_id()) $_SESSION['admin'] = 1;
+			if (session_id() && isset($_SESSION['characterID']) && (string) $_SESSION['characterID'] === (string) $esi->characterID) $_SESSION['admin'] = 1; // fork: only for the logged-in character
 
 			header('Location: ./?success=admin#register#admin');
 			exit();

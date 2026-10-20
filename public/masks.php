@@ -30,6 +30,8 @@ $name = isset($_REQUEST['name'])?$_REQUEST['name']:null;
 $adds = isset($_REQUEST['adds'])?$_REQUEST['adds']:array();
 $deletes = isset($_REQUEST['deletes'])?$_REQUEST['deletes']:array();
 $output = null;
+require_once('../csrf.inc.php'); // fork: changes need POST + this session's CSRF token
+if (in_array($mode, array('create', 'save', 'delete', 'join', 'leave'), true)) fork_csrf_require();
 
 header('Content-Type: application/json');
 

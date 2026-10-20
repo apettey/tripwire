@@ -13,7 +13,8 @@ require_once('settings.php');
 require_once('masks.inc.php');
 require('lib.inc.php');
 
-$system = $_REQUEST['system'];
+$system = htmlspecialchars(isset($_REQUEST['system']) ? (string) $_REQUEST['system'] : '', ENT_QUOTES, 'UTF-8'); // fork: escaped (reflected XSS)
+require_once(__DIR__ . '/csrf.inc.php'); // fork
 ?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -23,6 +24,7 @@ $system = $_REQUEST['system'];
 	<meta name="server" content="<?= CDN_DOMAIN ?>">
 	<meta name="app_name" content="<?= APP_NAME ?>">
 	<meta name="version" content="<?= VERSION ?>">
+	<meta name="csrf-token" content="<?= htmlspecialchars(fork_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
 	<link rel="shortcut icon" href="//<?= CDN_DOMAIN ?>/images/favicon.png" />
 
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.duration-picker.css">
