@@ -129,7 +129,7 @@ if (isset($_REQUEST['tracking'])) {
 		$esiName = $mysql->prepare('SELECT characterName FROM esi WHERE userID = :userID AND characterID = :characterID');
 		$esiName->execute(array(':userID' => $userID, ':characterID' => $track['characterID']));
 		if (($track['characterName'] = $esiName->fetchColumn()) === false) { continue; }
-		foreach (array('systemName', 'stationName', 'shipName', 'shipTypeName') as $f) { if (is_string($track[$f])) $track[$f] = str_replace(array('<', '>', '"', '&'), '', $track[$f]); }
+		foreach (array('systemName', 'stationName', 'shipName', 'shipTypeName') as $f) { if (is_string($track[$f])) $track[$f] = str_replace(array('<', '>', '"'), '', $track[$f]); }
 		
 		// Tracking mass mods
 		if($track['shipTypeName'] != null) {			

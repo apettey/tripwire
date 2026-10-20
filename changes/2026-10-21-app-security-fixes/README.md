@@ -24,8 +24,8 @@ No tip, because nothing new for users to find.
 - **Reflected XSS**: `tripwire.php` escapes `?system=` before printing it; `landing.php` URL-encodes it in the SSO
   link; `public/login.php` URL-encodes it in the post-SSO redirect.
 - **Stored XSS**: `public/refresh.php` only stores tracking for the account's own ESI characters, under their ESI
-  name, and drops `< > " &` from system, station and ship names; the occupants tooltip (`app/js/global-hooks.js`)
-  and the Mass dialog (`app/js/dialogs/mass-dialog.js`) escape pilot and ship names.
+  name, and drops `< > "` from system, station and ship names; the occupants tooltip (`app/js/global-hooks.js`)
+  the Mass dialog (`app/js/dialogs/mass-dialog.js`) and the admin dialog's tables (`app/js/dialogs/admin-dialog.js`) escape pilot and ship names.
 - **Corp admin**: `public/register.php` only sets the session's admin flag when the director character that
   signed in through SSO is the logged-in character (the DB flag for that character is set as before).
 - **Session**: `public/login.php` regenerates the session ID on login; new `docker/php-security.ini` (copied by
@@ -38,7 +38,7 @@ No tip, because nothing new for users to find.
 
 Upstream files touched (small, marked `// fork`): `tripwire.php`, `landing.php`, `public/options.php`,
 `public/masks.php`, `public/login.php`, `public/register.php`, `public/refresh.php`, `app/js/global-hooks.js`,
-`app/js/dialogs/mass-dialog.js`.
+`app/js/dialogs/mass-dialog.js`, `app/js/dialogs/admin-dialog.js`.
 
 Dev stack after the change (logged in, map loads; forged GET/POSTs to options.php and masks.php get 403):
 
