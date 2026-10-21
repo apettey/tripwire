@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Local dev only: runs every PHP test script (tests/*_test.php, */tests/*_test.php) inside the dev stack's app
-# container and prints a summary. Each script is run with E_ALL, and any PHP "Deprecated" / "Warning" / "Notice" /
-# "Fatal" line in its output counts as a failure, so a PHP upgrade can't slip a deprecation through.
+# container and prints a summary. Each script is run with E_ALL, and any PHP Deprecated / Warning / Notice / Fatal
+# message the script itself prints counts as a failure. Endpoint code a test reaches over HTTP runs in php-fpm and
+# logs to `docker compose logs app` instead: check that log too after a PHP upgrade.
 #
 #   docker compose -f docker-compose.dev.yml exec app bash /opt/app/docker/dev-seed.sh   # once, for the dev login
 #   docker compose -f docker-compose.dev.yml exec -T app bash /opt/app/docker/dev/run-php-tests.sh [filter]
@@ -23,11 +24,12 @@ passed=0
 failed=()
 for script in "${scripts[@]}"; do
   start=$(date +%s)
-  out=$(php -d error_reporting=E_ALL -d display_errors=stderr -d log_errors=0 "$script" 2>&1)
+  # PHP prints the marker (then a newline) before each of its own messages, wherever it lands on a line and however
+  # many lines the message has; error_prepend_string only applies to errors displayed on stdout
+  out=$(php -d error_reporting=E_ALL -d display_errors=1 -d html_errors=0 -d log_errors=0 -d error_prepend_string=@@PHP@@ "$script" 2>&1)
   status=$?
   took=$(( $(date +%s) - start ))
-  # Not anchored: the CLI prints a message straight after any output already on that line
-  php_issue=$(grep -oE "(PHP )?(Deprecated|Warning|Notice|Fatal error|Parse error): .* on line [0-9]+" <<<"$out" | head -5)
+  php_issue=$(awk '/@@PHP@@/ { s = $0; sub(/.*@@PHP@@[[:space:]]*/, "", s); if (s == "") getline s; print s }' <<<"$out" | head -5)
   # A script that ends with a deliberate fatal error documents what it prints instead: // Expected output: "..."
   expected=$(sed -n 's/^\/\/ Expected output: "\(.*\)".*/\1/p' "$script" | head -1)
   if [ -n "$expected" ] && grep -qF -- "$expected" <<<"$out"; then

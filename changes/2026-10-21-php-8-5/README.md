@@ -20,7 +20,8 @@ No toggle, because nothing changes for users.
 - CI "PHP syntax" job lints with the PHP version read from `docker/Dockerfile` (was the runner's PHP), fails on
   compile-time deprecations and warnings, and fails when `docker-compose.dev.yml` uses a different PHP.
 - New `docker/dev/run-php-tests.sh`: runs every PHP test script in the dev stack with `E_ALL`, failing on any PHP
-  Deprecated / Warning / Notice (documented in `docker/README.md` and `AGENTS.md`).
+  Deprecated / Warning / Notice the script itself prints; endpoint code reached over HTTP logs to the app container
+  log, which was checked by hand for this change (documented in `docker/README.md` and `AGENTS.md`).
 - PHP 8.4+ `round()` no longer pre-rounds: 1.5 AU parsed as 224396806.0 km instead of .1. `intel/intel.inc.php`
   now multiplies by the AU in whole tenths of a km (exact for every 0.001 AU step to 20 AU on 8.3 and 8.5). Security status rounding was checked for all 8289 systems: unchanged.
 - PHP 8.5 deprecations removed: `curl_close()` calls (no-op since PHP 8.0) and, in tests,

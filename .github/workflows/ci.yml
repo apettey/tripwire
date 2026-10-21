@@ -57,8 +57,10 @@ jobs:
       # deprecations of that version fail the job too; the dev stack's PHP image must match it
       - name: php -l
         run: |
-          php=$(grep -m1 -oE 'php:[0-9]+\.[0-9]+\.[0-9]+' docker/Dockerfile)
-          if [ -z "$php" ]; then echo "No pinned php:X.Y.Z image in docker/Dockerfile" >&2; exit 1; fi
+          php=$(grep -oE 'php:[0-9]+\.[0-9]+\.[0-9]+' docker/Dockerfile | sort -u)
+          if [ "$(printf '%s' "$php" | grep -c .)" -ne 1 ]; then
+            echo "docker/Dockerfile must pin exactly one php:X.Y.Z image, found: ${php:-none}" >&2; exit 1
+          fi
           if grep -oE 'php:[0-9.]+' docker-compose.dev.yml | grep -vxq "$php"; then
             echo "docker-compose.dev.yml uses a different PHP than docker/Dockerfile ($php)" >&2; exit 1
           fi
