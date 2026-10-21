@@ -392,7 +392,7 @@ var OccupiedToolTips = new jBox("Tooltip", {
 				});
 
 				for (var x in data.occupants) {
-					chars += "<tr><td>"+data.occupants[x].characterName+"</td><td style='padding-left: 10px;'>"+(data.occupants[x].shipTypeName?data.occupants[x].shipTypeName:"")+"</td></tr>";
+					chars += "<tr><td>"+$("<div>").text(data.occupants[x].characterName).html()+"</td><td style='padding-left: 10px;'>"+$("<div>").text(data.occupants[x].shipTypeName?data.occupants[x].shipTypeName:"").html()+"</td></tr>"; // fork: escaped
 				}
 
 				chars += "</table>";

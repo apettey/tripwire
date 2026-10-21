@@ -79,6 +79,7 @@ RUN install-php-extensions pdo_mysql gd intl mbstring \
 COPY .docker/php-fpm/php.ini /usr/local/etc/php/php.ini
 COPY .docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/php-fpm-local.conf /usr/local/etc/php-fpm.d/zz-local.conf
+COPY docker/php-security.ini /usr/local/etc/php/conf.d/tripwire-security.ini
 
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/50x.html 404.html 403.html /usr/share/nginx/tripwire-errors/

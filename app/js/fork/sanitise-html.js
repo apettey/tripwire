@@ -93,7 +93,7 @@ var sanitiseHtml = (function() {
 	// The path of a URL, percent-decoded, so %2e%70hp cannot hide a .php endpoint.
 	function decodedPath(url) {
 		var path = url.split(/[?#]/)[0];
-		try { return decodeURIComponent(path); } catch (e) { return path; }
+		try { return decodeURIComponent(path).replace(/[\x00-\x20\x7f]/g, ''); } catch (e) { return path; }
 	}
 
 	function cleanNode(node) {
@@ -136,7 +136,8 @@ var sanitiseHtml = (function() {
 			if (!permitted[name] && !global[name]) { node.removeAttribute(attr.name); return; }
 
 			if (name === 'href' || name === 'src') {
-				var v = value.trim();
+				// Browsers drop tabs and newlines inside URLs, so URLs are checked without control characters or spaces.
+				var v = value.replace(/[\x00-\x20\x7f]/g, '');
 				if (!(name === 'src' ? SAFE_IMG_URL : SAFE_URL).test(v) || (name === 'href' ? /\.php/i : /\.php$/i).test(decodedPath(v))) { node.removeAttribute(attr.name); return; }
 			}
 			if (name === 'style') {

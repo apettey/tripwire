@@ -30,5 +30,7 @@
 	{"name": "relative href without .php kept", "input": "<a href=\"/?system=Jita\">x</a>", "contains": ["href=\"/?system=Jita\""]},
 	{"name": "percent-encoded .php href dropped", "input": "<a href=\"/comments%2ephp?mode=delete\">x</a><a href=\"/comments.%70hp\">y</a>", "notContains": ["href"], "contains": ["x", "y"]},
 	{"name": "img src to a .php path dropped (own host)", "input": "<img src=\"https://tripwire.example/comments.php?mode=delete&commentID=1\"><img src=\"https://tripwire.example/a%2Ephp\">", "notContains": ["src=", ".php", "%2e"]},
-	{"name": "img src with .php only in the query is kept", "input": "<img src=\"https://images.example/a.png?x=.php\">", "contains": ["src=\"https://images.example/a.png"]}
+	{"name": "img src with .php only in the query is kept", "input": "<img src=\"https://images.example/a.png?x=.php\">", "contains": ["src=\"https://images.example/a.png"]},
+	{"name": "tab or newline inside .php dropped", "input": "<img src=\"https://tripwire.example/comments.ph\tp?mode=delete\"><img src=\"https://tripwire.example/comments.ph&#10;p\"><a href=\"/comments.p\nhp\">x</a><a href=\"/comments.ph%09p\">y</a>", "notContains": ["src=", "href"], "contains": ["x", "y"]},
+	{"name": "tab inside the scheme dropped", "input": "<a href=\"java\tscript:alert(1)\">x</a><a href=\"\n javascript:alert(1)\">y</a>", "notContains": ["href", "script"], "contains": ["x", "y"]}
 ]

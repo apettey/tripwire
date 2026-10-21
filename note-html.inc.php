@@ -131,6 +131,8 @@ function sanitizeNoteHtml($html) {
         foreach (iterator_to_array($node->attributes) as $attribute) {
             $name = strtolower($attribute->nodeName);
             $value = $attribute->nodeValue;
+            // Browsers drop tabs and newlines inside URLs, so URLs are checked without control characters or spaces.
+            $url = preg_replace('/[\x00-\x20\x7f]/', '', $value);
 
             if (!isset($permitted[$name]) && !isset($globalAttributes[$name])) {
                 $node->removeAttributeNode($attribute);
@@ -138,11 +140,11 @@ function sanitizeNoteHtml($html) {
             }
 
             if (($name === 'href' || $name === 'src') &&
-                !preg_match($name === 'src' ? '/^https?:\/\//i' : '/^(?:https?:|mailto:|\/|#|\.{0,2}\/)/i', trim($value))) {
+                !preg_match($name === 'src' ? '/^https?:\/\//i' : '/^(?:https?:|mailto:|\/|#|\.{0,2}\/)/i', $url)) {
                 $node->removeAttributeNode($attribute);
                 continue;
             }
-            $decodedPath = rawurldecode(preg_split('/[?#]/', trim($value))[0]);
+            $decodedPath = preg_replace('/[\x00-\x20\x7f]/', '', rawurldecode(preg_split('/[?#]/', $url)[0]));
             if (($name === 'href' && preg_match('/\.php/i', $decodedPath)) || ($name === 'src' && preg_match('/\.php$/i', $decodedPath))) {
                 $node->removeAttributeNode($attribute);
                 continue;

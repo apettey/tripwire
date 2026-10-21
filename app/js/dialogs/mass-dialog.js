@@ -50,7 +50,7 @@
 									'<i data-icon="prop-mod" class="' + (j.prop ? ' active' : 'inactive') + '"></i>' +
 									'<i data-icon="anchor" class="' + (j.higgs ? ' active' : 'inactive') + '"></i> '
 								) + wormholeRendering.renderMass(j.mass);
-							$("#dialog-mass #massTable tbody").append("<tr class='mass-" + getMassClass(j.mass) + "'><td>"+j.characterName+"</td><td>"+(j.targetSystem == systemID ? "Into " + systemRendering.renderSystem(toSystem, 'span') : "Return to " + systemRendering.renderSystem(fromSystem, 'span'))+"</td><td>"+j.shipName+"</td><td>"+massMarkup+"</td><td>"+j.time+"</td></tr>");
+							$("#dialog-mass #massTable tbody").append("<tr class='mass-" + getMassClass(j.mass) + "'><td>"+$("<div>").text(j.characterName).html()+"</td><td>"+(j.targetSystem == systemID ? "Into " + systemRendering.renderSystem(toSystem, 'span') : "Return to " + systemRendering.renderSystem(fromSystem, 'span'))+"</td><td>"+$("<div>").text(j.shipName).html()+"</td><td>"+massMarkup+"</td><td>"+j.time+"</td></tr>"); // fork: names escaped
 						}
 						// Summary rows
                         $("#dialog-mass #massTable tbody").append("<tr id='small-mass'><td></td><td></td><td>Small jumps</td><td>"+ wormholeRendering.renderMass(massData.smallMass) +"</td><td></td></tr>");
