@@ -48,7 +48,7 @@ for script in "${scripts[@]}"; do
     fi
     # The script's own failure lines too: a PHP message may only be a symptom
     if [ "$ok" -ne 1 ]; then
-      grep -v "@@PHP@@" <<<"$out" | tail -15 | sed 's/^/        /'
+      sed '/^@@PHP@@$/d; s/@@PHP@@$//' <<<"$out" | tail -15 | sed 's/^/        /'
     fi
   fi
 done
