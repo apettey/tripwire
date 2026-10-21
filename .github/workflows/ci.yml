@@ -53,10 +53,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Same PHP as the image (docker/Dockerfile), so compile-time deprecations of that version fail the job too
+      # Same PHP as the image (version read from docker/Dockerfile, which Dependabot bumps), so compile-time
+      # deprecations of that version fail the job too; the dev stack's PHP image must match it
       - name: php -l
         run: |
-          docker run --rm -v "$PWD:/src" -w /src php:8.5.12-cli-alpine sh -c '
+          php=$(grep -m1 -oE 'php:[0-9]+\.[0-9]+\.[0-9]+' docker/Dockerfile)
+          if [ -z "$php" ]; then echo "No pinned php:X.Y.Z image in docker/Dockerfile" >&2; exit 1; fi
+          if grep -oE 'php:[0-9.]+' docker-compose.dev.yml | grep -vxq "$php"; then
+            echo "docker-compose.dev.yml uses a different PHP than docker/Dockerfile ($php)" >&2; exit 1
+          fi
+          docker run --rm -v "$PWD:/src" -w /src "$php-cli-alpine" sh -c '
             failed=0
             for f in $(find . -name "*.php" -not -path "./vendor/*" -not -path "./node_modules/*"); do
               out=$(php -d error_reporting=E_ALL -d display_errors=stderr -l "$f" 2>&1) || { echo "$out"; failed=1; continue; }

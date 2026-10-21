@@ -65,7 +65,8 @@ RUN defines=$(grep -o 'define(' settings.php | wc -l) \
 ############################################################
 # Stage 3: runtime
 # PHP patch version is pinned so a cached base layer can never ship an unpatched PHP; bump it for each
-# PHP security release (Dependabot proposes them); CI's "PHP syntax" job (.github/workflows/ci.yml) uses the same version
+# PHP security release (Dependabot proposes them). CI's "PHP syntax" job reads the version from here and fails
+# when docker-compose.dev.yml's PHP image differs
 ############################################################
 FROM php:8.5.12-fpm-alpine3.24 AS runtime
 

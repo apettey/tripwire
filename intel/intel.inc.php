@@ -19,6 +19,7 @@ const INTEL_MAX_PER_SYSTEM = 30;      // newest scans kept per mask and system
 const INTEL_LIST_LIMIT    = 20;       // scans returned for a system
 const INTEL_RATE_PER_MIN  = 20;       // scans a user may share per minute
 const INTEL_AU_KM         = 149597870.7;
+const INTEL_AU_TENTH_KM   = 1495978707;   // INTEL_AU_KM in whole tenths of a km, for exact rounding
 const INTEL_MAX_KM        = 15 * INTEL_AU_KM;  // d-scan reaches about 14.3 AU; farther distances are junk
 
 // Whitespace and invisible characters are matched with the same explicit classes as app/js/fork/intel-scans.js
@@ -96,7 +97,7 @@ function intel_parse_distance_raw($value) {
         if (!is_numeric($number)) return null;
         // Rounded in whole tenths of a km: PHP 8.4+ round($x, 1) no longer pre-rounds, so 1.5 AU (224396806.05 km,
         // stored as ...806.0499) would give .0 instead of .1
-        return round(((float) $number) * INTEL_AU_KM * 10) / 10;
+        return round(((float) $number) * INTEL_AU_TENTH_KM) / 10;
     }
     return null;
 }

@@ -64,8 +64,10 @@ One container runs nginx, php-fpm (listening on `127.0.0.1:9000` only), busybox 
 kill feed worker (see [Kill Reporting](#kill-reporting)) and the Discord notifications worker (see
 [Discord notifications](#discord-notifications)), all under supervisord.
 PHP is the official `php:<version>-fpm-alpine` image with the patch version pinned in `docker/Dockerfile` (8.5.12), so a
-cached base layer can't ship an unpatched PHP. Dependabot opens a PR for each new patch release; CI's "PHP syntax"
-job lints with the same version (`php:<version>-cli-alpine`, keep the two equal).
+cached base layer can't ship an unpatched PHP. Dependabot opens a PR for each new patch release (it only bumps
+`docker/Dockerfile`: update the Discord mock image in `docker-compose.dev.yml` to the same version in that PR). CI's
+"PHP syntax" job reads the version from the Dockerfile, lints with `php:<version>-cli-alpine` and fails when the
+compose file's PHP differs.
 Cron runs `/etc/crontabs/www-data` as `www-data` (`system_activity` hourly, `account_update` every
 3 minutes); jobs inherit the container environment and their output goes to the container log,
 as do nginx access/error logs.

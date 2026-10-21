@@ -8,10 +8,11 @@
 #
 # [filter] is an optional grep -E pattern on the script path (e.g. "discord|rally"). Exit code 1 if any script failed.
 set -uo pipefail
-cd /opt/app
+cd /opt/app || exit 1
 
 filter="${1:-.}"
-mapfile -t scripts < <(ls tests/*_test.php */tests/*_test.php 2>/dev/null | grep -E -- "$filter" | sort)
+shopt -s nullglob
+mapfile -t scripts < <(printf '%s\n' tests/*_test.php */tests/*_test.php | grep -E -- "$filter" | sort)
 if [ "${#scripts[@]}" -eq 0 ]; then
   echo "No test scripts match '$filter'" >&2
   exit 1
@@ -25,7 +26,8 @@ for script in "${scripts[@]}"; do
   out=$(php -d error_reporting=E_ALL -d display_errors=stderr -d log_errors=0 "$script" 2>&1)
   status=$?
   took=$(( $(date +%s) - start ))
-  php_issue=$(grep -E "^(PHP )?(Deprecated|Warning|Notice|Fatal error|Parse error):" <<<"$out" | head -5)
+  # Not anchored: the CLI prints a message straight after any output already on that line
+  php_issue=$(grep -oE "(PHP )?(Deprecated|Warning|Notice|Fatal error|Parse error): .* on line [0-9]+" <<<"$out" | head -5)
   # A script that ends with a deliberate fatal error documents what it prints instead: // Expected output: "..."
   expected=$(sed -n 's/^\/\/ Expected output: "\(.*\)".*/\1/p' "$script" | head -1)
   if [ -n "$expected" ] && grep -qF -- "$expected" <<<"$out"; then
