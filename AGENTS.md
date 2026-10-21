@@ -146,6 +146,8 @@ docker compose -f docker-compose.dev.yml up --build     # http://127.0.0.1:8080
 - Never commit `.env`, `config.php`, `db.inc.php`, or any secret. EVE SSO credentials stay in `.env`.
 - Before opening a PR, make sure the image still builds: `docker build -f docker/Dockerfile -t tripwire:local .`
 - JS tests: `npx gulp test` (from the `assets` container or with Node locally).
+- PHP tests: `docker compose -f docker-compose.dev.yml exec -T app bash /opt/app/docker/dev/run-php-tests.sh`
+  (after `docker/dev-seed.sh`; see [docker/README.md](docker/README.md#local-development)).
 
 ## 5. Commits and PRs
 

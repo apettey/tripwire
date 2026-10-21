@@ -53,13 +53,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same PHP as the image (docker/Dockerfile), so compile-time deprecations of that version fail the job too
       - name: php -l
         run: |
-          failed=0
-          while IFS= read -r -d '' f; do
-            php -l "$f" > /dev/null || failed=1
-          done < <(find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0)
-          exit $failed
+          docker run --rm -v "$PWD:/src" -w /src php:8.5.12-cli-alpine sh -c '
+            failed=0
+            for f in $(find . -name "*.php" -not -path "./vendor/*" -not -path "./node_modules/*"); do
+              out=$(php -d error_reporting=E_ALL -d display_errors=stderr -l "$f" 2>&1) || { echo "$out"; failed=1; continue; }
+              case "$out" in *Deprecated*|*Warning*) echo "$out"; failed=1 ;; esac
+            done
+            exit $failed'
 
   scripts:
     name: Workflows and scripts

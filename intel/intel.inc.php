@@ -94,7 +94,9 @@ function intel_parse_distance_raw($value) {
             }
         }
         if (!is_numeric($number)) return null;
-        return round(((float) $number) * INTEL_AU_KM, 1);
+        // Rounded in whole tenths of a km: PHP 8.4+ round($x, 1) no longer pre-rounds, so 1.5 AU (224396806.05 km,
+        // stored as ...806.0499) would give .0 instead of .1
+        return round(((float) $number) * INTEL_AU_KM * 10) / 10;
     }
     return null;
 }

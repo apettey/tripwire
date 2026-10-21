@@ -23,7 +23,7 @@ function kill($time, $victimCorp, $victimAlliance, $killerCorp, $killerAlliance,
         'finalBlowCharacterID' => $char, 'finalBlowCorporationID' => $killerCorp, 'finalBlowAllianceID' => $killerAlliance];
 }
 function profile_db() {
-    $db = new PDO('sqlite::memory:');
+    $db = new Pdo\Sqlite('sqlite::memory:');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->exec('CREATE TABLE zkill_system_keep (systemID INTEGER PRIMARY KEY, requestedBy INTEGER NOT NULL DEFAULT 0, keepSince TEXT NOT NULL, wantedAt TEXT NOT NULL)');
     $db->exec('CREATE TABLE zkill_profile_cache (systemID INTEGER PRIMARY KEY, analysedAt TEXT NOT NULL, profile TEXT NOT NULL)');
@@ -31,7 +31,7 @@ function profile_db() {
         victimCorporationID INTEGER, victimAllianceID INTEGER, finalBlowCharacterID INTEGER, finalBlowCorporationID INTEGER, finalBlowAllianceID INTEGER)");
     $db->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, systemID INTEGER, type TEXT, lifeLength INTEGER NOT NULL DEFAULT 0,
         lifeLeft TEXT NULL, modifiedTime TEXT NOT NULL DEFAULT '2026-01-01 00:00:00')");
-    $db->sqliteCreateFunction('NOW', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+    $db->createFunction('NOW', function () { return gmdate('Y-m-d H:i:s'); }, 0);
     return $db;
 }
 function add_kills(PDO $db, $systemID, array $rows) {
@@ -135,7 +135,7 @@ check('keep: capped overall', [zk_keep_touch($db2, range(31000000, 31000000 + ZK
 $db3 = profile_db();
 check('keep: capped per user', [zk_keep_touch($db3, range(31000000, 31000000 + ZK_KEEP_MAX_PER_USER + 9), $now, 5), zk_keep_touch($db3, [31900000], $now, 5), zk_keep_touch($db3, [31900001], $now, 6)],
     [ZK_KEEP_MAX_PER_USER, 0, 1]);
-$broken = new PDO('sqlite::memory:');
+$broken = new Pdo\Sqlite('sqlite::memory:');
 $broken->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $previous = ini_set('error_log', '/dev/null');
 check('keep: a database error never escapes', zk_keep_touch($broken, [31000005], $now, 1), 0);

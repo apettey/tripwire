@@ -313,7 +313,6 @@ function http($method, $path, $sid) {
     curl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $sid ? ['Cookie: PHPSESSID=' . $sid] : [], CURLOPT_TIMEOUT => 20]);
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     return [$status, json_decode((string) $text, true)];
 }
 $sOwnerA = sess('ownera', OWNER_A, 'Test Owner', CORP, MASK_A);

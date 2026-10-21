@@ -198,7 +198,6 @@ function http($method, $path, $sid, $body = null, array $headers = []) {
     curl_setopt_array($ch, $opts);
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     return [$status, (string) $text];
 }
 $sid = sess('user', ['userID' => ACC_B, 'mask' => MASK_A, 'characterID' => 991901]);

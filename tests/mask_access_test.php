@@ -36,7 +36,6 @@ function http($method, $path, $jar, $body = null, array $headers = [], $auth = n
     if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     return [$status, json_decode((string) $text, true), (string) $text];
 }
 function login($jar) {

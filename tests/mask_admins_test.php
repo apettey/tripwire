@@ -271,7 +271,6 @@ function http($method, $path, $sid, $body = null, array $headers = []) {
     if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     return [$status, json_decode((string) $text, true), $text];
 }
 function sess($name, $id, $charName, $corp, $mask, $admin = 0) {

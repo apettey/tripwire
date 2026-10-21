@@ -323,9 +323,9 @@ check('breaker: global pauses everything', discord_wait('webhook:x', $t0 + 30) >
 discord_limits_reset();
 
 // Rate limit: record first, count, take back when over (SQLite stands in for MySQL)
-$rl = new PDO('sqlite::memory:');
+$rl = new Pdo\Sqlite('sqlite::memory:');
 $rl->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$rl->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$rl->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $rl->exec('CREATE TABLE discord_sent (maskID TEXT, kind TEXT, ref TEXT, createdAt TEXT, PRIMARY KEY (maskID, kind, ref))');
 $taken = [];
 for ($i = 0; $i < 7; $i++) $taken[] = discord_rate_take($rl, '98000001.2', 'rl:test', 5, 60);
@@ -337,7 +337,7 @@ check('rate limit: window passes', discord_rate_take($rl, '98000001.2', 'rl:test
 
 // --- review round 3 ---
 // Settings page status: counts, last failures (with webhook name) and open breakers, each from its own query
-$st = new PDO('sqlite::memory:');
+$st = new Pdo\Sqlite('sqlite::memory:');
 $st->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $st->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY, maskID TEXT, webhookID INTEGER, kind TEXT, status TEXT, lastError TEXT, createdAt TEXT, sentAt TEXT)");
 $st->exec("CREATE TABLE discord_webhooks (id INTEGER PRIMARY KEY, name TEXT)");
@@ -501,7 +501,7 @@ check('legacy hook', [discord_rally_legacy_hook('98000001.2', ['98000001.2' => '
     discord_rally_legacy_hook('98000001.2', ['98000001.2' => '']), discord_rally_legacy_hook('98000001.2', [])], ['https://x/hook', null, null, null]);
 
 // The sender's side, against SQLite: remember / edit / repost / skipped / superseded
-$rx = new PDO('sqlite::memory:');
+$rx = new Pdo\Sqlite('sqlite::memory:');
 $rx->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $rx->exec('CREATE TABLE discord_rally_message (maskID TEXT PRIMARY KEY, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT)');
 $rx->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY, maskID TEXT, kind TEXT, status TEXT)");
@@ -582,7 +582,7 @@ $rx->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execu
 check('rally target: type off', discord_rally_target($rx, '98000001.2'), null);
 
 // --- chain label (discord_chain_label): the name of the wormhole signature leading into a system ---
-$cl = new PDO('sqlite::memory:');
+$cl = new Pdo\Sqlite('sqlite::memory:');
 $cl->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, name TEXT, maskID TEXT)");
 $cl->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, maskID TEXT)");
 $sigID = 0;
@@ -609,7 +609,7 @@ check('chain label: trimmed, a return bookmark on the near side still counts', $
 check('chain label: home has none (its own holes are named on its side)', $label(31000001), '');
 check('chain label: k-space without a named hole, unknown system', [$label(30002187), $label(31009999), $label(0)], ['', '', '']);
 check('chain label: only the mask\'s own chain', [$label(31000009), $label(31000009, '98000002.2'), $label(31000002, '98000002.2')], ['', 'X', '']);
-check('chain label: no tables is no label', discord_chain_label(new PDO('sqlite::memory:'), '98000001.2', 31000002), '');
+check('chain label: no tables is no label', discord_chain_label(new Pdo\Sqlite('sqlite::memory:'), '98000001.2', 31000002), '');
 check('chain label pick: same token length, lowest wormhole id', discord_chain_label_pick([
     ['wormholeID' => 9, 'nearName' => '', 'farName' => 'BA', 'farSystem' => 1], ['wormholeID' => 4, 'nearName' => null, 'farName' => 'AB', 'farSystem' => 2]], 3), 'AB');
 check('chain label pick: a hole out (named near side) and a hole to itself are not in', discord_chain_label_pick([
@@ -688,7 +688,7 @@ foreach (['1.15' => $oldClear, '1.17' => $clear31] as $version => $old) {
         + discord_rally_context(['action' => 'clear', 'who' => 'C', 'systemID' => 31001880, 'template' => $oldRally, 'templateClear' => $old] + $rbase, null, $labelled))['content'],
         "~~Tripwire rally point from *K*: **AABCA · J152820** (C5, E\\-R00024)~~\nCleared by *C* at <t:2000:t>");
 }
-$cl2 = new PDO('sqlite::memory:');
+$cl2 = new Pdo\Sqlite('sqlite::memory:');
 $cl2->exec('CREATE TABLE discord_settings (maskID TEXT PRIMARY KEY, settings TEXT)');
 $cl2->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000001.2', json_encode(['types' => ['rally' => ['template' => $oldRally, 'templateClear' => $oldClear]]])]);
 $cl2->prepare('INSERT INTO discord_settings VALUES (?, ?)')->execute(['98000002.2', json_encode(['types' => ['rally' => ['templateClear' => $clear31]]])]);
@@ -698,9 +698,9 @@ check('migration: when loaded', [discord_settings_load($cl2, '98000001.2', disco
     discord_settings_load($cl2, '98000003.2', discord_settings_defaults())['types']['rally']['templateClear']], [$tpl['rallyClear'], $tpl['rallyClear'], 'Gone, said {who}']);
 
 // --- rally sequences against SQLite and a fake Discord: the sender's steps for each queued row (as discord_dispatch) ---
-$sq = new PDO('sqlite::memory:');
+$sq = new Pdo\Sqlite('sqlite::memory:');
 $sq->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$sq->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$sq->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $sq->exec('CREATE TABLE discord_rally_message (maskID TEXT PRIMARY KEY, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT)');
 $sq->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT,
     status TEXT, attempts INTEGER DEFAULT 0, nextAttemptAt TEXT, createdAt TEXT, sentAt TEXT, lastError TEXT DEFAULT '')");
@@ -804,7 +804,7 @@ check('chain walk: no home is nothing', discord_chain_walk([[31000001, 31000002]
 check('chain walk: both directions, breadth-first, loops once', discord_chain_walk([[31000002, 31000001], [31000002, 31000003], [31000003, 31000001], [31000008, 31000009]], 31000001),
     [31000001 => true, 31000002 => true, 31000003 => true]);
 
-$ch = new PDO('sqlite::memory:');
+$ch = new Pdo\Sqlite('sqlite::memory:');
 $ch->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $ch->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, name TEXT, maskID TEXT, lifeLeft TEXT, lifeLength INTEGER)");
 $ch->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, maskID TEXT)");
@@ -919,7 +919,7 @@ ksort($batch['98000001.2']);
 ksort($single['98000001.2']);
 check('chain labels: batch equals the one-system lookup', $batch, $single);
 check('chain labels: values', $batch['98000001.2'], [30000142 => 'ABC', 31000002 => 'A', 31000003 => 'AB', 31000005 => 'B']);
-check('chain labels: no masks, no tables', [discord_chain_labels($cl, []), discord_chain_labels(new PDO('sqlite::memory:'), ['98000001.2'])], [[], []]);
+check('chain labels: no masks, no tables', [discord_chain_labels($cl, []), discord_chain_labels(new Pdo\Sqlite('sqlite::memory:'), ['98000001.2'])], [[], []]);
 // The kill state loads them for every mask with a kill type (one query per refresh, none per kill)
 check('kill state: no named holes, no labels', $ks2['labels'], []);
 $ch->exec("UPDATE signatures SET name = 'A' WHERE id = 1");   // home's side of home - 31000002
@@ -966,9 +966,9 @@ foreach (['chainKill', 'corpKill', 'corpLoss'] as $kind) {
 check('kill label: placeholders listed', [isset(discord_placeholders()['chainKill']['labelSystem']), isset(discord_placeholders()['corpLoss']['label'])], [true, true]);
 
 // --- watchlist matches use the same chain (discord_watchlist_poll against SQLite: live holes walked from home) ---
-$wp = new PDO('sqlite::memory:');
+$wp = new Pdo\Sqlite('sqlite::memory:');
 $wp->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$wp->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$wp->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $wp->exec("CREATE TABLE signatures (id INTEGER PRIMARY KEY, signatureID TEXT, systemID INTEGER, type TEXT, maskID TEXT, lifeLeft TEXT, lifeLength INTEGER)");
 $wp->exec("CREATE TABLE wormholes (id INTEGER PRIMARY KEY, initialID INTEGER, secondaryID INTEGER, type TEXT, parent TEXT, maskID TEXT)");
 $wp->exec('CREATE TABLE fork_watchlist (maskID TEXT PRIMARY KEY, filters TEXT, updatedBy TEXT, updatedAt TEXT)');

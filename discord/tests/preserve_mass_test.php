@@ -165,9 +165,9 @@ check('plan: marked again later: a new message', [$plan['op'], $plan['strike']],
 check('plan: ... not in the chain: nothing', discord_preserve_plan(['inChain' => false] + $set, $struckMsg, 2030)['op'], 'skip');
 
 // --- the sender's side, against SQLite: remember / edit / strike / revive / repost / skipped / superseded / prune ---
-$db = new PDO('sqlite::memory:');
+$db = new Pdo\Sqlite('sqlite::memory:');
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$db->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$db->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $db->exec('CREATE TABLE discord_preserve_message (maskID TEXT, wormholeID INTEGER, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT, clearedAt TEXT, PRIMARY KEY (maskID, wormholeID))');
 $db->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT, status TEXT,
     attempts INTEGER DEFAULT 0, nextAttemptAt TEXT, createdAt TEXT, sentAt TEXT, lastError TEXT DEFAULT '')");
@@ -259,7 +259,7 @@ check('gone: struck through, says the hole is gone, nobody pinged', $gone,
     ['content' => "$struck\nCleared by *Tripwire \\(the hole is gone from the map\\)* at <t:1760123280:t>", 'allowed_mentions' => ['parse' => []]]);
 
 // A mark (or a fight point) that can't be read at send time waits and is tried again; a clear is still a clear
-$broken = new PDO('sqlite::memory:');   // no tables at all: every read fails
+$broken = new Pdo\Sqlite('sqlite::memory:');   // no tables at all: every read fails
 $broken->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $prow = ['id' => 1, 'maskID' => $mask, 'webhookID' => 5, 'kind' => 'preserveMass', 'age' => 0];
 check('unreadable: a mark waits (null), never "unreadable message data"', discord_row_context($broken, $prow + ['data' => json_encode(['action' => 'set', 'chainOnly' => true, 'homeSystemID' => J163701] + $base)]), null);

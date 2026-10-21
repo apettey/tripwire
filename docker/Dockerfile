@@ -37,7 +37,7 @@ RUN npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
 # - upstream's analytics.inc.php / donation_panel.inc (replaced by docker/ versions below) and
 #   public/donate.html (unlinked upstream PayPal redirect page)
 # - .docker/ except mysql/tripwire.sql, which the entrypoint imports
-FROM --platform=$BUILDPLATFORM php:8.3.36-fpm-alpine3.24 AS src
+FROM --platform=$BUILDPLATFORM php:8.5.12-fpm-alpine3.24 AS src
 
 WORKDIR /src
 COPY . .
@@ -65,9 +65,9 @@ RUN defines=$(grep -o 'define(' settings.php | wc -l) \
 ############################################################
 # Stage 3: runtime
 # PHP patch version is pinned so a cached base layer can never ship an unpatched PHP; bump it for each
-# PHP security release (8.3.36: PHP2Shell, CVE-2026-109618 / CVE-2026-109619)
+# PHP security release (Dependabot proposes them); CI's "PHP syntax" job (.github/workflows/ci.yml) uses the same version
 ############################################################
-FROM php:8.3.36-fpm-alpine3.24 AS runtime
+FROM php:8.5.12-fpm-alpine3.24 AS runtime
 
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.7.24/install-php-extensions /usr/local/bin/
 RUN apk add --no-cache nginx supervisor mariadb-client mariadb-connector-c bash tzdata \

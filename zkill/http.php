@@ -164,7 +164,6 @@ function zk_http_request($method, $url, $body = null, $wait = true, $timeout = 3
     $response = curl_exec($curl);
     $status = $response === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     $error = $response === false ? curl_error($curl) : '';
-    curl_close($curl);
     zk_http_record($host, $status, $headers);
     return zk_http_etag_finish($method, $url, $entry, $status, $response === false ? $error : $response, $headers);
 }
@@ -242,7 +241,6 @@ function zk_http_get_many(array $urls, $concurrency = 5, $timeout = 10, $deadlin
             }
             $results[$entry['url']] = [$status, $status === 0 ? curl_error($handle) : $body];
             curl_multi_remove_handle($multi, $handle);
-            curl_close($handle);
             unset($active[$id]);
         }
         while (count($active) < $concurrency && $start()) {}

@@ -61,9 +61,9 @@ check('reorder: not a permutation', [fight_reorder([$armor, $shield], ['cabcdefa
 check('find', [fight_find_comp([$armor, $shield], 'cabcdefabcd'), fight_find_comp([$armor], 'nope')], [$shield, null]);
 
 // Storage (SQLite: load / save round trip, no table = no comps)
-$db = new PDO('sqlite::memory:');
+$db = new Pdo\Sqlite('sqlite::memory:');
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$db->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$db->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 check('load: no table yet (sqlite raises HY000, not 42S02)', (function () use ($db) { try { return fight_comps_load($db, '98000001.2'); } catch (PDOException $e) { return 'error'; } })(), 'error');
 $db->exec('CREATE TABLE fork_fight_comps (maskID TEXT PRIMARY KEY, comps TEXT, updatedBy TEXT, updatedAt TEXT)');
 check('load: none', fight_comps_load($db, '98000001.2'), []);
@@ -171,7 +171,7 @@ $plan = discord_rally_plan(discord_rally_context(['action' => 'set', 'time' => 1
 check('live message without a system (older row): "Moved to"', strpos($plan['strike']['payload']['content'], "\nMoved to **AB · J152820** (Shield BS)") !== false, true);
 
 // The live message keeps its system (SQLite; an older table gets the column on its first write)
-$lm = new PDO('sqlite::memory:');
+$lm = new Pdo\Sqlite('sqlite::memory:');
 $lm->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $lm->exec('CREATE TABLE discord_rally_message (maskID TEXT PRIMARY KEY, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT)');
 discord_rally_remember($lm, '98000001.2', 5, '42', 'text', 1000, 31001880);
