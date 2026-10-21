@@ -103,7 +103,7 @@ services:
 
   # Fake Discord webhook API (docker/dev/discord-mock.php): GET http://127.0.0.1:9095/messages shows what was sent
   discord-mock:
-    image: php:8.3-cli-alpine
+    image: php:8.3.36-cli-alpine
     command: php -S 0.0.0.0:8080 /mock/discord-mock.php
     ports:
       - "127.0.0.1:${DEV_DISCORD_MOCK_PORT:-9095}:8080"
