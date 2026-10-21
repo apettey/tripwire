@@ -32,11 +32,12 @@ for script in "${scripts[@]}"; do
   php_issue=$(awk '/@@PHP@@/ { s = $0; sub(/.*@@PHP@@[[:space:]]*/, "", s); if (s == "") getline s; print s }' <<<"$out" | head -5)
   # A script that ends with a deliberate fatal error documents what it prints instead: // Expected output: "..."
   expected=$(sed -n 's/^\/\/ Expected output: "\(.*\)".*/\1/p' "$script" | head -1)
+  ok=$(( status == 0 ))
   if [ -n "$expected" ] && grep -qF -- "$expected" <<<"$out"; then
-    status=0
+    ok=1
     php_issue=$(grep -v "Fatal error" <<<"$php_issue")
   fi
-  if [ "$status" -eq 0 ] && [ -z "$php_issue" ]; then
+  if [ "$ok" -eq 1 ] && [ -z "$php_issue" ]; then
     passed=$((passed + 1))
     printf 'PASS  %-50s %3ss\n' "$script" "$took"
   else
@@ -44,8 +45,10 @@ for script in "${scripts[@]}"; do
     printf 'FAIL  %-50s %3ss (exit %s)\n' "$script" "$took" "$status"
     if [ -n "$php_issue" ]; then
       sed 's/^/        /' <<<"$php_issue"
-    else
-      tail -15 <<<"$out" | sed 's/^/        /'
+    fi
+    # The script's own failure lines too: a PHP message may only be a symptom
+    if [ "$ok" -ne 1 ]; then
+      grep -v "@@PHP@@" <<<"$out" | tail -15 | sed 's/^/        /'
     fi
   fi
 done

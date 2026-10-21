@@ -50,9 +50,9 @@ docker compose -f docker-compose.dev.yml up --build
 - All PHP tests at once (after `dev-seed.sh`): `docker compose -f docker-compose.dev.yml exec -T app bash
   /opt/app/docker/dev/run-php-tests.sh [filter]` runs every `tests/*_test.php` and `*/tests/*_test.php` with `E_ALL`
   and fails a script whose own run prints a PHP Deprecated / Warning / Notice (endpoint code reached over HTTP runs in
-  php-fpm and logs to `docker compose -f docker-compose.dev.yml logs app` instead: check that too after a PHP upgrade). The
-  login-based tests share the login rate limit, so a full run can fail one of them with "login failed"; run it
-  again on its own (`[filter]` is a `grep -E` pattern on the path). JS tests: `npx gulp test` in the `assets` container.
+  php-fpm and logs to `docker compose -f docker-compose.dev.yml logs app` instead: check that too after a PHP upgrade). Tests
+  share the dev database, the login rate limit and the running workers, so a full run can fail one of them ("login
+  failed", `pilots_test.php` with queued rows); run it again on its own (`[filter]` is a `grep -E` pattern on the path). JS tests: `npx gulp test` in the `assets` container.
 
 `docker/config.php` and `docker/db.inc.php` are mounted over `/opt/app/config.php` and
 `/opt/app/db.inc.php`, so Docker leaves empty `config.php` / `db.inc.php` files in the repo root as
