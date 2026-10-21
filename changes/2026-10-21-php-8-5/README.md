@@ -8,6 +8,13 @@ The image moves from PHP 8.3.36 to PHP 8.5.12 (supported until the end of 2029; 
 the end of 2027). Tested locally with the full PHP and JS test suites on 8.5 and 8.3 side by side, plus a click-through
 of the app.
 
+## After
+
+No visible change. The dev stack on PHP 8.5.12 after the click-through (pasted signatures, a wormhole to Amarr on the
+chain map, a note, Settings saved):
+
+![after](after.jpg)
+
 ## Settings
 
 No toggle, because nothing changes for users.
