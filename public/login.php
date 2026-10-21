@@ -93,6 +93,7 @@ function doLogin(&$output, $account, $esi, $mysql, $ip, $username, $method) {
 
 		$options = json_decode($account->options);
 
+		session_regenerate_id(true); // fork: new session ID on login (session fixation)
 		$_SESSION['userID'] = $account->id;
 		$_SESSION['username'] = $account->username;
 		$_SESSION['ip'] = $ip;
@@ -223,7 +224,7 @@ if ($mode == 'login') {
 				$_SESSION['oauth']['tokenExpire'] = $esi->tokenExpire;
 
 				if (isset($_SESSION['ssologin_system'])) {
-					header('Location: .?system=' . $_SESSION['ssologin_system']);
+					header('Location: .?system=' . urlencode((string) $_SESSION['ssologin_system'])); // fork: encoded
 				} else {
 					header('Location: .?system=');
 				}

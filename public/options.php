@@ -32,6 +32,8 @@ $confirm = isset($_REQUEST['confirm'])?$_REQUEST['confirm']:null;
 $username = isset($_REQUEST['username'])?$_REQUEST['username']:null;
 $old_username = isset($_REQUEST['username'])?$_SESSION['username']:null;
 $output = null;
+require_once('../csrf.inc.php'); // fork: changes need POST + this session's CSRF token
+if ($mode == 'set' || $password || $username) fork_csrf_require();
 
 if ($mode == 'get') {
 	$query = 'SELECT options FROM preferences WHERE userID = :userID';
