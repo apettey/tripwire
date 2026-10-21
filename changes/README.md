@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-21 | [Infrastructure hardening](2026-10-21-infra-hardening/README.md) | Workflow actions pinned to commit SHAs + Dependabot; infra checkout no longer stores the deploy token; nginx security headers and `server_tokens off`; ignore files cover keys, `.env.*` and notes; prod compose binds to 127.0.0.1 |
 | 2026-10-21 | [App security fixes](2026-10-21-app-security-fixes/README.md) | CSRF token on options.php (password, username, options) and masks.php changes; escaped `?system=` and tracked pilot/ship names (XSS); corp admin only for the logged-in character; session cookie HttpOnly/Secure/SameSite, strict mode, new ID on login; note sanitiser ignores tabs/newlines in URLs |
 | 2026-10-19 | [Site expiry](2026-10-19-site-expiry/README.md) | Sites (non-wormhole sigs, unknown included) get a 7-day default life (Settings > Signatures); in their last 24 h they count down in the Age cell, orange, red under 4 h; sig-age tints sites at 24 h / 72 h instead of 4.5 h / 24 h |
 | 2026-10-18 | [Ctrl+K opens count once](2026-10-18-ctrl-k-open-counts-once/README.md) | A Ctrl+K open of Usage analytics or What's New logs `command` only, not `opened` too (as the features hub does); the dashboard's What's New numbers include Ctrl+K opens |

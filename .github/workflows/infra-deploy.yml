@@ -91,7 +91,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.token.outputs.present == 'true'
         with:
           fetch-depth: 0 # tags and history for the PR list
@@ -123,13 +123,16 @@ jobs:
             echo "digest=$digest"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.token.outputs.present == 'true'
         with:
           repository: ${{ env.INFRA_REPO }}
           ref: main
           token: ${{ secrets.INFRA_REPO_TOKEN }}
           path: .infra
+          # The token is used for this clone only; open-infra-pr.sh hands it to git itself, after
+          # the infra bump tool has run, so nothing in .infra can read it from .git/config.
+          persist-credentials: false
           # Shallow on purpose: fetch-depth 0 would print every infra branch name in this public
           # log. The script fetches main and the bump branches it needs, quietly, with full history.
           fetch-depth: 1
