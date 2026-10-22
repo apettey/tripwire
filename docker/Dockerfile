@@ -8,7 +8,7 @@
 # Stage 1: build front-end bundles (public/js/app.min.js, public/css/app.min.css)
 ############################################################
 # Bundles are plain JS/CSS, so this stage runs natively on the build host even for linux/arm64
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS assets
+FROM --platform=$BUILDPLATFORM node:25-bookworm-slim AS assets
 
 WORKDIR /src
 COPY package.json package-lock.json ./
