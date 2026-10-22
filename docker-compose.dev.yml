@@ -71,7 +71,7 @@ services:
         condition: service_healthy
 
   assets:
-    image: node:20-bookworm-slim
+    image: node:24-bookworm-slim
     working_dir: /src
     environment:
       DISABLE_NOTIFIER: "true"
