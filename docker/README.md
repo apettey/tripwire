@@ -32,7 +32,7 @@ docker compose -f docker-compose.dev.yml up --build
 - Adminer: http://localhost:9000 (server `mysql`, user `tripwire` / `MYSQL_PASSWORD`, or `root`)
 - MySQL: `localhost:3306`
 - All ports are bound to `127.0.0.1` only.
-- `assets` service (Node 20) builds `public/js/app.min.js` / `public/css/app.min.css` on start and
+- `assets` service (Node 24) builds `public/js/app.min.js` / `public/css/app.min.css` on start and
   rebuilds them when files under `app/` change. They are git-ignored build output (upstream commits
   them, we don't): CI and the Docker image build their own with `docker/gulpfile.dev.js`. To build
   them without the stack: `npm ci && npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css`.
