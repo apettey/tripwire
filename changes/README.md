@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-22 | [Build tooling updates](2026-10-22-build-tooling-updates/README.md) | gulp-shell 0.8, pump 3, gulp-notify 5, gulp-sourcemaps 3 (Dependabot #130 #131 #133 #136); bundles unchanged |
 | 2026-10-21 | [PHP 8.5 upgrade](2026-10-21-php-8-5/README.md) | Image on PHP 8.5.12 (from 8.3.36); CI lints with the same PHP; new `docker/dev/run-php-tests.sh` runs all PHP tests failing on deprecations; AU distances rounded exactly under 8.4+ `round()` |
 | 2026-10-21 | [PHP 8.3.36 security update](2026-10-21-php-2shell-patch/README.md) | Image pinned to PHP 8.3.36, fixing the PHP2Shell unauthenticated RCE (CVE-2026-109618, CVE-2026-109619) |
 | 2026-10-21 | [Infrastructure hardening](2026-10-21-infra-hardening/README.md) | Workflow actions pinned to commit SHAs + Dependabot; infra checkout no longer stores the deploy token; nginx security headers and `server_tokens off`; ignore files cover keys, `.env.*` and notes; prod compose binds to 127.0.0.1 |
