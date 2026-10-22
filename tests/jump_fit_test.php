@@ -69,7 +69,8 @@ if (!in_array('--pure', $argv) && getenv('DB_HOST')) {
 		$stmt->execute(array(':w' => $w, ':c' => $char, ':n' => 'Roller|P', ':f' => $from, ':t' => $to, ':s' => $ship, ':m' => $mask, ':ago' => $ago));
 	};
 	$add(77, 31001880, 31001881, 3600);	// an hour ago: too old to match
-	list(, $report) = jump_fit_clean_report($fit, time());
+	// Fit time relative to the real clock: the fixed $now above is older than the 7-day window by now
+	list(, $report) = jump_fit_clean_report(array_merge($fit, array('fitTime' => (string)(time() - 600))), time());
 	check('db: no recent jump, no match', jump_fit_report($mysql, $mask, $report), null);
 	$add(77, 31001880, 31001881, 20);
 	$match = jump_fit_report($mysql, $mask, $report);

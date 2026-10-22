@@ -43,11 +43,20 @@ function login($jar) {
     @unlink($jar);
     [, $out] = http('POST', 'login.php', $jar, http_build_query(['mode' => 'login', 'username' => $user, 'password' => $password]));
     if (($out['result'] ?? '') !== 'success') { fwrite(STDERR, "login failed (run docker/dev-seed.sh first)\n"); exit(1); }
+    csrf_token($jar);
     return $out['session'];
+}
+/** Reads this session's CSRF token from the app page's <meta name="csrf-token">, like the browser (app/js/fork/csrf.js). */
+function csrf_token($jar) {
+    global $csrf;
+    [, , $page] = http('GET', '?system=Jita', $jar);
+    if (!preg_match('/<meta name="csrf-token" content="([0-9a-f]+)">/', $page, $m)) { fwrite(STDERR, "no CSRF token on the app page\n"); exit(1); }
+    $csrf = $m[1];
 }
 /** Sets masks.active through options.php; returns the mask options.php stored. */
 function set_mask($jar, $active) {
-    [$status, $out] = http('POST', 'options.php', $jar, http_build_query(['mode' => 'set', 'options' => json_encode(['masks' => ['active' => $active]])]));
+    global $csrf;
+    [$status, $out] = http('POST', 'options.php', $jar, http_build_query(['mode' => 'set', 'options' => json_encode(['masks' => ['active' => $active]])]), ['X-CSRF-Token: ' . $csrf]);
     return [$status, $out['options']['masks']['active'] ?? null];
 }
 /** refresh.php init for $system: [signature ids, comment texts] seen */
@@ -254,12 +263,27 @@ check('own note: deleted', $noteRow($ownID), false);
 check('unknown note id: refused', $status, 404);
 
 // 6. REST API (public/api.php, basic auth): another mask's data is refused, own corporation mask works.
+// Password login is off unless TRIPWIRE_API_PASSWORD_AUTH is set (api/token-auth.php): then HTTP must refuse it, and
+// upstream's mask check (api/auth.php + api/signatures/get.php) runs in a CLI PHP instead, as api.php runs it with the switch on.
 $auth = "$user:$password";
+[$status, , $raw] = http('GET', 'api.php?q=/signatures&maskID=' . rawurlencode($ownCorp), $jar, null, [], $auth);
+$passwordAuth = !($status === 401 && strpos($raw, 'Password authentication is turned off') !== false);
+if (!$passwordAuth) check('api password login off: no mask data', strpos($raw, $marker) === false, true);
+$api = function ($maskID) use ($jar, $auth, $passwordAuth, $user, $password) {
+    if ($passwordAuth) return http('GET', 'api.php?q=/signatures&maskID=' . rawurlencode($maskID), $jar, null, [], $auth);
+    $code = '$_SERVER["PHP_AUTH_USER"] = ' . var_export($user, true) . '; $_SERVER["PHP_AUTH_PW"] = ' . var_export($password, true)
+        . '; $_REQUEST["maskID"] = ' . var_export($maskID, true) . '; chdir("/opt/app/public"); require "../db.inc.php"; require "../api/auth.php";'
+        . ' $output = null; include "../api/signatures/get.php"; echo json_encode($output);';
+    $raw = (string) shell_exec('php -r ' . escapeshellarg($code) . ' 2>&1');
+    check("api $maskID (CLI): no PHP message", preg_match('/^(PHP )?(Deprecated|Warning|Notice|Fatal error):/m', $raw), 0);
+    $out = json_decode($raw, true);
+    return [is_array($out) ? 200 : 401, $out, $raw];
+};
 foreach (['991001.0', '991001.00', '991001.0abc', '991002.1', '991003.2', '991003.2x'] as $spelling) {
-    [$status, , $raw] = http('GET', 'api.php?q=/signatures&maskID=' . rawurlencode($spelling), $jar, null, [], $auth);
+    [$status, , $raw] = $api($spelling);
     check("api $spelling: refused", strpos($raw, $marker) === false && strpos($raw, 'not authorized') !== false, true);
 }
-[$status, $out] = http('GET', 'api.php?q=/signatures&maskID=' . rawurlencode($ownCorp), $jar, null, [], $auth);
+[$status, $out] = $api($ownCorp);
 check('api own corporation mask: status', $status, 200);
 check('api own corporation mask: returns its signature', in_array($sigIDs[$ownCorp], array_map('intval', array_column(is_array($out) ? $out : [], 'id')), true), true);
 

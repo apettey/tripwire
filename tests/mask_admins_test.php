@@ -251,8 +251,14 @@ maskadmin_unblock($db, MASK_A, $O, MEMBER2);
 check('api: unblocked again', $apiMask(), 'MASK=\'' . MASK_A . '\'');
 
 // ---- 2. HTTP ----
+// Each logged-in session also gets the CSRF token options.php and masks.php want (csrf.inc.php), like tripwire.php makes it.
 function make_session($name, array $data) {
+    global $appCsrf;
     $sid = 'maskadmintest' . $name;
+    if (isset($data['userID'])) {
+        $appCsrf[$sid] = bin2hex(random_bytes(32));
+        $data += ['appCsrf' => $appCsrf[$sid], 'appCsrfUser' => (string) $data['userID']];
+    }
     $path = '/var/lib/php/session/sess_' . $sid;
     $payload = '';
     foreach ($data as $k => $v) {
@@ -272,6 +278,11 @@ function http($method, $path, $sid, $body = null, array $headers = []) {
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     return [$status, json_decode((string) $text, true), $text];
+}
+/** A form POST to an upstream endpoint (options.php, masks.php) with the session's CSRF token, like app/js/fork/csrf.js. */
+function form_post($path, $sid, array $data) {
+    global $appCsrf;
+    return http('POST', $path, $sid, http_build_query($data), ['X-CSRF-Token: ' . ($appCsrf[$sid] ?? '')]);
 }
 function sess($name, $id, $charName, $corp, $mask, $admin = 0) {
     return make_session($name, ['userID' => $id, 'mask' => $mask, 'characterID' => $id, 'characterName' => $charName, 'corporationID' => $corp, 'allianceID' => null, 'admin' => $admin, 'super' => 0]);
@@ -363,7 +374,7 @@ check('http: after unblock the character stays on the corp mask until they pick 
 check('http: the granted member can use upstream mask admin (admin.php access-list)', isset(http('GET', 'admin.php?mode=access-list', $sGranted)[1]['results']), true);
 post($sOwner, $csrfOwner, ['mode' => 'revoke', 'characterID' => MEMBER1]);
 check('http: a plain member can not (admin.php access-list)', isset(http('GET', 'admin.php?mode=access-list', $sMember)[1]['results']), false);
-check('http: granted admin cannot delete the mask (masks.php)', http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'delete', 'mask' => MASK_A]))[1]['result'] ?? null, null);
+check('http: granted admin cannot delete the mask (masks.php)', form_post('masks.php', $sGranted, ['mode' => 'delete', 'mask' => MASK_A])[1]['result'] ?? null, null);
 check('http: mask A still exists', (int) $db->query("SELECT COUNT(*) FROM masks WHERE maskID = '" . MASK_A . "'")->fetchColumn(), 1);
 
 // upstream: any logged-in user can put a non-canonical custom mask id into their session through options.php (verifyMask lets
@@ -371,7 +382,7 @@ check('http: mask A still exists', (int) $db->query("SELECT COUNT(*) FROM masks 
 $uidOutsider = (int) $db->query('SELECT userID FROM characters WHERE characterID = ' . OUTSIDER)->fetchColumn();
 $sOutsider = make_session('outsider', ['userID' => $uidOutsider, 'mask' => CORP_X . '.2', 'characterID' => OUTSIDER, 'characterName' => 'Test Outsider', 'corporationID' => CORP_X, 'allianceID' => null, 'admin' => 0, 'super' => 0, 'username' => 'maskadmin-test-5']);
 foreach (['990001.0abc', '990001.00', '0990001.0', ' 990001.0', '990001.0%'] as $spelling) {
-    http('POST', 'options.php', $sOutsider, http_build_query(['mode' => 'set', 'options' => json_encode(['masks' => ['active' => $spelling]])]));
+    form_post('options.php', $sOutsider, ['mode' => 'set', 'options' => json_encode(['masks' => ['active' => $spelling]])]);
     list($st, $out) = http('GET', 'mask_admins.php?mode=defaults', $sOutsider);
     check('http: outsider with mask "' . $spelling . '" is not on mask A', [$st, in_array($out['mask'] ?? null, [MASK_A, '990001.0abc', '990001.00', '0990001.0'], true)], [200, false]);
     list($st, $out) = http('GET', 'mask_admins.php?mode=get', $sOutsider);
@@ -394,10 +405,10 @@ maskadmin_unblock($db, MASK_A, $O, MEMBER2);
 
 // granted admins and the upstream access-list editor / the corp-only fork tabs
 $accessBefore = (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "'")->fetchColumn();
-list($st, $out) = http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'save', 'mask' => MASK_A, 'adds' => [GRANTED . '_1373', '12345_2']]));
+list($st, $out) = form_post('masks.php', $sGranted, ['mode' => 'save', 'mask' => MASK_A, 'adds' => [GRANTED . '_1373', '12345_2']]);
 check('http: granted admin cannot edit the access list (save)', [$out['result'] ?? null, (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "'")->fetchColumn()], [null, $accessBefore]);
-check('http: granted admin cannot read the edit list', isset(http('POST', 'masks.php', $sGranted, http_build_query(['mode' => 'edit', 'mask' => MASK_A]))[1]['results']), false);
-list($st, $out) = http('POST', 'masks.php', $sOwner, http_build_query(['mode' => 'save', 'mask' => MASK_A, 'adds' => ['990009_1373']]));
+check('http: granted admin cannot read the edit list', isset(form_post('masks.php', $sGranted, ['mode' => 'edit', 'mask' => MASK_A])[1]['results']), false);
+list($st, $out) = form_post('masks.php', $sOwner, ['mode' => 'save', 'mask' => MASK_A, 'adds' => ['990009_1373']]);
 check('http: the owner still edits the access list', [$out['result'] ?? null, (int) $db->query("SELECT COUNT(*) FROM `groups` WHERE maskID = '" . MASK_A . "' AND eveID = 990009")->fetchColumn()], [true, 1]);
 $db->prepare('DELETE FROM `groups` WHERE maskID = ? AND eveID = 990009')->execute([MASK_A]);
 check('http: fight.php: corp admin edits, a granted admin of the same mask does not', [http('GET', 'fight.php', $sCorpAdmin)[1]['canEdit'] ?? null, http('GET', 'fight.php', $sCorpUser)[1]['canEdit'] ?? null], [true, false]);
