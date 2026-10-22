@@ -111,9 +111,9 @@ check('admit: unknown source counts as panel', zk_backfill_admit(800, 0, 'other'
 check('admit: no user, no per-user cap', zk_backfill_admit(10, 9999, 'panel', 0), true);
 
 // --- zk_names_resolve: converges with an invalid ID in the queue (fake ESI, SQLite) ---
-$namesDb = new PDO('sqlite::memory:');
+$namesDb = new Pdo\Sqlite('sqlite::memory:');
 $namesDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$namesDb->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$namesDb->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $namesDb->exec("CREATE TABLE zkill_names (id INTEGER PRIMARY KEY, name TEXT NULL, category TEXT NOT NULL DEFAULT '',
     requestedAt TEXT NOT NULL, resolvedAt TEXT NULL, attempts INTEGER NOT NULL DEFAULT 0)");
 $bad = 1000137;

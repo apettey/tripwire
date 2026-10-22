@@ -386,7 +386,6 @@ function esi_request($method, $url, array $headers = [], $body = null, $timeout 
         $response = curl_exec($curl);
         $status = $response === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         if ($response === false) $response = curl_error($curl);
-        curl_close($curl);
     }
     esi_after_response($url, $status, $responseHeaders, $headers);
     if ($method === 'GET' && esi_is_url($url)) return esi_etag_finish($url, $headers, $entry, $status, $response, $responseHeaders);

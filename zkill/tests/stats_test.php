@@ -98,9 +98,9 @@ check('entities: limit', count(zk_threat_entities(array_map(function ($i) { retu
 
 // --- zk_stats_run_one: the worker path (fake zKillboard via zk_http_transport, SQLite) ---
 function stats_db() {
-    $db = new PDO('sqlite::memory:');
+    $db = new Pdo\Sqlite('sqlite::memory:');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $db->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+    $db->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
     $db->exec("CREATE TABLE zkill_system_stats (systemID INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'queued',
         priority INTEGER NOT NULL DEFAULT 10, requestedBy INTEGER NOT NULL DEFAULT 0, requestedAt TEXT NOT NULL, wantedAt TEXT NOT NULL,
         attemptedAt TEXT NULL, fetchedAt TEXT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', data TEXT NULL)");

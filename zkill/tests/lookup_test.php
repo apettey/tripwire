@@ -57,9 +57,9 @@ check('admit: global cap', zk_lookup_admit(ZK_LOOKUP_MAX_QUEUED, 0, 5), false);
 
 // --- SQLite copies of the two tables (same columns as zkill/schema.php) ---
 function lookup_db() {
-    $db = new PDO('sqlite::memory:');
+    $db = new Pdo\Sqlite('sqlite::memory:');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $db->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+    $db->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
     $db->exec("CREATE TABLE zkill_kill_lookup (killID INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
         requestedBy INTEGER NOT NULL DEFAULT 0, requestedAt TEXT NOT NULL, attemptedAt TEXT NULL, error TEXT NOT NULL DEFAULT '')");
     $db->exec("CREATE TABLE zkill_killmails (id INTEGER PRIMARY KEY AUTOINCREMENT, killID INTEGER NOT NULL UNIQUE, systemID INTEGER NOT NULL,

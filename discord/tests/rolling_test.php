@@ -155,9 +155,9 @@ check('plan: done strikes the message', [$plan['op'], $plan['state'], $plan['pay
 check('plan: marked again within 30 s of done: the message comes back', discord_rolling_plan($set, ['clearedAt' => 2000] + $liveMsg, 2010)['state'], 'revived');
 
 // --- the sender's side, against SQLite ---
-$db = new PDO('sqlite::memory:');
+$db = new Pdo\Sqlite('sqlite::memory:');
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$db->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$db->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $db->exec('CREATE TABLE discord_rolling_message (maskID TEXT, wormholeID INTEGER, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT, clearedAt TEXT, PRIMARY KEY (maskID, wormholeID))');
 $db->exec('CREATE TABLE discord_preserve_message (maskID TEXT, wormholeID INTEGER, webhookID INTEGER, messageID TEXT, content TEXT, postedAt TEXT, clearedAt TEXT, PRIMARY KEY (maskID, wormholeID))');
 $db->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT, status TEXT,
@@ -226,7 +226,7 @@ $db->exec("INSERT INTO fork_rolling VALUES ('$mask', 2, ' Kytus Bos '), ('$mask'
 check('setter: the pilot who flagged it', [discord_rolling_setter($db, $mask, 2), discord_rolling_setter($db, $mask, 4), discord_rolling_setter($db, $mask, 9)], ['Kytus Bos', '', '']);
 
 // Unreadable at send time: a mark waits, a clear is still a clear
-$broken = new PDO('sqlite::memory:');
+$broken = new Pdo\Sqlite('sqlite::memory:');
 $broken->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $prow = ['id' => 1, 'maskID' => $mask, 'webhookID' => 5, 'kind' => 'rolling', 'age' => 0];
 check('unreadable: a mark waits', discord_row_context($broken, $prow + ['data' => json_encode(['action' => 'set', 'chainOnly' => true, 'homeSystemID' => J163701] + $base)]), null);

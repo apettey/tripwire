@@ -353,7 +353,6 @@ function http($method, $path, $sid, $body = null, array $headers = []) {
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    curl_close($ch);
     $head = substr((string) $text, 0, $size);
     $body = substr((string) $text, $size);
     return [$status, json_decode($body, true), $body, $head];

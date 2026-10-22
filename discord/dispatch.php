@@ -153,7 +153,6 @@ function discord_http_post($url, array $payload, $method = 'POST') {
     $response = curl_exec($curl);
     $status = $response === false ? 0 : (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     $error = $response === false ? curl_error($curl) : '';
-    curl_close($curl);
     return [$status, $response === false ? $error : $response, $headers];
 }
 

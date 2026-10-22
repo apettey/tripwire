@@ -102,9 +102,9 @@ check('discord matches: holes of each match (ascending), jump filters and disabl
 check('discord matches: no filters, no links', [discord_watchlist_matches([], $links, $data), discord_watchlist_matches($filters, [], $data)], [[], []]);
 
 // SQLite stands in for MySQL: the worker's records (fork_watchlist_baseline / fork_watchlist_seen) and the outbox
-$wl = new PDO('sqlite::memory:');
+$wl = new Pdo\Sqlite('sqlite::memory:');
 $wl->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$wl->sqliteCreateFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
+$wl->createFunction('UTC_TIMESTAMP', function () { return gmdate('Y-m-d H:i:s'); }, 0);
 $wl->exec('CREATE TABLE fork_watchlist_baseline (maskID TEXT, filterID TEXT, stamp TEXT, createdAt TEXT, PRIMARY KEY (maskID, filterID))');
 $wl->exec('CREATE TABLE fork_watchlist_seen (maskID TEXT, filterID TEXT, systemID INTEGER, wormholeID INTEGER, createdAt TEXT, PRIMARY KEY (maskID, filterID, systemID, wormholeID))');
 $wl->exec("CREATE TABLE discord_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, maskID TEXT, webhookID INTEGER, kind TEXT, priority INTEGER, data TEXT,

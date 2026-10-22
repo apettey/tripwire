@@ -280,7 +280,6 @@ function http($method, $path, $sid) {
         CURLOPT_HTTPHEADER => $sid ? ['Cookie: PHPSESSID=' . $sid] : []]);
     $text = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     return [$status, (string) $text];
 }
 // The web server reads ANALYTICS_ADMINS from its own environment (config.php)
