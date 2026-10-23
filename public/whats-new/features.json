@@ -1,6 +1,12 @@
 {
   "features": [
     {
+      "pr": 142,
+      "date": "2026-10-23",
+      "title": "Jump planner and region map open only when you ask",
+      "description": "Clicking a low-sec or null-sec system's name on the chain map now just views the system. It no longer opens the Jump planner or the region map.\n\nOpen the Jump planner from the exit's ring icon, and the region map from the skyhook icon or by right-clicking the system and choosing Region map. Both are also on Ctrl+K."
+    },
+    {
       "pr": 127,
       "date": "2026-10-19",
       "title": "Sites last longer and count down before they expire",
