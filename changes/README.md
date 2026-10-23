@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-23 | [Panels open from their buttons only](2026-10-23-open-panels-from-buttons-only/README.md) | Clicking a low-sec/null-sec system's name no longer opens the Jump planner or the region map; their name-click settings are gone |
 | 2026-10-22 | [PHP test fixes](2026-10-22-php-test-fixes/README.md) | mask_access and mask_admins tests send the CSRF token options.php/masks.php need; mask_access's API part copes with password login being off; jump_fit test uses a fit time relative to the real clock |
 | 2026-10-22 | [Node 24 LTS](2026-10-22-node-24/README.md) | Builds and JS tests on Node 24 LTS (Node 20 is end-of-life); jsdom 30 (Dependabot #137); Node 25 (#132) skipped, also end-of-life |
 | 2026-10-22 | [Build tooling updates](2026-10-22-build-tooling-updates/README.md) | gulp-shell 0.8, pump 3, gulp-notify 5, gulp-sourcemaps 3 (Dependabot #130 #131 #133 #136); bundles unchanged |
