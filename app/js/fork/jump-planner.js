@@ -38,7 +38,7 @@ const jumpPlanner = {
 	ROMAN: ["0", "I", "II", "III", "IV", "V"],
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
-		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
+		dock: "right", mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
 		fuel: true, hull: null,
 		prefer: "jumps", preferStations: true, avoidKills: true, avoidIncursions: true
 	},
@@ -70,7 +70,6 @@ const jumpPlanner = {
 			exits: pick(raw.exits, ["all", "viewing"], d.exits),
 			jammed: pick(raw.jammed, ["mark", "hide", "ignore"], d.jammed),
 			dock: pick(raw.dock, ["right", "left"], d.dock),
-			clickOpen: raw.clickOpen !== false,
 			mapRadius: Math.round(num(raw.mapRadius, 7, 15, d.mapRadius)),
 			showOut: raw.showOut !== false,
 			showHs: raw.showHs === true,
@@ -1329,7 +1328,6 @@ const jumpPlanner = {
 			+ "<tr><th>Cyno-jammed systems:</th><td><select id='jumpPlanner-jammed'><option value='mark'>Show, marked as jammed</option><option value='hide'>Hide</option><option value='ignore'>Treat as in range</option></select></td></tr>"
 			+ "<tr class='jp-sep'><td colspan='2'></td></tr>"
 			+ "<tr><th>Dock side:</th><td>" + radios("jumpPlanner-dock", [["right", "Right"], ["left", "Left"]]) + " <span class='jp-dim'>(where the window first opens)</span></td></tr>"
-			+ "<tr><th>Open when I click an exit:</th><td>" + radios("jumpPlanner-click", [["1", "Yes"], ["0", "Only from ring icon"]]) + "</td></tr>"
 			+ "<tr><th>Mini-map shows:</th><td><span class='jp-dim'>out to</span> <input type='range' id='jumpPlanner-radius' min='7' max='15' step='1' /> <span id='jumpPlanner-radius-label'></span></td></tr>"
 			+ "<tr><th>Out-of-range systems:</th><td><label><input type='checkbox' id='jumpPlanner-showOut' /> Show greyed in mini-map</label></td></tr>"
 			+ "<tr><th>High-sec systems:</th><td><label><input type='checkbox' id='jumpPlanner-showHs' /> Show inside the range (no cyno there)</label></td></tr>"
@@ -2234,7 +2232,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$("#jumpPlanner-exits").val(s.exits);
 			$("#jumpPlanner-jammed").val(s.jammed);
 			$s.find("input[name='jumpPlanner-dock'][value='" + s.dock + "']").prop("checked", true);
-			$s.find("input[name='jumpPlanner-click'][value='" + (s.clickOpen ? "1" : "0") + "']").prop("checked", true);
 			$("#jumpPlanner-radius").val(s.mapRadius);
 			$("#jumpPlanner-showOut").prop("checked", s.showOut);
 			$("#jumpPlanner-showHs").prop("checked", s.showHs);
@@ -2270,7 +2267,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				exits: $("#jumpPlanner-exits").val(),
 				jammed: $("#jumpPlanner-jammed").val(),
 				dock: $("input[name='jumpPlanner-dock']:checked").val() || "right",
-				clickOpen: $("input[name='jumpPlanner-click']:checked").val() !== "0",
 				mapRadius: Number($("#jumpPlanner-radius").val()),
 				showOut: $("#jumpPlanner-showOut").prop("checked"),
 				showHs: $("#jumpPlanner-showHs").prop("checked"),
@@ -2454,13 +2450,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				e.preventDefault();
 				if (typeof Tooltips !== "undefined" && Tooltips.close) { Tooltips.close(); }
 				close();
-			});
-			// Clicking an exit's name (which also views it, upstream) opens the planner on it when that is switched on
-			$doc.on("click", "#chainMap .nodeSystem a", function() {
-				const s = current();
-				if (!s.enabled || !s.clickOpen) { return; }
-				const id = parseInt($(this).closest("[data-nodeid]").attr("data-nodeid"), 10);
-				if (state.exits.indexOf(id) >= 0) { open(id, true); }	// like the ring: From exit, so the click shows something
 			});
 			$doc.on("click", sel + " .jp-tab", function() { state.selected = parseInt($(this).attr("data-jp-tab"), 10); state.pinnedID = null; state.hoverID = null; state.search.scroll = true; render(); });
 			$doc.on("change", sel + " .jp-ship", function() { store({ ship: $(this).val() }, true); state.counts = {}; state.search.scroll = true; render(); });
