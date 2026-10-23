@@ -101,7 +101,7 @@
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "routeHoleFilters", "title": "Routes avoid risky holes", "section": "routes", "prs": [65], "settingsKey": "routeHoleFilters",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
-    { "id": "skyhooks", "title": "Raidable skyhooks", "section": "routes", "prs": [66, 68, 106, 142], "settingsKey": "skyhooksPanel",
+    { "id": "skyhooks", "title": "Raidable skyhooks", "section": "routes", "prs": [66, 68, 106], "settingsKey": "skyhooksPanel",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["skyhooks.map", "panel.skyhooks"], "panels": [], "use": ["opened"],
       "exposed": ".sky-icon" },
     { "id": "lootBuyers", "title": "Nearest loot buyers", "section": "routes", "prs": [79], "settingsKey": "lootBuyers",
