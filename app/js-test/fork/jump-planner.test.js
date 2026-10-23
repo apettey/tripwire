@@ -33,7 +33,7 @@ describe('jumpPlanner', () => {
 	});
 
 	describe('settings', () => {
-		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, click opens, 10 LY, greyed, hubs', () => {
+		it('defaults: on, Carrier, JDC V, no cap, both targets, all exits, jammed marked, right, 10 LY, greyed, hubs', () => {
 			const s = jumpPlanner.settings({});
 			assert.deepStrictEqual(s, { enabled: true, ship: 'group-547', jdc: 5, cap: null, lowsec: true, nullsec: true, exits: 'all', jammed: 'mark',
 				dock: 'right', mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true, fuel: true, hull: null, fuelSkills: { 21610: 5 }, open: false, mode: 'exit', origin: null,
