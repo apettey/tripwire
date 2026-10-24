@@ -81,7 +81,7 @@ services:
       - node_modules:/src/node_modules
 
   mysql:
-    image: mysql:8.0.40
+    image: mysql:8.4.13
     command:
       - --event-scheduler=ON
       - --sql-mode=NO_ENGINE_SUBSTITUTION

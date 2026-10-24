@@ -62,7 +62,7 @@ services:
         condition: service_healthy
 
   mysql:
-    image: mysql:8.0.40
+    image: mysql:8.4.13
     restart: unless-stopped
     command:
       - --event-scheduler=ON
