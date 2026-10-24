@@ -24,7 +24,7 @@ var FluidNav = {
 	goTo: function(page, section) {
 		// page and section come from location.hash: only accept plain ids, so they can't change the selectors below
 		if (!/^[\w-]+$/.test(page || "") || !$("#" + page).hasClass("page")) page = "login";
-		if (!/^[\w-]+$/.test(section || "")) section = "";
+		if (!/^[A-Za-z_][\w-]*$/.test(section || "")) section = "";
 
 		if (page != $(".page.current").attr("id")) {
 			var next_page = $("#"+page);
