@@ -6,7 +6,6 @@ const notify = require('gulp-notify');
 const uglify = require('gulp-uglify-es').default;
 const cleancss = require('gulp-clean-css');
 const concat = require('gulp-concat');
-const sourcemaps = require('gulp-sourcemaps');
 const rename = require('gulp-rename');
 
 // The order of the files in `src` are important, be sure to include a file before something else uses it
@@ -57,13 +56,11 @@ var cssFiles = [
 gulp.task('js', function(cb) {
     for (var j in jsFiles) {
         pump([
-            gulp.src(jsFiles[j].src),
-            sourcemaps.init(),
+            gulp.src(jsFiles[j].src, { sourcemaps: true }),
             uglify(),
             concat(jsFiles[j].name),
             rename(jsFiles[j].nameMin),
-            sourcemaps.write('.'),
-            gulp.dest(jsFiles[j].output),
+            gulp.dest(jsFiles[j].output, { sourcemaps: '.' }),
             notify({
                 message: "Finished javascript",
                 onLast: true
@@ -75,12 +72,10 @@ gulp.task('js', function(cb) {
 gulp.task('js_dev', function(cb) {
     for (var j in jsFiles) {
         pump([
-            gulp.src(jsFiles[j].src),
-            sourcemaps.init(),
+            gulp.src(jsFiles[j].src, { sourcemaps: true }),
             concat(jsFiles[j].name),
             rename(jsFiles[j].nameMin),
-            sourcemaps.write('.'),
-            gulp.dest(jsFiles[j].output),
+            gulp.dest(jsFiles[j].output, { sourcemaps: '.' }),
             notify({
                 message: "Finished javascript",
                 onLast: true
@@ -92,13 +87,11 @@ gulp.task('js_dev', function(cb) {
 gulp.task('css', function(cb) {
     for (var c in cssFiles) {
         pump([
-            gulp.src(cssFiles[c].src),
-            sourcemaps.init(),
+            gulp.src(cssFiles[c].src, { sourcemaps: true }),
             cleancss(),
             concat(cssFiles[c].name),
             rename(cssFiles[c].nameMin),
-            sourcemaps.write('.'),
-            gulp.dest(cssFiles[c].output),
+            gulp.dest(cssFiles[c].output, { sourcemaps: '.' }),
             notify({
                 message: "Finished css",
                 onLast: true

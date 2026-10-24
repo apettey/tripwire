@@ -70,8 +70,11 @@ RUN defines=$(grep -o 'define(' settings.php | wc -l) \
 ############################################################
 FROM php:8.5.12-fpm-alpine3.24 AS runtime
 
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.7.24/install-php-extensions /usr/local/bin/
-RUN apk add --no-cache nginx supervisor mariadb-client mariadb-connector-c bash tzdata \
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.3/install-php-extensions /usr/local/bin/
+# apk upgrade: take Alpine security fixes (OpenSSL, musl, ...) released since the PHP base image was built;
+# nginx and the other packages below come from the Alpine repo at build time, so every release picks up their fixes
+RUN apk upgrade --no-cache \
+ && apk add --no-cache nginx supervisor mariadb-client mariadb-connector-c bash tzdata \
     icu-libs libpng libjpeg-turbo freetype libwebp libavif libxpm
 RUN install-php-extensions pdo_mysql gd intl mbstring \
  && php -m 2>&1 | grep -qx gd && ! php -m 2>&1 | grep -q Warning \
