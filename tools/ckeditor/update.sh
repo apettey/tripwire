@@ -46,11 +46,39 @@ SRC="$WORK/ckeditor4-$VERSION"
 # Plugin folders loaded at runtime (everything else in our plugin set is inside ckeditor.js). Checked below
 # against config.js's plugin list, so a plugin added there without its folder stops the script.
 PLUGIN_DIRS="autogrow clipboard colorbutton colordialog dialog font indentblock link panelbutton"
+# Our own third-party plugins, kept as they are.
+FORK_PLUGINS="autolink toolbarswitch"
+
+# Every plugin in config.js, and everything those plugins require, must be in the release's ckeditor.js or have its
+# folder (from the release via PLUGIN_DIRS, or our own). Checked before anything in $DEST is replaced.
+node - "$DEST" "$PKG" "$PLUGIN_DIRS" "$FORK_PLUGINS" <<'EOF'
+const fs = require('fs'), path = require('path');
+const [dest, pkg, dirs, forkDirs] = process.argv.slice(2);
+const fromRelease = new Set(dirs.split(/\s+/).filter(Boolean));
+const ours = new Set(forkDirs.split(/\s+/).filter(Boolean));
+const listed = fs.readFileSync(path.join(dest, 'config.js'), 'utf8').match(/config\.plugins\s*=\s*((?:'[^']*'\s*\+?\s*)+);/);
+if (!listed) throw new Error('config.js: no config.plugins');
+const wanted = listed[1].replace(/'\s*\+\s*'/g, '').replace(/'/g, '').split(',').map(s => s.trim()).filter(Boolean);
+const bundled = new Set(fs.readFileSync(path.join(pkg, 'ckeditor.js'), 'utf8').match(/CKEDITOR\.config\.plugins="([^"]*)"/)[1].split(','));
+const missing = [], seen = new Set();
+(function check(names) {
+	for (const name of names) {
+		if (seen.has(name) || bundled.has(name)) continue;
+		seen.add(name);
+		const file = fromRelease.has(name) ? path.join(pkg, 'plugins', name, 'plugin.js') : ours.has(name) ? path.join(dest, 'plugins', name, 'plugin.js') : '';
+		if (!file || !fs.existsSync(file)) { missing.push(name); continue; }
+		const req = fs.readFileSync(file, 'utf8').match(/requires\s*:\s*(?:"([^"]*)"|'([^']*)'|\[([^\]]*)\])/);
+		if (req) check((req[1] || req[2] || req[3]).replace(/['"\s]/g, '').split(',').filter(Boolean));
+	}
+})(wanted);
+if (missing.length) { console.error('Plugins neither in ckeditor.js nor in plugins/: ' + missing.join(', ') + ' (add them to PLUGIN_DIRS or FORK_PLUGINS)'); process.exit(1); }
+EOF
 
 echo "Replacing release files in $DEST..."
 rm -rf "$DEST/lang" "$DEST/skins/custom"
 # Everything under plugins/ except our own files comes from the release.
-find "$DEST/plugins" -mindepth 1 -maxdepth 1 ! -name toolbarswitch ! -name autolink ! -name font.png ! -name font_size.png -exec rm -rf {} +
+keep=(); for d in $FORK_PLUGINS font.png font_size.png; do keep+=(! -name "$d"); done
+find "$DEST/plugins" -mindepth 1 -maxdepth 1 "${keep[@]}" -exec rm -rf {} +
 mkdir -p "$DEST/lang" "$DEST/plugins"
 cp "$PKG/ckeditor.js" "$PKG/contents.css" "$PKG/styles.js" "$PKG/LICENSE.md" "$DEST/"
 cp "$PKG/lang/en.js" "$DEST/lang/"
@@ -62,28 +90,6 @@ for d in $PLUGIN_DIRS; do
 		find "$DEST/plugins/$d/lang" -type f ! -name en.js -delete
 	fi
 done
-
-# Every plugin in config.js, and everything those plugins require, must be in ckeditor.js or have its folder.
-node - "$DEST" <<'EOF'
-const fs = require('fs'), path = require('path');
-const dest = process.argv[2];
-const listed = fs.readFileSync(path.join(dest, 'config.js'), 'utf8').match(/config\.plugins\s*=\s*((?:'[^']*'\s*\+?\s*)+);/);
-if (!listed) throw new Error('config.js: no config.plugins');
-const wanted = listed[1].replace(/'\s*\+\s*'/g, '').replace(/'/g, '').split(',').map(s => s.trim()).filter(Boolean);
-const bundled = new Set(fs.readFileSync(path.join(dest, 'ckeditor.js'), 'utf8').match(/CKEDITOR\.config\.plugins="([^"]*)"/)[1].split(','));
-const missing = [], seen = new Set();
-(function check(names) {
-	for (const name of names) {
-		if (seen.has(name) || bundled.has(name)) continue;
-		seen.add(name);
-		const file = path.join(dest, 'plugins', name, 'plugin.js');
-		if (!fs.existsSync(file)) { missing.push(name); continue; }
-		const req = fs.readFileSync(file, 'utf8').match(/requires\s*:\s*(?:"([^"]*)"|'([^']*)'|\[([^\]]*)\])/);
-		if (req) check((req[1] || req[2] || req[3]).replace(/['"\s]/g, '').split(',').filter(Boolean));
-	}
-})(wanted);
-if (missing.length) { console.error('Plugins neither in ckeditor.js nor in plugins/: ' + missing.join(', ') + ' (add them to PLUGIN_DIRS)'); process.exit(1); }
-EOF
 
 node "$HERE/port-skin.js" "$SRC/skins/moono" "$PKG/skins/moono" "$DEST/skins/custom" "$DEST/plugins/autogrow/plugin.js"
 
