@@ -1,60 +1,19 @@
 /**
- * @license Copyright (c) 2003-2014, CKSource - Frederico Knabben. All rights reserved.
- * For licensing, see LICENSE.md or http://ckeditor.com/license
+ * Tripwire's CKEditor config (loaded by ckeditor.js; the per-editor settings are in app/js/ckeditor.js).
+ * public/ckeditor/ is the CKEditor 4.22.1 release trimmed to these plugins; rebuild it with
+ * tools/ckeditor/update.sh.
  */
 
 CKEDITOR.editorConfig = function( config ) {
-	// Define changes to default configuration here.
-	// For complete reference see:
-	// http://docs.ckeditor.com/#!/api/CKEDITOR.config
+	// The 4.4.6 custom build's plugin set. Plugins not inside ckeditor.js load from plugins/;
+	// autolink and toolbarswitch are third-party plugins (autolink also links bare www. addresses).
+	config.plugins = 'autogrow,autolink,basicstyles,clipboard,colorbutton,colordialog,enterkey,entities,' +
+		'floatingspace,font,indentblock,indentlist,link,list,maximize,sourcearea,toolbar,toolbarswitch,undo,wysiwygarea';
 
-	// The default plugins included in the basic setup define some buttons that
-	// are not needed in a basic editor. They are removed here.
-	//config.removeButtons = 'Cut,Copy,Paste,Undo,Redo,Anchor,Subscript,Superscript,Unlink';
-	/*
-	// Dialog windows are also simplified.
-	config.removeDialogTabs = 'link:advanced';
+	// Only the English UI is shipped.
+	config.language = 'en';
 
-	// Custom skin
-	config.skin = "custom";
-	config.height = 100;
-
-	//config.autoParagraph = false;
-	config.enterMode = CKEDITOR.ENTER_BR;
-	config.tabSpaces = 4;
-	config.allowedContent = true;
-
-	config.extraPlugins = 'toolbarswitch,autogrow';
-
-	config.autoGrow_onStartup = true;
-	config.autoGrow_minHeight = 100;
-
-	config.toolbar_minToolbar = [
-		{name: "basicstyles", items: ["Bold", "Italic", "Underline", "Strike"]},
-		{name: "paragraph", items: ["BulletedList", "Outdent", "Indent"]},
-		{name: "links", items: ["Link"]},
-		{name: "colors", items: ["TextColor", "BGColor"]},
-		{name: "styles", items: ["FontSize"]},
-		{name: "tools", items: ["Toolbarswitch"]}
-	];
-	
-	config.toolbar_maxToolbar = [
-		{name: "basicstyles", items: ["Bold", "Italic", "Underline", "Strike", "Subscript", "Superscript"]},
-		{name: "paragraph", items: ["NumberedList", "BulletedList", "Outdent", "Indent"]},
-		{name: "links", items: ["Link"]},
-		{name: "colors", items: ["TextColor", "BGColor"]},
-		{name: "styles", items: ["FontSize", "Font"]},
-		{name: "tools", items: ["Source", "Toolbarswitch"]}
-	];
-
-	config.toolbar = "minToolbar";
-	config.smallToolbar = "minToolbar";
-	config.maximizedToolbar = "maxToolbar";
-
-	config.fontSize_style = {
-	    element:        'span',
-	    styles:         { 'font-size': '#(size)' },
-	    overrides:      [ { element :'font', attributes: { 'size': null } } ]
-	};
-	*/
+	// Don't ask cdn.ckeditor.com for the latest version (a third-party call) or show
+	// "this version is not secure" notices: we know 4.22.1 is the last open-source release.
+	config.versionCheck = false;
 };
