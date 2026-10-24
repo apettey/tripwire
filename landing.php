@@ -24,7 +24,6 @@ require_once('settings.php');
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/landing/dark.css" />
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/landing/media.queries.css" />
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/landing/tipsy.css" />
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/js/landing/fancybox/jquery.fancybox-1.3.4.css" />
 	<link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Nothing+You+Could+Do|Quicksand:400,700,300">
 
 	<!-- Favicons -->
@@ -401,15 +400,11 @@ require_once('settings.php');
 	?>
 
 	<!-- Javascripts -->
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery-1.7.1.min.js"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery-3.7.1.min.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/html5shiv.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery.tipsy.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/fancybox/jquery.fancybox-1.3.4.pack.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/fancybox/jquery.easing-1.3.pack.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery.touchSwipe.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery.mobilemenu.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery.infieldlabel.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/jquery.echoslider.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/landing/landing.js"></script>
 </body>
 </html>
