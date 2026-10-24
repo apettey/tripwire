@@ -153,13 +153,17 @@ for (const [name, list] of Object.entries(edits)) {
 files['toolbar.css'] = files['toolbar.css'].replace(/\s*$/, '\n') + toolbarAppend;
 
 // 2. Inline @imports into editor.css and dialog.css (the files the editor loads), like CKBuilder.
-function inline(name, seen = new Set()) {
-	if (seen.has(name)) throw new Error('@import loop at ' + name);
-	seen.add(name);
+function inline(name, chain = []) {
+	if (chain.includes(name)) throw new Error('@import loop at ' + name);
 	return files[name].replace(/@import url\("([^"]+)"\);/g, (m, dep) => {
 		if (!files[dep]) throw new Error(`${name}: missing @import ${dep}`);
-		return inline(dep, seen);
+		return inline(dep, chain.concat(name));
 	});
+}
+function inlineAll(name) {
+	const out = inline(name);
+	if (/@import/.test(out)) throw new Error(`${name}: an @import was left after inlining (unexpected form?)`);
+	return out;
 }
 
 // 3. Icon sprite rules: the built moono editor.css ends with them (moono-style icons, as before).
@@ -172,8 +176,8 @@ fs.mkdirSync(destDir, { recursive: true });
 const banner = '/* Built by tools/ckeditor/port-skin.js from the CKEditor moono skin; edit the script, not this file. */\n';
 for (const name of Object.keys(files)) {
 	let out;
-	if (name === 'editor.css') out = banner + inline(name) + '\n' + iconRules + '\n';
-	else if (name === 'dialog.css') out = banner + inline(name);
+	if (name === 'editor.css') out = banner + inlineAll(name) + '\n' + iconRules + '\n';
+	else if (name === 'dialog.css') out = banner + inlineAll(name);
 	else if (/^(editor|dialog)_.*\.css$/.test(name) || name === 'skin.js') out = files[name];
 	else continue; // the rest is inlined above
 	fs.writeFileSync(path.join(destDir, name), out);

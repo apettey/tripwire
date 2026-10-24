@@ -25,7 +25,11 @@ No toggle, because this is a security upgrade with no new behaviour. No feature 
 - `tools/ckeditor/update.sh` (with `port-skin.js`) rebuilds the folder from a release: it copies the files, keeps the
   plugin folders we load, rebuilds `skins/custom` from the release's moono skin with our edits (white toolbar, dark
   translucent editing area, font/size drop-downs as icons), restyles `contents.css` and re-applies the autogrow patch
-  (don't grow when opening maximized).
+  (don't grow when opening maximized). It checks the GitHub source tarball against a pinned sha256 and stops if a
+  plugin in `config.js` (or one it requires) is neither in `ckeditor.js` nor shipped in `plugins/`.
+- `config.js` keeps 4.4.6's behaviour where 4.22 changed defaults: the old 40-colour palette (8 per row, no "used
+  colours" rows), pasted formatting kept in Chrome/Safari (`pasteFilter: null`; notes are still sanitised on save), and
+  no pasting of image files (they'd become `data:` images that the sanitiser drops on save).
 - `config.js` sets `versionCheck: false`: 4.22 would otherwise call cdn.ckeditor.com and show an "insecure version"
   notice. It also fixes the language to English, since only `en` is shipped.
 - `autolink` and `toolbarswitch` stay the third-party plugins we had. The old autolink also links bare `www.` addresses,
