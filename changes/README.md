@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-24 | [CKEditor 4.22.1](2026-10-24-ckeditor-4-22-1/README.md) | Comment editor upgraded from CKEditor 4.4.6 to 4.22.1 (retire.js: 12 advisories to 0), same look and plugins; `tools/ckeditor/update.sh` rebuilds it |
 | 2026-10-24 | [Login page on jQuery 3.7.1](2026-10-24-landing-jquery-3/README.md) | Landing/login page drops its jQuery 1.7.1 for the shared 3.7.1, removes unused fancybox/slider plugins, and validates hash-driven page ids |
 | 2026-10-24 | [Dependency security update](2026-10-24-dependency-security-update/README.md) | npm audit 52 → 0 (gulp 5, unused plugins removed); jQuery 3.7.1, jQuery UI 1.13.3, lodash 4.18.1, moment 2.31.0; image takes Alpine fixes (nginx CVE); compose MySQL 8.4 LTS |
 | 2026-10-23 | [Name click opens nothing by default](2026-10-23-name-click-default-off/README.md) | Clicking a low-sec/null-sec system's name no longer opens the Jump planner or the region map unless you turn that on in Settings |
