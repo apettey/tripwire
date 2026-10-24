@@ -38,7 +38,7 @@ const jumpPlanner = {
 	ROMAN: ["0", "I", "II", "III", "IV", "V"],
 	DEFAULTS: {
 		enabled: true, ship: "group-547", jdc: 5, cap: null, lowsec: true, nullsec: true, exits: "all", jammed: "mark",
-		dock: "right", clickOpen: true, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
+		dock: "right", nameClick: false, mapRadius: 10, showOut: true, showHs: false, hubs: true, search: true,
 		fuel: true, hull: null,
 		prefer: "jumps", preferStations: true, avoidKills: true, avoidIncursions: true
 	},
@@ -70,7 +70,7 @@ const jumpPlanner = {
 			exits: pick(raw.exits, ["all", "viewing"], d.exits),
 			jammed: pick(raw.jammed, ["mark", "hide", "ignore"], d.jammed),
 			dock: pick(raw.dock, ["right", "left"], d.dock),
-			clickOpen: raw.clickOpen !== false,
+			nameClick: raw.nameClick === true,	// was clickOpen (on by default) until 2026-10-23: old saved values are ignored, so it starts off
 			mapRadius: Math.round(num(raw.mapRadius, 7, 15, d.mapRadius)),
 			showOut: raw.showOut !== false,
 			showHs: raw.showHs === true,
@@ -2234,7 +2234,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$("#jumpPlanner-exits").val(s.exits);
 			$("#jumpPlanner-jammed").val(s.jammed);
 			$s.find("input[name='jumpPlanner-dock'][value='" + s.dock + "']").prop("checked", true);
-			$s.find("input[name='jumpPlanner-click'][value='" + (s.clickOpen ? "1" : "0") + "']").prop("checked", true);
+			$s.find("input[name='jumpPlanner-click'][value='" + (s.nameClick ? "1" : "0") + "']").prop("checked", true);
 			$("#jumpPlanner-radius").val(s.mapRadius);
 			$("#jumpPlanner-showOut").prop("checked", s.showOut);
 			$("#jumpPlanner-showHs").prop("checked", s.showHs);
@@ -2270,7 +2270,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				exits: $("#jumpPlanner-exits").val(),
 				jammed: $("#jumpPlanner-jammed").val(),
 				dock: $("input[name='jumpPlanner-dock']:checked").val() || "right",
-				clickOpen: $("input[name='jumpPlanner-click']:checked").val() !== "0",
+				nameClick: $("input[name='jumpPlanner-click']:checked").val() === "1",
 				mapRadius: Number($("#jumpPlanner-radius").val()),
 				showOut: $("#jumpPlanner-showOut").prop("checked"),
 				showHs: $("#jumpPlanner-showHs").prop("checked"),
@@ -2458,7 +2458,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// Clicking an exit's name (which also views it, upstream) opens the planner on it when that is switched on
 			$doc.on("click", "#chainMap .nodeSystem a", function() {
 				const s = current();
-				if (!s.enabled || !s.clickOpen) { return; }
+				if (!s.enabled || !s.nameClick) { return; }
 				const id = parseInt($(this).closest("[data-nodeid]").attr("data-nodeid"), 10);
 				if (state.exits.indexOf(id) >= 0) { open(id, true); }	// like the ring: From exit, so the click shows something
 			});

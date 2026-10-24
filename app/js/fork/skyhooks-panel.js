@@ -6,7 +6,7 @@ const skyhooksPanel = {
 	// The list comes from public/skyhooks.php, which keeps one server-wide copy of ESI's /skyhooks/raidable (the browser
 	// never calls ESI: that route allows 30 requests per 15 minutes per IP); `skyhooksPanel.store` is the one loader every
 	// user of the data shares (every 5 minutes at most, only while something shows skyhooks). Saved per user in
-	// options.skyhooksPanel = {enabled (the icon), clickOpen, low, null, lava, ice, window, soonHours, sort}; a missing key means
+	// options.skyhooksPanel = {enabled (the icon), nameClick, low, null, lava, ice, window, soonHours, sort}; a missing key means
 	// the default (icon on, name click off, low-sec and null-sec, lava and ice, opens within 2 h, by jumps).
 	// Planet type, name and yield come from the static public/skyhooks-data/planets.json (SDE), see planetInfo.
 	// Keep `const skyhooksPanel` on the first line: the test helper strips it to define a global.
@@ -14,7 +14,7 @@ const skyhooksPanel = {
 	REFRESH_MS: 5 * 60 * 1000,
 	RETRY_MS: 60 * 1000,          // after a failed request
 	NEAR_TTL_MS: 5 * 60 * 1000,   // how long a routing search is kept
-	DEFAULTS: { enabled: true, clickOpen: false, low: true, null: true, lava: true, ice: true, window: "soon", soonHours: 2, sort: "jumps" },
+	DEFAULTS: { enabled: true, nameClick: false, low: true, null: true, lava: true, ice: true, window: "soon", soonHours: 2, sort: "jumps" },
 	MAX_SEARCH_JUMPS: 60,       // jump counts stop here
 	WINDOWS: ["now", "soon", "all"],
 	SOON_HOURS_CHOICES: [1, 2, 4, 8, 24],
@@ -36,7 +36,7 @@ const skyhooksPanel = {
 		const soonHours = Number(s.soonHours);
 		return {
 			enabled: s.enabled !== false,
-			clickOpen: s.clickOpen === true,
+			nameClick: s.nameClick === true,	// was clickOpen until 2026-10-23: old saved values are ignored, so it starts off
 			low: s.low !== false,
 			null: s.null !== false,
 			lava: s.lava !== false,
@@ -466,9 +466,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			forkSettings.register({
 				section: "routes", order: 63, id: "skyhooksPanel-click", type: "checkbox",
 				label: "Raidable skyhooks:", text: "Also open the region map when I click a low-sec or null-sec system's name",
-				get: function() { return opts().clickOpen; },
-				set: function(o, on) { o.skyhooksPanel = Object.assign({}, o.skyhooksPanel || {}, { clickOpen: on }); },
-				reset: function(o) { if (o.skyhooksPanel) { delete o.skyhooksPanel.clickOpen; } }
+				get: function() { return opts().nameClick; },
+				set: function(o, on) { o.skyhooksPanel = Object.assign({}, o.skyhooksPanel || {}, { nameClick: on }); },
+				reset: function(o) { if (o.skyhooksPanel) { delete o.skyhooksPanel.nameClick; } }
 			});
 		}
 
@@ -518,7 +518,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			// Capture phase: viewing the system redraws the chain, which would detach the link before a delegated handler ran.
 			document.addEventListener("click", function(e) {
 				const link = e.target && e.target.closest ? e.target.closest("#chainMap .nodeSystem a") : null;
-				if (!link || !isOn() || !opts().clickOpen) { return; }
+				if (!link || !isOn() || !opts().nameClick) { return; }
 				const id = $(link).closest("[data-nodeid]").find(".sky-icon").first().attr("data-sky-system");
 				if (id) { setTimeout(function() { openMap(id); }, 0); }
 			}, true);
