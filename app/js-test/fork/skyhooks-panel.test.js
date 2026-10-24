@@ -13,11 +13,12 @@ const S = saved => skyhooksPanel.settings(saved);
 
 describe('Skyhooks panel', () => {
 	describe('settings', () => {
-		it('defaults', () => assert.deepEqual(S(undefined), { enabled: true, low: true, null: true, lava: true, ice: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
-		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }),
-			{ enabled: false, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }));
+		it('defaults (the name click is off)', () => assert.deepEqual(S(undefined), { enabled: true, nameClick: false, low: true, null: true, lava: true, ice: true, window: 'soon', soonHours: 2, sort: 'jumps' }));
+		it('keeps valid values', () => assert.deepEqual(S({ enabled: false, nameClick: true, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }),
+			{ enabled: false, nameClick: true, low: false, null: true, lava: false, ice: false, window: 'now', soonHours: 4, sort: 'value' }));
+		it('the old clickOpen key is ignored', () => assert.strictEqual(S({ clickOpen: true }).nameClick, false));
 		it('the retired box keys are ignored', () => assert.deepEqual(S({ maxJumps: 5, position: { col: 1 } }), S({})));
-		it('rejects nonsense', () => assert.deepEqual(S({ window: 'x', soonHours: 'abc', sort: 5 }), S({})));
+		it('rejects nonsense', () => assert.deepEqual(S({ window: 'x', soonHours: 'abc', sort: 5, nameClick: 'yes' }), S({})));
 		it('garbage options', () => assert.deepEqual(S('x'), S({})));
 	});
 
