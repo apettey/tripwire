@@ -12,7 +12,7 @@ function getUrlParameter(sParam) {
 // Main Navigation
 var FluidNav = {
 	init: function() {
-		$("a[href*=#]").click(function(e) {
+		$('a[href*="#"]').click(function(e) {
 			e.preventDefault();
 			if($(this).attr("href").split("#")[1]) {
 				FluidNav.goTo($(this).attr("href").split("#")[1], $(this).attr("href").split("#")[2]);
@@ -22,6 +22,10 @@ var FluidNav = {
 		FluidNav.goTo(window.location.hash.substring() != "" ? window.location.hash.split("#")[1] : "login", window.location.hash.substring() != "" ? window.location.hash.split("#")[2] : "");
 	},
 	goTo: function(page, section) {
+		// page and section come from location.hash: only accept plain ids, so they can't change the selectors below
+		if (!/^[\w-]+$/.test(page || "") || !$("#" + page).hasClass("page")) page = "login";
+		if (!/^[A-Za-z_][\w-]*$/.test(section || "")) section = "";
+
 		if (page != $(".page.current").attr("id")) {
 			var next_page = $("#"+page);
 			var nav_item = $('nav ul li a[href="#'+page+'"]');
@@ -87,18 +91,6 @@ $(document).ready(function() {
 	// Initialize navigation
 	setTimeout(FluidNav.init, 10);
 
-	// Home slider
-	$("#slider").echoSlider({
-		effect: "slide", // Default effect to use, supports: "slide" or "fade"
-		easing: true, // Easing effect for animations
-		pauseTime: 4000, // How long each slide will appear
-		animSpeed: 500, // Speed of slide animation
-		manualAdvance: false, // Force manual transitions
-		pauseOnHover: true, // Pause on mouse hover
-		controlNav: true, // Show slider navigation
-		swipeNav: true // Enable touch gestures to control slider
-	});
-
 	// Drop down menus
 	$("header nav ul li").hover(function() {
 		if($(this).find("ul").size != 0) {
@@ -135,20 +127,6 @@ $(document).ready(function() {
 		$("a", this).find(".hover").stop(true, true).fadeIn(400);
 	}, function() {
 		$("a", this).find(".hover").stop(true, true).fadeOut(400);
-	});
-
-	$("a.fancybox").fancybox({
-		"transitionIn":			"elastic",
-		"transitionOut":		"elastic",
-		"easingIn":				"easeOutBack",
-		"easingOut":			"easeInBack",
-		"titlePosition":		"over",
-		"fitToView": 			true,
-		"padding":				0,
-		"speedIn":      		500,
-		"speedOut": 			500,
-		"hideOnContentClick":	false,
-		"overlayShow":       	false
 	});
 
 	// Custom jQuery Tabs
