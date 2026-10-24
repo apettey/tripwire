@@ -36,7 +36,7 @@ const skyhooksPanel = {
 		const soonHours = Number(s.soonHours);
 		return {
 			enabled: s.enabled !== false,
-			nameClick: s.nameClick === true,	// was clickOpen until 2026-10-24: old saved values are ignored, so it starts off
+			nameClick: s.nameClick === true,	// was clickOpen until 2026-10-23: old saved values are ignored, so it starts off
 			low: s.low !== false,
 			null: s.null !== false,
 			lava: s.lava !== false,

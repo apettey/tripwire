@@ -70,7 +70,7 @@ const jumpPlanner = {
 			exits: pick(raw.exits, ["all", "viewing"], d.exits),
 			jammed: pick(raw.jammed, ["mark", "hide", "ignore"], d.jammed),
 			dock: pick(raw.dock, ["right", "left"], d.dock),
-			nameClick: raw.nameClick === true,	// was clickOpen (on by default) until 2026-10-24: old saved values are ignored, so it starts off
+			nameClick: raw.nameClick === true,	// was clickOpen (on by default) until 2026-10-23: old saved values are ignored, so it starts off
 			mapRadius: Math.round(num(raw.mapRadius, 7, 15, d.mapRadius)),
 			showOut: raw.showOut !== false,
 			showHs: raw.showHs === true,
@@ -2270,7 +2270,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				exits: $("#jumpPlanner-exits").val(),
 				jammed: $("#jumpPlanner-jammed").val(),
 				dock: $("input[name='jumpPlanner-dock']:checked").val() || "right",
-				nameClick: $("input[name='jumpPlanner-click']:checked").val() !== "0",
+				nameClick: $("input[name='jumpPlanner-click']:checked").val() === "1",
 				mapRadius: Number($("#jumpPlanner-radius").val()),
 				showOut: $("#jumpPlanner-showOut").prop("checked"),
 				showHs: $("#jumpPlanner-showHs").prop("checked"),
