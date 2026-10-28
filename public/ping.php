@@ -21,7 +21,7 @@ $ping_type_text = $ping_type ? ' as @' . $ping_type : '';
 $content = 'Tripwire ping from *' . $_SESSION['username'] . '* in **' . $_REQUEST['systemText'] . "**$ping_type_text\n<" . $url_base . '/?system=' . $_REQUEST['systemName'] . ">\n" . $_REQUEST['message'];
 
 // fork: @here/@everyone only ping through the dialog's buttons, never from text typed into the message (or names)
-$content = preg_replace('/@(everyone|here)\b/', "@\u{200B}$1", $content);
+$content = preg_replace('/@(everyone|here)/i', "@\u{200B}$1", $content);
 if ($ping_type) $content = str_replace(' as @' . "\u{200B}" . $ping_type, ' as @' . $ping_type, $content);
 $data = array('content' => $content, 'allowed_mentions' => array('parse' => $ping_type ? array('everyone', 'users', 'roles') : array('users', 'roles')));
 
