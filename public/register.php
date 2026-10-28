@@ -9,7 +9,7 @@ require('../password_hash.php');
 $code = 		isset($_REQUEST['code'])?$_REQUEST['code']:null;
 $state =		isset($_REQUEST['state'])?$_REQUEST['state']:null;
 require_once(__DIR__ . '/../sso-state.inc.php'); $state = fork_sso_state_check($state); // fork: per-session SSO state
-if ($code && $state === null) { header('Location: ./?error=register-unknown#register'); exit(); }
+if ($code && $state === null) { header('Location: ./?error=register-unknown#register'); exit(); } require_once(__DIR__ . '/../sso-downtime.inc.php'); fork_sso_downtime_redirects(); // fork: "EVE is down" message
 $mode = 		isset($_REQUEST['mode'])?$_REQUEST['mode']:null;
 $adminRoles = array('Director');
 $adminTitles = array('Tripwire Admin');

@@ -35,7 +35,7 @@ $mode = 		isset($_REQUEST['mode'])?$_REQUEST['mode']:null;
 $code = 		isset($_REQUEST['code'])?$_REQUEST['code']:null;
 $state =		isset($_REQUEST['state'])?$_REQUEST['state']:null;
 require_once(__DIR__ . '/../sso-state.inc.php'); $state = fork_sso_state_check($state); // fork: per-session SSO state
-if ($code && $state === null) { header('Location: ./?error=login-unknown#login#sso'); exit(); }
+if ($code && $state === null) { header('Location: ./?error=login-unknown#login#sso'); exit(); } require_once(__DIR__ . '/../sso-downtime.inc.php'); fork_sso_downtime_redirects(); // fork: "EVE is down" message
 $login =		isset($_REQUEST['login'])?$_REQUEST['login']:null;
 $ip = 			$_SERVER['REMOTE_ADDR'];
 
