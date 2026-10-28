@@ -1,7 +1,7 @@
 <?php
 
 // SSO redirecting
-$state = isset($_REQUEST['state'])?$_REQUEST['state']:null;
+$state = isset($_REQUEST['state']) && is_string($_REQUEST['state'])?preg_replace('/\..*$/s', '', $_REQUEST['state']):null; // fork: "<purpose>.<nonce>" (sso-state.inc.php)
 if ($state == 'evessologin' || $state == 'evessoesi') {
 	require('login.php');
 	exit();

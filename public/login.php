@@ -34,6 +34,8 @@ function login_history($ip, $username, $method, $result) {
 $mode = 		isset($_REQUEST['mode'])?$_REQUEST['mode']:null;
 $code = 		isset($_REQUEST['code'])?$_REQUEST['code']:null;
 $state =		isset($_REQUEST['state'])?$_REQUEST['state']:null;
+require_once(__DIR__ . '/../sso-state.inc.php'); $state = fork_sso_state_check($state); // fork: per-session SSO state
+if ($code && $state === null) { header('Location: ./?error=login-unknown#login#sso'); exit(); }
 $login =		isset($_REQUEST['login'])?$_REQUEST['login']:null;
 $ip = 			$_SERVER['REMOTE_ADDR'];
 
@@ -124,6 +126,9 @@ function doLogin(&$output, $account, $esi, $mysql, $ip, $username, $method) {
 }
 
 if ($mode == 'login') {
+	// fork: password login only by a same-site POST, so another site can't log a visitor into its account
+	require_once(__DIR__ . '/../csrf.inc.php'); require_once(__DIR__ . '/../login-guard.inc.php');
+	if (strtoupper(isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : '') !== 'POST' || fork_request_cross_site()) { http_response_code(403); header('Content-Type: application/json'); echo json_encode(array('field' => 'username', 'error' => 'Login refused, please reload the page.')); exit(); }
 	$username 	= isset($_REQUEST['username'])?$_REQUEST['username']:null;
 	$password 	= isset($_REQUEST['password'])?$_REQUEST['password']:null;
 	$method		= 'user';
@@ -157,6 +162,9 @@ if ($mode == 'login') {
 
 			// Log the attempt
 			login_history($ip, $username, $method, 'fail');
+		} else if (fork_login_user_throttled($mysql, $username)) { // fork: per-account limit (login-guard.inc.php)
+			$output['field'] = 'username';
+			$output['error'] = 'Too many failed logins for this account, please wait 15 minutes or log in with EVE SSO.';
 		} else {
 			$query = 'SELECT id, username, password, accounts.ban, characterID, characterName, corporationID, corporationName, admin, super, options FROM accounts LEFT JOIN preferences ON id = preferences.userID LEFT JOIN characters ON id = characters.userID WHERE username = :username';
 			$stmt = $mysql->prepare($query);
@@ -168,7 +176,7 @@ if ($mode == 'login') {
 				
 				if ($hasher->CheckPassword($password, $account->password) == false) {
 					$output['field'] = 'password';
-					$output['error'] = 'Password incorrect.';
+					$output['error'] = 'Username or password incorrect.'; // fork: same message for both (no username probing)
 
 					// Log the attempt
 					login_history($ip, $username, $method, 'fail');
@@ -191,8 +199,8 @@ if ($mode == 'login') {
 					}
 				}
 			} else {
-				$output['field'] = 'username';
-				$output['error'] = "Username doesn't exist.";
+				$output['field'] = 'password';
+				$output['error'] = 'Username or password incorrect.'; // fork: same message for both (no username probing)
 
 				// Log the attempt
 				login_history($ip, $username, $method, 'fail');
@@ -261,7 +269,7 @@ if ($mode == 'login') {
 			header('Location: ./?system=');
 			exit();
 		} else {
-			echo $esi->lastError;
+			echo htmlspecialchars((string) $esi->lastError, ENT_QUOTES, 'UTF-8'); // fork: escaped (contains the SSO's response)
 		}
 	} else {
 		if ($login == 'sso') {
@@ -314,5 +322,5 @@ if ($mode == 'login') {
 
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
-if (isset($_REQUEST['mode'])) echo json_encode($output);
+if (isset($_REQUEST['mode'])) { if (!headers_sent()) header('Content-Type: application/json'); echo json_encode($output, JSON_HEX_TAG | JSON_HEX_AMP); } // fork: JSON, not HTML
 ?>

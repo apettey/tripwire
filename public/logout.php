@@ -11,6 +11,10 @@
 //***********************************************************
 session_start();
 
+// fork: a link or form on another site can't log a visitor out (our own Logout link and button still work)
+require_once('../csrf.inc.php');
+if (fork_request_cross_site()) { header('Location: .'); exit(); }
+
 //setcookie also deletes existing cookies, must be EXACT same format as was set
 setcookie('username', '', time() -3600, '/');
 setcookie('password', '', time() -3600, '/');

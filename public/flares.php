@@ -21,6 +21,7 @@ if(!isset($_SESSION['userID'])) {
 
 require_once('../config.php');
 require_once('../db.inc.php');
+require_once('../csrf.inc.php'); fork_csrf_require(); // fork: flares change only by the app's own POST
 
 header('Content-Type: application/json');
 
