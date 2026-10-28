@@ -199,11 +199,12 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 
 			$esi = new esi();
 			if ($esi->refresh($character->refreshToken)) {
-				$query = 'UPDATE esi SET accessToken = :accessToken, refreshToken = :refreshToken, tokenExpire = :tokenExpire WHERE characterID = :characterID';
+				$query = 'UPDATE esi SET accessToken = :accessToken, refreshToken = :refreshToken, tokenExpire = :tokenExpire WHERE userID = :userID AND characterID = :characterID'; // fork: this account's row only
 				$stmt = $mysql->prepare($query);
 				$stmt->bindValue(':accessToken', $esi->accessToken);
 				$stmt->bindValue(':refreshToken', $esi->refreshToken);
 				$stmt->bindValue(':tokenExpire', date('Y-m-d H:i:s', strtotime($esi->tokenExpire)));
+				$stmt->bindValue(':userID', $userID); // fork
 				$stmt->bindValue(':characterID', $character->characterID);
 				$stmt->execute();
 
@@ -212,8 +213,9 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 				$character->tokenExpire = $esi->tokenExpire;
 			} else if ($esi->httpCode == 401 || $esi->httpCode == 403 || ($esi->httpCode == 400 && strpos((string)$esi->lastError, 'invalid_grant') !== false)) {
 				// fork: only a real refusal drops the character; 420/429/5xx or a paused ESI keep it (stale token) for the next poll
-				$query = 'DELETE FROM esi WHERE characterID = :characterID';
+				$query = 'DELETE FROM esi WHERE userID = :userID AND characterID = :characterID'; // fork: this account's row only
 				$stmt = $mysql->prepare($query);
+				$stmt->bindValue(':userID', $userID); // fork
 				$stmt->bindValue(':characterID', $character->characterID);
 				$stmt->execute();
 

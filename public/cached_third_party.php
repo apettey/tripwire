@@ -14,11 +14,11 @@ $fetch_data = array(
 	'eve-scout-signatures' => array('url' => 'https://api.eve-scout.com/v2/public/signatures', 'cache_file' => 'thera.json', 'cache_for' => 300),
 	'eve-scout-observations' => array('url' => 'https://api.eve-scout.com/v2/public/observations', 'cache_file' => 'eve-scout-observations.json', 'cache_for' => 600, 'refresh' => 'environment_tags_refresh'),	// fork: storms (environment tags)
 	'fw' => array('url' => 'https://esi.evetech.net/fw/systems/?datasource=tranquility', 'cache_file' => 'fw.json', 'cache_for' => 3600),
-)[$_REQUEST['key']];
+)[is_string($_REQUEST['key'] ?? null) ? $_REQUEST['key'] : ''] ?? null; // fork: no warning for a missing/unknown key
 
 if(!isset($fetch_data)) { 
 	http_response_code(400);
-	die(json_encode(array(reason => 'Unknown cache key')));
+	die(json_encode(array('reason' => 'Unknown cache key')));
 }
 
 // Fetch into cache if not set
@@ -30,7 +30,7 @@ else if (!file_exists($cache_file) || (time() - filemtime($cache_file) >= $fetch
 	if($in_resource) file_put_contents($cache_file, $in_resource);
 	else { 
 		http_response_code(500);
-		die(print_r(error_get_last(), true));
+		error_log('cached_third_party ' . $_REQUEST['key'] . ': ' . print_r(error_get_last(), true)); die(json_encode(array('reason' => 'Fetch failed'))); // fork: details to the log, not the browser
 	}
 }
 

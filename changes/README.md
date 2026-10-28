@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-28 | [PHP security hardening](2026-10-28-php-security-hardening/README.md) | CSP/HSTS headers, no PHP errors in cached_third_party.php, ESI token updates scoped to the user, Adminer on localhost |
 | 2026-10-28 | [EVE SSO downtime message](2026-10-28-sso-downtime-message/README.md) | SSO login/registration during EVE downtime says the servers are down instead of "Unknown error" |
 | 2026-10-28 | [PHP security fixes](2026-10-28-php-security-fixes/README.md) | Login link can no longer log you into another account and run its HTML; refresh tokens stay on the server; SSO state checked; flares/ping/ESI delete/tracking/logout need a same-site request; per-account login limit; signature creator from the session |
 | 2026-10-24 | [CKEditor 4.22.1](2026-10-24-ckeditor-4-22-1/README.md) | Comment editor upgraded from CKEditor 4.4.6 to 4.22.1 (retire.js: 12 advisories to 0), same look and plugins; `tools/ckeditor/update.sh` rebuilds it |

@@ -90,7 +90,7 @@ services:
     networks:
       - tripwire
     ports:
-      - 9000:8080
+      - "127.0.0.1:9000:8080" # fork: Adminer only from the host itself
 
   #################################################################
   # DB-SEED SERVICE
