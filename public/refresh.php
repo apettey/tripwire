@@ -18,6 +18,7 @@ require_once('../config.php');
 require_once('../settings.php');
 require_once('../db.inc.php');
 require_once('../note-html.inc.php');
+require_once('../csrf.inc.php'); // fork: tracking and esiDelete need the session's CSRF token
 
 header('Content-Type: application/json');
 /**
@@ -104,7 +105,7 @@ if (isset($_SESSION['oauth']) && isset($_SESSION['oauth']['tokenExpire'])) {
 			}
 		}
 	}
-	$output['oauth'] = $_SESSION['oauth'];
+	$output['oauth'] = array_diff_key($_SESSION['oauth'], array('refreshToken' => 1)); // fork: refresh tokens stay on the server
 }
 
 /**
@@ -112,7 +113,7 @@ if (isset($_SESSION['oauth']) && isset($_SESSION['oauth']['tokenExpire'])) {
 // Character Tracking
 // *********************
 */
-if (isset($_REQUEST['tracking'])) {
+if (isset($_REQUEST['tracking']) && fork_csrf_valid()) { // fork: not from a link or another site
 	foreach ($_REQUEST['tracking'] as $track) {
 		if(!isset($track['systemID'])) { continue; }	// can't track if we didn't get location yet
 		
@@ -177,7 +178,7 @@ if (isset($_REQUEST['tracking'])) {
 if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['esiDelete'])) {
 	$output['esi'] = array();
 
-	if (isset($_REQUEST['esiDelete'])) {
+	if (isset($_REQUEST['esiDelete']) && fork_csrf_valid()) { // fork: not from a link or another site
 		foreach ($_REQUEST['esiDelete'] as $characterID) {
 			$query = 'DELETE FROM esi WHERE userID = :userID AND characterID = :characterID';
 			$stmt = $mysql->prepare($query);
@@ -221,6 +222,7 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 			}
 		}
 
+		unset($character->refreshToken); // fork: refresh tokens stay on the server
 		$output['esi'][$character->characterID] = $character;
 	}
 }

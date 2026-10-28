@@ -95,12 +95,13 @@ class esi {
 	}
 
 	public function login($scope = NULL, $state = 'evessologin') {
+		require_once(__DIR__ . '/sso-state.inc.php'); // fork: per-session nonce in the state
 		$params = array(
 			'response_type' => 'code',
 			'redirect_uri' => EVE_SSO_REDIRECT,
 			'client_id' => EVE_SSO_CLIENT,
 			'scope' => $scope,
-			'state' => $state
+			'state' => fork_sso_state_new($state)
 		);
 
 		header('Location: '. self::$loginUrl . '/authorize?' . http_build_query($params), true, 302);

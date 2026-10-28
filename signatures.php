@@ -206,6 +206,8 @@ function findWormhole($id, $mysql) {
 }
 
 function addSignature($signature, $mysql) {
+    // fork: the creator is whoever is logged in, not names sent with the request
+    unset($signature['createdByID'], $signature['createdByName'], $signature['modifiedByID'], $signature['modifiedByName']);
     $signature = new signature($signature);
 
     $query = 'INSERT INTO signatures (signatureID, systemID, type, name, bookmark, lifeTime, lifeLeft, lifeLength, createdByID, createdByName, modifiedByID, modifiedByName, modifiedTime, maskID)
@@ -450,10 +452,11 @@ function addAutomapMass($wormhole, $sig1, $sig2, $automap, $mysql) {
     // $automap is in the payload (see automap.js), the other objects have been db-resolved
     $maskID = $_SESSION['mask'];
 
-    $query = 'SELECT characterName, shipTypeID, shipTypeName FROM tracking WHERE characterID = :characterID AND maskID = :maskID';
+    $query = 'SELECT characterName, shipTypeID, shipTypeName FROM tracking WHERE characterID = :characterID AND maskID = :maskID AND userID = :userID'; // fork: own characters only
     $stmt = $mysql->prepare($query);
     $stmt->bindValue(':characterID', $automap['character']);
     $stmt->bindValue(':maskID', $maskID);
+    $stmt->bindValue(':userID', $_SESSION['userID']);
     $stmt->execute();
 
     $tracking = $stmt->fetch(PDO::FETCH_ASSOC);

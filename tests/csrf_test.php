@@ -1,5 +1,5 @@
 <?php
-// Fork-owned: tests for csrf.inc.php (the CSRF token options.php and masks.php require). No database needed.
+// Fork-owned: tests for csrf.inc.php (the CSRF token and the cross-site check). No database needed.
 //   docker compose -f docker-compose.dev.yml exec -T app php tests/csrf_test.php
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 
@@ -49,6 +49,29 @@ check('logged out fails', !fork_csrf_valid());
 $_SESSION = array('appCsrf' => '', 'appCsrfUser' => '', 'userID' => 9);
 request('POST', '');
 check('empty session token fails', !fork_csrf_valid());
+
+// fork_request_cross_site: Sec-Fetch-Site and Origin
+function site($fetch, $origin, $host = 'tripwire.example.com') {
+	unset($_SERVER['HTTP_SEC_FETCH_SITE'], $_SERVER['HTTP_ORIGIN']);
+	if ($fetch !== null) $_SERVER['HTTP_SEC_FETCH_SITE'] = $fetch;
+	if ($origin !== null) $_SERVER['HTTP_ORIGIN'] = $origin;
+	$_SERVER['HTTP_HOST'] = $host;
+	return fork_request_cross_site();
+}
+check('no headers is not cross-site', !site(null, null));
+check('same-origin fetch passes', !site('same-origin', 'https://tripwire.example.com'));
+check('typed URL (none) passes', !site('none', null));
+check('cross-site fetch is refused', site('cross-site', null));
+check('same-site (sibling subdomain) is refused', site('same-site', null));
+check('other Origin is refused', site(null, 'https://evil.example'));
+check('Origin null is refused', site(null, 'null'));
+check('own Origin with port passes', !site(null, 'http://127.0.0.1:8080', '127.0.0.1:8080'));
+check('Origin on another port is refused', site(null, 'http://127.0.0.1:9000', '127.0.0.1:8080'));
+check('host compare is case-insensitive', !site(null, 'https://Tripwire.Example.com'));
+check('same-origin fetch decides alone (proxy rewrote Host)', !site('same-origin', 'https://tripwire.example.com', 'app:80'));
+check('cross-site fetch wins over a matching Origin', site('cross-site', 'https://tripwire.example.com'));
+check('IPv6 Origin with port passes', !site(null, 'http://[::1]:8080', '[::1]:8080'));
+check('Origin without a host is refused', site(null, 'https://'));
 
 echo ($failures ? "FAILED $failures of $count\n" : "OK $count checks\n");
 exit($failures ? 1 : 0);
