@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-28 | [EVE SSO downtime message](2026-10-28-sso-downtime-message/README.md) | SSO login/registration during EVE downtime says the servers are down instead of "Unknown error" |
 | 2026-10-28 | [PHP security fixes](2026-10-28-php-security-fixes/README.md) | Login link can no longer log you into another account and run its HTML; refresh tokens stay on the server; SSO state checked; flares/ping/ESI delete/tracking/logout need a same-site request; per-account login limit; signature creator from the session |
 | 2026-10-24 | [CKEditor 4.22.1](2026-10-24-ckeditor-4-22-1/README.md) | Comment editor upgraded from CKEditor 4.4.6 to 4.22.1 (retire.js: 12 advisories to 0), same look and plugins; `tools/ckeditor/update.sh` rebuilds it |
 | 2026-10-24 | [Login page on jQuery 3.7.1](2026-10-24-landing-jquery-3/README.md) | Landing/login page drops its jQuery 1.7.1 for the shared 3.7.1, removes unused fancybox/slider plugins, and validates hash-driven page ids |

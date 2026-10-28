@@ -205,6 +205,7 @@ require_once('settings.php');
 							<br/>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'login-account' ? '<p class="error">No Tripwire account for that character</p><br/>' : '' ?>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'login-unknown' ? '<p class="error">Unknown error processing EVE SSO login</p><br/>' : '' ?>
+							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'login-downtime' ? '<p class="error">EVE Online&apos;s servers aren&apos;t answering, usually the daily downtime at 11:00 UTC. Try again in a few minutes.</p><br/>' : '' ?><?php /* fork: sso-downtime.inc.php */ ?>
 							<a href="login.php?mode=sso&login=sso<?= isset($_GET['system']) ? '&amp;system=' . htmlspecialchars(urlencode((string) $_GET['system']), ENT_QUOTES, 'UTF-8') : '' ?>"><img src="//<?= CDN_DOMAIN ?>/images/landing/eve_sso.png"/></a>
 						</center>
 					</div>
@@ -236,6 +237,7 @@ require_once('settings.php');
 						<?php else: ?>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'register-account' ? '<p class="error">Tripwire account already exists for that character - use the login instead.</p><br/>' : '' ?>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'register-unknown' ? '<p class="error">Unknown error processing EVE SSO login</p><br/>' : '' ?>
+							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'register-downtime' ? '<p class="error">EVE Online&apos;s servers aren&apos;t answering, usually the daily downtime at 11:00 UTC. Try again in a few minutes.</p><br/>' : '' ?><?php /* fork: sso-downtime.inc.php */ ?>
 							<a href="register.php?mode=user"><img src="//<?= CDN_DOMAIN ?>/images/landing/eve_sso.png"/></a>
 						<?php endif ?>
 					</div>
@@ -256,6 +258,7 @@ require_once('settings.php');
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'registeradmin-account' ? '<p class="error">Tripwire account does not exist for that character - use user registration first.</p><br/>' : '' ?>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'registeradmin-roles' ? '<p class="error">Character does not meet one of the role requirements: CEO, Director, or Tripwire Admin.</p><br/>' : '' ?>
 							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'registeradmin-unknown' ? '<p class="error">Unknown error processing EVE SSO login</p><br/>' : '' ?>
+							<?= isset($_REQUEST['error']) && $_REQUEST['error'] == 'registeradmin-downtime' ? '<p class="error">EVE Online&apos;s servers aren&apos;t answering, usually the daily downtime at 11:00 UTC. Try again in a few minutes.</p><br/>' : '' ?><?php /* fork: sso-downtime.inc.php */ ?>
 							<a href="register.php?mode=admin"><img src="//<?= CDN_DOMAIN ?>/images/landing/eve_sso.png"/></a>
 						<?php endif ?>
 					</div>
