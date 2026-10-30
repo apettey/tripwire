@@ -270,3 +270,8 @@
 	line-height: 11px;
 }
 #topbar.mt-compact .multi-track-pause-glyph { display: inline-block; }
+
+/* Rings: the character that jumped last stands out; older ones are fainter. Dashed: mapped without switching to it */
+.multi-track-chip.is-recent.is-silent { outline-style: dashed; }
+.multi-track-chip.is-recent:not(.is-latest) { outline-color: rgba(60, 200, 230, .4); animation: none; }
+.multi-track-chip.is-recent:not(.is-latest)::after { opacity: .4; }

@@ -15,7 +15,8 @@ const multiTrack = {
 	FRESH_MS: 10000,			// ...and pulses for the first part of it
 	FLEET_MS: 10000,			// an alt taking the same hole as the active character within this is following it
 	SETTLE_MS: 7000,			// a switch waits this long: the active character's own jump may come a poll (5 s) later
-	NOTICE_MS: 20000,			// the switch notice (longer while a question about that jump is open)
+	NOTICE_MS: 20000,
+	AFTER_QUESTION_MS: 6000,	// a jump question closed: its answer reaches the map with the next sync (5 s)			// the switch notice (longer while a question about that jump is open)
 	PAUSE_MS: 180000,			// no automatic switching for this long after the user picks a character
 	NAME_CHARS: 18,				// chip names longer than this keep their start and end ("Bob Sc…r Hauler")
 	PODS: [33328, 670],
@@ -65,7 +66,7 @@ const multiTrack = {
 	/** The tracking list's note when more characters are switched on than are used, or "" */
 	capNote: function(opts, characters) {
 		const n = multiTrack.switchedOn(opts, characters).length;
-		return n > multiTrack.CAP ? "Following the jumps of " + n + " characters; only " + multiTrack.CAP
+		return n > multiTrack.CAP ? "Switching to " + n + " characters on jumps; only " + multiTrack.CAP
 			+ " are used (the first by name). Turn one off with its A icon." : "";
 	},
 
@@ -136,7 +137,8 @@ const multiTrack = {
 	 *  switch already decided, within windowMs. (Landing where the active character is only counts through the same
 	 *  hole: from another system it is a jump of its own.) */
 	isFleet: function(move, recent, now, windowMs) {
-		return (recent || []).some(function(r) { return r.from == move.from && r.to == move.to && now - r.at <= windowMs; });
+		const at = typeof move.at === "number" ? move.at : now;	// from the alt's own jump, not from when it is checked
+		return (recent || []).some(function(r) { return r.from == move.from && r.to == move.to && Math.abs(at - r.at) <= windowMs; });
 	},
 
 	/**
@@ -150,7 +152,10 @@ const multiTrack = {
 	planMoves: function(moves, ctx) {
 		const c = ctx || {};
 		const now = c.now || 0, windowMs = typeof c.windowMs === "number" ? c.windowMs : multiTrack.FLEET_MS;
-		const recent = (c.recent || []).filter(function(r) { return now - r.at <= windowMs; });
+		// Entries are kept from windowMs before the oldest held switch (ctx.keepSince), so a switch held longer than the
+		// window is still checked against the jumps around its own time
+		const since = Math.min(now, typeof c.keepSince === "number" ? c.keepSince : now) - windowMs;
+		const recent = (c.recent || []).filter(function(r) { return r.at >= since; });
 		const decisions = [];
 		(moves || []).filter(function(m) { return m.active; }).forEach(function(m) {
 			recent.push({ from: m.from, to: m.to, at: now, by: "self" });
@@ -197,8 +202,52 @@ const multiTrack = {
 	/** After a jump of `prevActive` (the character an automatic switch just left): the same hole as that switch within
 	 *  windowMs means it was a fleet jump whose leader showed up a poll late, so switch back */
 	switchBack: function(move, lastSwitch, now, windowMs) {
+		const at = move && typeof move.at === "number" ? move.at : now;	// re-checked later (after a question closed): its own time
 		return !!(lastSwitch && move && String(move.id) === String(lastSwitch.prevId) && move.from == lastSwitch.from
-			&& move.to == lastSwitch.to && now - lastSwitch.at <= windowMs);
+			&& move.to == lastSwitch.to && at - lastSwitch.at <= windowMs);
+	},
+
+	/**
+	 * A held / settled switch is due: switch, or not. ctx: {recent (without this character's own switch entries),
+	 * windowMs, now, activeSystemID, currentSystemID (where the character is now)}.
+	 *  - "fleet": its first jump took the same hole as the active character within windowMs of it (measured from the
+	 *    jump, however long the switch was held);
+	 *  - "stay": it is in the active character's system now (they travel together; never switch to it then);
+	 *  - "switch".
+	 * Not switching, its unmapped jumps are mapped without switching (`map`): the active character's own automap of the
+	 * same hole may have been cancelled ("Which Signature?"), and the automapper finds an existing connection anyway.
+	 */
+	releaseDecision: function(moves, ctx) {
+		const c = ctx || {};
+		const list = (moves || []).filter(Boolean);
+		if (!list.length) { return { action: "none", map: [] }; }
+		const unmapped = list.filter(function(m) { return !m.mapped; });
+		if (multiTrack.isFleet(list[0], c.recent, c.now, typeof c.windowMs === "number" ? c.windowMs : multiTrack.FLEET_MS)) {
+			return { action: "fleet", map: unmapped };
+		}
+		if (c.activeSystemID && c.currentSystemID && c.activeSystemID == c.currentSystemID) { return { action: "stay", map: unmapped }; }
+		return { action: "switch", map: [] };
+	},
+
+	/**
+	 * Carry out a replayPlan. api: {silentMap(move) -> bool (false: can't now), eve(step), blocked() (the automapper's
+	 * dialog is open: it maps one jump at a time)}. A jump that can't be mapped now (silently, or because a replayed jump
+	 * opened "Which Signature?") is returned, to be mapped later; the character then lands on its last system as a
+	 * character change, so no hole is mapped from the stop where the replay ended. Returns the deferred moves.
+	 */
+	runReplay: function(plan, moves, api) {
+		const deferred = [];
+		(plan.silent || []).forEach(function(m) { if (!api.silentMap(m)) { deferred.push(m); } });
+		const steps = plan.steps || [];
+		for (let i = 0; i < steps.length; i++) {
+			if (!steps[i].characterChange && api.blocked()) {
+				(moves || []).slice(i - 1).forEach(function(m) { if (!m.mapped) { deferred.push(m); } });
+				api.eve({ systemID: steps[steps.length - 1].systemID, characterChange: true });
+				break;
+			}
+			api.eve(steps[i]);
+		}
+		return deferred;
 	},
 
 	/** A manual pick: automatic switching pauses, nothing waits to switch */
@@ -239,6 +288,17 @@ const multiTrack = {
 		};
 	},
 
+	/** The character that jumped last (within the ring time), or null. jumps: {id: {at} | at} */
+	latestJumper: function(jumps, now) {
+		let best = null, bestAt = -Infinity;
+		Object.keys(jumps || {}).forEach(function(id) {
+			const j = jumps[id];
+			const at = typeof j === "number" ? j : (j && j.at);
+			if (typeof at === "number" && now - at < multiTrack.RECENT_MS && at > bestAt) { best = id; bestAt = at; }
+		});
+		return best;
+	},
+
 	/** "3m" (whole minutes, rounded up) for the chip; the tooltip has m:ss */
 	minutes: function(ms) {
 		return Math.max(1, Math.ceil((ms || 0) / 60000)) + "m";
@@ -246,9 +306,9 @@ const multiTrack = {
 
 	/** The A switch's tooltip */
 	toggleTitle: function(on, overCap) {
-		if (!on) { return "Follow this character's jumps: off"; }
-		return overCap ? "Follow this character's jumps: on, but over the 5 (turn another one off)"
-			: "Follow this character's jumps: on (Tripwire switches to it when it jumps a wormhole, or maps the jump while switching is paused)";
+		if (!on) { return "Switch to this character when it jumps: off: its jumps aren't mapped unless it is active"; }
+		return overCap ? "Switch to this character when it jumps: on, but over the 5 (turn another one off)"
+			: "Switch to this character when it jumps: on (while switching is paused, its jumps are mapped without switching)";
 	},
 
 	/** The active character's name for "Current System (name)", or "" (feature off, fewer than 2 opted in, or the
@@ -282,7 +342,8 @@ const multiTrack = {
 		const x = ctx || {};
 		const id = String(c.characterID);
 		const now = x.now || 0;
-		const at = x.jumps && x.jumps[id];
+		const j = x.jumps && x.jumps[id];
+		const at = typeof j === "number" ? j : (j && typeof j.at === "number" ? j.at : null);
 		const since = typeof at === "number" ? now - at : null;
 		const active = multiTrack.tracking(x.activeId) && String(x.activeId) === id;
 		return {
@@ -297,6 +358,10 @@ const multiTrack = {
 			paused: active && (x.pausedMs || 0) > 0,
 			pausedMs: active ? Math.max(0, x.pausedMs || 0) : 0,
 			stale: (x.stale && x.stale[id]) || "",
+			latest: !!(x.latestId && String(x.latestId) === id),
+			silent: !!(j && typeof j === "object" && j.kind === "mapped"),
+			route: j && typeof j === "object" && j.fromName ? j.fromName + " → " + j.toName : "",
+			stayedOn: j && typeof j === "object" ? j.stayedOn || "" : "",
 			systemName: c.systemName || "",
 			ship: c.shipTypeName || "",
 			agoSeconds: since !== null && since >= 0 ? Math.floor(since / 1000) : null
@@ -317,8 +382,14 @@ const multiTrack = {
 		} else {
 			parts.push("Click to make this the active character");
 		}
-		if (state.queued) { parts.push("jump waiting: switches when you close the open jump question"); }
-		if (state.recent && state.agoSeconds !== null) { parts.push("jumped " + state.agoSeconds + " s ago"); }
+		if (state.queued) { parts.push("switches to it when you close the open jump question"); }
+		if (state.recent && state.agoSeconds !== null) {
+			if (state.silent) {
+				parts.push("mapped " + (state.route ? state.route + " " : "") + state.agoSeconds + " s ago" + (state.stayedOn ? " (stayed on " + state.stayedOn + ")" : ""));
+			} else {
+				parts.push("jumped " + (state.route ? state.route + " " : "") + state.agoSeconds + " s ago");
+			}
+		}
 		return parts.join(" · ");
 	},
 
@@ -338,9 +409,10 @@ const multiTrack = {
 	},
 
 	/** Notice for a jump that waits while a question about another jump is open (plain text) */
-	waitNotice: function(name, fromName, toName) {
+	waitNotice: function(name, fromName, toName, mapped) {
 		return (name || "A character") + " jumped " + (fromName || "?") + " → " + (toName || "?")
-			+ " while a jump question was open. It is mapped and switched to as soon as you close this question.";
+			+ " while a jump question was open. " + (mapped ? "It is mapped; Tripwire switches to it when you close this question."
+				: "It is mapped and switched to as soon as you close this question.");
 	},
 
 	/** Notice after an automatic switch (plain text; the "Back to" link is added next to it) */
@@ -370,7 +442,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		const debugCharacters = {};
 		const state = {
-			last: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null,
+			last: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null, pendingBack: null,
 			lastSwitch: null, stripKey: null, labelKey: null, togglesOn: null, fitLevel: 0, noticeUntil: 0
 		};
 		let originalLabel = null;
@@ -443,7 +515,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		 * when it can't run now (the automapper's dialog is open): the caller keeps the jump for later.
 		 */
 		function silentMap(move) {
-			if (pickerOpen() || typeof tripwire.autoMapper !== "function") { return false; }
+			// One question at a time: not while "Which Signature?" or the signature prompt is on screen
+			if (questionVisible() || typeof tripwire.autoMapper !== "function") { return false; }
 			const char = characters()[move.id] || {};
 			const saved = tripwire.client.EVE;
 			tripwire.client.EVE = Object.assign({}, saved || {}, {
@@ -456,6 +529,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			catch (e) { console.warn("multi-track: could not map " + move.id + "'s jump", e); }
 			finally { tripwire.client.EVE = saved; }
 			move.mapped = true;
+			const ring = state.jumps[move.id];
+			if (ring && ring.from == move.from && ring.to == move.to) {
+				ring.kind = "mapped";
+				ring.stayedOn = saved && saved.characterName && String(saved.characterID) !== String(move.id) ? saved.characterName : "";
+			}
 			if (typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "mapped"); }
 			return true;
 		}
@@ -469,17 +547,21 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!o || !char) { return; }
 			try {
 				const plan = multiTrack.replayPlan(moves, char.systemID);
-				plan.silent.forEach(function(m) { silentMap(m); });
 				const backId = multiTrack.tracking(o.tracking.active) && chars[o.tracking.active] && String(o.tracking.active) !== id ? String(o.tracking.active) : null;
 				const first = moves[0], last = moves[moves.length - 1];
+				// The silent maps run before the switch (the active character's context is restored after each)
+				const silentFirst = { silent: plan.silent, steps: [] };
+				const deferred = multiTrack.runReplay(silentFirst, moves, { silentMap: silentMap, eve: function() {}, blocked: pickerOpen });
 				setActive(id);
-				plan.steps.forEach(function(step) {
+				const eve = function(step) {
 					tripwire.EVE(Object.assign({}, char, {
 						systemID: step.systemID, systemName: systemName(step.systemID),
 						stationID: step.characterChange && step.systemID != char.systemID ? null : char.stationID,
 						stationName: step.characterChange && step.systemID != char.systemID ? null : char.stationName
 					}), step.characterChange);
-				});
+				};
+				multiTrack.runReplay({ silent: [], steps: plan.steps }, moves, { silentMap: silentMap, eve: eve, blocked: pickerOpen })
+					.concat(deferred).forEach(function(m) { if (state.silent.indexOf(m) < 0) { state.silent.push(m); } });
 				// Not saved: the switch is this session's state. The next save the user makes carries it; a reload goes back
 				// to the last saved active character. (Saving here let a background tab overwrite settings changed elsewhere.)
 				state.lastSwitch = backId ? { prevId: backId, toId: id, from: first.from, to: first.to, at: Date.now() } : null;
@@ -598,7 +680,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			state.last = result.last;
 			const ctx = { systems: tripwire.systems, shortest: tripwire.map && tripwire.map.shortest };
 			const jumps = result.moves.filter(function(m) { return multiTrack.isMappableJump(m.from, m.to, chars[m.id], ctx); });
-			jumps.forEach(function(m) { state.jumps[m.id] = now; });	// "who just jumped": every wormhole jump, active included
+			// "Who just jumped": every wormhole jump, active included (silentMap marks the ones it maps without switching)
+			jumps.forEach(function(m) {
+				m.at = now;
+				state.jumps[m.id] = { at: now, kind: "jumped", from: m.from, to: m.to, fromName: systemName(m.from), toName: systemName(m.to) };
+			});
 
 			if (!on) {
 				state.queue = [];
@@ -616,49 +702,64 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				return;
 			}
 
-			// The character an automatic switch left took the same hole a poll late (a fleet jump it led): back to it
+			// The character an automatic switch left took the same hole a poll late (a fleet jump it led): back to it. Not
+			// while a question is on screen (it would wipe it): re-checked, from the jump's own time, once it closes.
 			const back = jumps.filter(function(m) { return multiTrack.switchBack(m, state.lastSwitch, now, multiTrack.FLEET_MS); })[0];
-			if (back) { switchBack(back); }
+			if (back) { state.pendingBack = back; }
+			if (state.pendingBack && !questionVisible()) {
+				const pb = state.pendingBack;
+				state.pendingBack = null;
+				if (multiTrack.switchBack(pb, state.lastSwitch, now, multiTrack.FLEET_MS)) { switchBack(pb); }
+			}
 
 			const used = multiTrack.optedIn(o, chars);
 			const plan = multiTrack.planMoves(jumps.filter(function(m) { return m !== back; }), {
 				recent: state.recent, now: now, windowMs: multiTrack.FLEET_MS,
+				keepSince: state.queue.length ? state.queue[0].at : now,
 				paused: pausedMs() > 0,
 				eligible: function(id) { return used.indexOf(id) >= 0 && multiTrack.tracking(o.tracking.active); }
 			});
 			state.recent = plan.recent;
 			plan.decisions.forEach(function(d) {
-				if (d.action === "switch") { state.queue.push(Object.assign({ at: now }, d.move)); }
-				else if (d.action === "map") { state.silent.push(d.move); }
+				if (d.action === "switch") { state.queue.push(d.move); }
+				// "fleet": the active character's automap of that hole may be cancelled in its dialog; the automapper finds
+				// the connection when it isn't, so mapping it again costs nothing
+				else if (d.action === "map" || d.action === "fleet") { state.silent.push(d.move); }
 			});
 
-			// Jumps mapped without switching (switching paused): one per tick, never while the automapper's dialog is open
-			if (state.silent.length && !pickerOpen()) { silentMap(state.silent.shift()); }
+			// Jumps mapped without switching: one per tick, never while a jump question is on screen, and not until a sync
+			// after one closed (its answer must reach the map first, or the automapper would ask the same question again)
+			if (questionVisible()) { state.questionAt = now; }
+			if (state.silent.length && !questionVisible() && now - (state.questionAt || 0) >= multiTrack.AFTER_QUESTION_MS) {
+				const next = state.silent.shift();
+				if (next.mapped || !silentMap(next)) { if (!next.mapped) { state.silent.unshift(next); } }
+			}
 
 			if (state.queue.length) {
 				const id = state.queue[0].id;
 				const mine = state.queue.filter(function(m) { return m.id === id; });
 				if (questionPending()) {
 					// Hold the switch so the open question isn't wiped; map the jumps meanwhile (unless the dialog is that question)
-					mine.forEach(function(m) { if (!m.mapped && !pickerOpen()) { silentMap(m); } });
+					mine.forEach(function(m) { if (!m.mapped) { silentMap(m); } });
 					if (questionVisible()) {
 						mine.forEach(function(m) {
 							if (m.noticed) { return; }
 							m.noticed = true;
 							if (typeof Notify !== "undefined") {
-								Notify.trigger(esc(multiTrack.waitNotice(chars[id] && chars[id].characterName, systemName(m.from), systemName(m.to))), "yellow", 8000);
+								Notify.trigger(esc(multiTrack.waitNotice(chars[id] && chars[id].characterName, systemName(m.from), systemName(m.to), !!m.mapped)), "yellow", 8000);
 							}
 						});
 					}
 				} else if (now - state.queue[0].at >= multiTrack.SETTLE_MS) {
 					state.queue = state.queue.filter(function(m) { return m.id !== id; });
-					// Checked again: the active character may have taken the same hole meanwhile (it came a poll later)
-					const others = state.recent.filter(function(r) { return r.by !== id; });
-					if (multiTrack.isFleet(mine[0], others, now, multiTrack.FLEET_MS)) {
-						mine.slice(1).forEach(function(m) { if (!m.mapped) { state.silent.push(m); } });	// its later jumps: map them
-					} else {
-						switchTo(mine);
-					}
+					// Checked again: the active character may have taken the same hole meanwhile (a poll later), or be there now
+					const activeNow = chars[o.tracking.active];
+					const due = multiTrack.releaseDecision(mine, {
+						recent: state.recent.filter(function(r) { return r.by !== id; }), windowMs: multiTrack.FLEET_MS, now: now,
+						activeSystemID: activeNow ? activeNow.systemID : null, currentSystemID: chars[id] ? chars[id].systemID : null
+					});
+					if (due.action === "switch") { switchTo(mine); }
+					else { due.map.forEach(function(m) { if (state.silent.indexOf(m) < 0) { state.silent.push(m); } }); }
 				}
 			}
 			ageNotice(now);
@@ -695,11 +796,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			state.queue.forEach(function(m) { queued[m.id] = true; });
 			const stale = {};
 			ids.forEach(function(id) { stale[id] = staleOf(id); });
+			const latest = multiTrack.latestJumper(state.jumps, now);
 			const states = ids.map(function(id) {
 				return multiTrack.chipState(Object.assign({}, chars[id], { characterID: id, online: onlineOf(id) }),
-					{ activeId: activeId(), jumps: state.jumps, now: now, queued: queued, used: used, pausedMs: pausedMs(), stale: stale });
+					{ activeId: activeId(), jumps: state.jumps, now: now, queued: queued, used: used, pausedMs: pausedMs(), stale: stale, latestId: latest });
 			});
-			const key = JSON.stringify(states.map(function(s) { return [s.id, s.name, s.active, s.recent, s.fresh, s.offline, s.queued, s.paused, s.mapped]; }));
+			const key = JSON.stringify(states.map(function(s) { return [s.id, s.name, s.active, s.recent, s.fresh, s.offline, s.queued, s.paused, s.mapped, s.latest, s.silent]; }));
 			let $strip = $("#multi-track-strip");
 			let rebuilt = false;
 			if (key !== state.stripKey || !$strip.length) {
@@ -714,7 +816,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 						.attr({ "data-characterid": s.id, "aria-pressed": s.active ? "true" : "false" })
 						.toggleClass("is-active", s.active).toggleClass("is-recent", s.recent)
 						.toggleClass("is-fresh", s.fresh).toggleClass("is-offline", s.offline)
-						.toggleClass("is-queued", s.queued).toggleClass("is-paused", s.paused).toggleClass("is-unmapped", !s.mapped);
+						.toggleClass("is-queued", s.queued).toggleClass("is-paused", s.paused).toggleClass("is-unmapped", !s.mapped)
+						.toggleClass("is-latest", s.latest).toggleClass("is-silent", s.silent);
 					const $img = $("<img class='multi-track-avatar' alt='' width='18' height='18' />")
 						.attr("src", "https://image.eveonline.com/Character/" + encodeURIComponent(s.id) + "_32.jpg")
 						.on("error", function() { $(this).replaceWith($("<span class='multi-track-avatar multi-track-initial' aria-hidden='true'></span>").text(s.name.charAt(0) || "?")); });
@@ -885,8 +988,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				text: multiTrack.SETTING_TEXT,
 				hint: "When one of your tracked characters jumps a wormhole, Tripwire makes it your active character (Current "
 					+ "System, Follow and the jump prompts move to it) and maps the jump. Picking a character yourself pauses "
-					+ "the switching for 3 minutes; their jumps are still mapped. Up to 5 characters are followed: choose them "
-					+ "with the A icon next to the eye and ship icons in the tracking list (click your name, top right).",
+					+ "the switching for 3 minutes; their jumps are still mapped. Up to 5 characters: choose them with the A "
+					+ "icon (Switch to this character when it jumps) next to the eye and ship icons in the tracking list "
+					+ "(click your name, top right).",
 				keywords: ["multi", "multibox", "alts", "characters", "tracking", "active character", "switch"],
 				get: function(o) { return multiTrack.enabled(o); },
 				set: function(o, on) {

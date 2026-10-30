@@ -148,7 +148,7 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.chipTitle(Object.assign({}, base, { recent: false, mapped: false, paused: true, pausedMs: 161000, stale: 'token expired' })),
 			'Alt <b> · J100002, Cheetah · location not updating (token expired) · Active character (Current System, Follow, destination) · '
 			+ 'not switched to automatically (its A switch is off or over the 5) · Auto-switch paused 2:41; other characters\' jumps are still mapped · click to resume');
-		assert.ok(/jump waiting/.test(multiTrack.chipTitle(Object.assign({}, base, { active: false, queued: true }))));
+		assert.ok(/switches to it when you close the open jump question/.test(multiTrack.chipTitle(Object.assign({}, base, { active: false, queued: true }))));
 	});
 
 	it('tipBody: names who jumped and where, and how to turn tips off', () => {
@@ -175,6 +175,8 @@ describe('multiTrack', () => {
 	});
 
 	it('waitNotice / switchText / removedNotice: plain-text notices', () => {
+		assert.strictEqual(multiTrack.waitNotice('Alt Two', 'J1', 'J2', true),
+			'Alt Two jumped J1 → J2 while a jump question was open. It is mapped; Tripwire switches to it when you close this question.');
 		assert.strictEqual(multiTrack.waitNotice('Alt Two', 'J1', 'J2'),
 			'Alt Two jumped J1 → J2 while a jump question was open. It is mapped and switched to as soon as you close this question.');
 		assert.ok(/^A character jumped \? → \?/.test(multiTrack.waitNotice()));
@@ -201,7 +203,7 @@ describe('multiTrack', () => {
 		const o = { multiTrack: { enabled: true, exclude: { 7: true } } };
 		assert.deepStrictEqual(multiTrack.switchedOn(o, many), ['1', '2', '3', '4', '5', '6']);
 		assert.deepStrictEqual(multiTrack.optedIn(o, many), ['1', '2', '3', '4', '5']);
-		assert.strictEqual(multiTrack.capNote(o, many), 'Following the jumps of 6 characters; only 5 are used (the first by name). Turn one off with its A icon.');
+		assert.strictEqual(multiTrack.capNote(o, many), 'Switching to 6 characters on jumps; only 5 are used (the first by name). Turn one off with its A icon.');
 		o.multiTrack.exclude[6] = true;
 		assert.strictEqual(multiTrack.capNote(o, many), '');
 		assert.strictEqual(multiTrack.capNote({}, many), '', 'feature off');
@@ -308,6 +310,8 @@ describe('multiTrack', () => {
 		const last = { prevId: '1', toId: '2', from: J1, to: J2, at: 1000 };
 		assert.strictEqual(multiTrack.switchBack({ id: '1', from: J1, to: J2 }, last, 6000, 10000), true);
 		assert.strictEqual(multiTrack.switchBack({ id: '1', from: J1, to: J2 }, last, 12000, 10000), false, 'too late');
+		assert.strictEqual(multiTrack.switchBack({ id: '1', from: J1, to: J2, at: 5000 }, last, 40000, 10000), true,
+			're-checked after a question closed: measured from the jump');
 		assert.strictEqual(multiTrack.switchBack({ id: '3', from: J1, to: J2 }, last, 6000, 10000), false, 'someone else');
 		assert.strictEqual(multiTrack.switchBack({ id: '1', from: J2, to: J1 }, last, 6000, 10000), false, 'another hole');
 		assert.strictEqual(multiTrack.switchBack({ id: '1', from: J1, to: J2 }, null, 6000, 10000), false);
@@ -341,8 +345,100 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.minutes(180000), '3m');
 		assert.strictEqual(multiTrack.minutes(121000), '3m');
 		assert.strictEqual(multiTrack.minutes(5000), '1m');
-		assert.strictEqual(multiTrack.toggleTitle(false), "Follow this character's jumps: off");
-		assert.ok(/^Follow this character's jumps: on \(Tripwire switches to it/.test(multiTrack.toggleTitle(true)));
+		assert.strictEqual(multiTrack.toggleTitle(false), "Switch to this character when it jumps: off: its jumps aren't mapped unless it is active");
+		assert.ok(/^Switch to this character when it jumps: on \(while switching is paused/.test(multiTrack.toggleTitle(true)));
 		assert.ok(/over the 5/.test(multiTrack.toggleTitle(true, true)));
+	});
+
+	describe('round 4: holds, replays, fleet mapping', () => {
+		const NOW = 100000;
+		const mv = (id, from, to, active, at) => ({ id: String(id), from, to, active: !!active, at: at === undefined ? NOW : at });
+
+		it('E1: Logi jumps, the active Scanner takes the same hole 4 s later, a question holds Logi for 15 s: no switch', () => {
+			// t0: Logi (2) jumps J1 -> J2; switch decided and held
+			let p = multiTrack.planMoves([mv(2, J1, J2, false, NOW)], { now: NOW, windowMs: 10000, eligible: () => true });
+			assert.deepStrictEqual(p.decisions.map(d => d.action), ['switch']);
+			const queued = p.decisions[0].move;
+			// t0+4: the active Scanner (1) takes the same hole
+			p = multiTrack.planMoves([mv(1, J1, J2, true, NOW + 4000)], { now: NOW + 4000, windowMs: 10000, recent: p.recent, keepSince: queued.at });
+			// t0+19: the question closed; ticks in between keep the entries while Logi is held
+			p = multiTrack.planMoves([], { now: NOW + 19000, windowMs: 10000, recent: p.recent, keepSince: queued.at });
+			assert.ok(p.recent.some(r => r.by === 'self'), 'the active character\'s jump is still known');
+			const due = multiTrack.releaseDecision([queued], { recent: p.recent.filter(r => r.by !== '2'), windowMs: 10000, now: NOW + 19000,
+				activeSystemID: J2, currentSystemID: J2 });
+			assert.strictEqual(due.action, 'fleet');
+			// even without the entry: Logi is where the active character is, so no switch
+			const stay = multiTrack.releaseDecision([queued], { recent: [], windowMs: 10000, now: NOW + 19000, activeSystemID: J2, currentSystemID: J2 });
+			assert.strictEqual(stay.action, 'stay');
+			assert.deepStrictEqual(stay.map, [queued], 'its jump is still mapped');
+		});
+
+		it('releaseDecision: switch when apart; nothing queued', () => {
+			assert.deepStrictEqual(multiTrack.releaseDecision([mv(2, J1, J2)], { recent: [], now: NOW, activeSystemID: HS, currentSystemID: J2 }), { action: 'switch', map: [] });
+			assert.strictEqual(multiTrack.releaseDecision([], {}).action, 'none');
+		});
+
+		it('E3: a fleet jump whose hole the active character didn\'t get mapped (dialog cancelled) is mapped from the alt', () => {
+			const queued = mv(2, J1, J2, false, NOW);
+			const due = multiTrack.releaseDecision([queued, mv(2, J2, HS, false, NOW + 1000)], {
+				recent: [{ from: J1, to: J2, at: NOW + 3000, by: 'self' }], windowMs: 10000, now: NOW + 30000, activeSystemID: J2, currentSystemID: HS });
+			assert.strictEqual(due.action, 'fleet');
+			assert.deepStrictEqual(due.map.map(m => [m.from, m.to]), [[J1, J2], [J2, HS]], 'the first jump too, not only the later ones');
+			assert.deepStrictEqual(multiTrack.releaseDecision([Object.assign(queued, { mapped: true })], {
+				recent: [{ from: J1, to: J2, at: NOW, by: 'self' }], now: NOW, activeSystemID: J2, currentSystemID: J2 }).map, [], 'already mapped');
+		});
+
+		it('isFleet / planMoves: measured from the jump, entries kept while a switch is held', () => {
+			assert.strictEqual(multiTrack.isFleet({ from: J1, to: J2, at: NOW }, [{ from: J1, to: J2, at: NOW + 4000 }], NOW + 60000, 10000), true);
+			const p = multiTrack.planMoves([], { now: NOW + 30000, windowMs: 10000, recent: [{ from: J1, to: J2, at: NOW }, { from: 1, to: 2, at: NOW - 20000 }], keepSince: NOW + 5000 });
+			assert.deepStrictEqual(p.recent.map(r => r.from), [J1], 'kept from 10 s before the held switch');
+		});
+
+		describe('E2: runReplay', () => {
+			const run = (plan, moves, blockAfter, silentOk) => {
+				const eves = [];
+				let replayed = 0;
+				const deferred = multiTrack.runReplay(plan, moves, {
+					silentMap: m => { if (silentOk === false) { return false; } m.mapped = true; return true; },
+					eve: step => { eves.push(step); if (!step.characterChange) { replayed++; } },
+					blocked: () => blockAfter !== undefined && replayed >= blockAfter
+				});
+				return { eves, deferred };
+			};
+			const a = () => ({ id: '2', from: J1, to: J2 }), b = () => ({ id: '2', from: J2, to: HS }), c = () => ({ id: '2', from: HS, to: HS2 });
+
+			it('all replayed in order', () => {
+				const moves = [a(), b(), c()];
+				const r = run(multiTrack.replayPlan(moves, HS2), moves);
+				assert.deepStrictEqual(r.eves.map(e => [e.systemID, e.characterChange]), [[J1, true], [J2, false], [HS, false], [HS2, false]]);
+				assert.deepStrictEqual(r.deferred, []);
+			});
+			it('the first replayed jump opens "Which Signature?": the rest wait, the character lands on its last system', () => {
+				const moves = [a(), b(), c()];
+				const r = run(multiTrack.replayPlan(moves, HS2), moves, 1);
+				assert.deepStrictEqual(r.eves.map(e => [e.systemID, e.characterChange]), [[J1, true], [J2, false], [HS2, true]]);
+				assert.deepStrictEqual(r.deferred.map(m => [m.from, m.to]), [[J2, HS], [HS, HS2]], 'mapped later, in order');
+			});
+			it('silent maps that can\'t run now are returned too', () => {
+				const moves = [a(), b()];
+				const plan = multiTrack.replayPlan(moves, HS2);	// moved on: silent + character change
+				const r = run(plan, moves, undefined, false);
+				assert.deepStrictEqual(r.deferred.map(m => [m.from, m.to]), [[J1, J2], [J2, HS]]);
+				assert.deepStrictEqual(r.eves.map(e => [e.systemID, e.characterChange]), [[HS2, true]]);
+			});
+		});
+
+		it('E7: latest jumper and the mapped-without-switching tooltip', () => {
+			assert.strictEqual(multiTrack.latestJumper({ 1: { at: NOW - 5000 }, 2: { at: NOW - 1000 }, 3: NOW - 200000 }, NOW), '2');
+			assert.strictEqual(multiTrack.latestJumper({}, NOW), null);
+			const c = { characterID: 2, characterName: 'Logi', systemName: 'J2', shipTypeName: 'Scimitar' };
+			const st = multiTrack.chipState(c, { activeId: '1', now: NOW, latestId: '2',
+				jumps: { 2: { at: NOW - 12000, kind: 'mapped', fromName: 'J100001', toName: 'J100002', stayedOn: 'Bob Scanner' } } });
+			assert.deepStrictEqual([st.recent, st.latest, st.silent], [true, true, true]);
+			assert.ok(/mapped J100001 → J100002 12 s ago \(stayed on Bob Scanner\)$/.test(multiTrack.chipTitle(st)), multiTrack.chipTitle(st));
+			const sw = multiTrack.chipState(c, { activeId: '2', now: NOW, latestId: '1', jumps: { 2: { at: NOW - 3000, kind: 'jumped', fromName: 'A', toName: 'B' } } });
+			assert.deepStrictEqual([sw.latest, sw.silent], [false, false]);
+			assert.ok(/jumped A → B 3 s ago$/.test(multiTrack.chipTitle(sw)));
+		});
 	});
 });

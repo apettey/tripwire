@@ -30,6 +30,8 @@ J171225, viewed) were mapped onto the chain without switching:
 
 ![mapped while paused](silent-map.jpg)
 
+Mapped without switching: dashed rings, the last jumper bright: ![rings](mapped-rings.png)
+
 | Which Signature? names the jumper (never cut) | Signature prompt | Return bookmark |
 | --- | --- | --- |
 | ![which signature](which-signature.png) | ![sig prompt](sig-prompt.png) | ![return pop-up](return-popup.png) |
@@ -43,7 +45,7 @@ J171225, viewed) were mapped onto the chain without switching:
 Toggle: Settings > Wormhole Jumps & Mass > "My characters: Map jumps of all my tracked characters" (`options.multiTrack =
 {enabled, exclude: {characterID: true}}`). **Off by default** (missing key = off), a deliberate exception to "on by
 default": it changes which character is active, and the user asked for strict opt-in. Up to 5 characters (sorted by name)
-are used; linking stays unlimited. Each character's A icon in the tracking list ("Follow this character's jumps") chooses whether Tripwire picks up its jumps. Settings > Reset
+are used; linking stays unlimited. Each character's A icon in the tracking list ("Switch to this character when it jumps") chooses whether Tripwire picks up its jumps. Settings > Reset
 deletes `multiTrack`. Left out of Mask Admin defaults (it holds the user's own character IDs).
 
 No toggle for the rest, both pure improvements: naming the character in jump questions (only with 2+ tracked
@@ -56,23 +58,32 @@ when a non-active linked character makes a mappable wormhole jump while the feat
 
 ## Change
 
-- **When it switches, and when it maps without switching** (pure `planMoves`, `replayPlan`, `switchBack`, mocha-tested):
+- **When it switches, and when it maps without switching** (pure `planMoves`, `releaseDecision`, `replayPlan`,
+  `runReplay`, `switchBack`, mocha-tested):
   - A followed character's (A switch on) wormhole jump makes it active after 7 s (the active character's own jump can
     come a 5 s poll later); all its waiting jumps are replayed in order, so no false hole from the first stop to the
-    last. If it moved on meanwhile, its jumps are mapped without switching and it only becomes active.
+    last. If it moved on meanwhile, its jumps are mapped without switching and it only becomes active. If a replayed
+    jump opens "Which Signature?", the rest are mapped after it closes and the character lands on its last system.
+  - Never switches to a character that is in the active character's system when the switch is due; the fleet window is
+    measured from the alt's own jump, however long the switch was held.
   - Fleet jumps: an alt through the same hole (from → to) as the active character within 10 s doesn't switch (nothing
-    to map: the active character mapped it). Several alts through one hole without the active character: one switch,
+    to switch to; its jump is mapped too, which finds the active character's connection, or maps it if that
+    character's "Which Signature?" was cancelled). Several alts through one hole without the active character: one switch,
     the others follow it. If the character a switch just left takes the same hole within 10 s (it was leading, a poll
-    late), Tripwire switches back to it without a notice.
+    late), Tripwire switches back to it without a notice (after any open question closes).
   - **Mapping without switching:** after a manual pick (chip, tracking list, "Back to", Ctrl+K) switching pauses for 3
     minutes, but the other characters' jumps are still mapped: the automapper runs with the jumper's context (its
     tripwire.client.EVE for the one synchronous call: station and pod checks, `automap.character`, the "Which
     Signature?" dialog naming it) and the active character's straight after. Current System, Follow and the jump
-    pop-ups don't move. The active chip says "paused 3m"; a click resumes.
+    pop-ups don't move. The active chip says "paused 3m"; a click resumes. A character mapped this way gets a dashed
+    ring and the tooltip "mapped J1 → J2 12 s ago (stayed on Main)"; only the last jumper's ring is bright.
+  - Never two questions at once: nothing is mapped without switching while "Which Signature?" or the signature prompt
+    is on screen, nor until the next sync after one closed.
   - While a question about the last jump is on screen or still coming ("Which Signature?", the signature prompt and its
     retries) the switch waits, so the question isn't wiped; the jumps are mapped meanwhile (unless the question is the
     automapper's own dialog, which allows one at a time). The chip gets a queued ring; a notice only when a question is
-    actually visible. The return-bookmark panel is passive and holds nothing.
+    actually visible ("It is mapped; Tripwire switches to it when you close this question."). The return-bookmark
+    panel is passive and holds nothing.
   - No switching with no active character (the user untracked on purpose), when turned off or after Reset.
   - Each automatic switch shows one notice "Now on X (jumped A → B) · Back to Y" (replaced by the next; it stays while a
     question about that jump is open, else 20 s).
