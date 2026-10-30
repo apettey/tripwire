@@ -7,7 +7,7 @@
 	gap: 6px;
 	box-sizing: border-box;
 	max-width: 380px;
-	max-height: calc(100vh - 54px);
+	max-height: calc(100vh / var(--fn-zoom, 1) - 54px);
 	overflow: hidden auto;
 	scrollbar-width: none;
 	padding: 2px;
@@ -50,7 +50,7 @@
 
 .fn-close-all {
 	display: none;
-	order: -1;
+	order: 1;	/* on the far side: appearing must not push the pop-ups' close buttons away from under the mouse */
 	pointer-events: auto;
 	padding: 1px 8px;
 	background: rgba(20, 24, 30, 0.95);

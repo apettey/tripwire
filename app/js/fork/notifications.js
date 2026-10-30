@@ -59,6 +59,8 @@ const forkNotifications = {
 		$dock.removeClass(forkNotifications.CORNERS.map(function(c) { return "fn-" + c[0]; }).join(" "))
 			.addClass("fn-" + forkNotifications.corner(opts))
 			.toggleClass("fn-see-through", forkNotifications.seeThrough(opts));
+		// Settings > UI Scale zooms the body, and the dock's height with it
+		$dock[0].style.setProperty("--fn-zoom", parseFloat(document.body.style.zoom) || 1);
 	},
 
 	/** Show Close all from two pop-ups up (a pop-up on its way out no longer counts) */
@@ -140,8 +142,11 @@ const forkNotifications = {
 		$(document).on("keydown.forkNotifications", function(e) {
 			if (e.key !== "Escape" || e.isDefaultPrevented()) { return; }
 			if ($(e.target).closest("input, textarea, select, [contenteditable='true'], .ui-dialog").length) { return; }
-			if ($(".ui-widget-overlay:visible, #cp-overlay:not(.cp-hidden)").length) { return; }
+			if ($(".ui-widget-overlay:visible, #cp-overlay:not(.cp-hidden), #ph-menu:visible").length) { return; }
+			if (typeof forkHintsUI !== "undefined" && forkHintsUI.tip) { return; }	// Esc closes the tip first
+			if (!$("#" + forkNotifications.DOCK_ID).find(forkNotifications.ITEMS).not(".fn-closing").length) { return; }
 			forkNotifications.closeAll();
+			if (typeof forkUsage !== "undefined") { forkUsage.track("notifications", "closed_all"); }
 		});
 
 		forkSettings.register({
