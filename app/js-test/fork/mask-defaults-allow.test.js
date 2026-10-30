@@ -26,6 +26,7 @@ describe('maskDefaults allow-list', () => {
 		keys.delete('favoritesPanel');   // left out on purpose: it carries the admin's own favourite systems
 		keys.delete('usageStats');       // left out on purpose: sending usage statistics is each user's own privacy choice
 		keys.delete('hints');            // left out on purpose: feature tips are each user's own (and hold their tip history)
+		keys.delete('multiTrack');       // left out on purpose: which of my own characters switch is each user's own choice
 		assert.deepStrictEqual([...keys].sort(), server);
 	});
 

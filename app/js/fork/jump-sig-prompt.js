@@ -163,6 +163,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		let jumpSeq = 0;
 		let timers = [];
 		let hideTimer = null;
+		let jumpWho = null;	// who jumped ({id, name}), taken at the jump
+		let pendingUntil = 0, asyncPending = 0;	// the question may still show (retries, the jump log check)
 		let pickerSeen = false;
 
 		function opts() { return typeof options !== "undefined" ? options : undefined; }
@@ -287,10 +289,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function showPanel(seq, from, to, hole, candidates) {
 			hidePanel();
+			const who = jumpWho;	// 2+ tracked characters: whose jump this is, taken at the jump (multi-track.js)
+			const question = who ? "Which signature did " + who.name + " jump through?" : "Which signature did you jump through?";
 			const summary = holeNaming.systemName(from) + " → " + holeNaming.systemName(to);
-			const $panel = $("<div id='jump-sig-panel' role='dialog' aria-live='polite' tabindex='-1'></div>").attr("aria-label", "Which signature did you jump through? " + summary);
+			const $panel = $("<div id='jump-sig-panel' role='dialog' aria-live='polite' tabindex='-1'></div>").attr("aria-label", question + " " + summary);
 			const $head = $("<div class='jump-sig-head'></div>");
-			$head.append($("<span class='jump-sig-title'>Which signature did you jump through?</span>"), $("<span class='jump-sig-route'></span>").text(summary));
+			const $title = $("<span class='jump-sig-title'></span>");
+			if (who) {
+				$title.append("Which signature did ", $("<span class='jump-who'></span>").text(who.name).attr("title", who.name), " jump through?");
+			} else {
+				$title.text(question);
+			}
+			$head.append($title, $("<span class='jump-sig-route'></span>").text(summary));
 			const $close = $("<button type='button' class='jump-sig-close' aria-label='Skip'>✕</button>").on("click", function(e) { e.preventDefault(); hidePanel(); });
 			$head.append($close);
 			const $list = $("<div class='jump-sig-list'></div>");
@@ -357,7 +367,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!holes.length) { return false; }
 			if (holes.length === 1) { show(seq, from, to, holes[0]); return true; }
 			const me = myNames();
+			asyncPending = seq;
 			Promise.all(holes.map(function(h) { return jumpLog(h.wormhole.id); })).then(function(all) {
+				if (asyncPending === seq) { asyncPending = 0; }
 				const logs = {};
 				holes.forEach(function(h, i) { logs[h.wormhole.id] = all[i]; });
 				const hole = jumpSigPrompt.pickHole(holes, logs, me, jumpAt, jumpSigPrompt.JUMP_WINDOW_MS);
@@ -367,19 +379,25 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function onJump(from, to) {
+			try { jumpWho = typeof multiTrack !== "undefined" && typeof multiTrack.jumperNow === "function" ? multiTrack.jumperNow() : null; } catch (e) { jumpWho = null; }
 			jumpSeq++;
 			const seq = jumpSeq;
 			clearTimers();
 			hidePanel();
 			const jumpAt = serverNow();
 			pickerSeen = pickerOpen();	// the automapper ran just before: its picker is up if it needs an answer
+			pendingUntil = 0;
 			if (!jumpSigPrompt.active(maskMode(), opts()) || !wormholeJump(from, to)) { return; }
+			// Until the question shows or it is clear it won't, multi-track.js holds other characters' switches (busy())
+			pendingUntil = Date.now() + Math.max.apply(null, jumpSigPrompt.RETRY_DELAYS_MS) + 1500;
 			jumpSigPrompt.RETRY_DELAYS_MS.forEach(function(delay, i) {
-				timers.push(setTimeout(function() { if (attempt(seq, from, to, jumpAt)) { clearTimers(); } }, delay));
+				timers.push(setTimeout(function() { if (attempt(seq, from, to, jumpAt)) { clearTimers(); pendingUntil = 0; } }, delay));
 			});
 		}
 		jumpSigPrompt.onJump = onJump;	// handy for testing from the console
 		jumpSigPrompt.hide = hidePanel;
+		/** The question is up, or may still come for the last jump (multi-track.js waits for it) */
+		jumpSigPrompt.busy = function() { return $("#jump-sig-panel").length > 0 || Date.now() < pendingUntil || asyncPending !== 0; };
 
 		const previousEVE = tripwire.EVE;
 		tripwire.EVE = function(EVE, characterChange) {

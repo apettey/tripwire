@@ -222,12 +222,22 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}, delay);
 		}
 
+		// Who jumped ({id, name}, 2+ tracked characters only; multi-track.js), taken at the jump: the active character may
+		// change before the panel shows
+		let jumpWho = null;
+		function jumperNow() {
+			try { return typeof multiTrack !== "undefined" && typeof multiTrack.jumperNow === "function" ? multiTrack.jumperNow() : null; }
+			catch (e) { return null; }
+		}
+
 		function showPanel(from, to, result) {
 			hidePanel();
-			const summary = "Jumped " + systemName(from) + " → " + systemName(to) + " via " + result.token;
+			const who = jumpWho ? jumpWho.name : "";
+			const summary = (who ? who + " jumped " : "Jumped ") + systemName(from) + " → " + systemName(to) + " via " + result.token;
 			const $panel = $("<div id='jump-return-panel' role='dialog' aria-live='polite' tabindex='-1'></div>")
 				.attr({ "aria-label": summary + ". Return bookmark " + result.text, title: summary });
 			const $label = $("<span class='jump-return-label'>Return bookmark</span>");
+			if (who) { $label.addClass("jump-return-label-who").text(" · Return bookmark").prepend($("<span class='jump-who'></span>").text(who)); }
 			const $button = $("<button type='button' class='jump-return-copy'></button>")
 				.attr("title", "Copy " + result.text + " (bookmark name for the way back to " + systemName(from) + ")");
 			const $text = $("<span class='jump-return-text'></span>").text(result.text);
@@ -321,6 +331,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function onJump(from, to) {
+			jumpWho = jumperNow();
 			if (typeof forkHints !== "undefined") { forkHints.emit("jump.done", { from: from, to: to }); }
 			jumpSeq++;
 			const seq = jumpSeq;

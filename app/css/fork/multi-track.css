@@ -1,0 +1,277 @@
+/* Fork: multi-character jump tracking (app/js/fork/multi-track.js). Chips after "Current System" in the header. */
+#multi-track-strip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 4px;
+	vertical-align: middle;
+	line-height: normal;
+	white-space: nowrap;
+}
+#multi-track-strip .multi-track-sep { margin-right: 2px; }	/* the header's own "|" (an h3, like its neighbours) */
+
+.multi-track-chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 22px;
+	padding: 0 3px;
+	border: 1px solid #555;
+	border-radius: 11px;
+	background: rgba(40, 40, 40, .85);
+	color: #ccc;
+	font: inherit;
+	font-size: 11px;
+	font-weight: normal;
+	cursor: pointer;
+	opacity: .8;
+	outline-offset: 1px;
+	transition: opacity .2s, border-color .2s;
+}
+.multi-track-chip:hover { opacity: 1; border-color: #999; }
+.multi-track-chip:focus { outline: none; }
+.multi-track-chip:focus-visible { outline: 1px dotted #ccc; }
+
+.multi-track-avatar {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	flex: none;
+	display: inline-block;
+}
+.multi-track-initial {
+	background: #444;
+	color: #ddd;
+	font-size: 10px;
+	line-height: 18px;
+	text-align: center;
+}
+
+/* Names only on the chips that matter (active, just jumped); every name on wide screens */
+.multi-track-name {
+	display: none;
+	max-width: 90px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	padding-right: 4px;
+}
+.multi-track-chip.is-active .multi-track-name,
+.multi-track-chip.is-recent .multi-track-name { display: inline-block; max-width: 120px; }
+@media (min-width: 1600px) {
+	.multi-track-name { display: inline-block; max-width: 72px; }
+}
+@media (max-width: 1150px) {
+	.multi-track-chip.is-recent:not(.is-active) .multi-track-name { display: none; }
+	.multi-track-name { max-width: 70px; }
+}
+
+/* Active: the tracking list's orange border (only here, never on the other states) */
+.multi-track-chip.is-active {
+	border-color: darkorange;
+	color: orange;
+	opacity: 1;
+	box-shadow: 0 0 0 1px darkorange inset;
+}
+
+/* Just jumped (a minute): a steady 2px cyan ring (outline, so it never touches the active border) and a cyan dot top
+   right; the ring pulses a few times first */
+.multi-track-chip.is-recent {
+	opacity: 1;
+	outline: 2px solid #3cc8e6;
+}
+.multi-track-chip.is-recent::after {
+	content: "";
+	position: absolute;
+	top: -3px;
+	right: -3px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #3cc8e6;
+	box-shadow: 0 0 0 1px #000;
+}
+.multi-track-chip.is-fresh { animation: multi-track-pulse 1.2s ease-in-out 8; }
+@keyframes multi-track-pulse {
+	0%, 100% { outline-color: #3cc8e6; outline-offset: 1px; }
+	50% { outline-color: rgba(60, 200, 230, .45); outline-offset: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.multi-track-chip.is-fresh { animation: none; }
+}
+
+/* Offline: dimmed, grey picture and a hollow grey dot bottom right */
+.multi-track-chip.is-offline { opacity: .55; }
+.multi-track-chip.is-offline .multi-track-avatar { filter: grayscale(1); }
+.multi-track-chip.is-offline::before {
+	content: "";
+	position: absolute;
+	bottom: -2px;
+	right: -2px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	border: 1px solid #aaa;
+	background: #222;
+}
+.multi-track-chip.is-offline:hover { opacity: .85; }
+
+/* "Current System (Alt One):" in the header's own text colour, the name capped */
+.multi-track-who {
+	display: inline-block;
+	max-width: 110px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
+	font-weight: normal;
+}
+
+/* Header too narrow (multi-track.js fit, classes on #topbar): names off, then only the active / last jumper and
+   "+N", then no strip, then no name in "Current System" */
+#topbar.mt-compact .multi-track-name { display: none !important; }
+.multi-track-more {
+	display: none;
+	color: #aaa;
+	font-size: 11px;
+	padding: 0 2px;
+	cursor: default;
+}
+#topbar.mt-min .multi-track-chip:not(.is-active):not(.is-recent) { display: none; }
+#topbar.mt-min .multi-track-more { display: inline; }
+#topbar.mt-nostrip #multi-track-strip { display: none !important; }
+#topbar.mt-noname .multi-track-who-wrap { display: none; }
+
+/* Tracking list: the per-character "auto-map this character's jumps" switch, on the eye / ship icons' row and in their
+   style (orange on, grey off, struck through in grey while off) */
+#tracking .control-group.multi-track-has-toggle { white-space: nowrap; }
+#tracking .multi-track-toggle {
+	position: relative;
+	color: #aaa;
+}
+#tracking .multi-track-toggle.active { color: orange; }
+#tracking .multi-track-toggle:not(.active)::after {
+	content: "";
+	position: absolute;
+	left: -1px;
+	right: -1px;
+	top: 50%;
+	border-top: 1px solid #888;
+	transform: rotate(-35deg);
+}
+#tracking .multi-track-toggle:focus { outline: none; }
+#tracking .multi-track-toggle:focus-visible { outline: 1px dotted #ccc; }
+
+/* Jump questions and pop-ups name the character that jumped (2+ tracked characters): the automapper's
+   "Which Signature?" dialog, the signature prompt, the return bookmark */
+.jump-who {	/* never cut: a long name wraps */
+	font-weight: bold;
+	color: #fff;
+	overflow-wrap: anywhere;
+}
+.jump-who-banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 8px;
+	padding: 4px 6px;
+	border-left: 3px solid darkorange;
+	background: rgba(255, 140, 0, .08);
+	font-size: 1.2em;
+}
+.jump-who-banner .jump-who-text { min-width: 0; }
+.jump-who-avatar { width: 28px; height: 28px; border-radius: 3px; flex: none; }
+
+/* Header too narrow: cap a long tracked character name top right (upstream's #user-track-name) */
+#topbar.mt-capuser #user-track-name {
+	display: inline-block;
+	max-width: 120px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
+}
+#topbar.mt-capuser-tight #user-track-name { max-width: 70px; }
+
+/* The active chip while automatic switching is paused after a manual pick ("paused 2:41"; click the chip to resume) */
+.multi-track-pause {
+	font-size: 10px;
+	color: #ddd;
+	background: rgba(255, 255, 255, .12);
+	border-radius: 7px;
+	padding: 0 5px;
+	margin-right: 2px;
+}
+#topbar.mt-compact .multi-track-pause { display: none; }
+.multi-track-chip.is-paused { border-style: dashed; }
+
+/* A jump waiting while a jump question is open: a yellow dot bottom left */
+.multi-track-chip.is-queued > .multi-track-avatar { box-shadow: 0 0 0 2px #e5c100; }
+
+/* The active character with its A switch off (or over the 5): not auto-mapped */
+.multi-track-chip.is-active.is-unmapped { box-shadow: none; border-style: dotted; }
+
+/* "Now on Alt (jumped A → B) · Back to Main" after an automatic switch: one at a time, top left under the header */
+#multi-track-notice {
+	position: fixed;
+	top: 48px;
+	left: 25px;
+	z-index: 1001;
+	max-width: calc(100vw - 50px);
+	padding: 5px 8px;
+	border: 1px solid #555;
+	border-left: 3px solid darkorange;
+	border-radius: 3px;
+	background: rgba(20, 20, 20, .95);
+	color: #ddd;
+	font-size: 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+}
+#multi-track-notice button {
+	font: inherit;
+	background: none;
+	border: 0;
+	color: orange;
+	cursor: pointer;
+	padding: 0 2px;
+}
+#multi-track-notice .multi-track-back { text-decoration: underline; }
+#multi-track-notice .multi-track-notice-close { color: #999; margin-left: 6px; }
+#multi-track-notice button:focus-visible { outline: 1px dotted #ccc; }
+
+/* Tracking list: more characters switched on than are used */
+#tracking .multi-track-cap-note {
+	max-width: 220px;
+	margin: 0 0 4px;
+	padding: 3px 5px;
+	border: 1px solid #806000;
+	background: rgba(229, 193, 0, .1);
+	color: #e5c100;
+	white-space: normal;
+}
+#jump-return-panel .jump-return-label.jump-return-label-who { overflow: visible; white-space: normal; max-width: 260px; }
+/* "Which signature did <a long name> jump through?": the title wraps instead of being cut */
+.ui-dialog[aria-describedby="dialog-select-signature"] .ui-dialog-title { white-space: normal; overflow: visible; }
+
+/* An A switch that is on but over the 5: dimmed */
+#tracking .multi-track-toggle.active.over-cap { opacity: .45; }
+
+/* Collapsed header: the pause shows as a small glyph on the active portrait */
+.multi-track-pause-glyph {
+	display: none;
+	position: absolute;
+	bottom: -3px;
+	left: -3px;
+	padding: 0 2px;
+	border-radius: 6px;
+	background: #222;
+	color: #ddd;
+	font-size: 9px;
+	line-height: 11px;
+}
+#topbar.mt-compact .multi-track-pause-glyph { display: inline-block; }
+
+/* Rings: the character that jumped last stands out; older ones are fainter. Dashed: mapped without switching to it */
+.multi-track-chip.is-recent.is-silent { outline-style: dashed; }
+.multi-track-chip.is-recent:not(.is-latest) { outline-color: rgba(60, 200, 230, .4); animation: none; }
+.multi-track-chip.is-recent:not(.is-latest)::after { opacity: .4; }
