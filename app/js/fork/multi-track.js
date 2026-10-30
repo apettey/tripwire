@@ -15,15 +15,15 @@ const multiTrack = {
 	FRESH_MS: 10000,			// ...and pulses for the first part of it
 	FLEET_MS: 10000,			// an alt taking the same hole as the active character within this is following it
 	SETTLE_MS: 7000,			// a switch waits this long: the active character's own jump may come a poll (5 s) later
-	NOTICE_MS: 20000,
-	AFTER_QUESTION_MS: 6000,	// a jump question closed: its answer reaches the map with the next sync (5 s)			// the switch notice (longer while a question about that jump is open)
+	NOTICE_MS: 20000,			// the switch notice (longer while a question about that jump is open)
+	AFTER_QUESTION_MS: 6000,	// one sync (5 s): a question's answer, or the active character's own automap, reaches the map
 	PAUSE_MS: 180000,			// no automatic switching for this long after the user picks a character
 	NAME_CHARS: 18,				// chip names longer than this keep their start and end ("Bob Sc…r Hauler")
 	PODS: [33328, 670],
 	NO_MAP_SYSTEMS: [30000142, 30002187],	// Jita, Amarr: likely pod-out destinations (as the automapper)
 	SPECIAL_REGION: 12000000,	// abyssal and other special space (as the automapper)
 
-	SETTING_TEXT: "Map jumps of all my tracked characters",	// the Settings row's text; the tip quotes it
+	SETTING_TEXT: "Map jumps of all my followed characters (up to 5)",	// the Settings row's text; the tip and the catalog title quote it
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -250,6 +250,32 @@ const multiTrack = {
 		return deferred;
 	},
 
+	/**
+	 * "Which Signature?" for the jump from → to was closed without an answer: the user doesn't want that hole mapped, so
+	 * the other characters' jumps through it (either way) aren't mapped either (each would ask again). Returns
+	 * {silent: the silent queue without them, skipped: those moves}. Answered, nothing is dropped: the automapper then
+	 * finds the connection for them.
+	 */
+	dropPair: function(silent, from, to) {
+		const same = function(m) { return (m.from == from && m.to == to) || (m.from == to && m.to == from); };
+		return { silent: (silent || []).filter(function(m) { return !same(m); }), skipped: (silent || []).filter(same) };
+	},
+
+	/** A ring's route after another jump: a chain of jumps mapped without switching keeps growing (P1) */
+	ringRoute: function(prev, fromName, toName, now) {
+		if (prev && prev.kind === "mapped" && prev.toName === fromName && now - prev.at < multiTrack.RECENT_MS) {
+			return { path: (prev.path || [prev.fromName, prev.toName]).concat([toName]), count: (prev.count || 1) + 1 };
+		}
+		return { path: [fromName, toName], count: 1 };
+	},
+
+	/** "J1 → J2 → J3 (2 jumps)" */
+	routeText: function(path, count) {
+		const p = (path || []).filter(Boolean);
+		if (p.length < 2) { return ""; }
+		return p.join(" → ") + (count > 1 ? " (" + count + " jumps)" : "");
+	},
+
 	/** A manual pick: automatic switching pauses, nothing waits to switch */
 	afterPick: function(st, now) {
 		st.pausedUntil = now + multiTrack.PAUSE_MS;
@@ -306,7 +332,7 @@ const multiTrack = {
 
 	/** The A switch's tooltip */
 	toggleTitle: function(on, overCap) {
-		if (!on) { return "Switch to this character when it jumps: off: its jumps aren't mapped unless it is active"; }
+		if (!on) { return "Switch to this character when it jumps: off (its jumps aren't mapped unless it is active)"; }
 		return overCap ? "Switch to this character when it jumps: on, but over the 5 (turn another one off)"
 			: "Switch to this character when it jumps: on (while switching is paused, its jumps are mapped without switching)";
 	},
@@ -360,7 +386,7 @@ const multiTrack = {
 			stale: (x.stale && x.stale[id]) || "",
 			latest: !!(x.latestId && String(x.latestId) === id),
 			silent: !!(j && typeof j === "object" && j.kind === "mapped"),
-			route: j && typeof j === "object" && j.fromName ? j.fromName + " → " + j.toName : "",
+			route: j && typeof j === "object" && j.fromName ? (j.kind === "mapped" && j.path ? multiTrack.routeText(j.path, j.count) : j.fromName + " → " + j.toName) : "",
 			stayedOn: j && typeof j === "object" ? j.stayedOn || "" : "",
 			systemName: c.systemName || "",
 			ship: c.shipTypeName || "",
@@ -531,6 +557,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			move.mapped = true;
 			const ring = state.jumps[move.id];
 			if (ring && ring.from == move.from && ring.to == move.to) {
+				const route = multiTrack.ringRoute(ring.prev, ring.fromName, ring.toName, ring.at);
+				ring.path = route.path;
+				ring.count = route.count;
 				ring.kind = "mapped";
 				ring.stayedOn = saved && saved.characterName && String(saved.characterID) !== String(move.id) ? saved.characterName : "";
 			}
@@ -546,6 +575,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const char = chars[id];
 			if (!o || !char) { return; }
 			try {
+				state.silent = state.silent.filter(function(m) { return moves.indexOf(m) < 0; });
 				const plan = multiTrack.replayPlan(moves, char.systemID);
 				const backId = multiTrack.tracking(o.tracking.active) && chars[o.tracking.active] && String(o.tracking.active) !== id ? String(o.tracking.active) : null;
 				const first = moves[0], last = moves[moves.length - 1];
@@ -683,7 +713,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			// "Who just jumped": every wormhole jump, active included (silentMap marks the ones it maps without switching)
 			jumps.forEach(function(m) {
 				m.at = now;
-				state.jumps[m.id] = { at: now, kind: "jumped", from: m.from, to: m.to, fromName: systemName(m.from), toName: systemName(m.to) };
+				const prev = state.jumps[m.id];
+				state.jumps[m.id] = { at: now, kind: "jumped", from: m.from, to: m.to, fromName: systemName(m.from), toName: systemName(m.to),
+					prev: prev && prev.kind === "mapped" ? { kind: prev.kind, at: prev.at, fromName: prev.fromName, toName: prev.toName, path: prev.path, count: prev.count } : null };
 			});
 
 			if (!on) {
@@ -724,13 +756,16 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				if (d.action === "switch") { state.queue.push(d.move); }
 				// "fleet": the active character's automap of that hole may be cancelled in its dialog; the automapper finds
 				// the connection when it isn't, so mapping it again costs nothing
-				else if (d.action === "map" || d.action === "fleet") { state.silent.push(d.move); }
+				// (a fleet move waits one sync, so the active character's automap reaches the map first and this finds it)
+				else if (d.action === "map") { state.silent.push(d.move); }
+				else if (d.action === "fleet") { d.move.notBefore = now + multiTrack.AFTER_QUESTION_MS; state.silent.push(d.move); }
 			});
 
 			// Jumps mapped without switching: one per tick, never while a jump question is on screen, and not until a sync
 			// after one closed (its answer must reach the map first, or the automapper would ask the same question again)
 			if (questionVisible()) { state.questionAt = now; }
-			if (state.silent.length && !questionVisible() && now - (state.questionAt || 0) >= multiTrack.AFTER_QUESTION_MS) {
+			if (state.silent.length && !questionVisible() && now - (state.questionAt || 0) >= multiTrack.AFTER_QUESTION_MS
+				&& !(state.silent[0].notBefore > now)) {
 				const next = state.silent.shift();
 				if (next.mapped || !silentMap(next)) { if (!next.mapped) { state.silent.unshift(next); } }
 			}
@@ -739,8 +774,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				const id = state.queue[0].id;
 				const mine = state.queue.filter(function(m) { return m.id === id; });
 				if (questionPending()) {
-					// Hold the switch so the open question isn't wiped; map the jumps meanwhile (unless the dialog is that question)
-					mine.forEach(function(m) { if (!m.mapped) { silentMap(m); } });
+					// Hold the switch so the open question isn't wiped; its jumps are mapped meanwhile by the (gated) silent queue
+					mine.forEach(function(m) { if (!m.mapped && state.silent.indexOf(m) < 0) { state.silent.push(m); } });
 					if (questionVisible()) {
 						mine.forEach(function(m) {
 							if (m.noticed) { return; }
@@ -1098,16 +1133,31 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		// automapper.js builds its answer (from, to, automap.character) when the jump happens, so a switch while the dialog
 		// is open can't credit another character (and the tick holds switches until it closes); the dialog only has to
 		// say whose jump it is. Named with 2+ tracked characters, whether or not "Map jumps of all" is on.
-		let pickerWho = null;
+		let pickerWho = null, pickerCall = null, picker = null;
 		if (typeof tripwire.autoMapper === "function") {
 			const originalAutoMapper = tripwire.autoMapper;
-			tripwire.autoMapper = function() {
+			tripwire.autoMapper = function(from, to) {
 				try { pickerWho = multiTrack.jumperNow(); } catch (e) { pickerWho = null; }
+				pickerCall = { from: from, to: to };
 				try { return originalAutoMapper.apply(this, arguments); }
-				finally { pickerWho = null; }	// the dialog opens synchronously inside the call
+				finally { pickerWho = null; pickerCall = null; }	// the dialog opens synchronously inside the call
 			};
 		}
+		// Closed without an answer (Cancel, ✕): the other characters' jumps through that hole aren't mapped either
+		$(document).on("click", ".ui-dialog[aria-describedby='dialog-select-signature'] .ui-dialog-buttonpane button", function() {
+			if (picker && $.trim($(this).text()) === "Ok") { picker.answered = true; }
+		});
+		$(document).on("dialogclose", "#dialog-select-signature", function() {
+			const p = picker;
+			picker = null;
+			if (!p || p.answered || !p.from) { return; }
+			const r = multiTrack.dropPair(state.silent, p.from, p.to);
+			state.silent = r.silent;
+			// Waiting switches through that hole: no replay of it (it would ask again), only the character change
+			state.queue.forEach(function(m) { if ((m.from == p.from && m.to == p.to) || (m.from == p.to && m.to == p.from)) { m.mapped = true; } });
+		});
 		$(document).on("dialogopen", "#dialog-select-signature", function() {
+			picker = { from: pickerCall && pickerCall.from, to: pickerCall && pickerCall.to, answered: false };
 			const $d = $(this);
 			$d.find(".jump-who-banner").remove();
 			const who = pickerWho;

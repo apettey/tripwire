@@ -345,7 +345,7 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.minutes(180000), '3m');
 		assert.strictEqual(multiTrack.minutes(121000), '3m');
 		assert.strictEqual(multiTrack.minutes(5000), '1m');
-		assert.strictEqual(multiTrack.toggleTitle(false), "Switch to this character when it jumps: off: its jumps aren't mapped unless it is active");
+		assert.strictEqual(multiTrack.toggleTitle(false), "Switch to this character when it jumps: off (its jumps aren't mapped unless it is active)");
 		assert.ok(/^Switch to this character when it jumps: on \(while switching is paused/.test(multiTrack.toggleTitle(true)));
 		assert.ok(/over the 5/.test(multiTrack.toggleTitle(true, true)));
 	});
@@ -439,6 +439,41 @@ describe('multiTrack', () => {
 			const sw = multiTrack.chipState(c, { activeId: '2', now: NOW, latestId: '1', jumps: { 2: { at: NOW - 3000, kind: 'jumped', fromName: 'A', toName: 'B' } } });
 			assert.deepStrictEqual([sw.latest, sw.silent], [false, false]);
 			assert.ok(/jumped A → B 3 s ago$/.test(multiTrack.chipTitle(sw)));
+		});
+	});
+
+	describe('round 5: a cancelled question, routes', () => {
+		const mv = (id, from, to) => ({ id: String(id), from, to });
+		it('F1: "Which Signature?" cancelled for J1 → J2: the followers through that hole (either way) are dropped', () => {
+			const a = mv(2, J1, J2), b = mv(3, J2, J1), c = mv(4, J1, HS);
+			const r = multiTrack.dropPair([a, b, c], J1, J2);
+			assert.deepStrictEqual(r.silent, [c]);
+			assert.deepStrictEqual(r.skipped, [a, b]);
+			assert.deepStrictEqual(multiTrack.dropPair(undefined, J1, J2), { silent: [], skipped: [] });
+		});
+		it('F1 / E3: answered, the follower is still mapped (nothing dropped; the release maps it)', () => {
+			const queued = Object.assign(mv(2, J1, J2), { at: 1000 });
+			const due = multiTrack.releaseDecision([queued], { recent: [{ from: J1, to: J2, at: 3000, by: 'self' }], windowMs: 10000, now: 30000, activeSystemID: J2, currentSystemID: J2 });
+			assert.deepStrictEqual(due.map, [queued]);
+		});
+		it('P1: a chain of jumps mapped without switching shows its route', () => {
+			const first = multiTrack.ringRoute(null, 'J100001', 'J100002', 1000);
+			assert.deepStrictEqual(first, { path: ['J100001', 'J100002'], count: 1 });
+			const prev = { kind: 'mapped', at: 1000, fromName: 'J100001', toName: 'J100002', path: first.path, count: 1 };
+			assert.deepStrictEqual(multiTrack.ringRoute(prev, 'J100002', 'J100003', 5000), { path: ['J100001', 'J100002', 'J100003'], count: 2 });
+			assert.deepStrictEqual(multiTrack.ringRoute(prev, 'J999999', 'J100003', 5000).count, 1, 'not a chain');
+			assert.deepStrictEqual(multiTrack.ringRoute(prev, 'J100002', 'J100003', 1000 + 61000).count, 1, 'too long ago');
+			assert.deepStrictEqual(multiTrack.ringRoute(Object.assign({}, prev, { kind: 'jumped' }), 'J100002', 'J100003', 5000).count, 1, 'a switch');
+			assert.strictEqual(multiTrack.routeText(['A', 'B', 'C'], 2), 'A → B → C (2 jumps)');
+			assert.strictEqual(multiTrack.routeText(['A', 'B'], 1), 'A → B');
+			const st = multiTrack.chipState({ characterID: 2, characterName: 'Logi' }, { activeId: '1', now: 10000,
+				jumps: { 2: { at: 8000, kind: 'mapped', fromName: 'B', toName: 'C', path: ['A', 'B', 'C'], count: 2, stayedOn: 'Main' } } });
+			assert.ok(/mapped A → B → C \(2 jumps\) 2 s ago \(stayed on Main\)$/.test(multiTrack.chipTitle(st)), multiTrack.chipTitle(st));
+		});
+		it('P3: the Settings text, the tip and the catalog title agree', () => {
+			const catalog = JSON.parse(require('fs').readFileSync('public/fork/feature-catalog.json', 'utf8'));
+			assert.strictEqual(catalog.features.find(f => f.id === 'multiTrack').title, multiTrack.SETTING_TEXT);
+			assert.ok(multiTrack.tipBody({}).indexOf('"' + multiTrack.SETTING_TEXT + '"') > 0);
 		});
 	});
 });

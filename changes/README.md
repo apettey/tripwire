@@ -5,7 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
-| 2026-10-30 | [Map jumps of all my tracked characters](2026-10-30-multi-character-jumps/README.md) | Opt-in: switch to whichever tracked character jumps a wormhole and map it, chip strip shows who; jump questions name the jumper; no location/ship polling for offline alts; mass logged for a second character through an already-mapped hole |
+| 2026-10-30 | [Map jumps of all my followed characters (up to 5)](2026-10-30-multi-character-jumps/README.md) | Opt-in: switch to whichever tracked character jumps a wormhole and map it, chip strip shows who; jump questions name the jumper; no location/ship polling for offline alts; mass logged for a second character through an already-mapped hole |
 | 2026-10-28 | [PHP security hardening](2026-10-28-php-security-hardening/README.md) | CSP/HSTS headers, no PHP errors in cached_third_party.php, ESI token updates scoped to the user, Adminer on localhost |
 | 2026-10-28 | [EVE SSO downtime message](2026-10-28-sso-downtime-message/README.md) | SSO login/registration during EVE downtime says the servers are down instead of "Unknown error" |
 | 2026-10-28 | [PHP security fixes](2026-10-28-php-security-fixes/README.md) | Login link can no longer log you into another account and run its HTML; refresh tokens stay on the server; SSO state checked; flares/ping/ESI delete/tracking/logout need a same-site request; per-account login limit; signature creator from the session |
