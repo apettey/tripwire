@@ -477,6 +477,23 @@ function addAutomapMass($wormhole, $sig1, $sig2, $automap, $mysql) {
     }
 }
 
+// fork: the connection was already mapped (another pilot, or another of this user's characters, got there first), so
+// this jump's mass row is missing: the tracking trigger only logs it when the character's location reaches the server
+// after the hole exists. Log it here when the location is already there (tracking shows the destination) and no jump of
+// this character through this hole was logged in the last 30 s. changes/2026-10-30-multi-character-jumps
+function addAutomapMassExisting($wormholeID, $sig1, $sig2, $automap, $mysql) {
+    if (!$wormholeID || !is_array($automap) || empty($automap['character']) || !is_array($sig1) || !is_array($sig2)) return false;
+    list($fromID, $toID) = automapJumpEnds($automap, (int)$sig1['systemID'], (int)$sig2['systemID']);
+    $stmt = $mysql->prepare('SELECT systemID FROM tracking WHERE characterID = :characterID AND maskID = :maskID AND userID = :userID');
+    $stmt->execute(array(':characterID' => $automap['character'], ':maskID' => $_SESSION['mask'], ':userID' => $_SESSION['userID']));
+    if ((int)$stmt->fetchColumn() !== (int)$toID) return false;   // not there yet: the trigger logs it when it arrives
+    $stmt = $mysql->prepare('SELECT COUNT(*) FROM jumps WHERE wormholeID = :wormholeID AND characterID = :characterID AND maskID = :maskID AND time > NOW() - INTERVAL 30 SECOND');
+    $stmt->execute(array(':wormholeID' => $wormholeID, ':characterID' => $automap['character'], ':maskID' => $_SESSION['mask']));
+    if ((int)$stmt->fetchColumn() > 0) return false;   // the trigger already logged it
+    addAutomapMass((object)array('id' => $wormholeID), (object)array('systemID' => $fromID), (object)array('systemID' => $toID), $automap, $mysql);
+    return true;
+}
+
 // Two pilots jumping together (or two tabs) both send the same "add a connection" automap request. Each checks only
 // its own cache, finds nothing and adds one, so the server used to insert both. The automap add path takes a named
 // lock for the system pair on this mask and reuses a connection that already joins the two systems. Manual adds are
@@ -540,6 +557,7 @@ if (isset($_POST['signatures'])) {
                         // The other pilot/tab got here first. Success without results, so no undo is recorded
                         // for a connection this request did not make; the next sync brings the list whole.
                         $output['resultSet'][] = array('result' => true, 'value' => 'Connection already mapped');
+                        addAutomapMassExisting($automapLock['existing'], $request['signatures'][0], $request['signatures'][1], $_REQUEST['automap'], $mysql); // fork: this pilot's jump mass too
                         continue;
                     }
                     list($result, $signature, $msg) = addSignature($request['signatures'][0], $mysql);

@@ -26,6 +26,8 @@ function cleanup($mysql, $mask) {
 	$mysql->prepare('DELETE FROM wormholes WHERE maskID = ?')->execute(array($mask));
 	$mysql->prepare('DELETE FROM signatures WHERE maskID = ?')->execute(array($mask));
 	$mysql->prepare('DELETE FROM statistics WHERE maskID = ?')->execute(array($mask));
+	$mysql->prepare('DELETE FROM jumps WHERE maskID = ?')->execute(array($mask));
+	$mysql->prepare('DELETE FROM tracking WHERE maskID = ?')->execute(array($mask));
 }
 
 $mysql = connect();
@@ -107,6 +109,29 @@ try {
 	check('jump ends fallback without from/to', automapJumpEnds(array('character' => 1), $A, $B), array($A, $B));
 	check('jump ends fallback with junk', automapJumpEnds(array('from' => 'x', 'to' => 5), $A, $B), array($A, $B));
 	check('jump ends fallback without payload', automapJumpEnds(null, $A, $B), array($A, $B));
+
+	// Already mapped (another pilot / another of my characters got there first): log this character's jump mass, once
+	$jumpRows = function($char) use ($mysql, $mask, $wh) {
+		$stmt = $mysql->prepare('SELECT COUNT(*) FROM jumps WHERE maskID = ? AND wormholeID = ? AND characterID = ?');
+		$stmt->execute(array($mask, $wh->id, $char));
+		return (int)$stmt->fetchColumn();
+	};
+	$track = $mysql->prepare("INSERT INTO tracking (userID, characterID, characterName, systemID, systemName, shipTypeID, shipTypeName, maskID) VALUES (1, ?, 'Alt|P', ?, 'J', 11182, 'Cheetah', ?)");
+	$track->execute(array(990002, $B, $mask));	// its location already reached the server (in the destination)
+	$track->execute(array(990003, $A, $mask));	// not yet: the tracking trigger logs it when it arrives
+	$automap = array('character' => 990002, 'from' => $A, 'to' => $B);
+	check('existing: logs the jump when tracking shows the destination', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), $automap, $mysql), true);
+	check('existing: one jumps row', $jumpRows(990002), 1);
+	$stmt = $mysql->prepare('SELECT fromID, toID, shipTypeID FROM jumps WHERE maskID = ? AND characterID = 990002');
+	$stmt->execute(array($mask));
+	check('existing: row has the jump direction and ship', array_map('intval', $stmt->fetch(PDO::FETCH_NUM)), array($A, $B, 11182));
+	check('existing: not twice within 30 s', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), $automap, $mysql), false);
+	check('existing: still one row', $jumpRows(990002), 1);
+	check('existing: location not there yet, left to the trigger', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), array('character' => 990003, 'from' => $A, 'to' => $B), $mysql), false);
+	check('existing: no row for it', $jumpRows(990003), 0);
+	check('existing: unknown character (no tracking row of this user)', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), array('character' => 990009, 'from' => $A, 'to' => $B), $mysql), false);
+	check('existing: no automap payload', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), null, $mysql), false);
+	check('existing: no wormhole', addAutomapMassExisting(null, array('systemID' => $A), array('systemID' => $B), $automap, $mysql), false);
 
 	// The lock is released after an exception inside try/finally, so a persistent connection does not keep it
 	$lock = automapLock(array('systemID' => $A), array('systemID' => $C), $mysql);

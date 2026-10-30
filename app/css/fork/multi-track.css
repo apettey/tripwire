@@ -1,0 +1,144 @@
+/* Fork: multi-character jump tracking (app/js/fork/multi-track.js). Chips next to "Current System" in the header. */
+#multi-track-strip {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin-left: 8px;
+	padding-left: 8px;
+	border-left: 1px solid #555;
+	vertical-align: middle;
+	line-height: normal;
+	white-space: nowrap;
+}
+
+.multi-track-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 22px;
+	padding: 0 3px;
+	border: 1px solid #555;
+	border-radius: 11px;
+	background: rgba(40, 40, 40, .85);
+	color: #ccc;
+	font: inherit;
+	font-size: 11px;
+	font-weight: normal;
+	cursor: pointer;
+	opacity: .75;
+	transition: opacity .2s, border-color .2s;
+}
+.multi-track-chip:hover { opacity: 1; border-color: #999; }
+.multi-track-chip:focus { outline: none; }
+.multi-track-chip:focus-visible { outline: 1px dotted #ccc; outline-offset: 1px; }
+
+.multi-track-avatar {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	flex: none;
+	display: inline-block;
+}
+.multi-track-initial {
+	background: #444;
+	color: #ddd;
+	font-size: 10px;
+	line-height: 18px;
+	text-align: center;
+}
+
+/* Names only on the chips that matter (active, just jumped), so 5 long names never push the header onto two lines */
+.multi-track-name {
+	display: none;
+	max-width: 90px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	padding-right: 4px;
+}
+.multi-track-chip.is-active .multi-track-name,
+.multi-track-chip.is-recent .multi-track-name { display: inline-block; }
+
+/* Active: the tracking list's orange (tracking panel and header name use it too) */
+.multi-track-chip.is-active {
+	border-color: darkorange;
+	color: orange;
+	opacity: 1;
+	box-shadow: 0 0 0 1px darkorange inset;
+}
+
+/* Just jumped (a minute): a cyan ring, pulsing for the first seconds */
+.multi-track-chip.is-recent {
+	border-color: #3cc8e6;
+	opacity: 1;
+}
+.multi-track-chip.is-recent.is-active {
+	box-shadow: 0 0 0 1px darkorange inset, 0 0 0 2px #3cc8e6;
+}
+.multi-track-chip.is-fresh { animation: multi-track-pulse 1.2s ease-in-out infinite; }
+@keyframes multi-track-pulse {
+	0%, 100% { box-shadow: 0 0 0 1px darkorange inset, 0 0 0 2px rgba(60, 200, 230, .9); }
+	50% { box-shadow: 0 0 0 1px darkorange inset, 0 0 6px 3px rgba(60, 200, 230, .7); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.multi-track-chip.is-fresh { animation: none; }
+}
+
+/* Offline: dimmed and grey */
+.multi-track-chip.is-offline { opacity: .4; border-style: dashed; }
+.multi-track-chip.is-offline .multi-track-avatar { filter: grayscale(1); }
+.multi-track-chip.is-offline:hover { opacity: .8; }
+
+/* "Current System (Alt One):" */
+.multi-track-who { color: orange; }
+
+/* Wide windows: every name, shorter */
+@media (min-width: 1600px) {
+	.multi-track-name { display: inline-block; max-width: 72px; }
+}
+
+/* Narrower windows: only the active character's name */
+@media (max-width: 1150px) {
+	.multi-track-chip.is-recent:not(.is-active) .multi-track-name { display: none; }
+	.multi-track-name { max-width: 70px; }
+}
+
+/* Header too narrow (multi-track.js fit): names off, then only the active / last jumper and "+N", then no strip */
+#multi-track-strip.mt-compact .multi-track-name { display: none !important; }
+.multi-track-more {
+	display: none;
+	color: #aaa;
+	font-size: 11px;
+	padding: 0 2px;
+	cursor: default;
+}
+#multi-track-strip.mt-min .multi-track-chip:not(.is-active):not(.is-recent) { display: none; }
+#multi-track-strip.mt-min .multi-track-more { display: inline; }
+#multi-track-strip.mt-hidden { display: none !important; }
+
+/* Tracking list: the per-character "map this character's jumps" switch */
+#tracking .multi-track-toggle {
+	cursor: pointer;
+	opacity: .35;
+	position: relative;
+	margin-left: 2px;
+}
+#tracking .multi-track-toggle::after {	/* struck through while off */
+	content: "";
+	position: absolute;
+	left: -1px;
+	right: -1px;
+	top: 50%;
+	border-top: 2px solid #ff4747;
+	transform: rotate(-35deg);
+}
+#tracking .multi-track-toggle.is-on {
+	opacity: 1;
+	color: orange;
+}
+#tracking .multi-track-toggle.is-on::after { display: none; }
+#tracking .multi-track-toggle:hover { opacity: 1; }
+#tracking .multi-track-toggle:focus { outline: none; }
+#tracking .multi-track-toggle:focus-visible { outline: 1px dotted #ccc; }
+
+/* The jump pop-ups name the character that jumped (jump-return.js) */
+.jump-return-who { color: orange; }

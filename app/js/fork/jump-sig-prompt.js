@@ -287,7 +287,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function showPanel(seq, from, to, hole, candidates) {
 			hidePanel();
-			const summary = holeNaming.systemName(from) + " → " + holeNaming.systemName(to);
+			let who = "";	// multi-character jumps: who jumped ("" otherwise)
+			try { who = typeof multiTrack !== "undefined" && typeof multiTrack.labelNow === "function" ? multiTrack.labelNow() : ""; } catch (e) { who = ""; }
+			const summary = (who ? who + ": " : "") + holeNaming.systemName(from) + " → " + holeNaming.systemName(to);
 			const $panel = $("<div id='jump-sig-panel' role='dialog' aria-live='polite' tabindex='-1'></div>").attr("aria-label", "Which signature did you jump through? " + summary);
 			const $head = $("<div class='jump-sig-head'></div>");
 			$head.append($("<span class='jump-sig-title'>Which signature did you jump through?</span>"), $("<span class='jump-sig-route'></span>").text(summary));

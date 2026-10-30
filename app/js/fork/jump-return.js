@@ -222,12 +222,19 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}, delay);
 		}
 
+		function jumperName() {
+			try { return typeof multiTrack !== "undefined" && typeof multiTrack.labelNow === "function" ? multiTrack.labelNow() : ""; }
+			catch (e) { return ""; }
+		}
+
 		function showPanel(from, to, result) {
 			hidePanel();
-			const summary = "Jumped " + systemName(from) + " → " + systemName(to) + " via " + result.token;
+			const who = jumperName();	// multi-character jumps: who jumped ("" otherwise)
+			const summary = (who ? who + " jumped " : "Jumped ") + systemName(from) + " → " + systemName(to) + " via " + result.token;
 			const $panel = $("<div id='jump-return-panel' role='dialog' aria-live='polite' tabindex='-1'></div>")
 				.attr({ "aria-label": summary + ". Return bookmark " + result.text, title: summary });
 			const $label = $("<span class='jump-return-label'>Return bookmark</span>");
+			if (who) { $label.prepend($("<span class='jump-return-who'></span>").text(who + ": ")); }
 			const $button = $("<button type='button' class='jump-return-copy'></button>")
 				.attr("title", "Copy " + result.text + " (bookmark name for the way back to " + systemName(from) + ")");
 			const $text = $("<span class='jump-return-text'></span>").text(result.text);
