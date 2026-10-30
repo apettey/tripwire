@@ -57,7 +57,7 @@
 	position: sticky;
 	top: 0;
 	bottom: 0;
-	z-index: 1;
+	z-index: 13000;	/* above scrolled pop-ups: jBox writes z-index 12000 on each notice */
 	flex: 0 0 auto;
 	pointer-events: auto;
 	padding: 1px 8px;
