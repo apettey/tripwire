@@ -141,9 +141,9 @@ describe('multiTrack', () => {
 
 	it('chipTitle: plain text with where, state and how long ago', () => {
 		const t = multiTrack.chipTitle({ name: 'Alt <b>', systemName: 'J100002', ship: 'Cheetah', active: true, recent: true, agoSeconds: 12, offline: false });
-		assert.strictEqual(t, 'Alt <b> · J100002, Cheetah · active: its jumps are mapped · jumped 12 s ago');
+		assert.strictEqual(t, 'Alt <b> · J100002, Cheetah · Active character: its jumps are mapped · jumped 12 s ago');
 		assert.strictEqual(multiTrack.chipTitle({ name: 'X', systemName: '', ship: '', active: false, recent: false, agoSeconds: null, offline: true }),
-			'X · offline · click to make it the active character');
+			'X · offline · Click to make this the active character');
 	});
 
 	it('tipBody: names who jumped and where, and how to turn tips off', () => {
@@ -151,6 +151,35 @@ describe('multiTrack', () => {
 		assert.ok(b.indexOf('Alt Two jumped J100001 → J100002, but only Main is mapped') === 0, b);
 		assert.ok(/Settings > Wormhole Jumps & Mass/.test(b));
 		assert.ok(/Turn tips off in Settings > General\.$/.test(b));
+		assert.ok(b.indexOf('Turn on "' + multiTrack.SETTING_TEXT + '" in Settings') > 0, 'quotes the Settings row exactly');
 		assert.ok(/^Another of your characters jumped through a wormhole, but only your active character/.test(multiTrack.tipBody()));
+	});
+
+	it('whoFor: the jumper is named with 2+ tracked characters, on or off', () => {
+		const jumper = { characterID: 2, characterName: 'Alt Two', systemID: J2 };
+		assert.deepStrictEqual(multiTrack.whoFor(chars(), jumper), { id: '2', name: 'Alt Two' });
+		assert.strictEqual(multiTrack.whoFor({ 2: chars()[2] }, jumper), null, 'one character: no change');
+		assert.strictEqual(multiTrack.whoFor(chars(), null), null);
+		assert.strictEqual(multiTrack.whoFor(chars(), { characterID: 2 }), null, 'no name');
+		assert.strictEqual(multiTrack.whoFor(undefined, jumper), null);
+	});
+
+	it('pickerTitle: names the jumper in the automapper dialog title', () => {
+		assert.strictEqual(multiTrack.pickerTitle({ id: '2', name: 'Alt Two' }), 'Which signature did Alt Two jump through?');
+		assert.strictEqual(multiTrack.pickerTitle(null), 'Which Signature?');
+	});
+
+	it('waitNotice: who, where, and that it is mapped after the answer', () => {
+		assert.strictEqual(multiTrack.waitNotice('Alt Two', 'J1', 'J2'),
+			'Alt Two jumped J1 → J2 while the Which Signature? question was open. It is mapped as soon as you answer.');
+		assert.ok(/^A character jumped \? → \?/.test(multiTrack.waitNotice()));
+	});
+
+	it('tracking: the user has an active character (null / empty = untracked on purpose)', () => {
+		assert.strictEqual(multiTrack.tracking('9001'), true);
+		assert.strictEqual(multiTrack.tracking(0), true);
+		assert.strictEqual(multiTrack.tracking(null), false);
+		assert.strictEqual(multiTrack.tracking(undefined), false);
+		assert.strictEqual(multiTrack.tracking(''), false);
 	});
 });

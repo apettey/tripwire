@@ -127,6 +127,12 @@ try {
 	check('existing: row has the jump direction and ship', array_map('intval', $stmt->fetch(PDO::FETCH_NUM)), array($A, $B, 11182));
 	check('existing: not twice within 30 s', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), $automap, $mysql), false);
 	check('existing: still one row', $jumpRows(990002), 1);
+	// Back the other way within 30 s (B to A, then A to B): each direction is its own jump
+	// (a fresh row, not an UPDATE: the update would fire the jumpHistory trigger, which logs the jump itself)
+	$mysql->prepare('DELETE FROM tracking WHERE characterID = 990002 AND maskID = ?')->execute(array($mask));
+	$track->execute(array(990002, $A, $mask));
+	check('existing: the way back is logged too', addAutomapMassExisting($wh->id, array('systemID' => $B), array('systemID' => $A), array('character' => 990002, 'from' => $B, 'to' => $A), $mysql), true);
+	check('existing: two rows, one each way', $jumpRows(990002), 2);
 	check('existing: location not there yet, left to the trigger', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), array('character' => 990003, 'from' => $A, 'to' => $B), $mysql), false);
 	check('existing: no row for it', $jumpRows(990003), 0);
 	check('existing: unknown character (no tracking row of this user)', addAutomapMassExisting($wh->id, array('systemID' => $A), array('systemID' => $B), array('character' => 990009, 'from' => $A, 'to' => $B), $mysql), false);

@@ -19,21 +19,36 @@ const esiOfflineSkip = {
 		return "unknown";
 	},
 
-	/** Poll this character's location and ship now? Only a known-offline character with a token that isn't about to
-	 *  expire is skipped. */
-	shouldPoll: function(state, tokenExpiring) {
-		return state !== "offline" || !!tokenExpiring;
+	/** Poll this character's location and ship now? Only a known-offline character is skipped, and never one that
+	 *  matters right away: the active character or one opted in to "Map jumps of all my tracked characters" (`keep`).
+	 *  /online/ is only asked every 60 s (and cached for 60 s), so a character that just logged in can look offline for
+	 *  up to two minutes; a skipped active character would then see two jumps as one (a hole that doesn't exist).
+	 *  Nor one whose token is about to expire (upstream's loop then asks the server to refresh it, without a request). */
+	shouldPoll: function(state, tokenExpiring, keep) {
+		return state !== "offline" || !!tokenExpiring || !!keep;
 	},
 
-	/** The characters to poll (same objects, a new map) */
-	filter: function(characters, states, isExpiring) {
+	/** The characters to poll (same objects, a new map). keep(id): the active / opted-in characters */
+	filter: function(characters, states, isExpiring, keep) {
 		const out = {};
 		Object.keys(characters || {}).forEach(function(id) {
 			const c = characters[id];
 			const expiring = typeof isExpiring === "function" ? !!isExpiring(c) : false;
-			if (esiOfflineSkip.shouldPoll(states && states[id], expiring)) { out[id] = c; }
+			const kept = typeof keep === "function" ? !!keep(id) : false;
+			if (esiOfflineSkip.shouldPoll(states && states[id], expiring, kept)) { out[id] = c; }
 		});
 		return out;
+	},
+
+	/** Ids never skipped: the active character, and with "Map jumps of all my tracked characters" on its opted-in ones */
+	keptIds: function(opts, characters, multiTrackApi) {
+		const ids = [];
+		const active = opts && opts.tracking ? opts.tracking.active : null;
+		if (active !== null && active !== undefined && active !== "") { ids.push(String(active)); }
+		if (multiTrackApi && typeof multiTrackApi.optedIn === "function") {
+			multiTrackApi.optedIn(opts, characters).forEach(function(id) { if (ids.indexOf(id) < 0) { ids.push(id); } });
+		}
+		return ids;
 	},
 
 	/** Back from offline to online: poll at once instead of waiting for the next 5 s slot */
@@ -64,7 +79,9 @@ const esiOfflineSkip = {
 			const poll = esi[name];
 			esi[name] = function() {
 				const all = tripwire.esi.characters;
-				return esiOfflineSkip.withCharacters(tripwire.esi, esiOfflineSkip.filter(all, esiOfflineSkip.states, isExpiring), poll, this, arguments);
+				const kept = esiOfflineSkip.keptIds(typeof options !== "undefined" ? options : null, all, typeof multiTrack !== "undefined" ? multiTrack : null);
+				const keep = function(id) { return kept.indexOf(String(id)) >= 0; };
+				return esiOfflineSkip.withCharacters(tripwire.esi, esiOfflineSkip.filter(all, esiOfflineSkip.states, isExpiring, keep), poll, this, arguments);
 			};
 		});
 

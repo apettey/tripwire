@@ -163,6 +163,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		let jumpSeq = 0;
 		let timers = [];
 		let hideTimer = null;
+		let jumpWho = null;	// who jumped ({id, name}), taken at the jump
 		let pickerSeen = false;
 
 		function opts() { return typeof options !== "undefined" ? options : undefined; }
@@ -287,12 +288,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function showPanel(seq, from, to, hole, candidates) {
 			hidePanel();
-			let who = "";	// multi-character jumps: who jumped ("" otherwise)
-			try { who = typeof multiTrack !== "undefined" && typeof multiTrack.labelNow === "function" ? multiTrack.labelNow() : ""; } catch (e) { who = ""; }
-			const summary = (who ? who + ": " : "") + holeNaming.systemName(from) + " → " + holeNaming.systemName(to);
-			const $panel = $("<div id='jump-sig-panel' role='dialog' aria-live='polite' tabindex='-1'></div>").attr("aria-label", "Which signature did you jump through? " + summary);
+			const who = jumpWho;	// 2+ tracked characters: whose jump this is, taken at the jump (multi-track.js)
+			const question = who ? "Which signature did " + who.name + " jump through?" : "Which signature did you jump through?";
+			const summary = holeNaming.systemName(from) + " → " + holeNaming.systemName(to);
+			const $panel = $("<div id='jump-sig-panel' role='dialog' aria-live='polite' tabindex='-1'></div>").attr("aria-label", question + " " + summary);
 			const $head = $("<div class='jump-sig-head'></div>");
-			$head.append($("<span class='jump-sig-title'>Which signature did you jump through?</span>"), $("<span class='jump-sig-route'></span>").text(summary));
+			const $title = $("<span class='jump-sig-title'></span>");
+			if (who) {
+				$title.append("Which signature did ", $("<span class='jump-who'></span>").text(who.name).attr("title", who.name), " jump through?");
+			} else {
+				$title.text(question);
+			}
+			$head.append($title, $("<span class='jump-sig-route'></span>").text(summary));
 			const $close = $("<button type='button' class='jump-sig-close' aria-label='Skip'>✕</button>").on("click", function(e) { e.preventDefault(); hidePanel(); });
 			$head.append($close);
 			const $list = $("<div class='jump-sig-list'></div>");
@@ -369,6 +376,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function onJump(from, to) {
+			try { jumpWho = typeof multiTrack !== "undefined" && typeof multiTrack.jumperNow === "function" ? multiTrack.jumperNow() : null; } catch (e) { jumpWho = null; }
 			jumpSeq++;
 			const seq = jumpSeq;
 			clearTimers();

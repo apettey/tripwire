@@ -1,17 +1,17 @@
-/* Fork: multi-character jump tracking (app/js/fork/multi-track.js). Chips next to "Current System" in the header. */
+/* Fork: multi-character jump tracking (app/js/fork/multi-track.js). Chips after "Current System" in the header. */
 #multi-track-strip {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
-	margin-left: 8px;
-	padding-left: 8px;
-	border-left: 1px solid #555;
+	gap: 4px;
+	margin-left: 4px;
 	vertical-align: middle;
 	line-height: normal;
 	white-space: nowrap;
 }
+#multi-track-strip .multi-track-sep { margin-right: 2px; }	/* the header's own "|" (an h3, like its neighbours) */
 
 .multi-track-chip {
+	position: relative;
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
@@ -25,12 +25,13 @@
 	font-size: 11px;
 	font-weight: normal;
 	cursor: pointer;
-	opacity: .75;
+	opacity: .8;
+	outline-offset: 1px;
 	transition: opacity .2s, border-color .2s;
 }
 .multi-track-chip:hover { opacity: 1; border-color: #999; }
 .multi-track-chip:focus { outline: none; }
-.multi-track-chip:focus-visible { outline: 1px dotted #ccc; outline-offset: 1px; }
+.multi-track-chip:focus-visible { outline: 1px dotted #ccc; }
 
 .multi-track-avatar {
 	width: 18px;
@@ -47,7 +48,7 @@
 	text-align: center;
 }
 
-/* Names only on the chips that matter (active, just jumped), so 5 long names never push the header onto two lines */
+/* Names only on the chips that matter (active, just jumped); every name on wide screens */
 .multi-track-name {
 	display: none;
 	max-width: 90px;
@@ -57,8 +58,15 @@
 }
 .multi-track-chip.is-active .multi-track-name,
 .multi-track-chip.is-recent .multi-track-name { display: inline-block; }
+@media (min-width: 1600px) {
+	.multi-track-name { display: inline-block; max-width: 72px; }
+}
+@media (max-width: 1150px) {
+	.multi-track-chip.is-recent:not(.is-active) .multi-track-name { display: none; }
+	.multi-track-name { max-width: 70px; }
+}
 
-/* Active: the tracking list's orange (tracking panel and header name use it too) */
+/* Active: the tracking list's orange border (only here, never on the other states) */
 .multi-track-chip.is-active {
 	border-color: darkorange;
 	color: orange;
@@ -66,44 +74,62 @@
 	box-shadow: 0 0 0 1px darkorange inset;
 }
 
-/* Just jumped (a minute): a cyan ring, pulsing for the first seconds */
+/* Just jumped (a minute): a steady 2px cyan ring (outline, so it never touches the active border) and a cyan dot top
+   right; the ring pulses a few times first */
 .multi-track-chip.is-recent {
-	border-color: #3cc8e6;
 	opacity: 1;
+	outline: 2px solid #3cc8e6;
 }
-.multi-track-chip.is-recent.is-active {
-	box-shadow: 0 0 0 1px darkorange inset, 0 0 0 2px #3cc8e6;
+.multi-track-chip.is-recent::after {
+	content: "";
+	position: absolute;
+	top: -3px;
+	right: -3px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #3cc8e6;
+	box-shadow: 0 0 0 1px #000;
 }
-.multi-track-chip.is-fresh { animation: multi-track-pulse 1.2s ease-in-out infinite; }
+.multi-track-chip.is-fresh { animation: multi-track-pulse 1.2s ease-in-out 8; }
 @keyframes multi-track-pulse {
-	0%, 100% { box-shadow: 0 0 0 1px darkorange inset, 0 0 0 2px rgba(60, 200, 230, .9); }
-	50% { box-shadow: 0 0 0 1px darkorange inset, 0 0 6px 3px rgba(60, 200, 230, .7); }
+	0%, 100% { outline-color: #3cc8e6; outline-offset: 1px; }
+	50% { outline-color: rgba(60, 200, 230, .45); outline-offset: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
 	.multi-track-chip.is-fresh { animation: none; }
 }
 
-/* Offline: dimmed and grey */
-.multi-track-chip.is-offline { opacity: .4; border-style: dashed; }
+/* Offline: dimmed, grey picture and a hollow grey dot bottom right */
+.multi-track-chip.is-offline { opacity: .55; }
 .multi-track-chip.is-offline .multi-track-avatar { filter: grayscale(1); }
-.multi-track-chip.is-offline:hover { opacity: .8; }
+.multi-track-chip.is-offline::before {
+	content: "";
+	position: absolute;
+	bottom: -2px;
+	right: -2px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	border: 1px solid #aaa;
+	background: #222;
+}
+.multi-track-chip.is-offline:hover { opacity: .85; }
 
-/* "Current System (Alt One):" */
-.multi-track-who { color: orange; }
-
-/* Wide windows: every name, shorter */
-@media (min-width: 1600px) {
-	.multi-track-name { display: inline-block; max-width: 72px; }
+/* "Current System (Alt One):" in the header's own text colour, the name capped */
+.multi-track-who {
+	display: inline-block;
+	max-width: 110px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
+	font-weight: normal;
 }
 
-/* Narrower windows: only the active character's name */
-@media (max-width: 1150px) {
-	.multi-track-chip.is-recent:not(.is-active) .multi-track-name { display: none; }
-	.multi-track-name { max-width: 70px; }
-}
-
-/* Header too narrow (multi-track.js fit): names off, then only the active / last jumper and "+N", then no strip */
-#multi-track-strip.mt-compact .multi-track-name { display: none !important; }
+/* Header too narrow (multi-track.js fit, classes on #topbar): names off, then only the active / last jumper and
+   "+N", then no strip, then no name in "Current System" */
+#topbar.mt-compact .multi-track-name { display: none !important; }
 .multi-track-more {
 	display: none;
 	color: #aaa;
@@ -111,34 +137,63 @@
 	padding: 0 2px;
 	cursor: default;
 }
-#multi-track-strip.mt-min .multi-track-chip:not(.is-active):not(.is-recent) { display: none; }
-#multi-track-strip.mt-min .multi-track-more { display: inline; }
-#multi-track-strip.mt-hidden { display: none !important; }
+#topbar.mt-min .multi-track-chip:not(.is-active):not(.is-recent) { display: none; }
+#topbar.mt-min .multi-track-more { display: inline; }
+#topbar.mt-nostrip #multi-track-strip { display: none !important; }
+#topbar.mt-noname .multi-track-who-wrap { display: none; }
 
-/* Tracking list: the per-character "map this character's jumps" switch */
+/* Tracking list: the per-character "auto-map this character's jumps" switch, on the eye / ship icons' row and in their
+   style (orange on, grey off, struck through in grey while off) */
+#tracking .control-group.multi-track-has-toggle { white-space: nowrap; }
 #tracking .multi-track-toggle {
-	cursor: pointer;
-	opacity: .35;
 	position: relative;
-	margin-left: 2px;
+	color: #aaa;
 }
-#tracking .multi-track-toggle::after {	/* struck through while off */
+#tracking .multi-track-toggle.active { color: orange; }
+#tracking .multi-track-toggle:not(.active)::after {
 	content: "";
 	position: absolute;
 	left: -1px;
 	right: -1px;
 	top: 50%;
-	border-top: 2px solid #ff4747;
+	border-top: 1px solid #888;
 	transform: rotate(-35deg);
 }
-#tracking .multi-track-toggle.is-on {
-	opacity: 1;
-	color: orange;
-}
-#tracking .multi-track-toggle.is-on::after { display: none; }
-#tracking .multi-track-toggle:hover { opacity: 1; }
 #tracking .multi-track-toggle:focus { outline: none; }
 #tracking .multi-track-toggle:focus-visible { outline: 1px dotted #ccc; }
 
-/* The jump pop-ups name the character that jumped (jump-return.js) */
-.jump-return-who { color: orange; }
+/* Jump questions and pop-ups name the character that jumped (2+ tracked characters): the automapper's
+   "Which Signature?" dialog, the signature prompt, the return bookmark */
+.jump-who {
+	display: inline-block;
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
+	font-weight: bold;
+	color: #fff;
+}
+.jump-who-banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 8px;
+	padding: 4px 6px;
+	border-left: 3px solid darkorange;
+	background: rgba(255, 140, 0, .08);
+	font-size: 1.2em;
+}
+.jump-who-banner .jump-who { max-width: 220px; }
+.jump-who-avatar { width: 28px; height: 28px; border-radius: 3px; flex: none; }
+
+/* Header too narrow: cap a long tracked character name top right (upstream's #user-track-name) */
+#topbar.mt-capuser #user-track-name {
+	display: inline-block;
+	max-width: 120px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
+}
+#topbar.mt-capuser-tight #user-track-name { max-width: 70px; }

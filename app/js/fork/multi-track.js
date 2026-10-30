@@ -12,10 +12,11 @@ const multiTrack = {
 	TICK_MS: 1000,
 	RECENT_MS: 60000,			// the last jumper is highlighted this long
 	FRESH_MS: 10000,			// ...and pulses for the first part of it
-	SAVE_DELAY_MS: 10000,		// several switches in a row cause one options save
 	PODS: [33328, 670],
 	NO_MAP_SYSTEMS: [30000142, 30002187],	// Jita, Amarr: likely pod-out destinations (as the automapper)
 	SPECIAL_REGION: 12000000,	// abyssal and other special space (as the automapper)
+
+	SETTING_TEXT: "Map jumps of all my tracked characters",	// the Settings row's text; the tip quotes it
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -46,6 +47,11 @@ const multiTrack = {
 				return na < nb ? -1 : na > nb ? 1 : (a < b ? -1 : a > b ? 1 : 0);
 			})
 			.slice(0, limit);
+	},
+
+	/** A character is being tracked (the user didn't untrack with a click on the active one) */
+	tracking: function(activeId) {
+		return activeId !== null && activeId !== undefined && activeId !== "";
 	},
 
 	/** Snapshot of what a jump needs to know about where a character was */
@@ -132,10 +138,31 @@ const multiTrack = {
 		const where = [state.systemName, state.ship].filter(Boolean).join(", ");
 		if (where) { parts.push(where); }
 		if (state.offline) { parts.push("offline"); }
-		if (state.active) { parts.push("active: its jumps are mapped"); }
-		else { parts.push("click to make it the active character"); }
+		if (state.active) { parts.push("Active character: its jumps are mapped"); }
+		else { parts.push("Click to make this the active character"); }
 		if (state.recent && state.agoSeconds !== null) { parts.push("jumped " + state.agoSeconds + " s ago"); }
 		return parts.join(" · ");
+	},
+
+	/**
+	 * The character a jump question (automapper "Which Signature?", signature prompt, return bookmark) is about, or null.
+	 * Named whenever 2 or more characters are tracked, whether or not this feature is on; with one character no change.
+	 * jumper: the jumping character ({characterID, characterName}, tripwire.client.EVE at the jump).
+	 */
+	whoFor: function(characters, jumper) {
+		if (!jumper || !jumper.characterName || Object.keys(characters || {}).length < 2) { return null; }
+		return { id: String(jumper.characterID || ""), name: String(jumper.characterName) };
+	},
+
+	/** The automapper's "Which Signature?" dialog title */
+	pickerTitle: function(who) {
+		return who && who.name ? "Which signature did " + who.name + " jump through?" : "Which Signature?";
+	},
+
+	/** Notice for a jump that waits while the automapper's dialog is open (plain text) */
+	waitNotice: function(name, fromName, toName) {
+		return (name || "A character") + " jumped " + (fromName || "?") + " → " + (toName || "?")
+			+ " while the Which Signature? question was open. It is mapped as soon as you answer.";
 	},
 
 	/** The tip's text when another character jumped while the feature is off */
@@ -144,7 +171,7 @@ const multiTrack = {
 		const who = d.name || "Another of your characters";
 		const route = d.fromName && d.toName ? " " + d.fromName + " → " + d.toName : " through a wormhole";
 		const main = d.activeName ? "only " + d.activeName + " is mapped" : "only your active character is mapped";
-		return who + " jumped" + route + ", but " + main + ". Turn on \"Map jumps of all my characters\" in Settings > "
+		return who + " jumped" + route + ", but " + main + ". Turn on \"" + multiTrack.SETTING_TEXT + "\" in Settings > "
 			+ "Wormhole Jumps & Mass and Tripwire switches to whichever character jumps.\n\nTurn tips off in Settings > General.";
 	}
 };
@@ -215,7 +242,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				tripwire.EVE(Object.assign({}, char, { systemID: move.from, systemName: before.systemName || systemName(move.from), stationID: null, stationName: null }), true);
 				tripwire.EVE(now);
 				state.lastJump = { id: move.id, at: Date.now() };
-				if (typeof o.saveDelay === "function") { o.saveDelay(multiTrack.SAVE_DELAY_MS); } else { o.save(); }
+				// Not saved: the switch is this session's state. The next save the user makes carries it; a reload goes back
+				// to the last saved active character. (Saving here let a background tab overwrite settings changed elsewhere.)
 				if (typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "switched"); }
 			} catch (e) {
 				console.warn("multi-track: could not switch to " + move.id, e);
@@ -259,15 +287,41 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					return;
 				}
 				if (used.indexOf(m.id) < 0) { return; }	// excluded, or over the cap
+				if (!multiTrack.tracking(o.tracking.active)) { return; }	// the user stopped tracking: don't start again
 				state.queue.push(m);	// in order: a second jump of the same character follows its first
 			});
-			// One switch per tick: the next character's automap request then finds the hole the first one made
-			const next = state.queue.shift();
-			if (next) { switchTo(next); }
+			// One switch per tick: the next character's automap request then finds the hole the first one made. While a
+			// jump question is open (the automapper's "Which Signature?") switching waits, so the dialog keeps naming and
+			// acting for the character it asked about; the waiting jumps are mapped once it closes.
+			if (state.queue.length && pickerOpen()) {
+				state.queue.forEach(function(m) {
+					if (m.noticed) { return; }
+					m.noticed = true;
+					const c = chars[m.id];
+					if (typeof Notify !== "undefined" && c) {
+						Notify.trigger(_.escape(multiTrack.waitNotice(c.characterName, systemName(m.from), systemName(m.to))), "yellow", 8000);
+					}
+				});
+			} else {
+				const next = state.queue.shift();
+				if (on && next) { switchTo(next); } else if (!on) { state.queue = []; }	// turned off or Reset meanwhile
+			}
 			render();
 		}
 
+		function pickerOpen() { return typeof automapState !== "undefined" && !!automapState.pendingDecision; }
+
 		// ---- Header: chips and "Current System (name)" ----
+
+		function attachTip($el) { if (typeof Tooltips !== "undefined" && $el.length) { Tooltips.attach($el); } }
+		/** Set a data-tooltip, and the open tooltip's text when it is showing for this element */
+		function setTip($el, text) {
+			if ($el.attr("data-tooltip") === text) { return; }
+			$el.attr({ "data-tooltip": text, "aria-label": text });
+			if (typeof Tooltips !== "undefined" && Tooltips.isOpen && Tooltips.source && Tooltips.source[0] === $el[0] && typeof Tooltips.setContent === "function") {
+				Tooltips.setContent(text);
+			}
+		}
 
 		function render() {
 			const o = opts();
@@ -276,7 +330,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			syncToggles(multiTrack.enabled(o));
 			renderLabel(multiTrack.jumperLabel(o, chars, activeId()));
 			if (ids.length < 2) {
-				if (state.stripKey !== null) { $("#multi-track-strip").remove(); state.stripKey = null; }
+				if (state.stripKey !== null) { $("#multi-track-strip").remove(); state.stripKey = null; fit(true); }
 				return;
 			}
 			const now = Date.now();
@@ -285,10 +339,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			});
 			const key = JSON.stringify(states.map(function(s) { return [s.id, s.name, s.active, s.recent, s.fresh, s.offline]; }));
 			let $strip = $("#multi-track-strip");
+			let rebuilt = false;
 			if (key !== state.stripKey || !$strip.length) {
 				state.stripKey = key;
+				rebuilt = true;
 				$strip.remove();
-				$strip = $("<span id='multi-track-strip' role='group' aria-label='Your tracked characters'></span>");
+				// Next to the "Current System" heading, not inside it (the heading's name stays as it is)
+				$strip = $("<span id='multi-track-strip' role='group' aria-label='Your tracked characters'></span>")
+					.append("<h3 class='multi-track-sep' aria-hidden='true'>|</h3>");
 				states.forEach(function(s) {
 					const $chip = $("<button type='button' class='multi-track-chip'></button>")
 						.attr({ "data-characterid": s.id, "aria-pressed": s.active ? "true" : "false" })
@@ -303,33 +361,41 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				const hidden = states.filter(function(s) { return !s.active && !s.recent; });
 				if (hidden.length) {	// shown only when the header is too narrow for every chip (fit)
 					$strip.append($("<span class='multi-track-more'></span>").text("+" + hidden.length)
-						.attr("title", hidden.map(function(s) { return s.name; }).join(", ")));
+						.attr("data-tooltip", hidden.map(function(s) { return s.name; }).join(", ")));
 				}
-				$("#currentSpan").append($strip);
-				fit(true);
+				$("h3#systemSearch").first().after($strip);
 			}
 			states.forEach(function(s) {	// the "jumped 12 s ago" part changes every tick: only the tooltip text
-				const title = multiTrack.chipTitle(s);
-				$strip.find(".multi-track-chip[data-characterid='" + s.id + "']").attr({ title: title, "aria-label": title });
+				setTip($strip.find(".multi-track-chip[data-characterid='" + s.id + "']"), multiTrack.chipTitle(s));
 			});
-			fit(false);
+			if (rebuilt) { attachTip($strip.find("[data-tooltip]")); }
+			$strip.toggle($("#currentSpan").is(":visible"));	// hidden with Current System (system search open, not tracking)
+			fit(rebuilt);
 		}
 
-		/** Keep the header on one line: names off, then only the active / last jumper (+N), then no strip */
-		const FIT_LEVELS = ["", "mt-compact", "mt-compact mt-min", "mt-hidden"];
+		// Keep the header on one line: a long tracked name top right capped, chip names off, then only the active / last
+		// jumper (+N), then no strip, then no name in "Current System", then the top-right name capped shorter. The
+		// classes go on #topbar (the strip and the labels read them).
+		const FIT_STEPS = ["mt-capuser", "mt-compact", "mt-min", "mt-nostrip", "mt-noname", "mt-capuser-tight"];
+		const FIT_LEVELS = FIT_STEPS.map(function(c, i) { return FIT_STEPS.slice(0, i).join(" "); }).concat([FIT_STEPS.join(" ")]);
+		const FIT_CLASSES = FIT_STEPS.join(" ");
 		function headerWrapped() {
 			const left = document.querySelector("#topbar > .align-left");
 			const right = document.querySelector("#topbar > .align-right");
 			if (!left || !right) { return false; }
 			return right.getBoundingClientRect().top > left.getBoundingClientRect().top + 5;
 		}
+		/** fromStart: try the roomiest level first (after a resize or a change); else only tighten when wrapped */
 		function fit(fromStart) {
-			const $strip = $("#multi-track-strip");
-			if (!$strip.length || !$("#currentSpan").is(":visible")) { return; }
-			if (!fromStart && !headerWrapped()) { return; }	// the every-tick check only ever tightens
+			const $bar = $("#topbar");
+			if (!$("#multi-track-strip").length && !$(".multi-track-who-wrap").length) {
+				if (state.fitLevel) { $bar.removeClass(FIT_CLASSES); state.fitLevel = 0; }
+				return;
+			}
+			if (!fromStart && !headerWrapped()) { return; }
 			let level = fromStart ? 0 : (state.fitLevel || 0);
 			for (; level < FIT_LEVELS.length; level++) {
-				$strip.removeClass("mt-compact mt-min mt-hidden").addClass(FIT_LEVELS[level]);
+				$bar.removeClass(FIT_CLASSES).addClass(FIT_LEVELS[level]);
 				if (!headerWrapped()) { break; }
 			}
 			state.fitLevel = Math.min(level, FIT_LEVELS.length - 1);
@@ -339,6 +405,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			clearTimeout(resizeTimer);
 			resizeTimer = setTimeout(function() { try { fit(true); } catch (e) { /* the next render */ } }, 150);
 		});
+		$("#search").on("click", function() { setTimeout(function() { try { render(); fit(true); } catch (e) { /* the next tick */ } }, 0); });
 
 		function renderLabel(name) {
 			const $label = $("#currentSpan > .pointer").first();
@@ -346,42 +413,45 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (originalLabel === null) { originalLabel = $label.text(); }
 			if (name === state.labelKey || (!name && state.labelKey === null)) { return; }	// off: never touched
 			state.labelKey = name;
+			if (name) {
+				$label.text("Current System").append(
+					$("<span class='multi-track-who-wrap'></span>").append(" (", $("<span class='multi-track-who'></span>").text(name).attr("title", name), ")"), ": ");
+			} else {
+				$label.text(originalLabel);
+			}
 			setTimeout(function() { fit(true); }, 0);	// the label changes the header's width
-			if (name) { $label.text("Current System (").append($("<span class='multi-track-who'></span>").text(name), "): "); }
-			else { $label.text(originalLabel); }
 		}
 
-		// ---- Tracking list: a "map this character's jumps" switch per character, only while the feature is on ----
+		// ---- Tracking list: an "auto-map this character's jumps" switch per character, only while the feature is on ----
+		// Looks like the eye / ship icons next to it (orange when on), but is not `.interactable`: tracking.js's handler
+		// for those would write a character option.
 
-		function toggleTitle(on) {
-			return on ? "Map this character's wormhole jumps: ON. Click to stop switching to it when it jumps."
-				: "Map this character's wormhole jumps: OFF. Click to switch to it whenever it jumps through a wormhole.";
-		}
+		function toggleTitle(on) { return "Auto-map this character's jumps: " + (on ? "on" : "off"); }
 
 		function syncToggles(on) {
 			const o = opts();
 			if (!on) {
-				if (state.togglesOn !== false) { $("#tracking .multi-track-toggle").remove(); state.togglesOn = false; }
+				if (state.togglesOn !== false) {
+					$("#tracking .multi-track-toggle").remove();
+					$("#tracking .multi-track-has-toggle").removeClass("multi-track-has-toggle");
+					state.togglesOn = false;
+				}
 				return;
 			}
 			state.togglesOn = true;
 			$("#tracking .tracking-clone").each(function() {
 				const id = $(this).attr("data-characterid");
 				if (!id) { return; }
+				const included = !multiTrack.excluded(o, id);
 				let $t = $(this).find(".multi-track-toggle");
 				if (!$t.length) {
 					$t = $("<i class='multi-track-toggle' data-icon='auto' role='switch' tabindex='0'></i>");
-					$(this).find(".control-group").first().append($t);
-					if (typeof Tooltips !== "undefined") { Tooltips.attach($t); }
+					$(this).find(".control-group").first().addClass("multi-track-has-toggle").append($t);
+					setTip($t, toggleTitle(included));
+					attachTip($t);
 				}
-				const included = !multiTrack.excluded(o, id);
-				if ($t.attr("aria-checked") !== String(included)) {
-					$t.toggleClass("is-on", included).attr({ "aria-checked": String(included), "data-tooltip": toggleTitle(included), "aria-label": toggleTitle(included) });
-					// The tooltip under the mouse keeps its old text until reopened: update it in place
-					if (typeof Tooltips !== "undefined" && Tooltips.isOpen && Tooltips.source && Tooltips.source[0] === $t[0] && typeof Tooltips.setContent === "function") {
-						Tooltips.setContent(toggleTitle(included));
-					}
-				}
+				$t.toggleClass("active", included).attr("aria-checked", String(included));
+				setTip($t, toggleTitle(included));
 			});
 		}
 
@@ -429,8 +499,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			forkSettings.register({
 				section: "jumps", order: 5, id: "multiTrack-enabled", type: "checkbox", key: "multiTrack",
 				label: "My characters:",
-				text: "Map jumps of all my tracked characters (switch to whichever one jumps a wormhole)",
-				hint: "Up to 5 characters. Leave one out with the A icon under it in the tracking list (click your name, top right).",
+				text: multiTrack.SETTING_TEXT,
+				hint: "Tripwire switches to whichever one jumps a wormhole and maps it. Up to 5 characters. Leave one out with "
+					+ "the A (auto-map) icon next to the eye and ship icons in the tracking list (click your name, top right).",
 				keywords: ["multi", "multibox", "alts", "characters", "tracking", "active character", "switch"],
 				get: function(o) { return multiTrack.enabled(o); },
 				set: function(o, on) {
@@ -510,7 +581,41 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		};
 		multiTrack.pick = pick;
 		multiTrack.characters = characters;
-		/** Name of the character that jumped, for the jump pop-ups (jump-return.js, jump-sig-prompt.js), or "" */
-		multiTrack.labelNow = function() { return multiTrack.jumperLabel(opts(), characters(), activeId()); };
+		/** The character a jump question is about ({id, name}), or null: the one tripwire.EVE just moved (call it at the
+		 *  jump, not later). Used by jump-return.js, jump-sig-prompt.js and the automapper's dialog below. */
+		multiTrack.jumperNow = function() { return multiTrack.whoFor(characters(), tripwire.client && tripwire.client.EVE); };
+
+		/** "[portrait] Alt One <rest>" for a jump question (text only: no markup from the name) */
+		function whoBanner(who, rest) {
+			const $b = $("<div class='jump-who-banner'></div>");
+			$("<img class='jump-who-avatar' alt='' width='28' height='28' />")
+				.attr("src", "https://image.eveonline.com/Character/" + encodeURIComponent(who.id) + "_64.jpg")
+				.on("error", function() { $(this).remove(); }).appendTo($b);
+			$b.append($("<span class='jump-who'></span>").text(who.name).attr("title", who.name));
+			if (rest) { $b.append($("<span class='jump-who-rest'></span>").text(" " + rest)); }
+			return $b;
+		}
+		multiTrack.whoBanner = whoBanner;
+
+		// ---- The automapper's "Which Signature?" dialog names the character that jumped ----
+		// automapper.js builds its answer (from, to, automap.character) when the jump happens, so a switch while the dialog
+		// is open can't credit another character (and the tick holds switches until it closes); the dialog only has to
+		// say whose jump it is. Named with 2+ tracked characters, whether or not "Map jumps of all" is on.
+		let pickerWho = null;
+		if (typeof tripwire.autoMapper === "function") {
+			const originalAutoMapper = tripwire.autoMapper;
+			tripwire.autoMapper = function() {
+				try { pickerWho = multiTrack.jumperNow(); } catch (e) { pickerWho = null; }
+				try { return originalAutoMapper.apply(this, arguments); }
+				finally { pickerWho = null; }	// the dialog opens synchronously inside the call
+			};
+		}
+		$(document).on("dialogopen", "#dialog-select-signature", function() {
+			const $d = $(this);
+			$d.find(".jump-who-banner").remove();
+			const who = pickerWho;
+			$d.dialog("option", "title", multiTrack.pickerTitle(who));	// jQuery UI 1.13 sets the title as text
+			if (who) { $d.prepend(whoBanner(who, "jumped through an unknown hole")); }
+		});
 	});
 }

@@ -17,6 +17,16 @@ describe('esiOfflineSkip', () => {
 		assert.strictEqual(esiOfflineSkip.shouldPoll('unknown', false), true);
 		assert.strictEqual(esiOfflineSkip.shouldPoll('offline', false), false);
 		assert.strictEqual(esiOfflineSkip.shouldPoll('offline', true), true, 'token about to expire: upstream asks for a refresh');
+		assert.strictEqual(esiOfflineSkip.shouldPoll('offline', false, true), true, 'active or opted in: never skipped');
+	});
+
+	it('keptIds: the active character, plus the opted-in ones when the feature is on', () => {
+		const chars = { 1: { characterName: 'A' }, 2: { characterName: 'B' }, 3: { characterName: 'C' } };
+		const mt = { optedIn: (o, c) => (o && o.multiTrack && o.multiTrack.enabled ? Object.keys(c).filter(id => !(o.multiTrack.exclude || {})[id]) : []) };
+		assert.deepStrictEqual(esiOfflineSkip.keptIds({ tracking: { active: '2' } }, chars, mt), ['2']);
+		assert.deepStrictEqual(esiOfflineSkip.keptIds({ tracking: { active: 2 }, multiTrack: { enabled: true, exclude: { 3: true } } }, chars, mt), ['2', '1']);
+		assert.deepStrictEqual(esiOfflineSkip.keptIds({ tracking: { active: null } }, chars, null), []);
+		assert.deepStrictEqual(esiOfflineSkip.keptIds(null, chars, mt), []);
 	});
 
 	it('filter: a new map with the same objects, offline ones left out', () => {
@@ -26,6 +36,7 @@ describe('esiOfflineSkip', () => {
 		assert.strictEqual(out[1], chars[1]);
 		assert.notStrictEqual(out, chars);
 		assert.deepStrictEqual(Object.keys(esiOfflineSkip.filter(chars, {}, null)), ['1', '2', '3', '4']);
+		assert.deepStrictEqual(Object.keys(esiOfflineSkip.filter(chars, { 2: 'offline' }, null, id => id === '2')), ['1', '2', '3', '4'], 'kept');
 		assert.deepStrictEqual(esiOfflineSkip.filter(undefined, {}), {});
 	});
 
@@ -90,6 +101,19 @@ describe('esiOfflineSkip', () => {
 			calls = [];
 			tw.esi.location();
 			assert.deepStrictEqual(calls, ['location:1', 'location:2']);
+		});
+
+		it('the active character is polled even when /online/ says offline (a login takes up to 2 minutes to show)', () => {
+			global.options = { tracking: { active: '2' } };
+			try {
+				tw.esi.characters[1].tokenExpire = tw.esi.characters[2].tokenExpire = 'x';
+				global.moment = (function() { const m = function() { return {}; }; m.utc = function() { return { subtract: () => ({ isBefore: () => false }) }; }; return m; })();
+				tw.esi.characterStatus(1); tw.esi.characterStatus(2);
+				answer(1, { online: false }); answer(2, { online: false });
+				calls = [];
+				tw.esi.location();
+				assert.deepStrictEqual(calls, ['location:2'], 'only the offline alt that is not active is skipped');
+			} finally { delete global.options; }
 		});
 
 		it('an offline character with an expiring token stays in the loop (upstream asks for the refresh)', () => {
