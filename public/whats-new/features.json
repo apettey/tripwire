@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 152,
+      "date": "2026-10-30",
+      "title": "Choose where pop-ups appear, and close them quickly",
+      "description": "All pop-ups now stack in one corner instead of overlapping. Choose the corner in Settings > General > Pop-ups appear. Kill pop-ups now appear there too, rather than bottom right.\n\nEvery pop-up has a close button, including the hot or cold mass prompt. With two or more showing, press Close all, or press Esc. In the same Settings section you can make pop-ups close after 5 seconds or stay see-through until you hover them.",
+      "images": [
+        { "src": "whats-new/img/pr-152-popup-dock.png", "caption": "Pop-ups stacked in the bottom right corner, with Close all" }
+      ]
+    },
+    {
       "pr": 151,
       "date": "2026-10-30",
       "title": "Map jumps of all my tracked characters",

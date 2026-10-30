@@ -521,7 +521,7 @@ const killReporting = {
 	toast: function(kill, category, place) {
 		let $box = $("#kill-reporting-toasts");
 		if (!$box.length) {
-			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo("body");
+			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo(typeof forkNotifications !== "undefined" ? forkNotifications.dock() : "body");
 		}
 		if (!$box.data("killReportingBound")) {
 			// Also when structure-timers.js created the box first

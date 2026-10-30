@@ -270,7 +270,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				else if (e.key === "Escape") { hidePanel(); }
 			});
 
-			$("body").append($panel);
+			$(typeof forkNotifications !== "undefined" ? forkNotifications.dock() : "body").append($panel);
 			// Notices (jump mass prompt etc.) stack in the same top-right spot: push them below the panel
 			document.documentElement.style.setProperty("--jump-return-height", ($panel.outerHeight() || 26) + "px");
 			$("body").addClass("jump-return-open");

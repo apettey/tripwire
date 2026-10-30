@@ -1,0 +1,81 @@
+/* The pop-up dock (fork-owned, see app/js/fork/notifications.js). Everything in it stacks in the chosen corner:
+   new pop-ups join on the far side, so the ones already there don't move under the mouse. */
+#fn-dock {
+	position: fixed;
+	z-index: 12000;
+	display: flex;
+	gap: 6px;
+	box-sizing: border-box;
+	max-width: 380px;
+	max-height: calc(100vh / var(--fn-zoom, 1) - 54px);
+	overflow: hidden auto;
+	scrollbar-width: none;
+	padding: 2px;
+	pointer-events: none;
+}
+
+#fn-dock.fn-top-right, #fn-dock.fn-top-left { top: 42px; flex-direction: column; }
+#fn-dock.fn-bottom-right, #fn-dock.fn-bottom-left { bottom: 10px; flex-direction: column-reverse; }
+#fn-dock.fn-top-right, #fn-dock.fn-bottom-right { right: 10px; align-items: flex-end; }
+#fn-dock.fn-top-left, #fn-dock.fn-bottom-left { left: 10px; align-items: flex-start; }
+
+/* The dock places them now, whatever each pop-up's own stylesheet (or jBox, inline) says */
+#fn-dock > .jBox-Notice,
+#fn-dock > #jump-return-panel,
+#fn-dock > #jump-sig-panel,
+#fn-dock > #kill-reporting-toasts,
+#fn-dock > #watchlist-toasts {
+	position: static !important;
+	margin: 0 !important;
+	translate: none !important;
+	flex: 0 0 auto;
+}
+
+#fn-dock > .jBox-Notice,
+#fn-dock > #jump-return-panel,
+#fn-dock > #jump-sig-panel { pointer-events: auto; }
+
+#fn-dock > #kill-reporting-toasts:empty,
+#fn-dock > #watchlist-toasts:empty { display: none; }
+
+#fn-dock.fn-bottom-right > #kill-reporting-toasts, #fn-dock.fn-bottom-right > #watchlist-toasts,
+#fn-dock.fn-top-right > #kill-reporting-toasts, #fn-dock.fn-top-right > #watchlist-toasts { align-items: flex-end; }
+
+/* jBox's own close button sits on the notice's corner; keep the text clear of it */
+#fn-dock .jBox-Notice .jBox-content { padding-right: 28px; }
+#fn-dock .jBox-Notice .jBox-closeButton { top: 3px; right: 4px; width: 18px; height: 18px; background: none; color: inherit; opacity: 0.75; }
+#fn-dock .jBox-Notice .jBox-closeButton:hover { opacity: 1; }
+#fn-dock .jBox-Notice .jBox-closeButton svg { top: 4px; right: 4px; width: 10px; height: 10px; margin: 0; }
+#fn-dock .jBox-Notice .jBox-closeButton path { fill: currentColor; }
+
+.fn-close-all {
+	/* A fixed row at the corner, kept from the first pop-up on: nothing ever moves into or out of its place, so a click
+	   meant for a pop-up's close button can't land on it */
+	display: none;
+	visibility: hidden;
+	order: -1;
+	position: sticky;
+	top: 0;
+	bottom: 0;
+	z-index: 13000;	/* above scrolled pop-ups: jBox writes z-index 12000 on each notice */
+	flex: 0 0 auto;
+	pointer-events: auto;
+	padding: 1px 8px;
+	background: rgba(20, 24, 30, 0.95);
+	border: 1px solid #5B9BD5;
+	border-radius: 3px;
+	color: #E6EEF7;
+	font-size: 11px;
+	line-height: 16px;
+	cursor: pointer;
+}
+.fn-close-all.fn-reserved { display: block; }
+.fn-close-all.fn-shown { visibility: visible; }
+.fn-close-all:hover, .fn-close-all:focus { background: #2A4C74; outline: none; }
+
+/* Settings > General > See-through pop-ups (on the container: jBox and jQuery fades write the wrapper's opacity) */
+#fn-dock.fn-see-through .jBox-Notice:not(:hover) .jBox-container,
+#fn-dock.fn-see-through .kill-toast:not(:hover),
+#fn-dock.fn-see-through .watchlist-toast:not(:hover),
+#fn-dock.fn-see-through > #jump-sig-panel:not(:hover):not(:focus-within) { opacity: 0.45; }
+#fn-dock.fn-see-through > #jump-return-panel:not(:hover):not(:focus-within):not(.jump-return-fading) { opacity: 0.45; }

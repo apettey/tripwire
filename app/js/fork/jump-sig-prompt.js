@@ -317,7 +317,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			);
 			$panel.append($head, $list, $foot);
 			$panel.on("keydown", function(e) { if (e.key === "Escape") { hidePanel(); } });
-			$("body").append($panel).addClass("jump-sig-open");
+			$(typeof forkNotifications !== "undefined" ? forkNotifications.dock() : "body").append($panel);
+			$("body").addClass("jump-sig-open");
 			document.documentElement.style.setProperty("--jump-sig-height", ($panel.outerHeight() || 100) + "px");
 			hideTimer = setTimeout(hidePanel, jumpSigPrompt.AUTO_HIDE_MS);
 		}

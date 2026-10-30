@@ -27,6 +27,7 @@ describe('maskDefaults allow-list', () => {
 		keys.delete('usageStats');       // left out on purpose: sending usage statistics is each user's own privacy choice
 		keys.delete('hints');            // left out on purpose: feature tips are each user's own (and hold their tip history)
 		keys.delete('multiTrack');       // left out on purpose: which of my own characters switch is each user's own choice
+		keys.delete('notifications');    // left out on purpose: which corner suits you depends on your own screen and layout
 		assert.deepStrictEqual([...keys].sort(), server);
 	});
 
