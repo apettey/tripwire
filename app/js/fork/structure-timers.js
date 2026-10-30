@@ -342,7 +342,7 @@ const structureTimers = {
 		if (!due.length) { return; }
 		let $box = $("#kill-reporting-toasts");
 		if (!$box.length) {
-			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo("body");
+			$box = $("<div id='kill-reporting-toasts' aria-live='polite'></div>").appendTo(typeof forkNotifications !== "undefined" ? forkNotifications.dock() : "body");
 			$box.on("click", ".kill-toast-close", function(e) { e.stopPropagation(); $(this).closest(".kill-toast").remove(); });
 		}
 		let sound = null;

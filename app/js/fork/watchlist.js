@@ -1022,7 +1022,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (settings.popups) {
 				let $box = $("#watchlist-toasts");
 				if (!$box.length) {
-					$box = $("<div id='watchlist-toasts' aria-live='polite'></div>").appendTo("body");
+					$box = $("<div id='watchlist-toasts' aria-live='polite'></div>").appendTo(typeof forkNotifications !== "undefined" ? forkNotifications.dock() : "body");
 					$box.on("click", ".watchlist-toast-close", function() { $(this).closest(".watchlist-toast").remove(); });
 				}
 				wl.groupByFilter(fresh).forEach(function(group) {
