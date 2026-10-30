@@ -52,28 +52,25 @@ describe('multiTrack', () => {
 		assert.deepStrictEqual(multiTrack.optedIn(on(), null), []);
 	});
 
-	it('detectMoves: system changes of non-active characters only', () => {
+	it('detectMoves: system changes, the active character marked', () => {
 		let r = multiTrack.detectMoves({}, chars(), ['1', '2', '3'], '1');
 		assert.deepStrictEqual(r.moves, [], 'first sighting is not a move');
 		assert.strictEqual(r.last['2'].systemID, J1);
 
 		r = multiTrack.detectMoves(r.last, chars({ 2: { characterID: 2, characterName: 'Alt Two', systemID: J2, systemName: 'J100002' } }), ['1', '2', '3'], '1');
 		assert.strictEqual(r.moves.length, 1);
-		assert.deepStrictEqual([r.moves[0].id, r.moves[0].from, r.moves[0].to], ['2', J1, J2]);
+		assert.deepStrictEqual([r.moves[0].id, r.moves[0].from, r.moves[0].to, r.moves[0].active], ['2', J1, J2, false]);
 		assert.strictEqual(r.moves[0].before.systemID, J1);
 
 		const again = multiTrack.detectMoves(r.last, chars({ 2: { characterID: 2, systemID: J2 } }), ['1', '2', '3'], '1');
 		assert.deepStrictEqual(again.moves, [], 'unchanged');
 	});
 
-	it('detectMoves: the active character is skipped but remembered', () => {
+	it('detectMoves: the active character move is reported, marked active', () => {
 		let r = multiTrack.detectMoves({}, chars(), ['1', '2'], 1);
 		r = multiTrack.detectMoves(r.last, chars({ 1: { characterID: 1, systemID: J2 } }), ['1', '2'], 1);
-		assert.deepStrictEqual(r.moves, []);
-		assert.strictEqual(r.last['1'].systemID, J2, 'snapshot kept up to date');
-		// Once it is no longer active, its old move is not replayed
-		r = multiTrack.detectMoves(r.last, chars({ 1: { characterID: 1, systemID: J2 } }), ['1', '2'], 2);
-		assert.deepStrictEqual(r.moves, []);
+		assert.deepStrictEqual(r.moves.map(m => [m.id, m.active]), [['1', true]]);
+		assert.strictEqual(r.last['1'].systemID, J2);
 	});
 
 	it('detectMoves: a missing systemID keeps the old snapshot; gone characters are dropped', () => {
@@ -88,10 +85,10 @@ describe('multiTrack', () => {
 		assert.deepStrictEqual(multiTrack.detectMoves(undefined, undefined, undefined, null), { moves: [], last: {} });
 	});
 
-	it('detectMoves: no active character means every move counts', () => {
+	it('detectMoves: no active character means no move is marked active', () => {
 		let r = multiTrack.detectMoves({}, chars(), ['1', '2'], null);
 		r = multiTrack.detectMoves(r.last, chars({ 1: { characterID: 1, systemID: J2 }, 2: { characterID: 2, systemID: J2 } }), ['1', '2'], null);
-		assert.deepStrictEqual(r.moves.map(m => m.id), ['1', '2']);
+		assert.deepStrictEqual(r.moves.map(m => [m.id, m.active]), [['1', false], ['2', false]]);
 	});
 
 	it('isMappableJump: mirrors the automapper', () => {
@@ -123,27 +120,35 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.jumperLabel(on(), chars(), 'new'), '');
 	});
 
-	it('chipState: active, recent (a minute), fresh, offline', () => {
+	it('chipState: active, recent (a minute, any jumper), fresh, offline, queued, paused, mapped, stale', () => {
 		const c = { characterID: 2, characterName: 'Alt Two', systemName: 'J100002', shipTypeName: 'Cheetah' };
-		let s = multiTrack.chipState(c, { activeId: '2', lastJump: { id: 2, at: 1000 }, now: 5000 });
-		assert.deepStrictEqual([s.id, s.active, s.recent, s.fresh, s.offline, s.agoSeconds], ['2', true, true, true, false, 4]);
-		s = multiTrack.chipState(c, { activeId: '1', lastJump: { id: '2', at: 1000 }, now: 1000 + 30000 });
-		assert.deepStrictEqual([s.active, s.recent, s.fresh], [false, true, false]);
-		s = multiTrack.chipState(c, { activeId: '1', lastJump: { id: '2', at: 1000 }, now: 1000 + 60000 });
+		let s = multiTrack.chipState(c, { activeId: '2', jumps: { 2: 1000 }, now: 5000 });
+		assert.deepStrictEqual([s.id, s.active, s.recent, s.fresh, s.offline, s.agoSeconds, s.mapped], ['2', true, true, true, false, 4, true]);
+		s = multiTrack.chipState(c, { activeId: '1', jumps: { 2: 1000, 3: 1000 }, now: 1000 + 30000 });
+		assert.deepStrictEqual([s.active, s.recent, s.fresh], [false, true, false], 'several jumpers can be ringed');
+		s = multiTrack.chipState(c, { activeId: '1', jumps: { 2: 1000 }, now: 1000 + 60000 });
 		assert.strictEqual(s.recent, false, 'after a minute');
-		s = multiTrack.chipState(c, { activeId: '1', lastJump: { id: '3', at: 1000 }, now: 2000 });
+		s = multiTrack.chipState(c, { activeId: '1', jumps: { 3: 1000 }, now: 2000 });
 		assert.deepStrictEqual([s.recent, s.agoSeconds], [false, null], 'someone else jumped');
-		s = multiTrack.chipState(Object.assign({ online: false }, c), { activeId: null, lastJump: null, now: 0 });
+		s = multiTrack.chipState(Object.assign({ online: false }, c), { activeId: null, now: 0 });
 		assert.deepStrictEqual([s.offline, s.active, s.systemName, s.ship], [true, false, 'J100002', 'Cheetah']);
+		s = multiTrack.chipState(c, { activeId: '2', queued: { 2: true }, used: ['1'], pausedMs: 61000, stale: { 2: 'token expired' } });
+		assert.deepStrictEqual([s.queued, s.mapped, s.paused, s.pausedMs, s.stale], [true, false, true, 61000, 'token expired']);
+		s = multiTrack.chipState(c, { activeId: '1', pausedMs: 61000 });
+		assert.deepStrictEqual([s.paused, s.pausedMs], [false, 0], 'the pause shows on the active chip only');
 		s = multiTrack.chipState(undefined, undefined);
 		assert.strictEqual(s.active, false);
 	});
 
 	it('chipTitle: plain text with where, state and how long ago', () => {
-		const t = multiTrack.chipTitle({ name: 'Alt <b>', systemName: 'J100002', ship: 'Cheetah', active: true, recent: true, agoSeconds: 12, offline: false });
-		assert.strictEqual(t, 'Alt <b> · J100002, Cheetah · Active character: its jumps are mapped · jumped 12 s ago');
+		const base = { name: 'Alt <b>', systemName: 'J100002', ship: 'Cheetah', active: true, recent: true, agoSeconds: 12, offline: false, mapped: true };
+		assert.strictEqual(multiTrack.chipTitle(base), 'Alt <b> · J100002, Cheetah · Active character (Current System, Follow, destination) · jumped 12 s ago');
 		assert.strictEqual(multiTrack.chipTitle({ name: 'X', systemName: '', ship: '', active: false, recent: false, agoSeconds: null, offline: true }),
 			'X · offline · Click to make this the active character');
+		assert.strictEqual(multiTrack.chipTitle(Object.assign({}, base, { recent: false, mapped: false, paused: true, pausedMs: 161000, stale: 'token expired' })),
+			'Alt <b> · J100002, Cheetah · location not updating (token expired) · Active character (Current System, Follow, destination) · '
+			+ 'not auto-mapped (its A switch is off or over the 5) · Auto-switch paused 2:41 · click to resume');
+		assert.ok(/jump waiting/.test(multiTrack.chipTitle(Object.assign({}, base, { active: false, queued: true }))));
 	});
 
 	it('tipBody: names who jumped and where, and how to turn tips off', () => {
@@ -169,10 +174,13 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.pickerTitle(null), 'Which Signature?');
 	});
 
-	it('waitNotice: who, where, and that it is mapped after the answer', () => {
+	it('waitNotice / switchText / removedNotice: plain-text notices', () => {
 		assert.strictEqual(multiTrack.waitNotice('Alt Two', 'J1', 'J2'),
-			'Alt Two jumped J1 → J2 while the Which Signature? question was open. It is mapped as soon as you answer.');
+			'Alt Two jumped J1 → J2 while a jump question was open. It is mapped as soon as you close this question.');
 		assert.ok(/^A character jumped \? → \?/.test(multiTrack.waitNotice()));
+		assert.strictEqual(multiTrack.switchText('Hauler Alt', 'J132605', 'J125634'), 'Now on Hauler Alt (jumped J132605 → J125634)');
+		assert.ok(/^Main is no longer tracked/.test(multiTrack.removedNotice('Main')));
+		assert.ok(/^The active character is no longer tracked/.test(multiTrack.removedNotice('')));
 	});
 
 	it('tracking: the user has an active character (null / empty = untracked on purpose)', () => {
@@ -181,5 +189,92 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.tracking(null), false);
 		assert.strictEqual(multiTrack.tracking(undefined), false);
 		assert.strictEqual(multiTrack.tracking(''), false);
+	});
+
+	it('tracking: "new" (before the first character arrives) is not a pick', () => {
+		assert.strictEqual(multiTrack.tracking('new'), false);
+	});
+
+	it('switchedOn / optedIn / capNote: the A switches choose; only 5 are used, with a note', () => {
+		const many = {};
+		for (let i = 1; i <= 7; i++) { many[i] = { characterID: i, characterName: 'Pilot ' + i }; }
+		const o = { multiTrack: { enabled: true, exclude: { 7: true } } };
+		assert.deepStrictEqual(multiTrack.switchedOn(o, many), ['1', '2', '3', '4', '5', '6']);
+		assert.deepStrictEqual(multiTrack.optedIn(o, many), ['1', '2', '3', '4', '5']);
+		assert.strictEqual(multiTrack.capNote(o, many), 'Auto-map is on for 6 characters; only 5 are used (the first by name). Turn one off with its A icon.');
+		o.multiTrack.exclude[6] = true;
+		assert.strictEqual(multiTrack.capNote(o, many), '');
+		assert.strictEqual(multiTrack.capNote({}, many), '', 'feature off');
+	});
+
+	it('stripIds: the used characters plus the active one even if it is off or over the cap', () => {
+		assert.deepStrictEqual(multiTrack.stripIds(on({ 2: true }), chars(), '2'), ['3', '2', '1'], 'excluded active shown, by name');
+		assert.deepStrictEqual(multiTrack.stripIds(on({ 2: true }), chars(), '1'), ['3', '1']);
+		assert.deepStrictEqual(multiTrack.stripIds(on(), chars(), null), ['3', '2', '1'], 'nothing tracked: still shown (a click resumes)');
+		assert.deepStrictEqual(multiTrack.stripIds({}, chars(), '1'), [], 'off');
+		assert.deepStrictEqual(multiTrack.stripIds(on(), chars(), '99'), ['3', '2', '1'], 'unknown active');
+	});
+
+	describe('planMoves: fleet jumps, pause', () => {
+		const NOW = 100000;
+		const mv = (id, from, to, active) => ({ id: String(id), from, to, active: !!active });
+		const plan = (moves, extra) => multiTrack.planMoves(moves, Object.assign({ now: NOW, windowMs: 10000, activeSystemID: J1, eligible: () => true }, extra || {}));
+		const actions = (r) => r.decisions.map(d => d.move.id + ':' + d.action);
+
+		it('one alt jumps elsewhere: switch', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, HS, J2)], { activeSystemID: J1 })), ['2:switch']);
+		});
+		it('the active character and an alt take the same hole in the same tick: no switch', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, J1, J2), mv(1, J1, J2, true)])), ['1:self', '2:fleet']);
+		});
+		it('the active character took that hole a few seconds ago: no switch; long ago: switch', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, J1, J2)], { activeSystemID: HS, recent: [{ from: J1, to: J2, at: NOW - 8000 }] })), ['2:fleet']);
+			assert.deepStrictEqual(actions(plan([mv(2, J1, J2)], { activeSystemID: HS, recent: [{ from: J1, to: J2, at: NOW - 30000 }] })), ['2:switch']);
+		});
+		it('an alt lands where the active character already is: no switch', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, HS, J1)], { activeSystemID: J1 })), ['2:fleet']);
+		});
+		it('several alts through one hole without the active character: one switch, the rest follow it', () => {
+			const r = plan([mv(2, J1, J2), mv(3, J1, J2), mv(4, J1, J2)], { activeSystemID: HS });
+			assert.deepStrictEqual(actions(r), ['2:switch', '3:fleet', '4:fleet']);
+			assert.deepStrictEqual(r.recent.map(x => [x.from, x.to, x.by]), [[J1, J2, '2']]);
+			// ...and one tick later the next alt through the same hole follows too
+			assert.deepStrictEqual(actions(plan([mv(5, J1, J2)], { activeSystemID: HS, recent: r.recent, now: NOW + 1000 })), ['5:fleet']);
+		});
+		it('two alts through different holes: two switches (queued in order)', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, J1, J2), mv(3, HS, HS2)], { activeSystemID: 30000142 })), ['2:switch', '3:switch']);
+		});
+		it('not eligible (off, over the cap, untracked): skip; paused: no switch, but the fleet rule still counts', () => {
+			assert.deepStrictEqual(actions(plan([mv(2, HS, J2)], { eligible: () => false })), ['2:skip']);
+			assert.deepStrictEqual(actions(plan([mv(2, HS, J2)], { paused: true })), ['2:paused']);
+			assert.deepStrictEqual(actions(plan([mv(2, HS, J1)], { paused: true })), ['2:fleet']);
+		});
+		it('old entries fall out of recent', () => {
+			assert.deepStrictEqual(plan([], { recent: [{ from: 1, to: 2, at: NOW - 20000 }, { from: 3, to: 4, at: NOW - 1000 }] }).recent.map(x => x.from), [3]);
+			assert.deepStrictEqual(multiTrack.planMoves(undefined, undefined).decisions, []);
+		});
+	});
+
+	it('isFleet: same hole within the window, or landing where the active character is', () => {
+		const m = { id: '2', from: J1, to: J2 };
+		assert.strictEqual(multiTrack.isFleet(m, [{ from: J1, to: J2, at: 0 }], HS, 5000, 10000), true);
+		assert.strictEqual(multiTrack.isFleet(m, [{ from: J2, to: J1, at: 0 }], HS, 5000, 10000), false, 'the other way');
+		assert.strictEqual(multiTrack.isFleet(m, [], J2, 5000, 10000), true);
+		assert.strictEqual(multiTrack.isFleet(m, null, null, 5000, 10000), false);
+	});
+
+	it('shortName: keeps the start and the end of a long name', () => {
+		assert.strictEqual(multiTrack.shortName('Bob Hauler'), 'Bob Hauler');
+		assert.strictEqual(multiTrack.shortName('Alexandria Longname-Of-The-Deep Space', 18), 'Alexandr…eep Space');
+		assert.strictEqual(multiTrack.shortName('Bob Scout Number Two', 18).slice(-8), 'mber Two');
+		assert.strictEqual(multiTrack.shortName(null), '');
+		assert.ok(multiTrack.shortName('x'.repeat(40), 18).length === 18);
+	});
+
+	it('clock: m:ss', () => {
+		assert.strictEqual(multiTrack.clock(161000), '2:41');
+		assert.strictEqual(multiTrack.clock(180000), '3:00');
+		assert.strictEqual(multiTrack.clock(500), '0:01');
+		assert.strictEqual(multiTrack.clock(-5), '0:00');
 	});
 });

@@ -57,7 +57,7 @@
 	padding-right: 4px;
 }
 .multi-track-chip.is-active .multi-track-name,
-.multi-track-chip.is-recent .multi-track-name { display: inline-block; }
+.multi-track-chip.is-recent .multi-track-name { display: inline-block; max-width: 120px; }
 @media (min-width: 1600px) {
 	.multi-track-name { display: inline-block; max-width: 72px; }
 }
@@ -164,15 +164,10 @@
 
 /* Jump questions and pop-ups name the character that jumped (2+ tracked characters): the automapper's
    "Which Signature?" dialog, the signature prompt, the return bookmark */
-.jump-who {
-	display: inline-block;
-	max-width: 160px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	vertical-align: bottom;
+.jump-who {	/* never cut: a long name wraps */
 	font-weight: bold;
 	color: #fff;
+	overflow-wrap: anywhere;
 }
 .jump-who-banner {
 	display: flex;
@@ -184,7 +179,7 @@
 	background: rgba(255, 140, 0, .08);
 	font-size: 1.2em;
 }
-.jump-who-banner .jump-who { max-width: 220px; }
+.jump-who-banner .jump-who-text { min-width: 0; }
 .jump-who-avatar { width: 28px; height: 28px; border-radius: 3px; flex: none; }
 
 /* Header too narrow: cap a long tracked character name top right (upstream's #user-track-name) */
@@ -197,3 +192,63 @@
 	vertical-align: bottom;
 }
 #topbar.mt-capuser-tight #user-track-name { max-width: 70px; }
+
+/* The active chip while automatic switching is paused after a manual pick ("paused 2:41"; click the chip to resume) */
+.multi-track-pause {
+	font-size: 10px;
+	color: #ddd;
+	background: rgba(255, 255, 255, .12);
+	border-radius: 7px;
+	padding: 0 5px;
+	margin-right: 2px;
+}
+#topbar.mt-compact .multi-track-pause { display: none; }
+.multi-track-chip.is-paused { border-style: dashed; }
+
+/* A jump waiting while a jump question is open: a yellow dot bottom left */
+.multi-track-chip.is-queued > .multi-track-avatar { box-shadow: 0 0 0 2px #e5c100; }
+
+/* The active character with its A switch off (or over the 5): not auto-mapped */
+.multi-track-chip.is-active.is-unmapped { box-shadow: none; border-style: dotted; }
+
+/* "Now on Alt (jumped A → B) · Back to Main" after an automatic switch: one at a time, top left under the header */
+#multi-track-notice {
+	position: fixed;
+	top: 48px;
+	left: 25px;
+	z-index: 1001;
+	max-width: calc(100vw - 50px);
+	padding: 5px 8px;
+	border: 1px solid #555;
+	border-left: 3px solid darkorange;
+	border-radius: 3px;
+	background: rgba(20, 20, 20, .95);
+	color: #ddd;
+	font-size: 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+}
+#multi-track-notice button {
+	font: inherit;
+	background: none;
+	border: 0;
+	color: orange;
+	cursor: pointer;
+	padding: 0 2px;
+}
+#multi-track-notice .multi-track-back { text-decoration: underline; }
+#multi-track-notice .multi-track-notice-close { color: #999; margin-left: 6px; }
+#multi-track-notice button:focus-visible { outline: 1px dotted #ccc; }
+
+/* Tracking list: more characters switched on than are used */
+#tracking .multi-track-cap-note {
+	max-width: 220px;
+	margin: 0 0 4px;
+	padding: 3px 5px;
+	border: 1px solid #806000;
+	background: rgba(229, 193, 0, .1);
+	color: #e5c100;
+	white-space: normal;
+}
+#jump-return-panel .jump-return-label.jump-return-label-who { overflow: visible; white-space: normal; max-width: 260px; }
+/* "Which signature did <a long name> jump through?": the title wraps instead of being cut */
+.ui-dialog[aria-describedby="dialog-select-signature"] .ui-dialog-title { white-space: normal; overflow: visible; }

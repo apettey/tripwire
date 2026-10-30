@@ -16,11 +16,16 @@ and ship polling is skipped for logged-off alts.
 | --- | --- |
 | ![before](before.png) | ![after](after.png) |
 
-After: "Current System (Alt Two)", the chip strip (active chip outlined orange; the last jumper has a cyan ring and dot
-for a minute, pulsing for the first seconds; offline characters dimmed with a hollow dot), and the per-character A
-(auto-map) switch next to the eye and ship icons in the tracking list, here off for the hauler.
+After: "Current System (Hauler Alt)", the chip strip (active chip outlined orange; every character that jumped a
+wormhole has a cyan ring and dot for a minute, pulsing for the first seconds; offline characters dimmed with a hollow
+dot), and the per-character A (auto-map) switch next to the eye and ship icons in the tracking list, here off for the
+hauler.
 
-| Which Signature? names the jumper | Signature prompt | Return bookmark |
+| Automatic switch notice (one click back) | Paused after a manual pick | Fleet jump: the active character stays |
+| --- | --- | --- |
+| ![switch notice](switch-notice.png) | ![paused](paused-chip.png) | ![fleet jump](fleet-jump.png) |
+
+| Which Signature? names the jumper (never cut) | Signature prompt | Return bookmark |
 | --- | --- | --- |
 | ![which signature](which-signature.png) | ![sig prompt](sig-prompt.png) | ![return pop-up](return-popup.png) |
 
@@ -46,6 +51,18 @@ when a non-active linked character makes a mappable wormhole jump while the feat
 
 ## Change
 
+- **When it switches** (pure `multiTrack.planMoves`, mocha-tested):
+  - An alt's jump does not switch when it takes the same hole (from → to) as the active character within 10 s, or lands
+    where the active character is. Several alts through one hole without the active character: one switch (the first),
+    the others follow it. A switch waits 1.5 s (the active character's own jump may come with the next poll) and is
+    checked again then.
+  - After a manual pick (chip, tracking list, "Back to", Ctrl+K "Switch to character") automatic switching pauses for
+    3 minutes; the active chip says "paused 2:41" and a click on it resumes.
+  - While a question or pop-up about the last jump is open (automapper "Which Signature?", signature prompt, return
+    bookmark, including their retries), switching waits so it isn't wiped: a yellow notice says so, the chip gets a
+    queued mark, and the jump is mapped once it is closed or auto-hides (60 s / 90 s at most).
+  - No switching with no active character (the user untracked on purpose), when turned off or after Reset.
+  - Each automatic switch shows one notice "Now on X (jumped A → B) · Back to Y" (replaced by the next).
 - New `app/js/fork/multi-track.js` (+ css, mocha tests). A 1 s in-memory tick diffs every linked character's system
   (filled by upstream's existing 5 s location poll). A wormhole jump of an opted-in, non-active character (same rules as
   the automapper: no gate, dock, pod, Jita/Amarr, abyssal) makes it active and replays the jump through `tripwire.EVE`
@@ -61,8 +78,12 @@ when a non-active linked character makes a mappable wormhole jump while the feat
   signature prompt asks "Which signature did Alt Two jump through?"; the return bookmark reads "Alt Two · Return
   bookmark". Only with 2+ tracked characters, whether or not the feature is on.
 - Jumps while "Which Signature?" is open: before, another character's jump was dropped. Now, with the feature on, it
-  waits in the queue (a yellow notice says so) and is mapped as soon as the dialog closes. An active character's own
-  second jump while the dialog is open is still dropped by upstream's automapper.
+  waits (see above) and is mapped once the dialog closes. An active character's own second jump while the dialog is
+  open is still dropped by upstream's automapper.
+- The strip always shows the active character (marked "not auto-mapped" when its A switch is off or it is over the 5),
+  stays visible with nothing tracked (a chip click resumes), and the tracking list says when more than 5 are switched
+  on. If the active character stops being tracked, nothing is active and a notice says so. Chip tooltips say when a
+  location isn't updating (token expired, ESI paused). Tooltips are escaped (jBox shows HTML).
 - The header stays on one line: if it would wrap, a long tracked name top right is capped, then chip names go, then only
   the active chip and "+N", then no strip, then no name in "Current System" (checked with a 37-character name at
   1920/1366/1100/1024/900/800 px). Character names are always inserted as text.

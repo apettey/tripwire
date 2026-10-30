@@ -163,6 +163,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		let jumpSeq = 0;
 		let retryTimers = [];
+		let pendingUntil = 0;	// the panel may still show until then (retries, the jump log check)
 		let hideTimer = null, fadeTimer = null;
 
 		function opts() { return typeof options !== "undefined" ? options : undefined; }
@@ -231,13 +232,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function showPanel(from, to, result) {
+			pendingUntil = 0;
 			hidePanel();
 			const who = jumpWho ? jumpWho.name : "";
 			const summary = (who ? who + " jumped " : "Jumped ") + systemName(from) + " → " + systemName(to) + " via " + result.token;
 			const $panel = $("<div id='jump-return-panel' role='dialog' aria-live='polite' tabindex='-1'></div>")
 				.attr({ "aria-label": summary + ". Return bookmark " + result.text, title: summary });
 			const $label = $("<span class='jump-return-label'>Return bookmark</span>");
-			if (who) { $label.text(" · Return bookmark").prepend($("<span class='jump-who'></span>").text(who).attr("title", who)); }
+			if (who) { $label.addClass("jump-return-label-who").text(" · Return bookmark").prepend($("<span class='jump-who'></span>").text(who)); }
 			const $button = $("<button type='button' class='jump-return-copy'></button>")
 				.attr("title", "Copy " + result.text + " (bookmark name for the way back to " + systemName(from) + ")");
 			const $text = $("<span class='jump-return-text'></span>").text(result.text);
@@ -303,14 +305,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!jumpReturn.firstOnly(opts())) { showPanel(from, to, result); return; }
 			const copied = copiedList().some(function(id) { return id == result.wormholeId; });
 			let reason = jumpReturn.alreadyHandled(result.toSig, null, myCharacters(), copied, result.fromSig, jumpAt);
-			if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
+			if (reason) { pendingUntil = 0; console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 			jumpLog(result.wormholeId).then(function(jumps) {
 				if (seq !== jumpSeq) { return; }	// superseded by a newer jump
 				const sigs = tripwire.client && tripwire.client.signatures;
 				const toSig = (sigs && result.toSig && sigs[result.toSig.id]) || result.toSig;	// may have synced meanwhile
 				const fromSig = (sigs && result.fromSig && sigs[result.fromSig.id]) || result.fromSig;
 				reason = jumpReturn.alreadyHandled(toSig, jumps, myCharacters(), false, fromSig, jumpAt);
-				if (reason) { console.info("jump-return: not showing " + result.text + ", " + reason); return; }
+				if (reason) { pendingUntil = 0; console.info("jump-return: not showing " + result.text + ", " + reason); return; }
 				showPanel(from, to, result);
 			});
 		}
@@ -338,7 +340,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const jumpAt = serverNow();
 			clearRetries();
 			hidePanel();
+			pendingUntil = 0;
 			if (!jumpReturn.enabled(opts())) { return; }
+			// Until the panel shows or it is clear it won't, multi-track.js holds other characters' switches (busy())
+			pendingUntil = Date.now() + Math.max.apply(null, jumpReturn.RETRY_DELAYS_MS) + 1500;
 			bookmarkTemplate.ensureLoaded();	// the return string uses the mask's template (a no-op once read)
 			if (attempt(seq, from, to, jumpAt)) { return; }
 			// The automapper may still be adding/updating the hole: re-check after the next syncs
@@ -348,6 +353,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 		jumpReturn.onJump = onJump;	// handy for testing from the console
 		jumpReturn.hide = hidePanel;
+		/** A return-bookmark panel is up, or may still come for the last jump (multi-track.js waits for it) */
+		jumpReturn.busy = function() {
+			const $p = $("#jump-return-panel");
+			return ($p.length > 0 && !$p.hasClass("jump-return-fading")) || Date.now() < pendingUntil;
+		};
 
 		const originalEVE = tripwire.EVE;
 		tripwire.EVE = function(EVE, characterChange) {

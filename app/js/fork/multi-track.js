@@ -5,13 +5,19 @@ const multiTrack = {
 	// tripwire.EVE, so the automapper, the return-bookmark pop-up, the signature prompt and Follow all work for it.
 	// A strip of character chips next to "Current System" shows who is active and who jumped last.
 	// No new ESI requests, endpoints or polling: the 1 s tick only reads tripwire.esi.characters (filled by upstream's
-	// 5 s location poll). Spec: changes/2026-10-30-multi-character-jumps/README.md.
+	// 5 s location poll). Rules (fleet jumps, pause after a manual pick, held while a jump question is open):
+	// changes/2026-10-30-multi-character-jumps/README.md.
 	// Keep `const multiTrack` on the first line: the test helper strips it to define a global.
 
-	CAP: 5,						// opted-in characters used for the strip and switching (linking stays unlimited)
+	CAP: 5,						// opted-in characters used for switching (linking stays unlimited)
 	TICK_MS: 1000,
-	RECENT_MS: 60000,			// the last jumper is highlighted this long
+	RECENT_MS: 60000,			// a character that jumped is ringed this long
 	FRESH_MS: 10000,			// ...and pulses for the first part of it
+	FLEET_MS: 10000,			// an alt taking the same hole as the active character within this is following it
+	SETTLE_MS: 1500,			// a switch waits this long, so the active character's own jump (next poll) can count
+	PAUSE_MS: 180000,			// no automatic switching for this long after the user picks a character
+	NOTICE_MS: 9000,
+	NAME_CHARS: 18,				// chip names longer than this keep their start and end ("Bob Sc…r Hauler")
 	PODS: [33328, 670],
 	NO_MAP_SYSTEMS: [30000142, 30002187],	// Jita, Amarr: likely pod-out destinations (as the automapper)
 	SPECIAL_REGION: 12000000,	// abyssal and other special space (as the automapper)
@@ -25,7 +31,7 @@ const multiTrack = {
 		return !!(opts && opts.multiTrack && typeof opts.multiTrack === "object" && opts.multiTrack.enabled === true);
 	},
 
-	/** The character's "map this character's jumps" switch is off */
+	/** The character's "auto-map this character's jumps" switch is off */
 	excluded: function(opts, id) {
 		const ex = opts && opts.multiTrack && opts.multiTrack.exclude;
 		return !!(ex && typeof ex === "object" && ex[id]);
@@ -35,23 +41,47 @@ const multiTrack = {
 		return multiTrack.enabled(opts) && !multiTrack.excluded(opts, id);
 	},
 
-	/** Ids (strings) of the included characters, sorted by name (then id), the first `cap` */
-	optedIn: function(opts, characters, cap) {
+	byName: function(characters) {
+		return function(a, b) {
+			const na = String(characters[a] && characters[a].characterName || "").toLowerCase();
+			const nb = String(characters[b] && characters[b].characterName || "").toLowerCase();
+			return na < nb ? -1 : na > nb ? 1 : (a < b ? -1 : a > b ? 1 : 0);
+		};
+	},
+
+	/** Ids (strings) of the characters whose switch is on, sorted by name (then id) */
+	switchedOn: function(opts, characters) {
 		if (!multiTrack.enabled(opts) || !characters) { return []; }
-		const limit = typeof cap === "number" ? cap : multiTrack.CAP;
 		return Object.keys(characters)
 			.filter(function(id) { return characters[id] && !multiTrack.excluded(opts, id); })
-			.sort(function(a, b) {
-				const na = String(characters[a].characterName || "").toLowerCase();
-				const nb = String(characters[b].characterName || "").toLowerCase();
-				return na < nb ? -1 : na > nb ? 1 : (a < b ? -1 : a > b ? 1 : 0);
-			})
-			.slice(0, limit);
+			.sort(multiTrack.byName(characters));
+	},
+
+	/** The ones used for switching: the first `cap` switched on */
+	optedIn: function(opts, characters, cap) {
+		return multiTrack.switchedOn(opts, characters).slice(0, typeof cap === "number" ? cap : multiTrack.CAP);
+	},
+
+	/** The tracking list's note when more characters are switched on than are used, or "" */
+	capNote: function(opts, characters) {
+		const n = multiTrack.switchedOn(opts, characters).length;
+		return n > multiTrack.CAP ? "Auto-map is on for " + n + " characters; only " + multiTrack.CAP
+			+ " are used (the first by name). Turn one off with its A icon." : "";
+	},
+
+	/** The strip's characters: the ones used, plus the active one even if it is off or over the cap, sorted by name */
+	stripIds: function(opts, characters, activeId) {
+		const ids = multiTrack.optedIn(opts, characters);
+		if (ids.length && multiTrack.tracking(activeId) && characters && characters[activeId] && ids.indexOf(String(activeId)) < 0) {
+			ids.push(String(activeId));
+			ids.sort(multiTrack.byName(characters));
+		}
+		return ids;
 	},
 
 	/** A character is being tracked (the user didn't untrack with a click on the active one) */
 	tracking: function(activeId) {
-		return activeId !== null && activeId !== undefined && activeId !== "";
+		return activeId !== null && activeId !== undefined && activeId !== "" && activeId !== "new";
 	},
 
 	/** Snapshot of what a jump needs to know about where a character was */
@@ -61,9 +91,9 @@ const multiTrack = {
 
 	/**
 	 * Characters that changed system since the last tick. last: {id: snapshot}. Ignores a missing systemID (keeps the
-	 * old snapshot: ESI just hasn't answered yet), the first sighting, an unchanged system and the active character
-	 * (upstream's own path handles that one; its snapshot is still kept, so it is right once it stops being active).
-	 * Characters that are gone are dropped. Returns {moves: [{id, from, to, before}], last: newLast}.
+	 * old snapshot: ESI just hasn't answered yet), the first sighting and an unchanged system. The active character's
+	 * move is reported too, marked `active` (upstream's own path maps it; it counts for the fleet rule and the ring).
+	 * Characters that are gone are dropped. Returns {moves: [{id, from, to, before, active}], last: newLast}.
 	 */
 	detectMoves: function(last, characters, ids, activeId) {
 		const prev = last || {};
@@ -76,8 +106,8 @@ const multiTrack = {
 			next[id] = multiTrack.snapshot(c);
 			const was = prev[id];
 			if (!was || was.systemID == c.systemID) { return; }
-			if (activeId !== null && activeId !== undefined && String(id) === String(activeId)) { return; }
-			moves.push({ id: String(id), from: was.systemID, to: c.systemID, before: was });
+			const active = activeId !== null && activeId !== undefined && String(id) === String(activeId);
+			moves.push({ id: String(id), from: was.systemID, to: c.systemID, before: was, active: active });
 		});
 		return { moves: moves, last: next };
 	},
@@ -102,44 +132,113 @@ const multiTrack = {
 		return true;
 	},
 
-	/** The active character's name for the jump pop-ups and "Current System", or "" (feature off, fewer than 2 opted
-	 *  in, or the active character isn't one of them): single-character users see no change */
+	/** An alt following the active character: the same hole (from → to) as a jump the active character made, or a
+	 *  switch already made, within windowMs, or landing where the active character already is */
+	isFleet: function(move, recent, activeSystemID, now, windowMs) {
+		if (activeSystemID && move.to == activeSystemID) { return true; }
+		return (recent || []).some(function(r) { return r.from == move.from && r.to == move.to && now - r.at <= windowMs; });
+	},
+
+	/**
+	 * What to do with this tick's wormhole jumps. ctx: {recent: [{from, to, at}], activeSystemID, now, windowMs,
+	 * eligible(id) (switched on, used, tracking, feature on), paused}. The active character's jumps come first
+	 * ("self", added to recent). Then, in order, each other jump: "skip" (not eligible), "fleet" (follows the active
+	 * character or a switch just decided, no switch), "paused" (the user picked a character a moment ago) or "switch"
+	 * (added to recent, so other alts through the same hole are "fleet"). Returns {decisions: [{move, action}], recent}.
+	 */
+	planMoves: function(moves, ctx) {
+		const c = ctx || {};
+		const now = c.now || 0, windowMs = typeof c.windowMs === "number" ? c.windowMs : multiTrack.FLEET_MS;
+		const recent = (c.recent || []).filter(function(r) { return now - r.at <= windowMs; });
+		let activeSystemID = c.activeSystemID;
+		const decisions = [];
+		(moves || []).filter(function(m) { return m.active; }).forEach(function(m) {
+			recent.push({ from: m.from, to: m.to, at: now });
+			activeSystemID = m.to;
+			decisions.push({ move: m, action: "self" });
+		});
+		(moves || []).filter(function(m) { return !m.active; }).forEach(function(m) {
+			let action;
+			if (typeof c.eligible === "function" && !c.eligible(m.id)) { action = "skip"; }
+			else if (multiTrack.isFleet(m, recent, activeSystemID, now, windowMs)) { action = "fleet"; }
+			else if (c.paused) { action = "paused"; }
+			else {
+				action = "switch";
+				recent.push({ from: m.from, to: m.to, at: now, by: m.id });
+				activeSystemID = m.to;
+			}
+			decisions.push({ move: m, action: action });
+		});
+		return { decisions: decisions, recent: recent };
+	},
+
+	/** The active character's name for "Current System (name)", or "" (feature off, fewer than 2 opted in, or the
+	 *  active character isn't one of them): single-character users see no change */
 	jumperLabel: function(opts, characters, activeId) {
 		const ids = multiTrack.optedIn(opts, characters);
-		if (ids.length < 2 || activeId === null || activeId === undefined) { return ""; }
+		if (ids.length < 2 || !multiTrack.tracking(activeId)) { return ""; }
 		const id = String(activeId);
 		if (ids.indexOf(id) < 0) { return ""; }
 		return String(characters[id].characterName || "");
 	},
 
-	/** What a chip shows. ctx: {activeId, lastJump: {id, at}, now} */
+	/** A long chip name keeps its start and its end (alts often share a first word: "Bob Scout" / "Bob Hauler") */
+	shortName: function(name, max) {
+		const s = String(name === undefined || name === null ? "" : name);
+		const n = typeof max === "number" ? max : multiTrack.NAME_CHARS;
+		if (s.length <= n) { return s; }
+		const tail = Math.ceil((n - 1) / 2), head = n - 1 - tail;
+		return s.substring(0, head).replace(/\s+$/, "") + "…" + s.substring(s.length - tail).replace(/^\s+/, "");
+	},
+
+	/** "2:41" */
+	clock: function(ms) {
+		const s = Math.max(0, Math.ceil((ms || 0) / 1000));
+		return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+	},
+
+	/** What a chip shows. ctx: {activeId, jumps: {id: at}, now, queued: {id: true}, used: [ids], pausedMs, stale: {id: reason}} */
 	chipState: function(char, ctx) {
 		const c = char || {};
+		const x = ctx || {};
 		const id = String(c.characterID);
-		const now = ctx && ctx.now || 0;
-		const jump = ctx && ctx.lastJump;
-		const since = jump && String(jump.id) === id ? now - jump.at : null;
+		const now = x.now || 0;
+		const at = x.jumps && x.jumps[id];
+		const since = typeof at === "number" ? now - at : null;
+		const active = multiTrack.tracking(x.activeId) && String(x.activeId) === id;
 		return {
 			id: id,
 			name: String(c.characterName || ""),
-			active: !!(ctx && ctx.activeId !== null && ctx.activeId !== undefined && String(ctx.activeId) === id),
+			active: active,
 			recent: since !== null && since >= 0 && since < multiTrack.RECENT_MS,
 			fresh: since !== null && since >= 0 && since < multiTrack.FRESH_MS,
 			offline: c.online === false,
+			queued: !!(x.queued && x.queued[id]),
+			mapped: !x.used || x.used.indexOf(id) >= 0,
+			paused: active && (x.pausedMs || 0) > 0,
+			pausedMs: active ? Math.max(0, x.pausedMs || 0) : 0,
+			stale: (x.stale && x.stale[id]) || "",
 			systemName: c.systemName || "",
 			ship: c.shipTypeName || "",
 			agoSeconds: since !== null && since >= 0 ? Math.floor(since / 1000) : null
 		};
 	},
 
-	/** A chip's tooltip, plain text */
+	/** A chip's tooltip, plain text (escaped where it is set) */
 	chipTitle: function(state) {
 		const parts = [state.name];
 		const where = [state.systemName, state.ship].filter(Boolean).join(", ");
 		if (where) { parts.push(where); }
 		if (state.offline) { parts.push("offline"); }
-		if (state.active) { parts.push("Active character: its jumps are mapped"); }
-		else { parts.push("Click to make this the active character"); }
+		else if (state.stale) { parts.push("location not updating (" + state.stale + ")"); }
+		if (state.active) {
+			parts.push("Active character (Current System, Follow, destination)");
+			if (!state.mapped) { parts.push("not auto-mapped (its A switch is off or over the 5)"); }
+			if (state.paused) { parts.push("Auto-switch paused " + multiTrack.clock(state.pausedMs) + " · click to resume"); }
+		} else {
+			parts.push("Click to make this the active character");
+		}
+		if (state.queued) { parts.push("jump waiting: mapped when you close the open jump question"); }
 		if (state.recent && state.agoSeconds !== null) { parts.push("jumped " + state.agoSeconds + " s ago"); }
 		return parts.join(" · ");
 	},
@@ -159,10 +258,20 @@ const multiTrack = {
 		return who && who.name ? "Which signature did " + who.name + " jump through?" : "Which Signature?";
 	},
 
-	/** Notice for a jump that waits while the automapper's dialog is open (plain text) */
+	/** Notice for a jump that waits while a question about another jump is open (plain text) */
 	waitNotice: function(name, fromName, toName) {
 		return (name || "A character") + " jumped " + (fromName || "?") + " → " + (toName || "?")
-			+ " while the Which Signature? question was open. It is mapped as soon as you answer.";
+			+ " while a jump question was open. It is mapped as soon as you close this question.";
+	},
+
+	/** Notice after an automatic switch (plain text; the "Back to" link is added next to it) */
+	switchText: function(name, fromName, toName) {
+		return "Now on " + (name || "?") + " (jumped " + (fromName || "?") + " → " + (toName || "?") + ")";
+	},
+
+	/** Notice when the active character stopped being tracked */
+	removedNotice: function(name) {
+		return (name || "The active character") + " is no longer tracked, so no character is active now. Pick one in the tracking list.";
 	},
 
 	/** The tip's text when another character jumped while the feature is off */
@@ -181,14 +290,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		if (typeof tripwire === "undefined" || typeof tripwire.EVE !== "function" || typeof tracking === "undefined") { return; }
 
 		const debugCharacters = {};
-		const state = { last: {}, lastJump: null, queue: [], stripKey: null, labelKey: null, togglesOn: null, fitLevel: 0 };
+		const state = {
+			last: {}, jumps: {}, queue: [], recent: [], pausedUntil: 0, prevActive: null,
+			stripKey: null, labelKey: null, togglesOn: null, fitLevel: 0, noticeTimer: null
+		};
 		let originalLabel = null;
 
 		function opts() { return typeof options !== "undefined" ? options : null; }
 		function activeId() { const o = opts(); return o && o.tracking ? o.tracking.active : null; }
 		function esiCharacters() { return (tripwire.esi && tripwire.esi.characters) || {}; }
+		function esc(text) { return typeof _ !== "undefined" && _.escape ? _.escape(text) : forkSettings.escape(text); }
 
-		/** Every linked character (plus the debug ones), with the online flag from the tracking list's bar */
+		/** Every linked character (plus the debug ones) */
 		function characters() {
 			const out = {};
 			const esi = esiCharacters();
@@ -203,10 +316,21 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const $bar = $("#tracking .tracking-clone[data-characterid='" + id + "'] .online");
 			return !($bar.length && $bar.hasClass("critical"));
 		}
+		/** Why a character's location isn't updating ("" if it is): expired token, or ESI paused for it */
+		function staleOf(id) {
+			const c = esiCharacters()[id];
+			if (!c) { return debugCharacters[id] && debugCharacters[id].stale || ""; }
+			try {
+				if (c.tokenExpire && typeof moment === "function" && moment.utc(c.tokenExpire).isBefore(moment())) { return "token expired"; }
+				if (typeof esiLimits !== "undefined" && esiLimits.pausedFor("char:" + id) > 0) { return "ESI paused"; }
+			} catch (e) { /* unknown: say nothing */ }
+			return "";
+		}
 		function systemName(id) {
 			const s = tripwire.systems && tripwire.systems[id];
 			return s && s.name ? s.name : String(id);
 		}
+		function pausedMs() { return Math.max(0, state.pausedUntil - Date.now()); }
 
 		// ---- Making a character the active one (mirrors tracking.js's click handler) ----
 
@@ -226,7 +350,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		/** An opted-in character jumped a wormhole: make it active, then replay its jump through tripwire.EVE */
 		function switchTo(move) {
 			const o = opts();
-			const char = characters()[move.id];
+			const chars = characters();
+			const char = chars[move.id];
 			if (!o || !char) { return; }
 			try {
 				const now = Object.assign({}, char, { systemID: move.to, systemName: char.systemID == move.to ? char.systemName : systemName(move.to) });
@@ -235,109 +360,199 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					if (tripwire.client.EVE && tripwire.client.EVE.systemID == move.from) { tripwire.EVE(now); }
 					return;
 				}
+				const backId = multiTrack.tracking(o.tracking.active) && chars[o.tracking.active] ? String(o.tracking.active) : null;
 				o.tracking.active = move.id;
+				state.prevActive = move.id;
 				markActive(move.id);
 				const before = move.before || {};
 				// Where it was, as a character change (no automap, no pop-ups), then the jump itself
 				tripwire.EVE(Object.assign({}, char, { systemID: move.from, systemName: before.systemName || systemName(move.from), stationID: null, stationName: null }), true);
 				tripwire.EVE(now);
-				state.lastJump = { id: move.id, at: Date.now() };
 				// Not saved: the switch is this session's state. The next save the user makes carries it; a reload goes back
 				// to the last saved active character. (Saving here let a background tab overwrite settings changed elsewhere.)
+				showSwitchNotice(char, move, backId ? chars[backId] : null);
 				if (typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "switched"); }
 			} catch (e) {
 				console.warn("multi-track: could not switch to " + move.id, e);
 			}
 		}
 
-		/** A chip or the API picks a character by hand (like clicking it in the tracking list) */
+		/** The user picks a character (chip, Back link, palette): like a click in the tracking list. Pauses automatic
+		 *  switching for a while, so the pick isn't overridden by the next alt's jump. */
 		function pick(id) {
 			const o = opts();
 			const char = characters()[id];
-			if (!o || !char || String(o.tracking.active) === String(id)) { return; }
-			o.tracking.active = String(id);
-			markActive(String(id));
-			state.queue = state.queue.filter(function(m) { return m.id !== String(id); });
-			tripwire.EVE(char, true);
-			o.save();
+			if (!o || !char) { return false; }
+			state.pausedUntil = Date.now() + multiTrack.PAUSE_MS;
+			state.queue = [];
+			if (String(o.tracking.active) !== String(id)) {
+				o.tracking.active = String(id);
+				state.prevActive = String(id);
+				markActive(String(id));
+				tripwire.EVE(char, true);
+				o.save();
+			} else {
+				markActive(String(id));
+			}
+			hideNotice();
+			render();
+			return true;
 		}
 
+		// ---- Notice after an automatic switch: "Now on X (jumped A → B) · Back to Y" (one at a time) ----
+
+		function hideNotice() {
+			clearTimeout(state.noticeTimer);
+			$("#multi-track-notice").remove();
+		}
+		function showSwitchNotice(char, move, back) {
+			hideNotice();
+			const $n = $("<div id='multi-track-notice' role='status' aria-live='polite'></div>");
+			$n.append($("<span class='multi-track-notice-text'></span>").text(multiTrack.switchText(char.characterName, systemName(move.from), systemName(move.to))));
+			if (back) {
+				$n.append(" · ", $("<button type='button' class='multi-track-back'></button>")
+					.text("Back to " + back.characterName).attr("data-characterid", String(back.characterID)));
+			}
+			$n.append($("<button type='button' class='multi-track-notice-close' aria-label='Close'>✕</button>"));
+			$("body").append($n);
+			state.noticeTimer = setTimeout(hideNotice, multiTrack.NOTICE_MS);
+		}
+		$(document).on("click", "#multi-track-notice .multi-track-back", function(e) {
+			e.preventDefault();
+			if (pick($(this).attr("data-characterid")) && typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "back"); }
+		});
+		$(document).on("click", "#multi-track-notice .multi-track-notice-close", function(e) { e.preventDefault(); hideNotice(); });
+		$(document).on("mouseenter", "#multi-track-notice", function() { clearTimeout(state.noticeTimer); });
+		$(document).on("mouseleave", "#multi-track-notice", function() { state.noticeTimer = setTimeout(hideNotice, 3000); });
+
 		// ---- The tick: in memory only, no requests ----
+
+		/** A question or pop-up about the last jump is open (or about to show): switching waits so it isn't wiped */
+		function holdOpen() {
+			try {
+				if (typeof automapState !== "undefined" && automapState.pendingDecision) { return true; }
+				if (typeof jumpSigPrompt !== "undefined" && typeof jumpSigPrompt.busy === "function" && jumpSigPrompt.busy()) { return true; }
+				if (typeof jumpReturn !== "undefined" && typeof jumpReturn.busy === "function" && jumpReturn.busy()) { return true; }
+			} catch (e) { /* assume nothing is open */ }
+			return false;
+		}
 
 		function tick() {
 			const o = opts();
 			if (!o || !o.tracking) { return; }
 			const chars = characters();
+			const now = Date.now();
+			const on = multiTrack.enabled(o);
+
+			// The active character was removed from tracking: nothing is active any more
+			if (state.prevActive && !chars[state.prevActive]) {
+				const gone = state.prevName || "";
+				if (String(o.tracking.active) === state.prevActive) {
+					o.tracking.active = null;
+					try { tripwire.EVE(false, true); } catch (e) { /* the header just keeps its text */ }
+				}
+				if (on && typeof Notify !== "undefined") { Notify.trigger(esc(multiTrack.removedNotice(gone)), "yellow", 10000); }
+				state.prevActive = null;
+			}
+			if (multiTrack.tracking(o.tracking.active) && chars[o.tracking.active]) {
+				state.prevActive = String(o.tracking.active);
+				state.prevName = chars[o.tracking.active].characterName;
+			}
+
 			const result = multiTrack.detectMoves(state.last, chars, Object.keys(chars), o.tracking.active);
 			state.last = result.last;
 			const ctx = { systems: tripwire.systems, shortest: tripwire.map && tripwire.map.shortest };
-			const on = multiTrack.enabled(o);
-			const used = on ? multiTrack.optedIn(o, chars) : [];
-			result.moves.forEach(function(m) {
-				const char = chars[m.id];
-				if (!multiTrack.isMappableJump(m.from, m.to, char, ctx)) { return; }	// gate, dock, pod...: strip only
-				if (!on) {
-					const active = chars[o.tracking.active];
+			const jumps = result.moves.filter(function(m) { return multiTrack.isMappableJump(m.from, m.to, chars[m.id], ctx); });
+			jumps.forEach(function(m) { state.jumps[m.id] = now; });	// "who just jumped": every wormhole jump, active included
+
+			if (!on) {
+				state.queue = [];
+				const active = chars[o.tracking.active];
+				jumps.filter(function(m) { return !m.active; }).forEach(function(m) {
 					if (typeof forkHints !== "undefined" && active) {
 						forkHints.emit("tracking.otherJump", {
-							id: m.id, name: char.characterName, fromName: systemName(m.from), toName: systemName(m.to),
+							id: m.id, name: chars[m.id].characterName, fromName: systemName(m.from), toName: systemName(m.to),
 							activeName: active.characterName
 						});
 					}
-					return;
-				}
-				if (used.indexOf(m.id) < 0) { return; }	// excluded, or over the cap
-				if (!multiTrack.tracking(o.tracking.active)) { return; }	// the user stopped tracking: don't start again
-				state.queue.push(m);	// in order: a second jump of the same character follows its first
+				});
+				render();
+				return;
+			}
+
+			const used = multiTrack.optedIn(o, chars);
+			const activeChar = chars[o.tracking.active];
+			const plan = multiTrack.planMoves(jumps, {
+				recent: state.recent, now: now, windowMs: multiTrack.FLEET_MS,
+				activeSystemID: activeChar ? activeChar.systemID : null,
+				paused: pausedMs() > 0,
+				eligible: function(id) { return used.indexOf(id) >= 0 && multiTrack.tracking(o.tracking.active); }
 			});
-			// One switch per tick: the next character's automap request then finds the hole the first one made. While a
-			// jump question is open (the automapper's "Which Signature?") switching waits, so the dialog keeps naming and
-			// acting for the character it asked about; the waiting jumps are mapped once it closes.
-			if (state.queue.length && pickerOpen()) {
+			state.recent = plan.recent;
+			plan.decisions.forEach(function(d) {
+				if (d.action === "switch") { state.queue.push(Object.assign({ at: now }, d.move)); }
+			});
+
+			// One switch per tick, after SETTLE_MS (the active character's own jump may come with the next poll), and not
+			// while a question about the last jump is open: that would wipe it. The held jump is mapped once it closes.
+			if (state.queue.length && holdOpen()) {
 				state.queue.forEach(function(m) {
 					if (m.noticed) { return; }
 					m.noticed = true;
 					const c = chars[m.id];
 					if (typeof Notify !== "undefined" && c) {
-						Notify.trigger(_.escape(multiTrack.waitNotice(c.characterName, systemName(m.from), systemName(m.to))), "yellow", 8000);
+						Notify.trigger(esc(multiTrack.waitNotice(c.characterName, systemName(m.from), systemName(m.to))), "yellow", 8000);
 					}
 				});
-			} else {
+			} else if (state.queue.length && now - state.queue[0].at >= multiTrack.SETTLE_MS) {
 				const next = state.queue.shift();
-				if (on && next) { switchTo(next); } else if (!on) { state.queue = []; }	// turned off or Reset meanwhile
+				const activeNow = chars[o.tracking.active];
+				// Checked again now: the active character may have taken the same hole meanwhile (fleet), or the user picked
+				const others = state.recent.filter(function(r) { return r.by !== next.id; });	// not its own switch entry
+				if (pausedMs() > 0 || multiTrack.isFleet(next, others, activeNow ? activeNow.systemID : null, now, multiTrack.FLEET_MS)) {
+					// no switch
+				} else {
+					switchTo(next);
+				}
 			}
 			render();
 		}
 
-		function pickerOpen() { return typeof automapState !== "undefined" && !!automapState.pendingDecision; }
-
 		// ---- Header: chips and "Current System (name)" ----
 
 		function attachTip($el) { if (typeof Tooltips !== "undefined" && $el.length) { Tooltips.attach($el); } }
-		/** Set a data-tooltip, and the open tooltip's text when it is showing for this element */
+		/** Set a tooltip (jBox shows it as HTML, so it is escaped here) and the open tooltip's text when it shows for $el */
 		function setTip($el, text) {
-			if ($el.attr("data-tooltip") === text) { return; }
-			$el.attr({ "data-tooltip": text, "aria-label": text });
+			const html = esc(text);
+			if (!$el.length || $el.attr("data-tooltip") === html) { return; }
+			$el.attr({ "data-tooltip": html, "aria-label": text });
 			if (typeof Tooltips !== "undefined" && Tooltips.isOpen && Tooltips.source && Tooltips.source[0] === $el[0] && typeof Tooltips.setContent === "function") {
-				Tooltips.setContent(text);
+				Tooltips.setContent(html);
 			}
 		}
 
 		function render() {
 			const o = opts();
 			const chars = characters();
-			const ids = multiTrack.optedIn(o, chars);
-			syncToggles(multiTrack.enabled(o));
+			const on = multiTrack.enabled(o);
+			syncToggles(on, chars);
 			renderLabel(multiTrack.jumperLabel(o, chars, activeId()));
+			const ids = on ? multiTrack.stripIds(o, chars, activeId()) : [];
 			if (ids.length < 2) {
 				if (state.stripKey !== null) { $("#multi-track-strip").remove(); state.stripKey = null; fit(true); }
 				return;
 			}
 			const now = Date.now();
+			const used = multiTrack.optedIn(o, chars);
+			const queued = {};
+			state.queue.forEach(function(m) { queued[m.id] = true; });
+			const stale = {};
+			ids.forEach(function(id) { stale[id] = staleOf(id); });
 			const states = ids.map(function(id) {
-				return multiTrack.chipState(Object.assign({}, chars[id], { characterID: id, online: onlineOf(id) }), { activeId: activeId(), lastJump: state.lastJump, now: now });
+				return multiTrack.chipState(Object.assign({}, chars[id], { characterID: id, online: onlineOf(id) }),
+					{ activeId: activeId(), jumps: state.jumps, now: now, queued: queued, used: used, pausedMs: pausedMs(), stale: stale });
 			});
-			const key = JSON.stringify(states.map(function(s) { return [s.id, s.name, s.active, s.recent, s.fresh, s.offline]; }));
+			const key = JSON.stringify(states.map(function(s) { return [s.id, s.name, s.active, s.recent, s.fresh, s.offline, s.queued, s.paused, s.mapped]; }));
 			let $strip = $("#multi-track-strip");
 			let rebuilt = false;
 			if (key !== state.stripKey || !$strip.length) {
@@ -351,25 +566,29 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					const $chip = $("<button type='button' class='multi-track-chip'></button>")
 						.attr({ "data-characterid": s.id, "aria-pressed": s.active ? "true" : "false" })
 						.toggleClass("is-active", s.active).toggleClass("is-recent", s.recent)
-						.toggleClass("is-fresh", s.fresh).toggleClass("is-offline", s.offline);
+						.toggleClass("is-fresh", s.fresh).toggleClass("is-offline", s.offline)
+						.toggleClass("is-queued", s.queued).toggleClass("is-paused", s.paused).toggleClass("is-unmapped", !s.mapped);
 					const $img = $("<img class='multi-track-avatar' alt='' width='18' height='18' />")
 						.attr("src", "https://image.eveonline.com/Character/" + encodeURIComponent(s.id) + "_32.jpg")
 						.on("error", function() { $(this).replaceWith($("<span class='multi-track-avatar multi-track-initial' aria-hidden='true'></span>").text(s.name.charAt(0) || "?")); });
-					$chip.append($img, $("<span class='multi-track-name'></span>").text(s.name));
+					$chip.append($img, $("<span class='multi-track-name'></span>").text(multiTrack.shortName(s.name)));
+					if (s.paused) { $chip.append($("<span class='multi-track-pause'></span>")); }
 					$strip.append($chip);
 				});
 				const hidden = states.filter(function(s) { return !s.active && !s.recent; });
 				if (hidden.length) {	// shown only when the header is too narrow for every chip (fit)
-					$strip.append($("<span class='multi-track-more'></span>").text("+" + hidden.length)
-						.attr("data-tooltip", hidden.map(function(s) { return s.name; }).join(", ")));
+					$strip.append($("<span class='multi-track-more'></span>").text("+" + hidden.length));
+					setTip($strip.find(".multi-track-more"), hidden.map(function(s) { return s.name; }).join(", "));
 				}
 				$("h3#systemSearch").first().after($strip);
 			}
-			states.forEach(function(s) {	// the "jumped 12 s ago" part changes every tick: only the tooltip text
-				setTip($strip.find(".multi-track-chip[data-characterid='" + s.id + "']"), multiTrack.chipTitle(s));
+			states.forEach(function(s) {	// "jumped 12 s ago" / the pause countdown change every tick: text only
+				const $chip = $strip.find(".multi-track-chip[data-characterid='" + s.id + "']");
+				setTip($chip, multiTrack.chipTitle(s));
+				if (s.paused) { $chip.find(".multi-track-pause").text("paused " + multiTrack.clock(s.pausedMs)); }
 			});
 			if (rebuilt) { attachTip($strip.find("[data-tooltip]")); }
-			$strip.toggle($("#currentSpan").is(":visible"));	// hidden with Current System (system search open, not tracking)
+			$strip.toggle(!$("#search").hasClass("active"));	// the system search box takes this place
 			fit(rebuilt);
 		}
 
@@ -428,11 +647,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function toggleTitle(on) { return "Auto-map this character's jumps: " + (on ? "on" : "off"); }
 
-		function syncToggles(on) {
+		function syncToggles(on, chars) {
 			const o = opts();
 			if (!on) {
 				if (state.togglesOn !== false) {
-					$("#tracking .multi-track-toggle").remove();
+					$("#tracking .multi-track-toggle, #tracking .multi-track-cap-note").remove();
 					$("#tracking .multi-track-has-toggle").removeClass("multi-track-has-toggle");
 					state.togglesOn = false;
 				}
@@ -453,6 +672,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				$t.toggleClass("active", included).attr("aria-checked", String(included));
 				setTip($t, toggleTitle(included));
 			});
+			// More switched on than are used: say so above the list
+			const note = multiTrack.capNote(o, chars || characters());
+			let $note = $("#tracking .multi-track-cap-note");
+			if (!note) { $note.remove(); return; }
+			if (!$note.length) { $note = $("<div class='multi-track-cap-note' role='note'></div>").prependTo("#tracking"); }
+			if ($note.text() !== note) { $note.text(note); }
 		}
 
 		function toggle(id) {
@@ -473,13 +698,19 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		$("#track").on("keydown", ".multi-track-toggle", function(e) {
 			if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggle($(this).closest(".tracking-clone").attr("data-characterid")); }
 		});
+		// A pick in the tracking list (upstream's handler ran first: bound earlier on #track) pauses automatic switching too
+		$("#track").on("click", ".tracking-clone", function() {
+			if (multiTrack.tracking(activeId())) { state.pausedUntil = Date.now() + multiTrack.PAUSE_MS; state.queue = []; state.prevActive = String(activeId()); }
+			render();
+		});
 		$("#topbar").on("click", ".multi-track-chip", function(e) {
 			e.preventDefault();
 			const id = $(this).attr("data-characterid");
-			if (String(activeId()) === id) { return; }
-			pick(id);
-			if (typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "chip"); }
-			render();
+			if (String(activeId()) === id) {
+				if (pausedMs() > 0) { state.pausedUntil = 0; render(); }	// "click to resume"
+				return;
+			}
+			if (pick(id) && typeof forkUsage !== "undefined") { forkUsage.track("multiTrack", "chip"); }
 		});
 
 		// A character added to the tracking list gets its switch right away
@@ -500,13 +731,34 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				section: "jumps", order: 5, id: "multiTrack-enabled", type: "checkbox", key: "multiTrack",
 				label: "My characters:",
 				text: multiTrack.SETTING_TEXT,
-				hint: "Tripwire switches to whichever one jumps a wormhole and maps it. Up to 5 characters. Leave one out with "
-					+ "the A (auto-map) icon next to the eye and ship icons in the tracking list (click your name, top right).",
+				hint: "When one of your tracked characters jumps a wormhole, Tripwire makes it your active character (Current "
+					+ "System, Follow and the jump prompts move to it) and maps the jump. Picking a character yourself pauses "
+					+ "this for 3 minutes. Up to 5 characters: choose them with the A (auto-map) icon next to the eye and ship "
+					+ "icons in the tracking list (click your name, top right).",
 				keywords: ["multi", "multibox", "alts", "characters", "tracking", "active character", "switch"],
 				get: function(o) { return multiTrack.enabled(o); },
 				set: function(o, on) {
 					o.multiTrack = Object.assign({ exclude: {} }, o.multiTrack, { enabled: !!on });
 					if (!on) { state.queue = []; }
+				}
+			});
+		}
+
+		// ---- Ctrl+K: "Switch to <character>" (a manual pick: works with the feature off too) ----
+		if (typeof forkCommands !== "undefined") {
+			forkCommands.register({
+				id: "tracking.switchTo", title: "Switch to character", group: "Navigation", icon: "follow",
+				keywords: ["character", "alt", "active", "tracking", "switch", "multibox"],
+				enabled: function() { return Object.keys(characters()).length ? true : "No tracked characters"; },
+				hint: function() { const c = characters()[activeId()]; return c ? "Active: " + c.characterName : "No active character"; },
+				args: [{ name: "character", label: "character", type: "choice", choices: function() {
+					const chars = characters();
+					return Object.keys(chars).sort(multiTrack.byName(chars)).map(function(id) {
+						return { value: id, title: String(chars[id].characterName || id), hint: String(chars[id].systemName || "") + (String(activeId()) === id ? " (active)" : "") };
+					});
+				} }],
+				run: function(args) {
+					if (!pick(String(args.character))) { throw new Error("That character isn't tracked"); }
 				}
 			});
 		}
@@ -576,7 +828,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				$("#tracking .tracking-clone[data-characterid='" + id + "']").remove();
 				tick();
 			},
-			state: function() { return { queue: state.queue.slice(), lastJump: state.lastJump, last: state.last }; },
+			resume: function() { state.pausedUntil = 0; render(); },
+			state: function() { return { queue: state.queue.slice(), jumps: state.jumps, recent: state.recent, pausedMs: pausedMs(), last: state.last }; },
 			tick: tick
 		};
 		multiTrack.pick = pick;
@@ -591,9 +844,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			$("<img class='jump-who-avatar' alt='' width='28' height='28' />")
 				.attr("src", "https://image.eveonline.com/Character/" + encodeURIComponent(who.id) + "_64.jpg")
 				.on("error", function() { $(this).remove(); }).appendTo($b);
-			$b.append($("<span class='jump-who'></span>").text(who.name).attr("title", who.name));
-			if (rest) { $b.append($("<span class='jump-who-rest'></span>").text(" " + rest)); }
-			return $b;
+			const $text = $("<span class='jump-who-text'></span>").append($("<span class='jump-who'></span>").text(who.name));
+			if (rest) { $text.append($("<span class='jump-who-rest'></span>").text(" " + rest)); }
+			return $b.append($text);
 		}
 		multiTrack.whoBanner = whoBanner;
 
