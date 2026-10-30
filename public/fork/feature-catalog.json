@@ -71,7 +71,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["logged"] },
     { "id": "jumpSigPrompt", "title": "Which signature did you jump through?", "section": "jumps", "prs": [98], "settingsKey": "jumpSigPrompt",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["linked"], "exposed": "#jump-sig-panel" },
-    { "id": "multiTrack", "title": "Map jumps of all my followed characters (up to 5)", "section": "jumps", "prs": [], "settingsKey": "multiTrack",
+    { "id": "multiTrack", "title": "Map jumps of all my tracked characters (up to 5)", "section": "jumps", "prs": [], "settingsKey": "multiTrack",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["switched", "chip", "back", "mapped"],
       "exposed": "#multi-track-strip",
       "success": "turned on by >=30% of users with 2+ linked characters by day 28; turned off again by <10% of them" },

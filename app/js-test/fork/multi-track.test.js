@@ -476,4 +476,21 @@ describe('multiTrack', () => {
 			assert.ok(multiTrack.tipBody({}).indexOf('"' + multiTrack.SETTING_TEXT + '"') > 0);
 		});
 	});
+
+	describe('round 6: answered or cancelled', () => {
+		it('G1: Ok answers only with a signature picked', () => {
+			assert.strictEqual(multiTrack.answeredBy('Ok', 1), true);
+			assert.strictEqual(multiTrack.answeredBy(' Ok ', 1), true);
+			assert.strictEqual(multiTrack.answeredBy('Ok', 0), false, 'nothing picked: the dialog stays open');
+			assert.strictEqual(multiTrack.answeredBy('Cancel', 1), false);
+		});
+		it('G2: an alt taking a cancelled hole a few seconds later (either way) is not mapped or switched to', () => {
+			const cancelled = [{ from: J1, to: J2, at: 1000 }];
+			assert.strictEqual(multiTrack.cancelledHole({ from: J1, to: J2 }, cancelled, 5000, 10000), true);
+			assert.strictEqual(multiTrack.cancelledHole({ from: J2, to: J1 }, cancelled, 5000, 10000), true, 'the way back');
+			assert.strictEqual(multiTrack.cancelledHole({ from: J1, to: HS }, cancelled, 5000, 10000), false, 'another hole');
+			assert.strictEqual(multiTrack.cancelledHole({ from: J1, to: J2 }, cancelled, 12000, 10000), false, 'later on: a jump of its own');
+			assert.strictEqual(multiTrack.cancelledHole({ from: J1, to: J2 }, null, 5000, 10000), false);
+		});
+	});
 });

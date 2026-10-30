@@ -23,7 +23,7 @@ const multiTrack = {
 	NO_MAP_SYSTEMS: [30000142, 30002187],	// Jita, Amarr: likely pod-out destinations (as the automapper)
 	SPECIAL_REGION: 12000000,	// abyssal and other special space (as the automapper)
 
-	SETTING_TEXT: "Map jumps of all my followed characters (up to 5)",	// the Settings row's text; the tip and the catalog title quote it
+	SETTING_TEXT: "Map jumps of all my tracked characters (up to 5)",	// the Settings row's text; the tip and the catalog title quote it
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -143,7 +143,7 @@ const multiTrack = {
 
 	/**
 	 * What to do with this tick's wormhole jumps. ctx: {recent: [{from, to, at}], now, windowMs, eligible(id)
-	 * (followed, used, tracking, feature on), paused}. The active character's jumps come first ("self", added to recent).
+	 * (A switch on, used, tracking, feature on), paused}. The active character's jumps come first ("self", added to recent).
 	 * Then, in order, each other jump: "skip" (not eligible), "fleet" (follows the active character or a switch just
 	 * decided through the same hole: nothing to map), "map" (switching is paused after the user picked a character: the
 	 * jump is mapped without switching) or "switch" (added to recent, so other alts through the same hole are "fleet").
@@ -259,6 +259,18 @@ const multiTrack = {
 	dropPair: function(silent, from, to) {
 		const same = function(m) { return (m.from == from && m.to == to) || (m.from == to && m.to == from); };
 		return { silent: (silent || []).filter(function(m) { return !same(m); }), skipped: (silent || []).filter(same) };
+	},
+
+	/** Ok in "Which Signature?" answers it only with a signature picked (upstream keeps the dialog open otherwise) */
+	answeredBy: function(buttonText, checkedCount) {
+		return String(buttonText || "").trim() === "Ok" && checkedCount > 0;
+	},
+
+	/** A jump through a hole whose "Which Signature?" was cancelled within windowMs (either way): not mapped, no switch */
+	cancelledHole: function(move, cancelled, now, windowMs) {
+		return (cancelled || []).some(function(c) {
+			return now - c.at <= windowMs && ((move.from == c.from && move.to == c.to) || (move.from == c.to && move.to == c.from));
+		});
 	},
 
 	/** A ring's route after another jump: a chain of jumps mapped without switching keeps growing (P1) */
@@ -468,7 +480,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		const debugCharacters = {};
 		const state = {
-			last: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null, pendingBack: null,
+			last: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null, pendingBack: null, cancelled: [],
 			lastSwitch: null, stripKey: null, labelKey: null, togglesOn: null, fitLevel: 0, noticeUntil: 0
 		};
 		let originalLabel = null;
@@ -745,7 +757,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 
 			const used = multiTrack.optedIn(o, chars);
-			const plan = multiTrack.planMoves(jumps.filter(function(m) { return m !== back; }), {
+			// Jumps through a hole whose question was just cancelled: nothing to map or switch for (it would ask again)
+			state.cancelled = state.cancelled.filter(function(c) { return now - c.at <= multiTrack.FLEET_MS; });
+			const plan = multiTrack.planMoves(jumps.filter(function(m) {
+				return m !== back && (m.active || !multiTrack.cancelledHole(m, state.cancelled, now, multiTrack.FLEET_MS));
+			}), {
 				recent: state.recent, now: now, windowMs: multiTrack.FLEET_MS,
 				keepSince: state.queue.length ? state.queue[0].at : now,
 				paused: pausedMs() > 0,
@@ -785,7 +801,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 							}
 						});
 					}
-				} else if (now - state.queue[0].at >= multiTrack.SETTLE_MS) {
+				} else if (now - state.queue[0].at >= multiTrack.SETTLE_MS && now - (state.questionAt || 0) >= multiTrack.AFTER_QUESTION_MS) {
 					state.queue = state.queue.filter(function(m) { return m.id !== id; });
 					// Checked again: the active character may have taken the same hole meanwhile (a poll later), or be there now
 					const activeNow = chars[o.tracking.active];
@@ -1145,7 +1161,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 		// Closed without an answer (Cancel, ✕): the other characters' jumps through that hole aren't mapped either
 		$(document).on("click", ".ui-dialog[aria-describedby='dialog-select-signature'] .ui-dialog-buttonpane button", function() {
-			if (picker && $.trim($(this).text()) === "Ok") { picker.answered = true; }
+			if (picker && multiTrack.answeredBy($(this).text(), $("#dialog-select-signature [name=sig]:checked").length)) { picker.answered = true; }
 		});
 		$(document).on("dialogclose", "#dialog-select-signature", function() {
 			const p = picker;
@@ -1153,6 +1169,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!p || p.answered || !p.from) { return; }
 			const r = multiTrack.dropPair(state.silent, p.from, p.to);
 			state.silent = r.silent;
+			state.cancelled.push({ from: p.from, to: p.to, at: Date.now() });	// alts taking it a little later: not asked either
 			// Waiting switches through that hole: no replay of it (it would ask again), only the character change
 			state.queue.forEach(function(m) { if ((m.from == p.from && m.to == p.to) || (m.from == p.to && m.to == p.from)) { m.mapped = true; } });
 		});

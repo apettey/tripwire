@@ -20,7 +20,7 @@ const esiOfflineSkip = {
 	},
 
 	/** Poll this character's location and ship now? Only a known-offline character is skipped, and never one that
-	 *  matters right away: the active character or one opted in to "Map jumps of all my followed characters (up to 5)" (`keep`).
+	 *  matters right away: the active character or one opted in to "Map jumps of all my tracked characters (up to 5)" (`keep`).
 	 *  /online/ is only asked every 60 s (and cached for 60 s), so a character that just logged in can look offline for
 	 *  up to two minutes; a skipped active character would then see two jumps as one (a hole that doesn't exist).
 	 *  Nor one whose token is about to expire (upstream's loop then asks the server to refresh it, without a request). */
@@ -40,7 +40,7 @@ const esiOfflineSkip = {
 		return out;
 	},
 
-	/** Ids never skipped: the active character, and with "Map jumps of all my followed characters (up to 5)" on its opted-in ones */
+	/** Ids never skipped: the active character, and with "Map jumps of all my tracked characters (up to 5)" on its opted-in ones */
 	keptIds: function(opts, characters, multiTrackApi) {
 		const ids = [];
 		const active = opts && opts.tracking ? opts.tracking.active : null;

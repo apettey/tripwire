@@ -1,4 +1,4 @@
-# Map jumps of all my followed characters (up to 5) (multi-character jump tracking)
+# Map jumps of all my tracked characters (up to 5) (multi-character jump tracking)
 
 **Date:** 2026-10-30
 
@@ -42,7 +42,7 @@ Mapped without switching: dashed rings, the last jumper bright: ![rings](mapped-
 
 ## Settings
 
-Toggle: Settings > Wormhole Jumps & Mass > "My characters: Map jumps of all my followed characters (up to 5)" (`options.multiTrack =
+Toggle: Settings > Wormhole Jumps & Mass > "My characters: Map jumps of all my tracked characters (up to 5)" (`options.multiTrack =
 {enabled, exclude: {characterID: true}}`). **Off by default** (missing key = off), a deliberate exception to "on by
 default": it changes which character is active, and the user asked for strict opt-in. Up to 5 characters (sorted by name)
 are used; linking stays unlimited. Each character's A icon in the tracking list ("Switch to this character when it jumps") chooses whether Tripwire picks up its jumps. Settings > Reset
@@ -60,7 +60,7 @@ when a non-active linked character makes a mappable wormhole jump while the feat
 
 - **When it switches, and when it maps without switching** (pure `planMoves`, `releaseDecision`, `replayPlan`,
   `runReplay`, `switchBack`, mocha-tested):
-  - A followed character's (A switch on) wormhole jump makes it active after 7 s (the active character's own jump can
+  - A tracked character's wormhole jump (its A switch on) makes it active after 7 s (the active character's own jump can
     come a 5 s poll later); all its waiting jumps are replayed in order, so no false hole from the first stop to the
     last. If it moved on meanwhile, its jumps are mapped without switching and it only becomes active. If a replayed
     jump opens "Which Signature?", the rest are mapped after it closes and the character lands on its last system.
@@ -69,7 +69,7 @@ when a non-active linked character makes a mappable wormhole jump while the feat
   - Fleet jumps: an alt through the same hole (from → to) as the active character within 10 s doesn't switch (nothing
     to switch to; its jump is mapped one sync later too, which finds the active character's connection and does
     nothing). If the active character's "Which Signature?" for that hole is cancelled, the followers' jumps through it
-    (either way) are dropped instead of asking again. Several alts through one hole without the active character: one switch,
+    (either way), queued or made within the next 10 s, are dropped instead of asking again. Several alts through one hole without the active character: one switch,
     the others follow it. If the character a switch just left takes the same hole within 10 s (it was leading, a poll
     late), Tripwire switches back to it without a notice (after any open question closes).
   - **Mapping without switching:** after a manual pick (chip, tracking list, "Back to", Ctrl+K) switching pauses for 3
