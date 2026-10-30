@@ -1,6 +1,22 @@
 {
   "features": [
     {
+      "pr": 151,
+      "date": "2026-10-30",
+      "title": "Map jumps of all my tracked characters",
+      "description": "Flying several characters? Turn on Settings > Wormhole Jumps & Mass > Map jumps of all my tracked characters (up to 5). It is off by default. When one of your other characters jumps a wormhole, Tripwire switches to it and maps the hole. A strip next to Current System shows who is active, who just jumped and who is offline; click a character to switch, or press Ctrl+K and type Switch to character. After you pick a character yourself, switching pauses for 3 minutes, but your other characters' jumps are still mapped.\n\nWith two or more tracked characters, every jump question, such as Which signature did you jump through?, now names the character it is about. Choose which characters Tripwire switches to with the A icon next to each one in the tracking list.",
+      "images": [
+        {
+          "src": "whats-new/img/pr-151-multi-character-jumps.png",
+          "caption": "Who is active and who just jumped, next to Current System"
+        },
+        {
+          "src": "whats-new/img/pr-151-which-signature.png",
+          "caption": "Jump questions name the character"
+        }
+      ]
+    },
+    {
       "pr": 142,
       "date": "2026-10-23",
       "title": "Jump planner and region map open only when you ask",

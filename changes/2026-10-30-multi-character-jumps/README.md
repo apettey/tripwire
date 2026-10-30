@@ -18,8 +18,8 @@ and ship polling is skipped for logged-off alts.
 
 After: "Current System (Hauler Alt)", the chip strip (active chip outlined orange; every character that jumped a
 wormhole has a cyan ring and dot for a minute, pulsing for the first seconds; offline characters dimmed with a hollow
-dot), and the per-character A (auto-map) switch next to the eye and ship icons in the tracking list, here off for the
-hauler.
+dot), and the per-character A switch ("Switch to this character when it jumps") next to the eye and ship icons in the tracking list,
+orange = on.
 
 | Automatic switch notice (one click back) | Paused after a manual pick | Fleet jump: the active character stays |
 | --- | --- | --- |
