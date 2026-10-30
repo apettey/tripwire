@@ -49,8 +49,16 @@
 #fn-dock .jBox-Notice .jBox-closeButton path { fill: currentColor; }
 
 .fn-close-all {
+	/* A fixed row at the corner, kept from the first pop-up on: nothing ever moves into or out of its place, so a click
+	   meant for a pop-up's close button can't land on it */
 	display: none;
-	order: 1;	/* on the far side: appearing must not push the pop-ups' close buttons away from under the mouse */
+	visibility: hidden;
+	order: -1;
+	position: sticky;
+	top: 0;
+	bottom: 0;
+	z-index: 1;
+	flex: 0 0 auto;
 	pointer-events: auto;
 	padding: 1px 8px;
 	background: rgba(20, 24, 30, 0.95);
@@ -61,7 +69,8 @@
 	line-height: 16px;
 	cursor: pointer;
 }
-.fn-close-all.fn-shown { display: block; }
+.fn-close-all.fn-reserved { display: block; }
+.fn-close-all.fn-shown { visibility: visible; }
 .fn-close-all:hover, .fn-close-all:focus { background: #2A4C74; outline: none; }
 
 /* Settings > General > See-through pop-ups (on the container: jBox and jQuery fades write the wrapper's opacity) */

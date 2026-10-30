@@ -70,7 +70,7 @@ const forkNotifications = {
 		const $button = $dock.children(".fn-close-all");
 		const text = "Close all (" + count + ")";
 		if ($button.text() !== text) { $button.text(text); }
-		$button.toggleClass("fn-shown", count > 1);
+		$button.toggleClass("fn-reserved", count > 0).toggleClass("fn-shown", count > 1);
 	},
 
 	/** Close one pop-up the way its own close button does, so its feature tidies up after itself */
