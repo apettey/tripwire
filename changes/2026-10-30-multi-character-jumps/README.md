@@ -25,6 +25,11 @@ hauler.
 | --- | --- | --- |
 | ![switch notice](switch-notice.png) | ![paused](paused-chip.png) | ![fleet jump](fleet-jump.png) |
 
+Paused on Main Scanner (Current System J115405); Hauler Alt jumped twice meanwhile and both holes (J115405 → J142355 →
+J171225, viewed) were mapped onto the chain without switching:
+
+![mapped while paused](silent-map.jpg)
+
 | Which Signature? names the jumper (never cut) | Signature prompt | Return bookmark |
 | --- | --- | --- |
 | ![which signature](which-signature.png) | ![sig prompt](sig-prompt.png) | ![return pop-up](return-popup.png) |
@@ -38,7 +43,7 @@ hauler.
 Toggle: Settings > Wormhole Jumps & Mass > "My characters: Map jumps of all my tracked characters" (`options.multiTrack =
 {enabled, exclude: {characterID: true}}`). **Off by default** (missing key = off), a deliberate exception to "on by
 default": it changes which character is active, and the user asked for strict opt-in. Up to 5 characters (sorted by name)
-are used; linking stays unlimited. Each character can be left out with its A icon in the tracking list. Settings > Reset
+are used; linking stays unlimited. Each character's A icon in the tracking list ("Follow this character's jumps") chooses whether Tripwire picks up its jumps. Settings > Reset
 deletes `multiTrack`. Left out of Mask Admin defaults (it holds the user's own character IDs).
 
 No toggle for the rest, both pure improvements: naming the character in jump questions (only with 2+ tracked
@@ -51,18 +56,26 @@ when a non-active linked character makes a mappable wormhole jump while the feat
 
 ## Change
 
-- **When it switches** (pure `multiTrack.planMoves`, mocha-tested):
-  - An alt's jump does not switch when it takes the same hole (from → to) as the active character within 10 s, or lands
-    where the active character is. Several alts through one hole without the active character: one switch (the first),
-    the others follow it. A switch waits 1.5 s (the active character's own jump may come with the next poll) and is
-    checked again then.
-  - After a manual pick (chip, tracking list, "Back to", Ctrl+K "Switch to character") automatic switching pauses for
-    3 minutes; the active chip says "paused 2:41" and a click on it resumes.
-  - While a question or pop-up about the last jump is open (automapper "Which Signature?", signature prompt, return
-    bookmark, including their retries), switching waits so it isn't wiped: a yellow notice says so, the chip gets a
-    queued mark, and the jump is mapped once it is closed or auto-hides (60 s / 90 s at most).
+- **When it switches, and when it maps without switching** (pure `planMoves`, `replayPlan`, `switchBack`, mocha-tested):
+  - A followed character's (A switch on) wormhole jump makes it active after 7 s (the active character's own jump can
+    come a 5 s poll later); all its waiting jumps are replayed in order, so no false hole from the first stop to the
+    last. If it moved on meanwhile, its jumps are mapped without switching and it only becomes active.
+  - Fleet jumps: an alt through the same hole (from → to) as the active character within 10 s doesn't switch (nothing
+    to map: the active character mapped it). Several alts through one hole without the active character: one switch,
+    the others follow it. If the character a switch just left takes the same hole within 10 s (it was leading, a poll
+    late), Tripwire switches back to it without a notice.
+  - **Mapping without switching:** after a manual pick (chip, tracking list, "Back to", Ctrl+K) switching pauses for 3
+    minutes, but the other characters' jumps are still mapped: the automapper runs with the jumper's context (its
+    tripwire.client.EVE for the one synchronous call: station and pod checks, `automap.character`, the "Which
+    Signature?" dialog naming it) and the active character's straight after. Current System, Follow and the jump
+    pop-ups don't move. The active chip says "paused 3m"; a click resumes.
+  - While a question about the last jump is on screen or still coming ("Which Signature?", the signature prompt and its
+    retries) the switch waits, so the question isn't wiped; the jumps are mapped meanwhile (unless the question is the
+    automapper's own dialog, which allows one at a time). The chip gets a queued ring; a notice only when a question is
+    actually visible. The return-bookmark panel is passive and holds nothing.
   - No switching with no active character (the user untracked on purpose), when turned off or after Reset.
-  - Each automatic switch shows one notice "Now on X (jumped A → B) · Back to Y" (replaced by the next).
+  - Each automatic switch shows one notice "Now on X (jumped A → B) · Back to Y" (replaced by the next; it stays while a
+    question about that jump is open, else 20 s).
 - New `app/js/fork/multi-track.js` (+ css, mocha tests). A 1 s in-memory tick diffs every linked character's system
   (filled by upstream's existing 5 s location poll). A wormhole jump of an opted-in, non-active character (same rules as
   the automapper: no gate, dock, pod, Jita/Amarr, abyssal) makes it active and replays the jump through `tripwire.EVE`
@@ -78,17 +91,19 @@ when a non-active linked character makes a mappable wormhole jump while the feat
   signature prompt asks "Which signature did Alt Two jump through?"; the return bookmark reads "Alt Two · Return
   bookmark". Only with 2+ tracked characters, whether or not the feature is on.
 - Jumps while "Which Signature?" is open: before, another character's jump was dropped. Now, with the feature on, it
-  waits (see above) and is mapped once the dialog closes. An active character's own second jump while the dialog is
+  waits (see above) and is mapped and switched to once the dialog closes. An active character's own second jump while the dialog is
   open is still dropped by upstream's automapper.
-- The strip always shows the active character (marked "not auto-mapped" when its A switch is off or it is over the 5),
+- The strip always shows the active character (marked "not switched to automatically" when its A switch is off or it is
+  over the 5; its own jumps are mapped by upstream as always),
   stays visible with nothing tracked (a chip click resumes), and the tracking list says when more than 5 are switched
   on. If the active character stops being tracked, nothing is active and a notice says so. Chip tooltips say when a
   location isn't updating (token expired, ESI paused). Tooltips are escaped (jBox shows HTML).
 - The header stays on one line: if it would wrap, a long tracked name top right is capped, then chip names go, then only
   the active chip and "+N", then no strip, then no name in "Current System" (checked with a 37-character name at
   1920/1366/1100/1024/900/800 px). Character names are always inserted as text.
-- **Load:** no new endpoints, no new server polling, no new ESI requests. Per switched jump, the same requests an active
+- **Load:** no new endpoints, no new server polling, no new ESI requests. Per mapped jump, the same requests an active
   character's jump already makes; switching itself saves nothing.
+- Ctrl+K "Switch to character" (previously active character first) has its own catalog entry (`switchCharacter`).
 - **Offline skip** (`app/js/fork/esi-offline-skip.js`, every user): upstream's `/online/` answer (still every 60 s)
   decides. An offline alt that is neither the active character nor opted in to the feature gets no `/location/` or
   `/ship/` requests (24 requests/min saved per such alt). The active and opted-in characters are always polled (a fresh
