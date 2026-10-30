@@ -26,7 +26,7 @@
         "sig.add", "sig.edit", "sig.undo", "sig.redo", "chain.flareRed", "chain.flareYellow", "chain.flareGreen", "chain.ping", "chain.mass",
         "palette.clearHistory", "app.settings"],
       "panels": [], "use": ["opened"], "success": "used by >=20% of active users by day 28" },
-    { "id": "notifications", "title": "Pop-up corner and closing", "section": "general", "prs": [], "settingsKey": "notifications",
+    { "id": "notifications", "title": "Pop-up corner and closing", "section": "general", "prs": [152], "settingsKey": "notifications",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["closed_all", "moved"],
       "success": "corner moved or Close all used by >=15% of active users by day 28" },
     { "id": "soundMute", "title": "Mute button", "section": "general", "prs": [71], "settingsKey": "soundMute",
