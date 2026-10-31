@@ -55,7 +55,10 @@ tripwire.parse = function(server, mode) {
             }
         }
     } else if (mode == 'init' || mode == 'change') {
+        // fork: keep client.EVE here too, or the next location poll can't see a jump (automapper, Follow, jump pop-ups)
+        var EVE = this.client.EVE;
         this.client = server;
+        this.client.EVE = EVE;
 
         for (var key in data.signatures) {
             if (data.signatures[key].systemID != viewingSystemID) {
