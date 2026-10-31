@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-10-31 | [Jump right after a view change](2026-10-31-jump-after-view-change/README.md) | A jump seen on the first location poll after changing the viewed system is no longer lost: it reaches the automapper, Follow and the jump pop-ups |
 | 2026-10-30 | [Pop-up corner and closing](2026-10-30-notification-dock/README.md) | Every pop-up in one dock in a corner you choose, with close buttons, Close all, Esc, a shorter time and see-through |
 | 2026-10-30 | [Map jumps of all my tracked characters (up to 5)](2026-10-30-multi-character-jumps/README.md) | Opt-in: switch to whichever tracked character jumps a wormhole and map it, chip strip shows who; jump questions name the jumper; no location/ship polling for offline alts; mass logged for a second character through an already-mapped hole |
 | 2026-10-28 | [PHP security hardening](2026-10-28-php-security-hardening/README.md) | CSP/HSTS headers, no PHP errors in cached_third_party.php, ESI token updates scoped to the user, Adminer on localhost |
