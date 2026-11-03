@@ -180,8 +180,9 @@ const holeNaming = {
 	/** Renames that settle a clash already saved (two saves inside one refresh, so neither client saw the other's hole):
 		of the wormhole sigs in systemID whose leading token is `token`, the oldest (lowest id) keeps it and every other
 		one gets the next free name. Ids never change, so every client works this out the same way whatever was edited
-		since; each renames only its own and they never pick the same new name. Returns [{sig, name}] (empty when there
-		is no clash). */
+		since; each renames only its own and they never pick the same new name. On purpose this is the oldest hole, not the
+		first save: an old hole renamed by edit keeps a name a brand-new hole took in the same moment. Returns [{sig, name}]
+		(empty when there is no clash). */
 	raceRenames: function(signatures, systemID, prefix, token) {
 		const all = Object.keys(signatures || {}).map(function(k) { return signatures[k]; }).filter(function(sig) {
 			return sig && sig.type === "wormhole" && sig.systemID == systemID;
@@ -481,7 +482,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			for (let i = 0; i < watched.length; i++) {
 				const w = watched[i];
 				const own = tripwire.client.signatures[w.sigID];
-				if (!own || holeNaming.leadingToken(own.name) !== w.token) { watched.splice(i--, 1); continue; }	// renamed or gone
+				// Not in the list yet, or the list still has the old name (a response without the list): wait, the watch expires anyway
+				if (!own || holeNaming.leadingToken(own.name) !== w.token) { continue; }
 				const prefix = holeNaming.prefixForSystem(w.systemID);
 				const rename = holeNaming.raceRenames(tripwire.client.signatures, w.systemID, prefix, w.token)
 					.filter(function(r) { return r.sig.id == w.sigID; })[0];
@@ -494,13 +496,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				const from = String(own.name).trim();
 				watched.splice(i, 1);
 				// Straight to the original refresh: no bookmark copy or clash check for this one
+				let renamed = false;
 				originalRefresh.call(tripwire, "refresh", payload, function(result) {
 					if (result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true) {
+						renamed = true;
 						watchSig(w.systemID, w.sigID, holeNaming.leadingToken(rename.name));
 						Notify.trigger("Hole name " + _.escape(from) + " was taken at the same moment by another hole in " +
 							_.escape(holeNaming.systemName(w.systemID) || "this system") + ": renamed to " + _.escape(rename.name) + ". Rename its bookmark in game too.", "yellow", 15000);
-					} else {
-						watched.push(w);	// try again shortly
+					}
+				}, function() {
+					// Failed, or no answer at all (only .done calls the success callback): try again shortly
+					if (!renamed) {
+						watched.push(w);
 						scheduleCheck(tripwire.refreshRate || 5000);
 					}
 				});
