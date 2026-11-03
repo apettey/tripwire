@@ -223,7 +223,11 @@ describe('Hole naming', () => {
 			const sigs = { 10: sig(10, 'C', '2026-11-03 10:00:01'), 11: sig(11, 'C', '2026-11-03 10:00:02'), 12: sig(12, 'A', '2026-11-03 09:00:00') };
 			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'C').map(r => [r.sig.id, r.name]), [[11, 'B']]);
 		});
-		it('Same second: the higher id is renamed', () => {
+		it('Editing the older hole afterwards does not move the name', () => {
+			const sigs = { 30: sig(30, 'C', '2026-11-03 10:05:00'), 31: sig(31, 'C', '2026-11-03 10:00:02') };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'C').map(r => [r.sig.id, r.name]), [[31, 'A']]);
+		});
+		it('The higher id is renamed', () => {
 			const sigs = { 21: sig(21, 'B', '2026-11-03 10:00:01'), 20: sig(20, 'B', '2026-11-03 10:00:01') };
 			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'B').map(r => [r.sig.id, r.name]), [[21, 'A']]);
 		});
