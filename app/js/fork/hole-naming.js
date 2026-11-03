@@ -178,18 +178,16 @@ const holeNaming = {
 	},
 
 	/** Renames that settle a clash already saved (two saves inside one refresh, so neither client saw the other's hole):
-		of the wormhole sigs in systemID whose leading token is `token`, the first saved (oldest modifiedTime, then lowest
-		id) keeps it, every later one gets the next free name. Every client works this out the same way, so each renames
-		only its own and they never pick the same new name. Returns [{sig, name}] (empty when there is no clash). */
+		of the wormhole sigs in systemID whose leading token is `token`, the oldest (lowest id) keeps it and every other
+		one gets the next free name. Ids never change, so every client works this out the same way whatever was edited
+		since; each renames only its own and they never pick the same new name. Returns [{sig, name}] (empty when there
+		is no clash). */
 	raceRenames: function(signatures, systemID, prefix, token) {
 		const all = Object.keys(signatures || {}).map(function(k) { return signatures[k]; }).filter(function(sig) {
 			return sig && sig.type === "wormhole" && sig.systemID == systemID;
 		});
-		const group = all.filter(function(sig) { return holeNaming.leadingToken(sig.name) === token; }).sort(function(a, b) {
-			const ta = String(a.modifiedTime || ""), tb = String(b.modifiedTime || "");
-			if (ta !== tb) { return ta < tb ? -1 : 1; }
-			return Number(a.id) - Number(b.id);
-		});
+		const group = all.filter(function(sig) { return holeNaming.leadingToken(sig.name) === token; })
+			.sort(function(a, b) { return Number(a.id) - Number(b.id); });
 		const renames = [];
 		if (group.length < 2) { return renames; }
 		const used = all.map(function(sig) { return sig.name; }).filter(Boolean);
@@ -406,16 +404,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 		holeNaming.bookmarkForPayload = bookmarkForPayload;
 
-		// The dialog's submit handler builds the payload and calls tripwire.refresh synchronously from the
-		// Add/Save click (or Enter key), so copying here happens inside the user gesture. The toast is only
-		// shown if the save succeeds (same check the dialog's own success callback makes).
 		// --- Name clashes (two people naming holes in the same system) ---
 		// On save: a new or changed name another hole in the system already has (it synced while the dialog was open)
 		// becomes the next free one. After saving: the same save may have crossed someone else's inside one refresh, so the
-		// next few syncs check this hole again and the later of the two is renamed (raceRenames decides, the same on
-		// every client).
+		// next few syncs check this hole again; of the holes with that name the oldest (lowest id) keeps it and each client
+		// renames only its own (raceRenames decides, the same on every client). A renamed hole is watched again, so a
+		// clash the rename itself makes (two clients picking the same free name) is settled the same way.
 		const RACE_WATCH_MS = 120000;
-		let watched = [];	// {systemID, sigID (update) | signatureID (add), token, until}
+		let watched = [];	// {systemID, sigID, token, until}
 
 		/** Whether the dialog saves a new name for its hole (a new hole, or a name token the sig didn't have).
 			An unchanged name is left alone, so editing an old hole's mass never renames it. */
@@ -439,17 +435,32 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return { from: from, to: name };
 		}
 
-		function watch(entry) {
-			const sig = entry.signatures[0];
-			const token = holeNaming.leadingToken(sig.name);
-			if (!token) { return; }
-			watched.push({ systemID: sig.systemID, sigID: sig.id, signatureID: String(sig.signatureID || "").toLowerCase(),
-				token: token, until: Date.now() + RACE_WATCH_MS });
+		/** Check the watched holes once the current sync has finished (tripwire.xhr is cleared only then) */
+		function scheduleCheck(delay) {
+			setTimeout(function() {
+				try { checkRaces(); } catch (e) { console.warn("hole-naming: could not check name clashes", e); }
+			}, delay || 0);
 		}
 
-		function isWatchedSig(w, sig) {
-			if (w.sigID !== undefined && w.sigID !== null) { return sig.id == w.sigID; }
-			return String(sig.signatureID || "").toLowerCase() === w.signatureID;
+		/** Watch a hole of ours. tripwire.sync parses the list before calling the save's success callback, so that
+			parse ran before the watch existed: check once now too. */
+		function watchSig(systemID, sigID, token) {
+			if (sigID === undefined || sigID === null || sigID === "" || !token) { return; }
+			watched.push({ systemID: systemID, sigID: sigID, token: token, until: Date.now() + RACE_WATCH_MS });
+			scheduleCheck(0);
+		}
+
+		/** Watch the dialog's hole after a successful save. A new hole's id comes from the save result
+			(results[0].signatures, the side in the dialog's system). */
+		function watch(entry, result) {
+			const sig = entry.signatures[0];
+			let id = sig.id;
+			if (id === undefined || id === null) {
+				const added = result && result.results && result.results[0] && result.results[0].signatures;
+				const mine = (added || []).filter(function(s) { return s && s.systemID == sig.systemID; })[0];
+				id = mine ? mine.id : undefined;
+			}
+			watchSig(sig.systemID, id, holeNaming.leadingToken(sig.name));
 		}
 
 		function wormholeOf(sigID) {
@@ -459,46 +470,56 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			})[0];
 		}
 
+		/** Settle one clash on a watched hole of ours. One rename per check, and only while no sync is in flight:
+			a payload queued behind a running sync is deep-merged into the next one (tripwire.sync), which could mix it
+			with the user's own save. The rest waits for the next sync. */
 		function checkRaces() {
 			const now = Date.now();
 			watched = watched.filter(function(w) { return w.until > now; });
-			if (!watched.length || !tripwire.client || !tripwire.client.signatures) { return; }
+			if (!watched.length || !tripwire.client || !tripwire.client.signatures || tripwire.xhr) { return; }
 			if (typeof options !== "undefined" && !holeNaming.enabled(options)) { return; }
-			const keep = [];
-			watched.forEach(function(w) {
+			for (let i = 0; i < watched.length; i++) {
+				const w = watched[i];
+				const own = tripwire.client.signatures[w.sigID];
+				if (!own || holeNaming.leadingToken(own.name) !== w.token) { watched.splice(i--, 1); continue; }	// renamed or gone
 				const prefix = holeNaming.prefixForSystem(w.systemID);
-				const renames = holeNaming.raceRenames(tripwire.client.signatures, w.systemID, prefix, w.token)
-					.filter(function(r) { return isWatchedSig(w, r.sig); });
-				if (!renames.length) { keep.push(w); return; }
-				renames.forEach(function(r) {
-					const wormhole = wormholeOf(r.sig.id);
-					if (!wormhole) { return; }
-					const otherID = wormhole.initialID == r.sig.id ? wormhole.secondaryID : wormhole.initialID;
-					const payload = { signatures: { update: [{ wormhole: { id: wormhole.id },
-						signatures: [{ id: r.sig.id, name: r.name }, { id: otherID }] }] } };
-					const from = String(r.sig.name).trim();
-					// Straight to the original refresh: no bookmark copy or clash check for this one
-					setTimeout(function() {
-						originalRefresh.call(tripwire, "refresh", payload, function(result) {
-							if (result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true) {
-								Notify.trigger("Hole name " + _.escape(from) + " was taken at the same moment by another hole in " +
-									_.escape(holeNaming.systemName(w.systemID) || "this system") + ": renamed to " + _.escape(r.name), "yellow", 10000);
-							}
-						});
-					}, 0);
+				const rename = holeNaming.raceRenames(tripwire.client.signatures, w.systemID, prefix, w.token)
+					.filter(function(r) { return r.sig.id == w.sigID; })[0];
+				if (!rename) { continue; }
+				const wormhole = wormholeOf(w.sigID);
+				if (!wormhole) { continue; }
+				const otherID = wormhole.initialID == w.sigID ? wormhole.secondaryID : wormhole.initialID;
+				const payload = { signatures: { update: [{ wormhole: { id: wormhole.id },
+					signatures: [{ id: w.sigID, name: rename.name }, { id: otherID }] }] } };
+				const from = String(own.name).trim();
+				watched.splice(i, 1);
+				// Straight to the original refresh: no bookmark copy or clash check for this one
+				originalRefresh.call(tripwire, "refresh", payload, function(result) {
+					if (result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true) {
+						watchSig(w.systemID, w.sigID, holeNaming.leadingToken(rename.name));
+						Notify.trigger("Hole name " + _.escape(from) + " was taken at the same moment by another hole in " +
+							_.escape(holeNaming.systemName(w.systemID) || "this system") + ": renamed to " + _.escape(rename.name) + ". Rename its bookmark in game too.", "yellow", 15000);
+					} else {
+						watched.push(w);	// try again shortly
+						scheduleCheck(tripwire.refreshRate || 5000);
+					}
 				});
-			});
-			watched = keep;
+				return;
+			}
 		}
 		holeNaming.checkRaces = checkRaces;
 
+		// A new list from the server (someone else's hole) is checked once its sync has finished
 		const originalParse = tripwire.parse;
 		tripwire.parse = function() {
 			const ret = originalParse.apply(this, arguments);
-			try { checkRaces(); } catch (e) { console.warn("hole-naming: could not check name clashes", e); }
+			if (watched.length) { scheduleCheck(0); }
 			return ret;
 		};
 
+		// The dialog's submit handler builds the payload and calls tripwire.refresh synchronously from the
+		// Add/Save click (or Enter key), so copying here happens inside the user gesture. The toast is only
+		// shown if the save succeeds (same check the dialog's own success callback makes).
 		const originalRefresh = tripwire.refresh;
 		tripwire.refresh = function(mode, data, successCallback, alwaysCallback) {
 			let entry = null;
@@ -517,7 +538,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const wrappedSuccess = function(result) {
 				const ret = successCallback ? successCallback.apply(this, arguments) : undefined;
 				if (result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true) {
-					if (naming) { try { watch(entry); } catch (e) { /* ignore */ } }
+					if (naming) { try { watch(entry, result); } catch (e) { /* ignore */ } }
 					if (renamed) {
 						Notify.trigger("Hole name " + _.escape(renamed.from) + " is already used in this system: saved as " + _.escape(renamed.to), "yellow", 10000);
 					}

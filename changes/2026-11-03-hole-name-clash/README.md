@@ -30,10 +30,11 @@ No tip: it happens on its own and says so in a pop-up.
   another hole in the system already has is replaced by the lowest free one of the same kind (letter, small digit,
   medium digit); text after the token is kept (`B - frig` -> `C - frig`). Names outside the scheme, and names that
   didn't change (editing an old hole's mass), are left alone.
-- For two minutes after such a save, each sync checks the name again. If the same token was saved twice, the first
-  save (oldest modified time, then lowest id) keeps it and every later one gets the next free name. Each client
-  renames only its own hole and all of them work it out the same way, so two clients never both rename or pick the
-  same name.
+- For two minutes after such a save, each sync checks the name again. If the same token was saved twice, the oldest
+  hole (lowest id, which later edits don't change) keeps it and every other one gets the next free name. Each client
+  renames only its own hole (found by the id the save returned) and all of them work it out the same way. A renamed
+  hole is watched again, so if two clients happen to pick the same free name, the next sync settles that too. One
+  rename per sync, sent only when no other sync is in flight, so it is never merged into the user's own save.
 - New pure helpers `holeNaming.charSize`, `resolveConflict`, `raceRenames`, tested in
   `app/js-test/fork/hole-naming.test.js`.
 
