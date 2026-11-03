@@ -201,6 +201,47 @@ describe('Hole naming', () => {
 			{ map: { rows: [{ c: [{ v: 1, systemID: HOME }, { v: null }] }] }, systemsInChainMap: {} }, whs, whSigs('')), 'C'));
 	});
 
+	describe('resolveConflict', () => {
+		it('Taken letter gets the next free one', () => assert.equal(holeNaming.resolveConflict('C', '', ['A', 'B', 'C']), 'D'));
+		it('Lowest free letter, not just the next', () => assert.equal(holeNaming.resolveConflict('B', '', ['A', 'B', 'D']), 'C'));
+		it('Text after the token is kept', () => assert.equal(holeNaming.resolveConflict('C - frig', '', ['C']), 'A - frig'));
+		it('Deeper prefix', () => assert.equal(holeNaming.resolveConflict('AB', 'A', ['AA', 'AB - C5']), 'AC'));
+		it('Lower-case name', () => assert.equal(holeNaming.resolveConflict('ab', 'a', ['AB']), 'AA'));
+		it('Small digit stays a small digit', () => assert.equal(holeNaming.resolveConflict('A1', 'A', ['A1']), 'A2'));
+		it('Medium digit stays a medium digit', () => assert.equal(holeNaming.resolveConflict('6', '', ['6', '7']), '8'));
+		it('No clash', () => assert.equal(holeNaming.resolveConflict('C', '', ['A', 'B']), null));
+		it('Return bookmark with the same letter is no clash', () => assert.equal(holeNaming.resolveConflict('C', '', ['!C']), null));
+		it('Name outside the scheme is left alone', () => assert.equal(holeNaming.resolveConflict('FRIG', '', ['FRIG']), null));
+		it('Name of another level is left alone', () => assert.equal(holeNaming.resolveConflict('AB', '', ['AB']), null));
+		it('No prefix (incoming hole unnamed)', () => assert.equal(holeNaming.resolveConflict('A', null, ['A']), null));
+		it('Nothing free', () => assert.equal(holeNaming.resolveConflict('A', '', holeNaming.LETTERS.split('')), null));
+	});
+
+	describe('raceRenames', () => {
+		const sig = (id, name, time, systemID) => ({ id: id, type: 'wormhole', systemID: systemID || 1, name: name, modifiedTime: time });
+		it('Later save of the same name is renamed', () => {
+			const sigs = { 10: sig(10, 'C', '2026-11-03 10:00:01'), 11: sig(11, 'C', '2026-11-03 10:00:02'), 12: sig(12, 'A', '2026-11-03 09:00:00') };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'C').map(r => [r.sig.id, r.name]), [[11, 'B']]);
+		});
+		it('Editing the older hole afterwards does not move the name', () => {
+			const sigs = { 30: sig(30, 'C', '2026-11-03 10:05:00'), 31: sig(31, 'C', '2026-11-03 10:00:02') };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'C').map(r => [r.sig.id, r.name]), [[31, 'A']]);
+		});
+		it('The higher id is renamed', () => {
+			const sigs = { 21: sig(21, 'B', '2026-11-03 10:00:01'), 20: sig(20, 'B', '2026-11-03 10:00:01') };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'B').map(r => [r.sig.id, r.name]), [[21, 'A']]);
+		});
+		it('Three at once get different names', () => {
+			const sigs = { 1: sig(1, 'A', 't1'), 2: sig(2, 'A', 't2'), 3: sig(3, 'A', 't3') };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'A').map(r => [r.sig.id, r.name]), [[2, 'B'], [3, 'C']]);
+		});
+		it('Other systems and non-wormholes are ignored', () => {
+			const sigs = { 1: sig(1, 'A', 't1'), 2: sig(2, 'A', 't2', 2), 3: { id: 3, type: 'data', systemID: 1, name: 'A', modifiedTime: 't3' } };
+			assert.deepEqual(holeNaming.raceRenames(sigs, 1, '', 'A'), []);
+		});
+		it('No clash', () => assert.deepEqual(holeNaming.raceRenames({ 1: sig(1, 'A', 't1') }, 1, '', 'A'), []));
+	});
+
 	describe('siblingNames', () => {
 		const sigs = {
 			1: { id: 1, systemID: '31000001', type: 'wormhole', name: 'A' },
