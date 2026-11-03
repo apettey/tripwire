@@ -83,7 +83,7 @@
 
     { "id": "sigQuickpicks", "title": "Statics in the signature Type quick picks", "section": "signatures", "prs": [2], "settingsKey": null,
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["picked"], "exposed": ".wormholeTypeQuickSelect" },
-    { "id": "holeNaming", "title": "Automatic wormhole names", "section": "signatures", "prs": [6, 74, 103], "settingsKey": "holeNaming",
+    { "id": "holeNaming", "title": "Automatic wormhole names", "section": "signatures", "prs": [6, 74, 103, 154], "settingsKey": "holeNaming",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "sigAge", "title": "Signature age colouring", "section": "signatures", "prs": [26], "settingsKey": "sigAge",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".sig-age-aging, .sig-age-stale" },

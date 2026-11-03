@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 154,
+      "date": "2026-11-03",
+      "title": "No two holes with the same name",
+      "description": "When you and someone else name holes in the same system at the same time, you no longer both end up with the same name. If the suggested name was taken while your Add Signature window was open, saving uses the next free one and a pop-up tells you. If you both saved in the same moment, the newer hole is renamed a few seconds later; rename its bookmark in game too.\n\nThis is part of Settings > Signatures > Suggest hole names.",
+      "images": [
+        { "src": "whats-new/img/pr-154-hole-name-clash.png", "caption": "B was taken while the window was open, so the hole was saved as C" }
+      ]
+    },
+    {
       "pr": 152,
       "date": "2026-10-30",
       "title": "Choose where pop-ups appear, and close them quickly",
