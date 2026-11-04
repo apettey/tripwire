@@ -35,6 +35,8 @@ return hole; its button opens the Settings row.
   `tripwire.pasteSignatures.parsePaste` and, for that one synchronous call only, `tripwire.refresh`, so the paste's payload
   is adjusted before it is sent (the add is swapped for an update of the automapper hole's signature, or its far side is
   set). Undo works for both (one update step on top of the paste's own). The jump-sig prompt closes on a merge.
+- It links only when no hole joins the two systems yet; it leaves the paste alone when the return hole is already known,
+  when there are several holes between the systems, or while the automapper's "Which Signature?" question is open.
 - Usage events `returnSigPaste.merged` / `returnSigPaste.linked`; catalog entry in `public/fork/feature-catalog.json`.
 - `returnSigPaste` added to the mask-default allow-lists (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`,
   both fork-owned). No upstream files touched (`app/js/tripwire/paste.js` unchanged).

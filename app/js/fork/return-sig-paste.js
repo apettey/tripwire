@@ -105,15 +105,15 @@ const returnSigPaste = {
 
 	/** What the paste does with the return hole: {mode: "merge", merge} (put the ID on the automapper's hole, see
 		mergeTarget), {mode: "link"} (add it with its far side set to jump.from) or {mode: "none"} (leave the paste alone:
-		a hole between the two systems already has an ID on this side, so the return hole is known, or the automapper's
-		"Which Signature?" question is open and it will add its own hole). */
+		any hole between the two systems that is not the one merge target: the return hole is already known, or there are
+		several unknown ones; or the automapper's "Which Signature?" question is open and it will add its own hole). */
 	plan: function(jump, wormholes, signatures, pickerOpen) {
 		if (!jump || typeof jumpSigPrompt === "undefined") { return { mode: "none" }; }
 		const merge = returnSigPaste.mergeTarget(jump, wormholes, signatures);
 		if (merge) { return { mode: "merge", merge: merge }; }
-		const known = jumpSigPrompt.holesBetween(jump.from, jump.to, wormholes, signatures)
-			.some(function(h) { return jumpSigPrompt.hasId(h.toSig); });
-		if (known || pickerOpen) { return { mode: "none" }; }
+		// Any other hole between the two systems (the return hole already known, or several unknown ones): not ours to guess
+		const holes = jumpSigPrompt.holesBetween(jump.from, jump.to, wormholes, signatures);
+		if (holes.length || pickerOpen) { return { mode: "none" }; }
 		return { mode: "link" };
 	},
 

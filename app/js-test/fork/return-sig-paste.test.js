@@ -227,10 +227,10 @@ describe('returnSigPaste', () => {
 			assert.deepStrictEqual(returnSigPaste.plan(jump, {}, {}, true), { mode: 'none' });
 		});
 
-		it('two holes without an ID here: link (as before), no jump: none', () => {
+		it('two holes without an ID here: none (not ours to guess); no jump: none', () => {
 			const sigs = { 1: sig(1, FROM, null), 2: sig(2, TO, null), 3: sig(3, TO, null), 4: sig(4, FROM, null) };
 			const holes = { 7: { id: 7, initialID: 1, secondaryID: 2 }, 8: { id: 8, initialID: 3, secondaryID: 4 } };
-			assert.strictEqual(returnSigPaste.plan(jump, holes, sigs, false).mode, 'link');
+			assert.strictEqual(returnSigPaste.plan(jump, holes, sigs, false).mode, 'none');
 			assert.strictEqual(returnSigPaste.plan(null, holes, sigs, false).mode, 'none');
 		});
 	});
