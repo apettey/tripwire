@@ -85,7 +85,7 @@
       "stage": "first", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["picked"], "exposed": ".wormholeTypeQuickSelect" },
     { "id": "holeNaming", "title": "Automatic wormhole names", "section": "signatures", "prs": [6, 74, 103, 154], "settingsKey": "holeNaming",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
-    { "id": "returnSigPaste", "title": "Return hole on paste", "section": "signatures", "prs": [], "settingsKey": "returnSigPaste",
+    { "id": "returnSigPaste", "title": "Return hole on paste", "section": "signatures", "prs": [157], "settingsKey": "returnSigPaste",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["merged", "linked"],
       "success": "turned on by >=15% of users who paste signatures after jumps by day 28; >=60% of them see it fire at least once a week; turned off again by <10%" },
     { "id": "sigAge", "title": "Signature age colouring", "section": "signatures", "prs": [26], "settingsKey": "sigAge",
