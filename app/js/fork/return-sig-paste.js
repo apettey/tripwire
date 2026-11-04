@@ -103,6 +103,20 @@ const returnSigPaste = {
 		return holes.length === 1 ? { wormhole: holes[0].wormhole, toSig: holes[0].toSig, fromSig: holes[0].fromSig } : null;
 	},
 
+	/** What the paste does with the return hole: {mode: "merge", merge} (put the ID on the automapper's hole, see
+		mergeTarget), {mode: "link"} (add it with its far side set to jump.from) or {mode: "none"} (leave the paste alone:
+		a hole between the two systems already has an ID on this side, so the return hole is known, or the automapper's
+		"Which Signature?" question is open and it will add its own hole). */
+	plan: function(jump, wormholes, signatures, pickerOpen) {
+		if (!jump || typeof jumpSigPrompt === "undefined") { return { mode: "none" }; }
+		const merge = returnSigPaste.mergeTarget(jump, wormholes, signatures);
+		if (merge) { return { mode: "merge", merge: merge }; }
+		const known = jumpSigPrompt.holesBetween(jump.from, jump.to, wormholes, signatures)
+			.some(function(h) { return jumpSigPrompt.hasId(h.toSig); });
+		if (known || pickerOpen) { return { mode: "none" }; }
+		return { mode: "link" };
+	},
+
 	/** Signature IDs already in the system */
 	existingIds: function(systemID, signatures) {
 		const out = [];
@@ -144,6 +158,12 @@ const returnSigPaste = {
 		return { mode: "linked", undo: null };
 	},
 
+	/** Did the tracked character change (so a stored jump is someone else's)? */
+	otherCharacter: function(prev, next, characterChange) {
+		if (characterChange) { return true; }
+		return !!(prev && next && prev.characterID && next.characterID && prev.characterID != next.characterID);
+	},
+
 	/** "DPF143" -> "DPF-143" */
 	idText: function(id) {
 		const s = String(id || "");
@@ -161,7 +181,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		function opts() { return typeof options !== "undefined" ? options : undefined; }
 		function systemName(id) {
-			try { return holeNaming.systemName(id); } catch (e) { return String(id); }
+			try { return holeNaming.systemName(id) || String(id); } catch (e) { return String(id); }
 		}
 
 		/** Jumps through a stargate, from a station or in a pod are not wormhole jumps (as jump-sig-prompt.js checks) */
@@ -183,6 +203,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			try {
 				const j = jumpReturn.detectJump(prev, EVE || null, characterChange);
 				if (j) { jump = wormholeJump(j.from, j.to) ? { from: j.from, to: j.to, at: Date.now(), used: false } : null; }
+				else if (returnSigPaste.otherCharacter(prev, EVE || null, characterChange)) { jump = null; }	// never another character's jump
 			} catch (e) {
 				console.warn("return-sig-paste: jump detection failed", e);
 			}
@@ -233,9 +254,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				const systemID = viewingSystemID;
 				const from = hit.jump.from;
 				try {
-					const merge = returnSigPaste.mergeTarget(hit.jump, tripwire.client.wormholes, tripwire.client.signatures);
-					change = returnSigPaste.rewrite(data, hit.row.id, hit.jump, merge);
-					if (change) { change.merge = merge; }
+					const pickerOpen = typeof automapState !== "undefined" && !!automapState.pendingDecision;
+					const plan = returnSigPaste.plan(hit.jump, tripwire.client.wormholes, tripwire.client.signatures, pickerOpen);
+					if (plan.mode !== "none") {
+						change = returnSigPaste.rewrite(data, hit.row.id, hit.jump, plan.mode === "merge" ? plan.merge : null);
+						if (change) { change.merge = plan.merge || null; }
+					}
 				} catch (e) { change = null; console.warn("return-sig-paste: could not link the hole", e); }
 				if (!change) { return previousRefresh.apply(this, arguments); }
 				hit.jump.used = true;

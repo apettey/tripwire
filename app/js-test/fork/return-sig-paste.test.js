@@ -202,6 +202,49 @@ describe('returnSigPaste', () => {
 		});
 	});
 
+	describe('plan', () => {
+		const FROM = 31000001, TO = 31000002;
+		const jump = { from: FROM, to: TO, at: 1 };
+		const sig = (id, systemID, signatureID) => ({ id: id, systemID: systemID, signatureID: signatureID, type: 'wormhole' });
+
+		it('merge into the one hole without an ID here', () => {
+			const sigs = { 1: sig(1, FROM, 'abc123'), 2: sig(2, TO, null) };
+			const p = returnSigPaste.plan(jump, { 7: { id: 7, initialID: 1, secondaryID: 2 } }, sigs, false);
+			assert.strictEqual(p.mode, 'merge');
+			assert.strictEqual(p.merge.toSig.id, 2);
+		});
+
+		it('link when no hole joins the systems', () => {
+			assert.deepStrictEqual(returnSigPaste.plan(jump, {}, {}, false), { mode: 'link' });
+		});
+
+		it('none when the return hole is already known (its side here has an ID)', () => {
+			const sigs = { 1: sig(1, FROM, null), 2: sig(2, TO, 'TWD137') };
+			assert.deepStrictEqual(returnSigPaste.plan(jump, { 7: { id: 7, initialID: 2, secondaryID: 1 } }, sigs, false), { mode: 'none' });
+		});
+
+		it('none instead of link while the automapper asks "Which Signature?"', () => {
+			assert.deepStrictEqual(returnSigPaste.plan(jump, {}, {}, true), { mode: 'none' });
+		});
+
+		it('two holes without an ID here: link (as before), no jump: none', () => {
+			const sigs = { 1: sig(1, FROM, null), 2: sig(2, TO, null), 3: sig(3, TO, null), 4: sig(4, FROM, null) };
+			const holes = { 7: { id: 7, initialID: 1, secondaryID: 2 }, 8: { id: 8, initialID: 3, secondaryID: 4 } };
+			assert.strictEqual(returnSigPaste.plan(jump, holes, sigs, false).mode, 'link');
+			assert.strictEqual(returnSigPaste.plan(null, holes, sigs, false).mode, 'none');
+		});
+	});
+
+	describe('otherCharacter', () => {
+		it('a character change forgets the jump', () => {
+			assert.strictEqual(returnSigPaste.otherCharacter({ characterID: 1 }, { characterID: 1 }, true), true);
+			assert.strictEqual(returnSigPaste.otherCharacter({ characterID: 1 }, { characterID: 2 }, false), true);
+			assert.strictEqual(returnSigPaste.otherCharacter({ characterID: 1 }, { characterID: 1 }, false), false);
+			assert.strictEqual(returnSigPaste.otherCharacter({ characterID: 1 }, { systemID: 5 }, false), false);
+			assert.strictEqual(returnSigPaste.otherCharacter(null, { characterID: 2 }, false), false);
+		});
+	});
+
 	describe('rewrite', () => {
 		const pastePayload = () => ({ systemID: 31000002, signatures: {
 			add: [
