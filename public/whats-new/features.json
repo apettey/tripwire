@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 157,
+      "date": "2026-11-05",
+      "title": "Return hole opens when you paste after a jump",
+      "description": "After a jump you land close to the hole you came through. Turn on Settings > Signatures > Return hole on paste (off by default), and when you paste your probe scanner within 10 minutes of a wormhole jump, the one new wormhole signature within 100 km is taken as your return hole. It goes onto the hole the automapper drew for your jump, or is linked to the system you came from, and its Edit Signature window opens so you can fill in the type.\n\nNothing happens if there was no recent jump, if two holes are that close, or if the return hole is already known. Undo works as usual.",
+      "images": [
+        { "src": "whats-new/img/pr-157-return-hole-on-paste.jpg", "caption": "The pasted DPF-143 put on the jump's hole, ready to fill in" }
+      ]
+    },
+    {
       "pr": 154,
       "date": "2026-11-03",
       "title": "No two holes with the same name",
