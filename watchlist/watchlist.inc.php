@@ -14,6 +14,7 @@
 
 const WATCHLIST_MAX_FILTERS = 50;
 const WATCHLIST_MAX_NAME = 60;
+const WATCHLIST_MAX_SYSTEMS = 50;   // systems one filter can name (any of them matches)
 const WATCHLIST_CLASSES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C13', 'Thera', 'Shattered', 'Drifter', 'Pochven', 'HS', 'LS', 'NS'];
 const WATCHLIST_EFFECTS = ['Wolf-Rayet Star', 'Pulsar', 'Magnetar', 'Black Hole', 'Cataclysmic Variable', 'Red Giant'];
 const WATCHLIST_SIZES = ['S', 'M', 'L', 'VL', 'XL'];
@@ -172,8 +173,13 @@ function watchlist_pick($list, array $allowed) {
 function watchlist_normalise_conditions($c) {
     $c = is_array($c) ? $c : [];
     $out = [];
-    $systemID = watchlist_to_id($c['systemID'] ?? null);
-    if ($systemID) $out['systemID'] = $systemID;
+    // Any of these systems; filters saved before the list had one systemID
+    $systemIDs = [];
+    foreach (array_merge([$c['systemID'] ?? null], is_array($c['systemIDs'] ?? null) ? array_values($c['systemIDs']) : []) as $value) {
+        $id = watchlist_to_id($value);
+        if ($id && !in_array($id, $systemIDs, true) && count($systemIDs) < WATCHLIST_MAX_SYSTEMS) $systemIDs[] = $id;
+    }
+    if ($systemIDs) $out['systemIDs'] = $systemIDs;
     $regionID = watchlist_number($c['regionID'] ?? null);
     if (watchlist_is_integer($regionID) && $regionID >= 10000000 && $regionID < 13000000) $out['regionID'] = (int) $regionID;
     $constellationID = watchlist_number($c['constellationID'] ?? null);
@@ -294,7 +300,7 @@ function watchlist_size_of($jump) {
 
 function watchlist_match_system(array $c, $systemID, $system, array $data) {
     if (!is_array($system)) return false;
-    if (!empty($c['systemID']) && $c['systemID'] !== (int) $systemID) return false;
+    if (!empty($c['systemIDs']) && !in_array((int) $systemID, $c['systemIDs'], true)) return false;
     if (!empty($c['regionID']) && $c['regionID'] !== (int) ($system['regionID'] ?? 0)) return false;
     if (!empty($c['constellationID']) && $c['constellationID'] !== (int) ($system['constellationID'] ?? 0)) return false;
     $keys = watchlist_class_keys($system);
@@ -418,7 +424,8 @@ function watchlist_validate_filter($input, array $existing, array $data, $by, $n
     if ($name === '') $errors[] = 'Give the filter a name';
     elseif (mb_strlen($name) > WATCHLIST_MAX_NAME) $errors[] = 'Name is too long (max ' . WATCHLIST_MAX_NAME . ' characters)';
     $c = watchlist_normalise_conditions($input['conditions'] ?? null);
-    if (isset($c['systemID']) && !isset($data['systems'][$c['systemID']])) $errors[] = 'Unknown system';
+    if (is_array($input['conditions']['systemIDs'] ?? null) && count($input['conditions']['systemIDs']) > WATCHLIST_MAX_SYSTEMS) $errors[] = 'Up to ' . WATCHLIST_MAX_SYSTEMS . ' systems per filter';
+    foreach ($c['systemIDs'] ?? [] as $id) if (!isset($data['systems'][$id])) { $errors[] = 'Unknown system'; break; }
     if (isset($c['regionID']) && !isset($data['regions'][$c['regionID']])) $errors[] = 'Unknown region';
     if (isset($c['constellationID'])) {
         $known = false;

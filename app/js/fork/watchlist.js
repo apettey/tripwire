@@ -14,6 +14,7 @@ const watchlist = {
 	FORGET_MS: 30 * 60 * 1000,	// a match whose system left the chain map is remembered this long
 	MAX_FILTERS: 50,
 	MAX_NAME: 60,
+	MAX_SYSTEMS: 50,	// systems one filter can name (any of them matches)
 	TOAST_MS: 15000,
 	DEFAULT_SOUND: "tone-chime",
 	DEFAULT_VOLUME: 70,
@@ -123,8 +124,13 @@ const watchlist = {
 			(Array.isArray(list) ? list : []).forEach(function(v) { if (allowed.indexOf(v) >= 0 && out.indexOf(v) < 0) { out.push(v); } });
 			return out;
 		};
-		const systemID = watchlist.toID(c.systemID);
-		if (systemID) { result.systemID = systemID; }
+		// Any of these systems; filters saved before the list had one systemID
+		const systemIDs = [];
+		[c.systemID].concat(Array.isArray(c.systemIDs) ? c.systemIDs : []).forEach(function(v) {
+			const id = watchlist.toID(v);
+			if (id && systemIDs.indexOf(id) < 0 && systemIDs.length < watchlist.MAX_SYSTEMS) { systemIDs.push(id); }
+		});
+		if (systemIDs.length) { result.systemIDs = systemIDs; }
 		const regionID = Number(c.regionID);
 		if (Number.isInteger(regionID) && regionID >= 10000000 && regionID < 13000000) { result.regionID = regionID; }
 		const constellationID = Number(c.constellationID);
@@ -229,7 +235,7 @@ const watchlist = {
 	/** Whether a system satisfies a filter's system conditions. system: appData.systems entry */
 	matchSystem: function(c, systemID, system, data) {
 		if (!system) { return false; }
-		if (c.systemID && c.systemID !== Number(systemID)) { return false; }
+		if (c.systemIDs && c.systemIDs.indexOf(Number(systemID)) < 0) { return false; }
 		if (c.regionID && c.regionID !== Number(system.regionID)) { return false; }
 		if (c.constellationID && c.constellationID !== Number(system.constellationID)) { return false; }
 		const keys = watchlist.classKeys(system);
@@ -604,6 +610,12 @@ const watchlist = {
 
 	// ---- Editing (pure) ----
 
+	/** The names in a comma-separated field ("Jita, J123450,,Amarr" -> ["Jita", "J123450", "Amarr"]) */
+	splitList: function(value) {
+		return String(value === undefined || value === null ? "" : value).split(",")
+			.map(function(n) { return n.trim(); }).filter(function(n) { return n; });
+	},
+
 	/** Find a system by exact name (case-insensitive). Returns its ID or null */
 	findSystem: function(name, data) {
 		const wanted = String(name || "").trim().toUpperCase();
@@ -641,9 +653,19 @@ const watchlist = {
 		if (!name) { errors.push({ field: "name", message: "Give the filter a name" }); }
 		if (name.length > watchlist.MAX_NAME) { errors.push({ field: "name", message: "Name is too long (max " + watchlist.MAX_NAME + " characters)" }); }
 
-		if (text(raw.system)) {
-			const id = watchlist.findSystem(raw.system, data);
-			if (id) { c.systemID = id; } else { errors.push({ field: "system", message: "Unknown system \"" + text(raw.system) + "\"" }); }
+		const systemNames = watchlist.splitList(raw.system);
+		if (systemNames.length > watchlist.MAX_SYSTEMS) {
+			errors.push({ field: "system", message: "Up to " + watchlist.MAX_SYSTEMS + " systems per filter" });
+		} else if (systemNames.length) {
+			const unknown = [];
+			c.systemIDs = [];
+			systemNames.forEach(function(n) {
+				const id = watchlist.findSystem(n, data);
+				if (id) { c.systemIDs.push(id); } else { unknown.push(n); }
+			});
+			if (unknown.length) {
+				errors.push({ field: "system", message: "Unknown system" + (unknown.length > 1 ? "s" : "") + " " + unknown.map(function(n) { return "\"" + n + "\""; }).join(", ") });
+			}
 		}
 		if (text(raw.region)) {
 			const id = watchlist.findRegion(raw.region, data);
@@ -694,7 +716,7 @@ const watchlist = {
 			id: filter ? filter.id : "",
 			name: filter ? filter.name : "",
 			enabled: filter ? filter.enabled !== false : true,
-			system: name(c.systemID),
+			system: (c.systemIDs || []).map(name).filter(function(n) { return n; }).join(", "),
 			region: c.regionID && ix.regions[c.regionID] ? ix.regions[c.regionID].name : "",
 			constellation: name(c.constellationRef),
 			classes: (c.classes || []).slice(),
@@ -716,7 +738,9 @@ const watchlist = {
 		const ix = watchlist.index(data);
 		const label = function(list, key) { const x = list.filter(function(i) { return i.key === key; })[0]; return x ? x.label : key; };
 		const parts = [];
-		if (c.systemID) { parts.push(ix.systems[c.systemID] ? ix.systems[c.systemID].name : String(c.systemID)); }
+		if (c.systemIDs) {
+			parts.push(c.systemIDs.map(function(id) { return ix.systems[id] ? ix.systems[id].name : String(id); }).join(" or "));
+		}
 		if (c.regionID) { parts.push("in " + (ix.regions[c.regionID] ? ix.regions[c.regionID].name : "region " + c.regionID)); }
 		if (c.constellationID) {
 			parts.push("in the constellation of " + (c.constellationRef && ix.systems[c.constellationRef] ? ix.systems[c.constellationRef].name : c.constellationID));
@@ -1226,7 +1250,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<table class='optionsTable wl-form-table'>"
 				+ "<tr><th>Name:</th><td><input type='text' name='name' maxlength='" + wl.MAX_NAME + "' placeholder='e.g. C5 with a Wolf-Rayet' /></td></tr>"
 				+ "<tr><td></td><td class='wl-hint'>For everyone on the mask. A system on the chain map matches when it meets every condition you fill in; leave the rest empty.</td></tr>"
-				+ "<tr><th>System:</th><td><input type='text' name='system' placeholder='J-code or k-space system, e.g. J123450 or Jita' /></td></tr>"
+				+ "<tr><th>System:</th><td><input type='text' name='system' placeholder='J-codes or k-space systems, comma-separated, e.g. J123450, Jita' /></td></tr>"
+				+ "<tr><td></td><td class='wl-hint'>Any of the systems matches (up to " + wl.MAX_SYSTEMS + ").</td></tr>"
 				+ "<tr><th>Region:</th><td><input type='text' name='region' placeholder='e.g. The Forge' /></td></tr>"
 				+ "<tr><th>Constellation:</th><td><input type='text' name='constellation' placeholder='The constellation of this system, e.g. Jita' /></td></tr>"
 				+ "<tr><th>Class:</th><td class='wl-checks'><div class='wl-check-grid'>" + checkboxes("classes", wl.CLASSES) + "</div><div class='wl-hint'>Any of the ticked classes</div></td></tr>"
@@ -1295,6 +1320,30 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 		}
 
+		/** Autocomplete for a comma-separated field: completes the name after the last comma */
+		function listComplete($input, source) {
+			$input.inlinecomplete({
+				source: source, renderer: "system", maxSize: 10, delay: 0,
+				focus: function() { return false; },
+				select: function(e, ui) {
+					const parts = this.value.split(",");
+					parts.pop();
+					parts.push(ui.item.value);
+					this.value = parts.map(function(p) { return p.trim(); }).filter(function(p) { return p; }).join(", ") + ", ";
+					$(this).trigger("change");
+					return false;
+				}
+			});
+			const instance = $input.inlinecomplete("instance");
+			if (!instance || typeof instance.source !== "function") { return; }
+			const search = instance.source;
+			instance.source = function(request, response) {
+				const term = String(request.term || "").split(",").pop().trim();
+				if (!term) { response([]); return; }
+				return search.call(this, { term: term }, response);
+			};
+		}
+
 		let searchSources = null;
 		function sources() {
 			if (!searchSources) {
@@ -1327,7 +1376,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				$dialog.find(".wl-form").on("submit", function(e) { e.preventDefault(); saveEditor(); });
 				if ($.fn.inlinecomplete) {
 					const s = sources();
-					$dialog.find("[name='system'], [name='constellation']").inlinecomplete({ source: s.systems, renderer: "system", maxSize: 10, delay: 0 });
+					$dialog.find("[name='constellation']").inlinecomplete({ source: s.systems, renderer: "system", maxSize: 10, delay: 0 });
+					listComplete($dialog.find("[name='system']"), s.systems);
 					$dialog.find("[name='region']").inlinecomplete({ source: s.regions, maxSize: 10, delay: 0 });
 					$dialog.find("[name='staticType'], [name='whType']").inlinecomplete({ source: s.types, maxSize: 10, delay: 0 });
 				}
