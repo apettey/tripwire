@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 158,
+      "date": "2026-11-08",
+      "title": "Watch several systems in one Watchlist filter",
+      "description": "A Watchlist filter's System field now takes a list of systems separated by commas, for example J115405, J122515, Amamake (up to 50). A system on the chain map matches when it is any of them, so one filter can watch all the systems you care about. Suggestions appear for the name after the last comma.\n\nAdmins edit filters in Mask Admin > Watchlist or the Watchlist panel. Filters with one system work as before.",
+      "images": [
+        { "src": "whats-new/img/pr-158-watchlist-several-systems.png", "caption": "Several systems in one filter, with suggestions for the next one" }
+      ]
+    },
+    {
       "pr": 157,
       "date": "2026-11-05",
       "title": "Return hole opens when you paste after a jump",
