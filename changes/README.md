@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-08 | [Watchlist: several systems per filter](2026-11-08-watchlist-several-systems/README.md) | The Watchlist's System field takes a comma-separated list (up to 50); any of them matches |
 | 2026-11-05 | [Return hole on paste](2026-11-05-return-hole-on-paste/README.md) | Opt-in: a paste right after a wormhole jump links the one new wormhole sig within 100 km to the jump and opens it |
 | 2026-11-03 | [Hole names: no two holes with the same name](2026-11-03-hole-name-clash/README.md) | Saving a hole name someone else just used picks the next free one; two saves inside one refresh are settled on the next sync (the later one is renamed) |
 | 2026-10-31 | [Jump right after a view change](2026-10-31-jump-after-view-change/README.md) | A jump seen on the first location poll after changing the viewed system is no longer lost: it reaches the automapper, Follow and the jump pop-ups |

@@ -960,8 +960,10 @@ DDL in `watchlist/watchlist.inc.php`, reference copy `docker/sql/watchlist.sql`)
   masks the watchlist isn't for), `canEdit`, and for admins a per-session CSRF token. Admins `POST` JSON
   (`filter-save`, `filter-delete`, `filter-enable`) with the `X-CSRF-Token` header, `X-Requested-With: XMLHttpRequest`,
   `Content-Type: application/json` and, when the browser sends `Origin`, this host; everyone else gets 403. The server
-  normalises the conditions with the browser's rules, checks the system, region, constellation and wormhole types
-  against the game data, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask.
+  normalises the conditions with the browser's rules, checks the systems, region, constellation and wormhole types
+  against the game data, and stamps `updatedAt` / `updatedBy` itself. At most 50 filters per mask. A filter can name
+  up to 50 systems (`conditions.systemIDs`, any of them matches; typed comma-separated in the editor); filters saved
+  before that have one `systemID`, read as a one-item list.
 - The browser matches the filters against its chain map on every draw: pop-up, sound and marks (node, the hole that
   makes the match or leads to the system, with an eye next to its size tag, and the hole's signature in the
   signature table). Each member turns these on or off in Settings > Kills & Intel > Watchlist.
