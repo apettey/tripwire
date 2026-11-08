@@ -139,7 +139,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["pasted"] },
     { "id": "smartNotes", "title": "Smart notes: kill cards and link chips", "section": "intel", "prs": [53], "settingsKey": "smartNotes",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["clicked"], "exposed": ".commentBody a.sn, .commentBody a.sn-chip" },
-    { "id": "watchlist", "try": "panel.watchlist", "title": "Watchlist", "section": "intel", "prs": [41, 58], "settingsKey": "watchlist",
+    { "id": "watchlist", "try": "panel.watchlist", "title": "Watchlist", "section": "intel", "prs": [41, 58, 158], "settingsKey": "watchlist",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["panel.watchlist"], "panels": ["watchlistWidget"], "use": ["configured"] },
     { "id": "structures", "try": "structures.show", "title": "Structures panel", "section": "intel", "prs": [70, 82], "settingsKey": "structures",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.show", "panel.structures"], "panels": ["structuresWidget"], "use": ["saved"] },

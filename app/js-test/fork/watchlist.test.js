@@ -168,6 +168,14 @@ describe('Watchlist', () => {
 			const f = wl.fromForm({ name: 'Amamake', system: 'amamake' }, appData, [], 1).filter;
 			assert.deepEqual(matchedSystems([f]), [AMAMAKE]);
 		});
+		it('Any of several systems, comma-separated (through the editor)', () => {
+			const f = wl.fromForm({ name: 'Several', system: 'J133207, amamake ,, J100001,Jita' }, appData, [], 1).filter;
+			assert.deepEqual(f.conditions.systemIDs, [PULSAR_C3, AMAMAKE, sid('J100001'), JITA]);
+			assert.deepEqual(matchedSystems([f]), [AMAMAKE, PULSAR_C3]);
+		});
+		it('A filter saved with one systemID still matches', () => {
+			assert.deepEqual(matchedSystems(wl.normaliseFilters([{ id: 'old', name: 'Old', conditions: { systemID: PULSAR_C3 } }])), [PULSAR_C3]);
+		});
 		it('A J-code not on the chain: no match', () => assert.deepEqual(matchedSystems([filter('a', { systemID: sid('J100001') })]), []));
 		it('Class', () => assert.deepEqual(matchedSystems([filter('a', { classes: ['C5'] })]), [HOME, WR_C5]));
 		it('Any of several classes', () => assert.deepEqual(matchedSystems([filter('a', { classes: ['C2', 'LS'] })]), [C2, AMAMAKE]));
@@ -329,6 +337,20 @@ describe('Watchlist', () => {
 			const r = wl.fromForm({ name: '', system: 'Nowhere', whType: 'K162', staticType: 'X999', maxJumpsMe: '-1' }, appData, [], 1);
 			assert.deepEqual(r.errors.map(e => e.field), ['name', 'system', 'staticType', 'whType', 'maxJumpsMe']);
 		});
+		it('Errors: every unknown system is named, at most MAX_SYSTEMS', () => {
+			assert.deepEqual(wl.fromForm({ name: 'x', system: 'Jita, Nowhere, Neverland' }, appData, [], 1).errors,
+				[{ field: 'system', message: 'Unknown systems "Nowhere", "Neverland"' }]);
+			const many = Array.from({ length: wl.MAX_SYSTEMS + 1 }, () => 'Jita').join(',');
+			assert.deepEqual(wl.fromForm({ name: 'x', system: many }, appData, [], 1).errors,
+				[{ field: 'system', message: 'Up to ' + wl.MAX_SYSTEMS + ' systems per filter' }]);
+		});
+		it('The same system twice is kept once', () => {
+			assert.deepEqual(wl.fromForm({ name: 'x', system: 'Jita, jita' }, appData, [], 1).filter.conditions.systemIDs, [JITA]);
+		});
+		it('Several systems in the form, comma-separated', () => {
+			const f = wl.fromForm({ name: 'x', system: 'J122515, Jita' }, appData, [], 1).filter;
+			assert.equal(wl.toForm(f, appData).system, 'J122515, Jita');
+		});
 		it('Error: no conditions', () => assert.deepEqual(wl.fromForm({ name: 'x' }, appData, [], 1).errors, [{ field: '', message: 'Add at least one condition' }]));
 		it('Form round trip', () => {
 			const f = wl.fromForm({ name: 'x', system: 'J122515', region: 'Derelik', constellation: 'Jita', classes: ['C5'], effects: ['Pulsar'],
@@ -347,6 +369,7 @@ describe('Watchlist', () => {
 		it('Region and constellation', () => assert.deepEqual(
 			wl.describe({ regionID: appData.systems[JITA].regionID, constellationID: appData.systems[JITA].constellationID, constellationRef: JITA }, appData),
 			['in The Forge', 'in the constellation of Jita']));
+		it('Several systems', () => assert.deepEqual(wl.describe({ systemIDs: [WR_C5, JITA] }, appData), ['J122515 or Jita']));
 		it('Nothing', () => assert.deepEqual(wl.describe(undefined, appData), []));
 	});
 
