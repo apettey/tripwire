@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 161,
+      "date": "2026-11-14",
+      "title": "Favourites on one line, with every route",
+      "description": "The Favourites panel now shows each favourite on one line: security or class (T for Thera), name, how many jumps away it is and a marker for each jump, plus the signature to warp to when the route goes through Thera or Turnur. Every favourite gets its route without switching it on, using EVE-Scout's Thera and Turnur connections when they are quicker. Hover a row for its buttons.\n\nRoutes start where your tracked character is, or at the system you are viewing when no character is tracked. The route button on a row now shows that route on the chain map. Turn the new rows off in Settings > Routes & Navigation.",
+      "images": [
+        { "src": "whats-new/img/pr-161-favourites-one-line.png", "caption": "Each favourite on one line, Thera and Turnur routed through EVE-Scout" }
+      ]
+    },
+    {
       "pr": 158,
       "date": "2026-11-08",
       "title": "Watch several systems in one Watchlist filter",
