@@ -456,8 +456,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		/** Whether any route would use the data: Favourites with Route on, or saved destinations */
 		function needed() {
 			if (!tr.anyHub(current())) { return false; }
+			// Compact Favourites rows route every favourite, so any favourite needs it then
 			const favRoutes = typeof favouritesPanel !== "undefined" && favouritesPanel.enabled(options)
-				&& favouritesPanel.routeFavorites(options.favorites, favouritesPanel.settings(options)).length;
+				&& favouritesPanel.routeTargets(options.favorites, favouritesPanel.settings(options), favouritesPanel.compact(options)).length;
 			const dests = typeof routeDestinations !== "undefined" && routeDestinations.saved().length;
 			return !!(favRoutes || dests);
 		}

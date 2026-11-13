@@ -48,6 +48,25 @@ describe('Favourites panel', () => {
 			Object.keys(fp.cleanFlags(fp.settings({ favoritesPanel: { systems: { 30000142: { map: false }, 30002187: { route: true } } } }), [AMARR]).systems), ['30002187']));
 	});
 
+	describe('compact rows', () => {
+		const s = fp.settings({ favoritesPanel: { systems: { 30002187: { route: 'safe' }, 30000142: { map: false } } } });
+		it('compact(): missing means on', () => assert.ok(fp.compact({})));
+		it('compact(): no options', () => assert.ok(fp.compact(undefined)));
+		it('compact(): explicit false', () => assert.ok(!fp.compact({ favouritesCompact: { enabled: false } })));
+		it('routeTargets compact: every favourite, Route mode else shortest, highlight only with Route on', () => assert.deepEqual(
+			fp.routeTargets([JITA, AMARR, DODIXIE], s, true), [
+				{ systemID: JITA, mode: 'shortest', highlight: false },
+				{ systemID: AMARR, mode: 'safe', highlight: true },
+				{ systemID: DODIXIE, mode: 'shortest', highlight: false }]));
+		it('routeTargets not compact: only Route on, highlighted', () => assert.deepEqual(
+			fp.routeTargets([JITA, AMARR, DODIXIE], s, false), [{ systemID: AMARR, mode: 'safe', highlight: true }]));
+		it('routeTargets: junk favourites dropped', () => assert.deepEqual(fp.routeTargets(['x|1', null], s, true), []));
+		it('origin: tracked character first', () => assert.deepEqual(fp.origin(JITA, AMARR, true), { systemID: JITA, source: 'tracked' }));
+		it('origin: viewed system when untracked (compact)', () => assert.deepEqual(fp.origin(null, String(AMARR), true), { systemID: AMARR, source: 'viewing' }));
+		it('origin: no fallback without compact rows', () => assert.deepEqual(fp.origin(null, AMARR, false), { systemID: null }));
+		it('origin: nothing known', () => assert.deepEqual(fp.origin(undefined, 'x|1', true), { systemID: null }));
+	});
+
 	describe('list', () => {
 		const systems = { 30000142: { name: 'Jita' }, 30002187: { name: 'Amarr' } };
 		const byName = n => ({ JITA: JITA, AMARR: AMARR })[String(n).toUpperCase()] || null;
@@ -287,6 +306,14 @@ describe('Favourites panel', () => {
 			assert.deepEqual(marked(r, 'favourite-route-exit'), [2]);
 			assert.deepEqual(marked(r, 'favourite-route-node'), [5]);
 			assert.deepEqual(lineIds(r, 'favourite-safe-route'), []);
+		});
+		it('decorate: highlight false works the route out but marks nothing (compact rows, Route off)', () => {
+			const r = withCalc();
+			const routes = fp.decorate(r, [{ systemID: F, mode: 'shortest', highlight: false }], L, exits, distances, systems);
+			assert.equal(routes[F].shortest.exitSystemID, B);
+			assert.deepEqual(lineIds(r, 'favourite-route'), []);
+			assert.deepEqual(marked(r, 'favourite-route-node'), []);
+			assert.deepEqual(marked(r, 'favourite-route-exit'), []);
 		});
 		it('decorate: safe uses its own classes and marks the exit when no calc node leads there', () => {
 			const r = withCalc();

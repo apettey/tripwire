@@ -159,6 +159,33 @@ const favouritesPanel = {
 		});
 	},
 
+	/** One-line rows with every favourite's route (options.favouritesCompact.enabled; on unless explicitly false) */
+	compact: function(opts) {
+		return !(opts && opts.favouritesCompact && opts.favouritesCompact.enabled === false);
+	},
+
+	/** The favourites to work out a route for: compact rows route every favourite (the Route button's mode, else
+	shortest) but only highlight on the map those with Route on; otherwise only those with Route on.
+	[{systemID, mode: "shortest" | "safe", highlight: bool}] */
+	routeTargets: function(favorites, settings, compact) {
+		if (!compact) {
+			return favouritesPanel.routeModes(favorites, settings).map(function(f) { return Object.assign(f, { highlight: true }); });
+		}
+		return favouritesPanel.sanitize(favorites).map(function(id) {
+			const route = favouritesPanel.flags(settings, id).route;
+			return { systemID: id, mode: route || "shortest", highlight: !!route };
+		});
+	},
+
+	/** Where routes start: the tracked character, else (compact rows) the system being viewed.
+	@return {systemID, source: "tracked" | "viewing"} or {systemID: null} */
+	origin: function(trackedID, viewingID, compact) {
+		const tracked = favouritesPanel.toID(trackedID);
+		if (tracked) { return { systemID: tracked, source: "tracked" }; }
+		const viewing = compact ? favouritesPanel.toID(viewingID) : null;
+		return viewing ? { systemID: viewing, source: "viewing" } : { systemID: null };
+	},
+
 	/** The array to stand in for options.favorites while the chain map is built: iterating it gives only
 	the favourites shown on the map (the chain map loops over it with for..in), but indexOf still answers
 	for every favourite so the star on favourite systems' nodes stays. */
@@ -457,7 +484,7 @@ const favouritesPanel = {
 				});
 			}
 			routes[f.systemID] = info;
-			favouritesPanel.highlight(ctx, f.systemID, info[f.mode === "safe" ? "safe" : "shortest"]);
+			if (f.highlight !== false) { favouritesPanel.highlight(ctx, f.systemID, info[f.mode === "safe" ? "safe" : "shortest"]); }
 		});
 		return routes;
 	},
@@ -516,7 +543,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 	(function() {
 		const fp = favouritesPanel;
 		let renderTimer = null;
-		let lastTracked = null;
+		let lastTracked = null;		// where the routes drawn last start (the tracked character, or the viewed system)
+		let lastOrigin = { systemID: null };
 		let dragging = false;		// a row is being dragged: don't rebuild the list under it
 		let renderPending = false;
 		let tooltipTimer = null;
@@ -525,6 +553,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function current() { return fp.settings(options); }
 		function isOn() { return fp.enabled(options); }
 		function trackedSystem() { return tripwire.client && tripwire.client.EVE ? tripwire.client.EVE.systemID : null; }
+		function viewingSystem() { return typeof viewingSystemID !== "undefined" ? viewingSystemID : null; }
 		function systemName(id) { return (tripwire.systems[id] || appData.systems[id] || {}).name || String(id); }
 		function redrawChain() { if (typeof chain !== "undefined" && chain && chain.data && chain.data.rawMap) { chain.redraw(); } }
 
@@ -541,8 +570,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					? fp.withChainFavorites(options, settings, function() { return originalNodes.apply(self, args); })
 					: originalNodes.apply(this, arguments);
 				try {
-					lastTracked = trackedSystem();
-					const routeFavs = on ? fp.routeModes(favorites, settings) : [];
+					const compact = fp.compact(options);
+					lastOrigin = fp.origin(trackedSystem(), viewingSystem(), compact);
+					lastTracked = lastOrigin.systemID;
+					const routeFavs = on ? fp.routeTargets(favorites, settings, compact) : [];
 					// Thera/Turnur routes on: EVE-Scout links drawn on the chain go through theraRoute (with its filters);
 					// off: they count as chain wormholes and exits, as before
 					const scout = typeof theraRoute !== "undefined" && theraRoute.enabled && theraRoute.enabled() ? theraRoute.favouriteScout : null;
@@ -595,7 +626,52 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			return "<i class='fav-map" + (flags.map ? " active" : "") + (globalMapOn() ? "" : " fav-map-global-off") + "' data-icon='eye' title='" + esc(title) + "'></i>";
 		}
 
+		/** Compact row (Wanderer style), one line: handle, security / class, name, jumps and markers (the route strip
+		fills them in), signatures; the buttons show on hover. Every favourite has a route; Route on highlights it. */
+		function compactRowHtml(id, settings) {
+			const esc = fp.escape;
+			const system = systemAnalysis.analyse(id);
+			const region = (tripwire.regions && tripwire.regions[system.regionID]) ? tripwire.regions[system.regionID].name : "";
+			const flags = fp.flags(settings, id);
+			const mode = flags.route || "shortest";
+			const info = Object.assign({}, fp.lastRoutes[id] || {}, { mode: mode });
+			const summary = fp.routeSummary(info, system.name, systemName);
+			const style = typeof favouritesRouteStrip !== "undefined" ? favouritesRouteStrip.systemStyle(Object.assign({}, appData.systems[id] || {}, { name: system.name })) : null;
+			const label = style ? favouritesRouteStrip.shortLabel(style) : system.systemTypeName;
+			const from = lastOrigin.systemID ? " from " + systemName(lastOrigin.systemID) + (lastOrigin.source === "viewing" ? " (the system you are viewing)" : "") : "";
+			const routeTitle = !flags.route
+				? "Show this route on the chain map: off. Click for the shortest route, again for the safe (high-sec only) route"
+				: (flags.route === "safe" ? "Safe route (high-sec only) on the chain map: click to turn it off" : "Shortest route on the chain map: click for the safe (high-sec only) route");
+			const routeState = !flags.route ? "" : (" fav-route-" + flags.route + (summary.ok ? " fav-route-ok" : " fav-route-none"));
+			return "<li class='fav-row" + (flags.route ? " fav-highlighted" : "") + "' data-systemid='" + id + "'>"
+				+ "<span class='fav-handle' title='Drag to reorder'>&#8942;&#8942;</span>"
+				+ "<span class='fav-class " + esc(system.systemTypeClass) + "'" + (style ? " style='color:" + esc(style.colour) + "'" : "") + " title='" + esc(style && style.label ? style.label : system.systemTypeName) + "'>" + esc(label) + "</span>"
+				+ "<a class='fav-name " + esc(system.systemTypeClass) + "' href='.?system=" + esc(system.name) + "' title='" + esc("View " + system.name + (region ? " (" + region + ")" : "")) + "'>" + esc(system.name) + "</a>"
+				+ "<span class='fav-route-text' title='" + esc(summary.title.replace(/^Route \(/, "Route" + from + " (")) + "'>"
+				+ (mode === "safe" ? "<span class='fav-route-mode' title='High-sec only'>safe</span>" : "")
+				+ esc(summary.text) + "</span>"
+				+ "<span class='fav-tools'>"
+				+ mapIconHtml(id, system, flags)
+				+ "<i class='fav-route" + (flags.route ? " active" : "") + routeState + "' data-icon='connection' title='" + esc(routeTitle) + "'></i>"
+				+ "<i class='fav-remove' data-icon='times' title='Remove " + esc(system.name) + " from favourites'></i>"
+				+ "</span>"
+				+ scoutLine(info)
+				+ holeNote(info)
+				+ "</li>";
+		}
+
+		/** Header text: where the routes start */
+		function originText() {
+			if (!fp.compact(options)) { return { text: "", title: "" }; }
+			if (!lastOrigin.systemID) { return { text: "no location", title: "Routes start at your tracked character, or the system you are viewing" }; }
+			const name = systemName(lastOrigin.systemID);
+			return lastOrigin.source === "viewing"
+				? { text: "from " + name + " (viewing)", title: "No character is tracked: routes start at the system you are viewing" }
+				: { text: "from " + name, title: "Routes start at your tracked character's location" };
+		}
+
 		function rowHtml(id, settings) {
+			if (fp.compact(options)) { return compactRowHtml(id, settings); }
 			const esc = fp.escape;
 			const system = systemAnalysis.analyse(id);
 			const region = (tripwire.regions && tripwire.regions[system.regionID]) ? tripwire.regions[system.regionID].name : "";
@@ -650,6 +726,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$list.html(favorites.length ? favorites.map(function(id) { return rowHtml(id, settings); }).join("")
 				: "<li class='fav-empty'>No favourites yet. Add a system above, or use the star in the system info panel.</li>");
 			$("#" + fp.WIDGET_ID + " .fav-count").text(favorites.length ? "(" + favorites.length + ")" : "");
+			const origin = originText();
+			$("#" + fp.WIDGET_ID + " .fav-origin").text(origin.text).attr("title", origin.title);
+			$("#" + fp.WIDGET_ID).toggleClass("fav-compact", fp.compact(options));
 			if ($list.hasClass("ui-sortable")) { $list.sortable("refresh"); }
 		}
 		fp.render = render;
@@ -715,7 +794,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function widgetHtml() {
 			return "<li id='" + fp.WIDGET_ID + "' class='gridWidget'>"
 				+ "<div class='controls'>"
-				+ "<span class='fav-title'><i data-icon='star'></i> Favourites <span class='fav-count'></span></span>"
+				+ "<span class='fav-title'><i data-icon='star'></i> Favourites <span class='fav-count'></span> <span class='fav-origin'></span></span>"
 				+ "</div>"
 				+ "<div class='content'>"
 				+ "<form class='fav-add' autocomplete='off'>"
@@ -786,6 +865,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				label: "Favourites panel:", text: "Show the Favourites panel",
 				get: function() { return isOn(); },
 				set: function(o, on) { o.favoritesPanel = Object.assign({}, o.favoritesPanel || {}, { enabled: on }); }
+			});
+			// One-line rows with every favourite's route; takes effect on Save, Reset = on
+			forkSettings.register({
+				section: "routes", order: 50.5, id: "favouritesCompact-enabled", type: "checkbox", key: "favouritesCompact",
+				label: "", text: "One-line rows with every favourite's route", keywords: "favourites panel compact wanderer jumps",
+				get: function() { return fp.compact(options); },
+				set: function(o, on) {
+					if (on !== fp.compact(o)) { setTimeout(redrawChain, 0); }
+					o.favouritesCompact = { enabled: on };
+				}
 			});
 
 			// Save and Reset both end in options.apply(): show/hide the panel and refresh it then
@@ -873,8 +962,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 			// Routes start at the tracked character: redraw when they move
 			setInterval(function() {
-				if (!isOn() || !fp.routeFavorites(options.favorites, current()).length) { return; }
-				if (String(trackedSystem()) !== String(lastTracked)) { redrawChain(); }
+				const compact = fp.compact(options);
+				if (!isOn() || !fp.routeTargets(options.favorites, current(), compact).length) { return; }
+				if (String(fp.origin(trackedSystem(), viewingSystem(), compact).systemID) !== String(lastTracked)) { redrawChain(); }
 			}, fp.LOCATION_CHECK_MS);
 		});
 	})();

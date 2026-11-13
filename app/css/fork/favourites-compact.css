@@ -1,0 +1,93 @@
+/* Favourites panel, compact rows (fork-owned; options.favouritesCompact, see app/js/fork/favourites-panel.js):
+   one line per favourite - handle, security / class, name, jumps, jump markers, signatures - with the buttons
+   on hover. Prefixed with #favouritesWidget.fav-compact so it wins over favourites-panel.css and
+   favourites-route-strip.css whatever the bundle order. */
+
+#favouritesWidget .fav-origin {
+	color: #8fbfff;
+	font-weight: normal;
+	font-size: 0.9em;
+	margin-left: 4px;
+}
+
+#favouritesWidget.fav-compact .fav-row,
+#favouritesWidget.fav-compact .fav-row.fav-has-strip {
+	position: relative;
+	flex-wrap: wrap;
+	gap: 6px;
+	row-gap: 1px;
+	padding: 2px 2px 2px 0;
+	border-bottom: none;
+	border-left: 2px solid transparent;
+}
+
+/* Route on: highlighted on the chain map */
+#favouritesWidget.fav-compact .fav-row.fav-highlighted {
+	border-left-color: #4191ff;
+}
+
+#favouritesWidget.fav-compact .fav-class {
+	min-width: 24px;
+	text-align: right;
+}
+
+#favouritesWidget.fav-compact .fav-name {
+	flex: 0 0 78px;	/* fixed, so the jump counts and markers line up */
+	color: #DDD;
+}
+
+#favouritesWidget.fav-compact .fav-region {
+	display: none;
+}
+
+/* "here", "no route", or the text breakdown when jump markers are off */
+#favouritesWidget.fav-compact .fav-route-text {
+	flex: 0 1 auto;
+	order: 5;
+	color: #8fbfff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* The strip on the same line as the name */
+#favouritesWidget.fav-compact .fav-strip {
+	flex: 1 1 0;
+	order: 6;
+	padding-left: 0;
+	gap: 6px;
+}
+
+#favouritesWidget.fav-compact .fav-strip-count {
+	min-width: 18px;
+	text-align: right;
+	color: #DDD;
+	font-weight: bold;
+}
+
+/* Buttons: over the end of the row, on hover only */
+#favouritesWidget.fav-compact .fav-tools {
+	position: absolute;
+	right: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	display: none;
+	padding: 2px 4px 2px 10px;
+	background: linear-gradient(to right, rgba(17, 17, 17, 0), #111 10px);
+}
+
+#favouritesWidget.fav-compact .fav-row:hover .fav-tools {
+	display: flex;
+}
+
+#favouritesWidget.fav-compact .fav-row.ui-sortable-helper .fav-tools {
+	display: none;
+}
+
+/* Notes (route through filtered holes, Thera line with markers off) keep their own line */
+#favouritesWidget.fav-compact .fav-hole-note,
+#favouritesWidget.fav-compact .fav-scout-line {
+	flex: 1 0 100%;
+	order: 20;
+	padding-left: 34px;
+	box-sizing: border-box;
+}

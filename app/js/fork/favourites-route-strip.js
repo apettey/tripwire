@@ -76,6 +76,20 @@ const favouritesRouteStrip = {
 		return { kind: s >= 0.5 ? "hisec" : s > 0 ? "lowsec" : "nullsec", colour: rs.securityColour(s), label: s.toFixed(1) };
 	},
 
+	/** Short label for compact rows: security "0.9", class "C5", "T" (Thera), "P" (Pochven), "Z" (Zarzakh), "?" */
+	shortLabel: function(style) {
+		if (!style) { return "?"; }
+		if (style.label === "Thera") { return "T"; }
+		if (style.kind === "pochven") { return "P"; }
+		if (style.kind === "zarzakh") { return "Z"; }
+		return style.label || "?";
+	},
+
+	/** Jump count beside the markers: "7" on compact rows, "7 jumps" otherwise */
+	countText: function(count, compact) {
+		return compact ? String(count) : count + (count === 1 ? " jump" : " jumps");
+	},
+
 	/** The hole you jump through from fromID: its type on the side that has it ("H296"), "K162" from the other side.
 	@param wormhole tripwire.client.wormholes entry {type, parent: "initial" | "secondary"}
 	@param initialSystemID / secondarySystemID systems of its two signatures */
@@ -323,11 +337,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			fp.decorate.routeStripWrapped = true;
 		}
 
+		/** The route mode a favourite's row shows: its Route setting, else shortest on compact rows (every favourite
+		has a route there), else none */
+		function rowMode(id) {
+			const route = fp.flags(fp.settings(options), id).route;
+			return route || (fp.compact && fp.compact(options) ? "shortest" : false);
+		}
+
 		/** Markers for a favourite's selected route, or null (route off, no route, here...) */
 		function markersFor(id) {
-			const flags = fp.flags(fp.settings(options), id);
-			if (!flags.route) { return null; }
-			const plan = (fp.lastRoutes[id] || {})[flags.route];
+			const mode = rowMode(id);
+			if (!mode) { return null; }
+			const plan = (fp.lastRoutes[id] || {})[mode];
 			const steps = rs.steps(plan, snapshot.start, id, gatePath, snapshot.connections);
 			activeMarks = (plan && plan.holeMarks) || {};
 			return steps ? rs.markers(steps, lookup, regionName, hole) : null;
@@ -335,8 +356,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		/** Signature chips for a favourite's route through Thera / Turnur, or [] */
 		function chipsFor(id) {
-			const flags = fp.flags(fp.settings(options), id);
-			const plan = flags.route ? (fp.lastRoutes[id] || {})[flags.route] : null;
+			const mode = rowMode(id);
+			const plan = mode ? (fp.lastRoutes[id] || {})[mode] : null;
 			if (!plan || plan.kind !== "scout" || typeof theraRoute === "undefined") { return []; }
 			return theraRoute.warpSigs(plan, function(sid) { const s = lookup(sid); return s && s.name ? s.name : String(sid); }, Date.now());
 		}
@@ -380,7 +401,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const title = rs.stripTitle(summary, breakdown);
 				$text.attr(BREAKDOWN_ATTR, breakdown).contents().filter(function() { return this.nodeType === 3; }).remove();	// the text moves into the tooltip
 				const $strip = $("<div class='fav-strip'></div>").attr("title", title)
-					.append($("<span class='fav-strip-count'></span>").text(markers.length + (markers.length === 1 ? " jump" : " jumps")))
+					.append($("<span class='fav-strip-count'></span>").text(rs.countText(markers.length, fp.compact && fp.compact(options))))
 					.append("<span class='fav-strip-markers'></span>");
 				$strip.data("markers", markers);
 				const chips = chipsFor(id);
