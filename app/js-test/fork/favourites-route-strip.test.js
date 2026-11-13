@@ -66,6 +66,18 @@ describe('Favourites route strip', () => {
 		it('No security, no class', () => assert.equal(rs.systemStyle({ name: 'x' }).kind, 'unknown'));
 	});
 
+	describe('compact rows', () => {
+		it('shortLabel: security', () => assert.equal(rs.shortLabel(rs.systemStyle(systems[JITA])), '0.9'));
+		it('shortLabel: class', () => assert.equal(rs.shortLabel(rs.systemStyle(systems[J1])), 'C5'));
+		it('shortLabel: Thera', () => assert.equal(rs.shortLabel(rs.systemStyle(systems[31000005])), 'T'));
+		it('shortLabel: Pochven', () => assert.equal(rs.shortLabel(rs.systemStyle(systems[30045328])), 'P'));
+		it('shortLabel: Zarzakh', () => assert.equal(rs.shortLabel(rs.systemStyle(systems[30100000])), 'Z'));
+		it('shortLabel: unknown', () => assert.equal(rs.shortLabel(rs.systemStyle(null)), '?'));
+		it('shortLabel: nothing', () => assert.equal(rs.shortLabel(null), '?'));
+		it('countText compact', () => assert.equal(rs.countText(7, true), '7'));
+		it('countText rows', () => { assert.equal(rs.countText(1, false), '1 jump'); assert.equal(rs.countText(7, false), '7 jumps'); });
+	});
+
 	describe('holeLabel', () => {
 		const wh = { type: 'H296', parent: 'initial' };
 		it('From the typed side', () => assert.equal(rs.holeLabel(wh, 1, 2, 1), 'H296'));

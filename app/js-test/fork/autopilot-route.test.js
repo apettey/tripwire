@@ -93,6 +93,9 @@ describe('Set destination in game', () => {
 			assert.equal(autopilotRoute.favouriteLeg(plan, PERIMETER, JITA, pathFn).error, 'Nothing to fly by gates after the chain');
 		});
 		it('Here', () => assert.ok(autopilotRoute.favouriteLeg({ status: 'here' }, JITA, JITA, pathFn).error));
+		it('Direct with no tracked character (route from the viewed system)', () => assert.equal(
+			autopilotRoute.favouriteLeg({ status: 'ok', kind: 'direct', gatesIn: 3 }, null, JITA, pathFn).error,
+			'No character is tracked (the route starts at the system you are viewing)'));
 		it('No route', () => assert.equal(autopilotRoute.favouriteLeg({ status: 'no-route', mode: 'safe' }, JITA, AMARR, pathFn).error, 'No high-sec only route'));
 		it('No plan', () => assert.ok(autopilotRoute.favouriteLeg(undefined, JITA, AMARR, pathFn).error));
 	});

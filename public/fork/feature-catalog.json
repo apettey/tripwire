@@ -103,7 +103,7 @@
 
     { "id": "destinations", "try": "destinations.open", "title": "Saved destinations", "section": "routes", "prs": [7], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["destinations.open", "destinations.add"], "panels": [], "use": ["opened"] },
-    { "id": "favouritesPanel", "try": "panel.favourites", "title": "Favourites panel", "section": "routes", "prs": [17], "settingsKey": "favoritesPanel",
+    { "id": "favouritesPanel", "try": "panel.favourites", "title": "Favourites panel", "section": "routes", "prs": [17, 161], "settingsKey": "favoritesPanel",
       "stage": "core", "audience": "all", "kind": "active", "commands": ["favourites.add", "panel.favourites"], "panels": ["favouritesWidget"], "use": ["added"] },
     { "id": "favouritesRouteStrip", "title": "Favourites: route as jump markers", "section": "routes", "prs": [40], "settingsKey": "favouritesRouteStrip",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".fav-strip" },
