@@ -337,12 +337,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			fp.decorate.routeStripWrapped = true;
 		}
 
-		/** The route mode a favourite's row shows: its Route setting, else shortest on compact rows (every favourite
-		has a route there), else none */
-		function rowMode(id) {
-			const route = fp.flags(fp.settings(options), id).route;
-			return route || (fp.compact && fp.compact(options) ? "shortest" : false);
-		}
+		function rowMode(id) { return fp.rowMode(options, id); }
 
 		/** Markers for a favourite's selected route, or null (route off, no route, here...) */
 		function markersFor(id) {
@@ -401,7 +396,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const title = rs.stripTitle(summary, breakdown);
 				$text.attr(BREAKDOWN_ATTR, breakdown).contents().filter(function() { return this.nodeType === 3; }).remove();	// the text moves into the tooltip
 				const $strip = $("<div class='fav-strip'></div>").attr("title", title)
-					.append($("<span class='fav-strip-count'></span>").text(rs.countText(markers.length, fp.compact && fp.compact(options))))
+					.append($("<span class='fav-strip-count'></span>").text(rs.countText(markers.length, fp.compact(options))))
 					.append("<span class='fav-strip-markers'></span>");
 				$strip.data("markers", markers);
 				const chips = chipsFor(id);

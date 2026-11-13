@@ -65,6 +65,15 @@ describe('Favourites panel', () => {
 		it('origin: viewed system when untracked (compact)', () => assert.deepEqual(fp.origin(null, String(AMARR), true), { systemID: AMARR, source: 'viewing' }));
 		it('origin: no fallback without compact rows', () => assert.deepEqual(fp.origin(null, AMARR, false), { systemID: null }));
 		it('origin: nothing known', () => assert.deepEqual(fp.origin(undefined, 'x|1', true), { systemID: null }));
+		it('rowMode: Route setting wins', () => assert.equal(fp.rowMode({ favoritesPanel: { systems: { 30002187: { route: 'safe' } } } }, AMARR), 'safe'));
+		it('rowMode: compact falls back to shortest', () => assert.equal(fp.rowMode({}, JITA), 'shortest'));
+		it('rowMode: no route without compact rows', () => assert.equal(fp.rowMode({ favouritesCompact: { enabled: false } }, JITA), false));
+		it('viewingSummary: here and off-chain words', () => {
+			const v = fp.viewingSummary({ text: 'here', title: 'Route (shortest): you are in Jita', ok: true });
+			assert.deepEqual(v, { text: 'viewing', title: 'Route (shortest): you are viewing Jita', ok: true });
+			assert.equal(fp.viewingSummary({ text: '', title: 'no route: you are in J-space off the chain map' }).title,
+				'no route: the system you are viewing is in J-space off the chain map');
+		});
 	});
 
 	describe('list', () => {
@@ -311,6 +320,7 @@ describe('Favourites panel', () => {
 			const r = withCalc();
 			const routes = fp.decorate(r, [{ systemID: F, mode: 'shortest', highlight: false }], L, exits, distances, systems);
 			assert.equal(routes[F].shortest.exitSystemID, B);
+			assert.equal(routes[F].safe, undefined);	// not highlighted, shortest: the safe route isn't worked out
 			assert.deepEqual(lineIds(r, 'favourite-route'), []);
 			assert.deepEqual(marked(r, 'favourite-route-node'), []);
 			assert.deepEqual(marked(r, 'favourite-route-exit'), []);

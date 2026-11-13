@@ -107,6 +107,7 @@ const autopilotRoute = {
 		if (!plan || plan.status === "no-location") { return { error: "Your location isn't known" }; }
 		if (plan.status === "here") { return { error: "You are already there" }; }
 		if (plan.status !== "ok") { return { error: plan.mode === "safe" ? "No high-sec only route" : "No route" }; }
+		if (plan.kind === "direct" && !autopilotRoute.toID(startID)) { return { error: "No character is tracked (the route starts at the system you are viewing)" }; }
 		const from = plan.kind === "direct" ? autopilotRoute.toID(startID) : autopilotRoute.toID(plan.exitSystemID);
 		const gates = plan.kind === "direct" ? plan.gatesIn : plan.gatesOut;
 		if (!from || !gates) { return { error: "Nothing to fly by gates after the chain" }; }
@@ -392,9 +393,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 
 		function favouriteButton(id) {
 			const fp = favouritesPanel;
-			const flags = fp.flags(fp.settings(options), id);
-			if (!flags.route) { return ""; }
-			const plan = (fp.lastRoutes[id] || {})[flags.route];
+			const mode = fp.rowMode(options, id);	// compact rows: every favourite has a route
+			if (!mode) { return ""; }
+			const plan = (fp.lastRoutes[id] || {})[mode];
 			if (plan && plan.kind === "scout" && typeof theraRoute !== "undefined") { return scoutButtons(plan); }
 			const leg = ap.favouriteLeg(plan, trackedSystem(), id, function() { return [0, 0]; });	// availability only
 			const name = systemName(id);
@@ -405,7 +406,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const from = plan.kind === "direct" ? "where you are" : systemName(plan.exitSystemID);
 				title = "Set destination in game: " + name + " as your in-game destination"
 					+ (plan.kind === "chain" ? " (take the wormholes to " + from + " yourself)" : "") + ". "
-					+ (flags.route === "safe"
+					+ (mode === "safe"
 						? "The in-game autopilot picks its own route: set it to Prefer safer in game for a high-sec only route."
 						: "The in-game autopilot picks the route with your in-game route settings.");
 			}
@@ -442,20 +443,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if ($(this).hasClass("disabled")) { return; }
 			const fp = favouritesPanel;
 			const id = fp.toID($(this).closest(".fav-row").data("systemid"));
-			const flags = fp.flags(fp.settings(options), id);
-			const plan = (fp.lastRoutes[id] || {})[flags.route];
+			const mode = fp.rowMode(options, id);
+			const plan = (fp.lastRoutes[id] || {})[mode];
 			if (plan && plan.kind === "scout") {
 				const index = Number($(this).data("leg")) || 0;
 				const scoutLeg = ap.scoutLeg(plan, index);
 				if (scoutLeg.error) { notify(ap.escape(scoutLeg.error), "yellow", 5000); return; }
-				push(scoutLeg.path, scoutLabel(plan, index, id, flags.route === "safe"), { safe: flags.route === "safe" });
+				push(scoutLeg.path, scoutLabel(plan, index, id, mode === "safe"), { safe: mode === "safe" });
 				return;
 			}
 			const leg = ap.favouriteLeg(plan, trackedSystem(), id, function(from, to, safe) {
 				return ap.gatePath(gateMap(), appData.systems, from, to, safe, avoidList());
 			});
 			if (leg.error) { notify(ap.escape(leg.error), "yellow", 5000); return; }
-			push(leg.path, systemName(leg.from) + " → " + systemName(id) + (flags.route === "safe" ? " (safe)" : ""), { safe: flags.route === "safe" });
+			push(leg.path, systemName(leg.from) + " → " + systemName(id) + (mode === "safe" ? " (safe)" : ""), { safe: mode === "safe" });
 		}
 
 		// ---- Destinations window: a button in each row ----

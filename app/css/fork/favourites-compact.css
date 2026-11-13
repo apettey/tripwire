@@ -75,8 +75,20 @@
 	background: linear-gradient(to right, rgba(17, 17, 17, 0), #111 10px);
 }
 
-#favouritesWidget.fav-compact .fav-row:hover .fav-tools {
+#favouritesWidget.fav-compact .fav-row:hover .fav-tools,
+#favouritesWidget.fav-compact .fav-row:focus-within .fav-tools {
 	display: flex;
+}
+
+/* Touch screens have no hover: keep the buttons in the row */
+@media (hover: none) {
+	#favouritesWidget.fav-compact .fav-tools {
+		display: flex;
+		position: static;
+		transform: none;
+		background: none;
+		padding: 0;
+	}
 }
 
 #favouritesWidget.fav-compact .fav-row.ui-sortable-helper .fav-tools {

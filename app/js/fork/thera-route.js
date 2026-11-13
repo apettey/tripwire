@@ -453,7 +453,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 		tr.links = links;
 
-		/** Whether any route would use the data: Favourites with Route on, or saved destinations */
+		/** Whether any route would use the data: Favourites with a route (every favourite on compact rows, else those
+		with Route on), or saved destinations */
 		function needed() {
 			if (!tr.anyHub(current())) { return false; }
 			// Compact Favourites rows route every favourite, so any favourite needs it then

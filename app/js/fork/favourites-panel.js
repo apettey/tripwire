@@ -177,6 +177,13 @@ const favouritesPanel = {
 		});
 	},
 
+	/** The route mode a favourite's row shows: its Route setting, else shortest on compact rows (every favourite has
+	a route there), else false (no route) */
+	rowMode: function(opts, systemID) {
+		const route = favouritesPanel.flags(favouritesPanel.settings(opts), systemID).route;
+		return route || (favouritesPanel.compact(opts) ? "shortest" : false);
+	},
+
 	/** Where routes start: the tracked character, else (compact rows) the system being viewed.
 	@return {systemID, source: "tracked" | "viewing"} or {systemID: null} */
 	origin: function(trackedID, viewingID, compact) {
@@ -476,9 +483,13 @@ const favouritesPanel = {
 		if (!(routeFavorites || []).length) { return routes; }
 		const ctx = favouritesPanel.context(result, startSystemID, exits, distances, systems, ignore, !!scout);
 		routeFavorites.forEach(function(f) {
-			const info = { mode: f.mode, shortest: favouritesPanel.plan(ctx, f.systemID, "shortest"), safe: favouritesPanel.plan(ctx, f.systemID, "safe") };
+			// A compact row that only shows the shortest route (Route off) skips the safe one: it is only the
+			// tooltip's comparison, and every favourite is routed on each draw
+			const modes = f.highlight === false && f.mode !== "safe" ? ["shortest"] : ["shortest", "safe"];
+			const info = { mode: f.mode };
+			modes.forEach(function(mode) { info[mode] = favouritesPanel.plan(ctx, f.systemID, mode); });
 			if (scout && typeof theraRoute !== "undefined") {
-				["shortest", "safe"].forEach(function(mode) {
+				modes.forEach(function(mode) {
 					const alt = info[mode] && info[mode].status === "here" ? null : scout(ctx, f.systemID, mode);
 					if (theraRoute.better(info[mode], alt)) { info[mode] = alt; }
 				});
@@ -521,6 +532,17 @@ const favouritesPanel = {
 		steps.push(plural(plan.holes, "wormhole jump") + " to " + name(plan.exitSystemID));
 		if (plan.gatesOut) { steps.push(plural(plan.gatesOut, "gate jump") + " to " + favName); }
 		return favouritesPanel.planText(plan) + " (" + steps.join(", ") + ")";
+	},
+
+	/** routeSummary's words when the route starts at the viewed system, not the character's location */
+	viewingSummary: function(summary) {
+		const words = function(t) {
+			return String(t || "")
+				.replace(/you are in J-space off the chain map/g, "the system you are viewing is in J-space off the chain map")
+				.replace(/your location isn't known/g, "no character is tracked and no system is viewed")
+				.replace(/you are in /g, "you are viewing ");
+		};
+		return Object.assign({}, summary, { text: summary.text === "here" ? "viewing" : summary.text, title: words(summary.title) });
 	},
 
 	/** Text and tooltip for a favourite's route: the selected mode first, the other one too when it differs */
@@ -604,7 +626,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (avoidKey !== distanceAvoid) { distanceCache = {}; distanceCount = 0; distanceAvoid = avoidKey; }
 			const key = systemID + (safe ? "|safe" : "");
 			if (!distanceCache[key]) {
-				if (++distanceCount > 60) { distanceCache = {}; distanceCount = 1; }
+				// Room for a whole draw: the start, then each favourite in both modes (compact rows route them all)
+				if (++distanceCount > Math.max(60, 2 * fp.sanitize(options.favorites).length + 8)) { distanceCache = {}; distanceCount = 1; }
 				const map = (tripwire.map && tripwire.map.shortest) || appData.map.shortest;
 				distanceCache[key] = fp.gateDistances(map, appData.systems, systemID, safe, avoid);
 			}
@@ -635,7 +658,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const flags = fp.flags(settings, id);
 			const mode = flags.route || "shortest";
 			const info = Object.assign({}, fp.lastRoutes[id] || {}, { mode: mode });
-			const summary = fp.routeSummary(info, system.name, systemName);
+			const plain = fp.routeSummary(info, system.name, systemName);
+			const summary = lastOrigin.source === "viewing" ? fp.viewingSummary(plain) : plain;
 			const style = typeof favouritesRouteStrip !== "undefined" ? favouritesRouteStrip.systemStyle(Object.assign({}, appData.systems[id] || {}, { name: system.name })) : null;
 			const label = style ? favouritesRouteStrip.shortLabel(style) : system.systemTypeName;
 			const from = lastOrigin.systemID ? " from " + systemName(lastOrigin.systemID) + (lastOrigin.source === "viewing" ? " (the system you are viewing)" : "") : "";
@@ -871,10 +895,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				section: "routes", order: 50.5, id: "favouritesCompact-enabled", type: "checkbox", key: "favouritesCompact",
 				label: "", text: "One-line rows with every favourite's route", keywords: "favourites panel compact wanderer jumps",
 				get: function() { return fp.compact(options); },
-				set: function(o, on) {
-					if (on !== fp.compact(o)) { setTimeout(redrawChain, 0); }
-					o.favouritesCompact = { enabled: on };
-				}
+				set: function(o, on) { o.favouritesCompact = { enabled: on }; }	// options.apply() redraws the chain
 			});
 
 			// Save and Reset both end in options.apply(): show/hide the panel and refresh it then
