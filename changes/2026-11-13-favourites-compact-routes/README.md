@@ -30,6 +30,8 @@ Tip: none, the panel and its routes are on screen.
 - Labels: security `0.9`, class `C5`, `T` Thera, `P` Pochven, `Z` Zarzakh; region in the name's tooltip.
 - EVE-Scout's Thera/Turnur list is fetched whenever any favourite needs a route (`theraRoute`), not only those with
   Route on.
-- Files: `app/js/fork/favourites-panel.js`, `favourites-route-strip.js`, `thera-route.js`, `mask-defaults.js`, new
+- "Set destination in game" is on every compact row (it follows the row's route); with no tracked character a
+  gate-only route says so instead.
+- Files: `app/js/fork/favourites-panel.js`, `favourites-route-strip.js`, `thera-route.js`, `autopilot-route.js`, `mask-defaults.js`, new
   `app/css/fork/favourites-compact.css`, tests, and the new key in the mask-defaults allow list
   (`maskadmin/maskadmin.inc.php`, fork-owned). No upstream files touched.
