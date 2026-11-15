@@ -148,6 +148,19 @@ describe('esiBackoff', () => {
 			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 60000, true), true);
 			assert.strictEqual(esiBackoff.due(Object.assign({}, e, { inflight: NOW + 59000 }), 'a', NOW + 60000, true), false, 'not while one is out');
 		});
+		it('a Retry-After wins over the active character\'s 60 s cap and a new token', () => {
+			const e = esiBackoff.next(null, { kind: 'error', status: 503, retryAfter: 600 }, NOW, 0.5);
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 60000, true), false, 'not after 60 s');
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 599000, true), false);
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 600000, true), true);
+			let s = null;
+			for (let i = 0; i < 3; i++) { s = esiBackoff.next(s, { kind: 'auth', status: 401, token: 'a', retryAfter: 600 }, NOW, 0.5); }
+			assert.strictEqual(s.stopped, true);
+			assert.strictEqual(esiBackoff.due(s, 'new', NOW + 1000, true), false, 'a new token waits too');
+			assert.strictEqual(esiBackoff.due(s, 'new', NOW + 600000, true), true);
+			const plain = esiBackoff.next(null, { kind: 'error', status: 503 }, NOW, 0.5);
+			assert.strictEqual(plain.retryUntil, undefined);
+		});
 		it('an ok answer clears everything; a different failure starts its own count', () => {
 			let e = esiBackoff.next(null, { kind: 'auth', status: 401 }, NOW, 0.5);
 			e = esiBackoff.next(e, { kind: 'error', status: 502 }, NOW, 0.5);
