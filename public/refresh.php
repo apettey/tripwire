@@ -16,7 +16,7 @@ if(!isset($_SESSION['userID'])) {
 
 require_once('../config.php');
 require_once('../settings.php');
-require_once('../db.inc.php');
+require_once('../db.php');
 require_once('../note-html.inc.php');
 require_once('../csrf.inc.php'); // fork: tracking and esiDelete need the session's CSRF token
 
@@ -119,6 +119,7 @@ if (isset($_REQUEST['tracking']) && fork_csrf_valid()) { // fork: not from a lin
 		
 		$track['characterID'] 		= isset($track['characterID']) ? $track['characterID'] : null;
 		$track['characterName'] 	= isset($track['characterName']) ? $track['characterName'] : null;
+		$track['online'] 	     = (isset($track['online']) && $track['online'] == 'true') ? 1 : 0;
 		$track['systemName'] 		= isset($track['systemName']) ? $track['systemName'] : null;
 		$track['stationID'] 		= isset($track['stationID']) && !empty($track['stationID']) ? $track['stationID'] : null;
 		$track['stationName'] 		= isset($track['stationName']) && !empty($track['stationName']) ? $track['stationName'] : null;
@@ -146,16 +147,17 @@ if (isset($_REQUEST['tracking']) && fork_csrf_valid()) { // fork: not from a lin
 		$track['characterName'] .= '|' . $mods;
 
 
-		$query = 'INSERT INTO tracking (userID, characterID, characterName, systemID, systemName, stationID, stationName, shipID, shipName, shipTypeID, shipTypeName, maskID)
-		VALUES (:userID, :characterID, :characterName, :systemID, :systemName, :stationID, :stationName, :shipID, :shipName, :shipTypeID, :shipTypeName, :maskID)
+		$query = 'INSERT INTO tracking (userID, characterID, characterName, online, systemID, systemName, stationID, stationName, shipID, shipName, shipTypeID, shipTypeName, maskID)
+		VALUES (:userID, :characterID, :characterName, :online, :systemID, :systemName, :stationID, :stationName, :shipID, :shipName, :shipTypeID, :shipTypeName, :maskID)
 		ON DUPLICATE KEY UPDATE
 		systemID = :systemID, systemName = :systemName, stationID = :stationID, stationName = :stationName, 
-		characterName = :characterName,
+		characterName = :characterName, online = :online,
 		shipID = :shipID, shipName = :shipName, shipTypeID = :shipTypeID, shipTypeName = :shipTypeName';
 		$stmt = $mysql->prepare($query);
 		$stmt->bindValue(':userID', $userID);
 		$stmt->bindValue(':characterID', $track['characterID']);
 		$stmt->bindValue(':characterName', $track['characterName']);
+		$stmt->bindValue(':online', $track['online']);
 		$stmt->bindValue(':systemID', $track['systemID']);
 		$stmt->bindValue(':systemName', $track['systemName']);
 		$stmt->bindValue(':stationID', $track['stationID']);
@@ -309,8 +311,6 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 	$signatureTime 		= isset($_REQUEST['signatureTime']) ? $_REQUEST['signatureTime'] : null;
 	$chainCount				= isset($_REQUEST['chainCount'])?$_REQUEST['chainCount']:null;
 	$chainTime 				= isset($_REQUEST['chainTime'])?$_REQUEST['chainTime']:null;
-	$flareCount 			= isset($_REQUEST['flareCount'])?$_REQUEST['flareCount']:null;
-	$flareTime 				= isset($_REQUEST['flareTime'])?$_REQUEST['flareTime']:null;
 	$commentCount 		= isset($_REQUEST['commentCount'])?$_REQUEST['commentCount']:null;
 	$commentTime 			= isset($_REQUEST['commentTime'])?$_REQUEST['commentTime']:null;
 
@@ -380,16 +380,17 @@ if (isset($_REQUEST['mode']) && $_REQUEST['mode'] == 'init') {
 // Values that we always want to return
 
 // Get occupied systems
-$query = 'SELECT systemID, COUNT(characterID) AS count FROM tracking WHERE maskID = :maskID AND characterName NOT LIKE \'%|x%\' GROUP BY systemID';
+// These casts are necessary because PDO will make things strings by default and doesn't know aggregated columns are numbers without hints
+$query = 'SELECT systemID, COUNT(characterID) AS count, cast(sum(online) as signed) as online, cast(sum(case when stationID is null then 0 else 1 end) as signed) as docked FROM tracking WHERE maskID = :maskID AND characterName NOT LIKE \'%|x%\' GROUP BY systemID';
 $stmt = $mysql->prepare($query);
 $stmt->bindValue(':maskID', $maskID);
 $stmt->execute();
-if ($result = $stmt->fetchAll(PDO::FETCH_CLASS)) {
+if ($result = $stmt->fetchAll(PDO::FETCH_OBJ)) {
 	$output['occupied'] = $result;
 }
 
 // Get flares
-$query = 'SELECT systemID, flare, time FROM flares WHERE maskID = :maskID';
+$query = 'SELECT systemID, flare, lifeLength, reason, time FROM flares WHERE maskID = :maskID';
 $stmt = $mysql->prepare($query);
 $stmt->bindValue(':maskID', $maskID);
 $stmt->execute();

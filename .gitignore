@@ -18,3 +18,6 @@ public/js/app.min.js
 public/js/app.min.js.map
 public/css/app.min.css
 public/css/app.min.css.map
+e2e/.auth/
+test-results/
+playwright-report/

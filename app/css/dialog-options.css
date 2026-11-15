@@ -37,7 +37,7 @@ div.ui-slider { display: inline-block; width: calc(75% - 3px); margin-right: 3px
 }
 
 tr.line td, tr.line th {
-	border-bottom: 1px solid #555;
+	border-bottom: 1px solid var(--n-400);
 }
 
 .optionsTable tr {
@@ -47,7 +47,7 @@ tr.line td, tr.line th {
 .ui-accordion .ui-accordion-content {
 	padding: 0.5em;
 	background: none;
-	border-color: #111;
+	border-color: var(--n-050);
 }
 
 .ui-accordion .ui-accordion-header:focus {

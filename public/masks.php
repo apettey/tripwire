@@ -20,7 +20,7 @@ if(!isset($_SESSION['userID'])) {
 }
 
 require_once('../config.php');
-require_once('../db.inc.php');
+require_once('../db.php');
 require_once('../lib.inc.php');
 
 $mode = isset($_REQUEST['mode'])?$_REQUEST['mode']:null;

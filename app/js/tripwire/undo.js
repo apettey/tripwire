@@ -36,6 +36,16 @@ tripwire.undo = function() {
         }
 
         var success = function(data) {
+            // An entry the server cannot act on -- "Signature ID not found",
+            // typically an id-0 entry left in sessionStorage from before
+            // addSignature returned real ids -- must not sit on top of the
+            // stack forever, or undo is dead for the rest of the session.
+            if (!(data.resultSet && data.resultSet[0] && data.resultSet[0].result == true)) {
+                tripwire.signatures.undo[viewingSystemID].pop();
+                sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo));
+                if (data.resultSet && data.resultSet[0] && data.resultSet[0].value) { Notify.trigger("Nothing to undo: " + data.resultSet[0].value); }
+                return;
+            }
             if (data.resultSet && data.resultSet[0].result == true) {
                 tripwire.signatures.undo[viewingSystemID].pop();
 

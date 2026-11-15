@@ -8,12 +8,19 @@ tripwire.active = function(data) {
         editComments.push(parseInt(activity.editComment));
 
         if (activity.editSig) {
-            $("#sigTable tr[data-id='"+activity.editSig+"']")
-                //.attr('data-tooltip', sig.editing)
-                //.attr("title", sig.editing)
-                .addClass("editing")
-                .find("td")
-                .animate({backgroundColor: "#001b47"}, 1000); //35240A - Yellow
+            var $row = $("#sigTable tr[data-id='"+activity.editSig+"']");
+
+            // Only animate when the row is newly marked. This runs on every
+            // refresh, so animating unconditionally queued one more 1s
+            // animation per poll for as long as somebody kept the signature
+            // open -- and the queue only drains while the tab is visible.
+            if (!$row.hasClass("editing")) {
+                $row.addClass("editing");
+                if (!document.hidden) {
+                    $row.find("td").stop(true, true)
+                        .animate({backgroundColor: "#001b47"}, 1000); //35240A - Yellow
+                }
+            }
         }
 
         if (activity.editComment && $("#commentWrapper .comment[data-id='"+activity.editComment+"'] .cke").length > 0) {
@@ -30,7 +37,8 @@ tripwire.active = function(data) {
                 //.removeAttr("title")
                 .removeClass("editing")
                 .find("td")
-                .animate({backgroundColor: "#111"}, 1000, null, function() {$(this).css({backgroundColor: ""});});
+                .stop(true, true)
+                .animate({backgroundColor: "#111"}, document.hidden ? 0 : 1000, null, function() {$(this).css({backgroundColor: ""});});
         }
     });
 

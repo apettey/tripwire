@@ -46,5 +46,7 @@ tripwire.editSig = function(edit, disabled) {
         $(tr).find('span[data-age]').countdown({since: moment.utc(edit.lifeTime).toDate(), compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime});
     }
 
-    $(tr).effect("pulsate");
+    if (!document.hidden) {
+        $(tr).stop(true, true).effect("pulsate");
+    }
 }

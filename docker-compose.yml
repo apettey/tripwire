@@ -110,7 +110,7 @@ services:
       - DB_ROOT_USER=root
       - DB_ROOT_PASS=$MYSQL_ROOT_PASSWORD
       - TRIPWIRE_DB=tripwire_database
-      - SDE_DB=eve_dump
+      # - SDE_DB=eve_dump  # optional, only needed for tools/json_builder.php
     # No need for volumes or ports
     # The seed script will run once, then exit
 

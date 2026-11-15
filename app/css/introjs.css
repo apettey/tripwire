@@ -1,7 +1,7 @@
 .introjs-helperLayer {
-    background-color: #555;
+    background-color: var(--n-400);
 }
 
 a.introjs-button:hover, a.introjs-skipbutton:hover {
-    color: #7a7a7a;
+    color: var(--n-560);
 }

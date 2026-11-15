@@ -48,6 +48,35 @@ const ChainMapRendererBase = function(owner) {
 	/** Calculate the minimum arc for this node, for example taking into account text size */
 	this.calcMinArc = function(node) { return 1; }
 
+	/** Called once per draw, after every node has been measured and before any
+	is placed, with every node on every map. A renderer that spaces its grid or
+	rings by the size of the cards sets that up here. */
+	this.prepareLayout = function(nodes) { }
+
+	/** The largest width and height over the given nodes' requested sizes */
+	this.maxNodeSize = function(nodes) {
+		return nodes.reduce(function(acc, n) {
+			const size = n.requestedSize || { width: 0, height: 0 };
+			return { width: Math.max(acc.width, size.width), height: Math.max(acc.height, size.height) };
+		}, { width: 0, height: 0 });
+	}
+	
+	/** The representative size of a normal node */
+	this.representativeNodeSize = function() {
+		const representativeMarkup = `<div class="node jm-2000kt jm-2000kt-chain wh-class-5-node">
+			<div class="nodeIcons">
+				<div style="float: left;"><i class="whEffect" data-icon="cataclysmic-variable" data-tooltip="Cataclysmic Variable"></i></div>
+			</div>
+			<h4 class="nodeClass"><span class="wh class-5">C5</span></h4>
+			<h4 class="nodeSystem"><a href=".?system=J130302">J130302</a></h4>
+			<h4 class="nodeType"><a href="#">ABC</a></h4>
+			<div class="statics"><span class="class-6" data-tooltip="Class-6 via V753">6</span></div>
+			<div class="nodeActivity"><span class="jumps invisible invisible">●</span>&nbsp;<span class="pods invisible invisible">●</span>&nbsp;&nbsp;<span class="ships invisible invisible">●</span>&nbsp;<span class="npcs invisible invisible">●</span>
+			</div>
+		</div>`;
+		return measureNode(representativeMarkup);
+	}
+
 	const _this = this;
 	const drawInner = function(map, lines, collapsed) {
 		const maps = [];
@@ -82,6 +111,7 @@ const ChainMapRendererBase = function(owner) {
 			mapNode.markup = inNode.f;
 			mapNode.requestedSize = measureNode(mapNode.markup);
 		}
+		_this.prepareLayout(Object.keys(nodesById).map(function(id) { return nodesById[id]; }));
 
 		// Second pass - for each map, find the allocation of arc needed for each node
 		for(var mi = 0; mi < maps.length; mi++) {
@@ -343,16 +373,21 @@ function propertyFromCssClass(className, property) {
 }	
 
 /** https://stackoverflow.com/questions/118241
-Using the DOM approach because we have a fully styled node, not just text */
+Using the DOM approach because we have a fully styled node, not just text.
+The scratch wrapper lives inside #chainMap, so CSS style apply to it properly. */
 function measureNode(markup) {
 	var elem = document.getElementById('temp-div-node-width');
 	if(!elem) {
-	  elem = document.createElement("div");
-	  elem.id = 'temp-div-node-width';
-	  elem.style.cssText = "position:fixed;left:-100px;top:-100px;";
-	  elem.className = 'node-wrapper';
-	  document.body.appendChild(elem);  // required in some browsers
-  }
-  elem.innerHTML = markup;
-  return elem.firstChild.getBoundingClientRect();
+		const scratch = document.createElement("div");
+		scratch.className = 'radial-map map-measure';
+		scratch.style.cssText = "position:fixed;left:-1000px;top:-1000px;visibility:hidden;pointer-events:none;";
+		scratch.innerHTML = '<div class="map-inner-container"><div class="node-wrapper" id="temp-div-node-width"></div></div>';
+		(document.getElementById('chainMap') || document.body).appendChild(scratch);
+		elem = document.getElementById('temp-div-node-width');
+	}
+	elem.innerHTML = markup;
+	const node = elem.firstChild;
+	const size = { width: node.offsetWidth, height: node.offsetHeight };
+	elem.innerHTML = '';	// a copy of the card left here would answer #chainMap selectors and share the real card's id
+	return size;
 }

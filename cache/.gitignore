@@ -1,2 +1,3 @@
 *.json
 esi-etag/
+db-update-state.php

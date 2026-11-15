@@ -7,7 +7,7 @@
 }
 
 .comment {
-	border-bottom: 1px solid #444;
+	border-bottom: 1px solid var(--n-300);
 }
 
 .commentSticky {
@@ -23,7 +23,7 @@
 
 .commentToolbar, .commentFooter {
 	font-size: .9em;
-	color: #999;
+	color: var(--n-650);
 }
 
 .commentToolbar {
@@ -70,7 +70,7 @@
 }
 
 .commentBody {
-	color: #ccc;
+	color: var(--n-800);
 	padding: 8px;
 	//white-space: pre-wrap;      /* CSS3 */
 	//white-space: -moz-pre-wrap; /* Firefox */

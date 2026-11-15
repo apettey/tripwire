@@ -17,8 +17,13 @@ tripwire.parse = function(server, mode) {
     if (mode == 'refresh') {
         // preserve client.EVE across refresh otherwise tracking/automapper will be confused
         var EVE = this.client.EVE;
+        var prevWormholes = (this.client && this.client.wormholes) || {};
         this.client = server;
         this.client.EVE = EVE;
+        var wormholeOf = function(wormholes, sigId) {
+            for (var id in wormholes) { if (wormholes[id].initialID == sigId || wormholes[id].secondaryID == sigId) { return wormholes[id]; } }
+            return null;
+        };
 
         for (var key in data.signatures) {
             if (data.signatures[key].systemID != viewingSystemID) {
@@ -32,18 +37,28 @@ tripwire.parse = function(server, mode) {
 				tripwire.signatures.list[key] = data.signatures[key];	// To reduce race condition chance
                 this.addSig(data.signatures[key], {animate: true}, disabled);
                 updateSignatureTable = true;
-            } else if (tripwire.signatures.list[key].modifiedTime !== data.signatures[key].modifiedTime) {
+            } else {
+                // Any column that differs re-renders the row. This used to be
+                // gated on modifiedTime, which has one-second resolution: two
+                // edits of a hole inside a second (life to <1h, then Expired)
+                // left the second one invisible until something else changed.
+                // A wormhole's own record (life, mass, type) lives beside the
+                // signature and is compared too.
                 var edit = false;
                 for (column in data.signatures[key]) {
                     if (data.signatures[key][column] != tripwire.signatures.list[key][column] && column != "editing") {
                         edit = true;
                     }
                 }
+                if (!edit && data.signatures[key].type == "wormhole") {
+                    var whNow = wormholeOf(this.client.wormholes || {}, key), whBefore = wormholeOf(prevWormholes, key);
+                    if (whNow && whBefore && (whNow.life != whBefore.life || whNow.mass != whBefore.mass || whNow.type != whBefore.type || whNow.parent != whBefore.parent)) {
+                        edit = true;
+                    }
+                }
 
                 if (edit) {
                     this.editSig(data.signatures[key], disabled);
-                } else {
-                    // this.sigEditing(data.signatures[key]);
                 }
             }
         }
@@ -84,9 +99,21 @@ tripwire.parse = function(server, mode) {
 	tripwire.signatures.currentSystem = newSigsInSystem;
 		
     // set the sig count in the UI
-    var signatureCount = 0;
-    $.map(data.signatures, function(signature) {signature.systemID == viewingSystemID ? signatureCount++ : null;});
-    $("#signature-count").text(signatureCount);
+    var signatureCount = { total: 0, wormhole: 0, signature: 0, anomaly: 0 };
+    $.map(data.signatures, function(signature) {
+		if(signature.systemID != viewingSystemID) { return; }
+		signatureCount.total++;
+		
+		if(signature.type === 'wormhole') { signatureCount.wormhole++; }
+		else if(signature.scan_group === 'anomaly') { signatureCount.anomaly++; }
+		else { signatureCount.signature++; }
+	});
+    $("#signature-count").html(signatureCount.total ? (signatureCount.total + ' ( <span id="sig-breakdown">'
+		+ (signatureCount.wormhole ? scanGroupText.wormhole + signatureCount.wormhole + ' ' : '')
+		+ (signatureCount.signature ? scanGroupText.signature + signatureCount.signature + ' ' : '')
+		+ (signatureCount.anomaly ? scanGroupText.anomaly + signatureCount.anomaly + ' ' : '')
+		+ '</span>)'): 0
+	);
 }
 
 /** Find if there is an unknown return sig. The markup is always generated (in addSignature.js) */

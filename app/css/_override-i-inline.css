@@ -1,0 +1,42 @@
+/* ============================================================================
+   INLINE LIFE / MASS
+   The two cells read as editable on approach, and the chooser is the same
+   surface as the palette: popover ground, one radius, filled chips in the
+   data colours the rest of the app uses for these states.
+   ========================================================================= */
+
+#sigTable td.inline-editable { cursor: pointer; position: relative; }
+#sigTable td.inline-editable:hover { color: var(--foreground); text-decoration: underline dotted; text-underline-offset: 3px; }
+#sigTable td.inline-editable.is-saving { opacity: .5; pointer-events: none; }
+
+#inline-edit {
+	position: fixed;
+	z-index: 1200;
+	display: flex;
+	gap: var(--space-1);
+	padding: var(--space-1);
+	background: var(--popover);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.4);
+}
+#inline-edit .inline-chip {
+	height: var(--control-dense);
+	padding: 0 var(--space-3);
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: transparent;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	cursor: pointer;
+}
+#inline-edit .inline-chip:hover { background: var(--muted); border-color: var(--border-strong); }
+#inline-edit .inline-chip[aria-selected="true"].stable   { background: var(--data-good);     border-color: var(--data-good);     color: #1b1b1b; }
+#inline-edit .inline-chip[aria-selected="true"].destab   { background: var(--data-warn);     border-color: var(--data-warn);     color: #1b1b1b; }
+#inline-edit .inline-chip[aria-selected="true"].critical { background: var(--data-critical); border-color: var(--data-critical); color: #fff; }
+#inline-edit .inline-chip[aria-selected="true"].eol-1h { background: var(--data-supercritical); border-color: var(--data-supercritical); color: #fff; }
+#inline-edit .inline-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+@media (pointer: coarse) {
+	#inline-edit .inline-chip { min-height: 44px; padding: 0 var(--space-4); }
+}

@@ -26,7 +26,7 @@ tripwire.makeSigInfo = function(sig, wormhole) {
 		leadsTo: leadsTo,
 		wormhole: wormhole,
 		formattedType: (wormhole[wormhole.parent+"ID"] == sig.id ? wormholeTypeText : (wormhole.parent ? "[" + wormholeTypeText + "]" : "")),
-		lifeText: { critical: 'EOL', stable: 'Stable' }[wormhole.life] || wormhole.life,
+		lifeText: { '<1h': '<1h', critical: 'EOL', stable: 'Stable' }[wormhole.life] || wormhole.life,
 	}
 }
 
@@ -34,7 +34,7 @@ tripwire.addSig = function(add, option, disabled) {
     var option = option || {};
     var animate = typeof(option.animate) !== 'undefined' ? option.animate : true;
     var disabled = disabled || false;
-    var wormhole;
+	let wormhole;
 
 	const returnLinkText = add.signatureID ? '<a class="return-link" href="#" onclick="tripwire.setReturnSig(event, ' + add.id + ')">&gt;&gt; Set ' + 
 				add.signatureID.substring(0, 3).toUpperCase() + '-' + add.signatureID.substring(3) +
@@ -50,25 +50,26 @@ tripwire.addSig = function(add, option, disabled) {
 		const leadsToText = sigInfo.leadsTo ? sigInfo.leadsTo : 
 			add.signatureID && add.signatureID.length && add.signatureID[0] != '?' ? returnLinkText
 			: '';	
+		const lifeClass = (wormhole.life || '').replace('<', 'eol-');
 
-        var row = "<tr data-id='"+add.id+"' data-tooltip='' "+ (disabled ? 'disabled="disabled"' : '') +">"
+        var row = "<tr data-id='"+add.id+"' class='sig-wormhole' data-scan-group='"+_.escape(add.scan_group) + "' data-tooltip='' "+ (disabled ? 'disabled="disabled"' : '') +">"
             + "<td class='"+ options.signatures.alignment.sigID +"'>"+formatSignatureID(add.signatureID)+"</td>"
             + "<td class='type-tooltip "+ options.signatures.alignment.sigType +"' data-tooltip=\""+this.whTooltip(wormhole)+"\">"+sigInfo.formattedType+"</td>"
             + "<td class='age-tooltip "+ options.signatures.alignment.sigAge + (parseInt(add.lifeLength) === 0 ? " disabled" : "") +"' data-tooltip='"+this.ageTooltip(add)+"'><span data-age='"+add.lifeTime+"'></span></td>"
             + "<td class='"+ options.signatures.alignment.leadsTo +"'>"+leadsToText+"</td>"
-            + "<td class='"+wormhole.life+" "+ options.signatures.alignment.sigLife +"'>"+sigInfo.lifeText+"</td>"
+            + "<td class='"+lifeClass+" "+ options.signatures.alignment.sigLife +"'>"+sigInfo.lifeText+"</td>"
             + "<td class='"+wormhole.mass+" "+ options.signatures.alignment.sigMass +"'>"+wormhole.mass+"</td>"
             + "</tr>";
 
         var tr = $(row);
     } else {
-		const leadsToText = add.type === 'unknown' ? returnLinkText : 
-			(add.name ? linkSig(add.name) : '');
-        var row = "<tr data-id='"+add.id+"' data-tooltip='' "+ (disabled ? 'disabled="disabled"' : '') +">"
+		const leadsToText = (add.type === 'unknown' ? returnLinkText : 
+			(add.name ? linkSig(add.name) : ''));
+        var row = "<tr data-id='"+add.id+"' class='sig-" + _.escape(add.scan_group) +"' data-scan-group='"+_.escape(add.scan_group) + "' data-tooltip='' "+ (disabled ? 'disabled="disabled"' : '') +">"
             + "<td class='"+ options.signatures.alignment.sigID +"'>"+formatSignatureID(add.signatureID)+"</td>"
             + "<td class='"+ options.signatures.alignment.sigType +"'>"+add.type+"</td>"
             + "<td class='age-tooltip "+ options.signatures.alignment.sigAge + (parseInt(add.lifeLength) === 0 ? " disabled" : "") +"' data-tooltip='"+this.ageTooltip(add)+"'><span data-age='"+add.lifeTime+"'></span></td>"
-            + "<td class='"+ options.signatures.alignment.leadsTo +"' colspan='3'>"+leadsToText+"</td>"
+            + "<td class='"+ options.signatures.alignment.leadsTo +"' colspan='3'><span style='float:left'>"+(scanGroupText[add.scan_group] || '') + '</span>' +  leadsToText +"</td>"
             + "</tr>";
 
         var tr = $(row);
@@ -88,7 +89,10 @@ tripwire.addSig = function(add, option, disabled) {
         $(tr).find('span[data-age]').countdown({since: moment.utc(add.lifeTime).toDate(), compact: true, format: this.ageFormat, serverSync: this.serverTime.getTime});
     }
 
-    if (animate) {
+    // Same reasoning as deleteSig: the wrapper is only unwrapped by the
+    // slideDown callback, so animating in a hidden tab leaves the new row
+    // invisible until the backlog drains. Show it outright instead.
+    if (animate && !document.hidden) {
         $(tr)
             .find('td')
             .wrapInner('<div class="hidden" />')

@@ -1,18 +1,32 @@
 const ChainMapRendererRadial = function(owner) {
 	ChainMapRendererBase.apply(this, arguments);
 	
+	// The rings are sized per draw from the cards: one ring step is the
+	// widest card plus a gap across, and the taller of the tallest card plus
+	// the gap or 62% of that down, so the rings are ellipses in the cards'
+	// own proportions. Upstream's fixed 70x60 fitted its 30px pills only.
+	const GAP = 12, MIN_Y_RATIO = 0.62;
 	const CIRCLE_SIZE = { x: 70, y: 60, first_ring_delta: 0.3,
 		ringX: function(ci) { return ci == 0 ? 0 : (ci + this.first_ring_delta) * this.x * options.chain.nodeSpacing.x},
 		ringY: function(ci) { return ci == 0 ? 0 : (ci + this.first_ring_delta) * this.y * options.chain.nodeSpacing.y},
 	 };
 	
+	this.prepareLayout = function(nodes) {
+		const size = this.representativeNodeSize();
+		CIRCLE_SIZE.x = Math.max(CIRCLE_SIZE.x, size.width + GAP);
+		CIRCLE_SIZE.y = Math.max(CIRCLE_SIZE.y, size.height + GAP, MIN_Y_RATIO * CIRCLE_SIZE.x);
+	}
+	
 	this.arcFactor = function(ci) { return ci / (ci + 1.0); }
 	
 	this.skipLevels = function(ci, nodes, minRad, maxRad, parentCollapsed) { 
-		const max_nodes_per_rad = 1.4;
+		if(nodes.length < 2) { return 0; } // if there's only 1, no point skipping, even if the space is small
+		// Cards fit side by side along a ring at one per ring step of arc
+		// length, so a ring holds (its radius in ring steps) cards per radian
+		const max_nodes_per_rad = ci + CIRCLE_SIZE.first_ring_delta;
 		let skipped = 0;
 		if(ci > 0 && !parentCollapsed) {
-			while(nodes.length > max_nodes_per_rad * ci * (maxRad - minRad) && ++skipped < 1) { }
+			while(nodes.length > max_nodes_per_rad * (maxRad - minRad) && ++skipped < 1) { }
 		}
 		return skipped; 
 	}

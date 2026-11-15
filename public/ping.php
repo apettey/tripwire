@@ -18,7 +18,10 @@ if(!$hook) {
 $url_base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . $_SERVER['SERVER_NAME'].dirname($_SERVER["REQUEST_URI"].'?');
 $ping_type = isset($_REQUEST['pingType']) && in_array($_REQUEST['pingType'], array('here', 'everyone'), true) ? $_REQUEST['pingType'] : null; // fork: only the dialog's two buttons
 $ping_type_text = $ping_type ? ' as @' . $ping_type : '';
-$content = 'Tripwire ping from *' . $_SESSION['username'] . '* in **' . $_REQUEST['systemText'] . "**$ping_type_text\n<" . $url_base . '/?system=' . $_REQUEST['systemName'] . ">\n" . $_REQUEST['message'];
+$systemText = isset($_REQUEST['systemText']) ? $_REQUEST['systemText'] : '';
+$systemName = isset($_REQUEST['systemName']) ? $_REQUEST['systemName'] : '';
+$message    = isset($_REQUEST['message']) ? $_REQUEST['message'] : '';
+$content = 'Tripwire ping from *' . $_SESSION['username'] . '* in **' . $systemText . "**$ping_type_text\n<" . $url_base . '/?system=' . rawurlencode($systemName) . ">\n" . $message;
 
 // fork: @here/@everyone only ping through the dialog's buttons, never from text typed into the message (or names)
 $content = preg_replace('/@(everyone|here)/i', "@\u{200B}$1", $content);

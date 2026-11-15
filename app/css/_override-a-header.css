@@ -1,0 +1,62 @@
+/* ============================================================================
+   NOTE EDITOR
+   Replaces CKEditor 4's skin. Same visual language as everything else, so the
+   editor does not look like a different application embedded in the panel.
+   ========================================================================= */
+
+.rte {
+	border: 1px solid var(--input);
+	border-radius: var(--radius-sm);
+	background: var(--muted);
+	overflow: hidden;
+}
+
+.rte-bar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: var(--space-1);
+	border-bottom: 1px solid var(--border);
+	background: color-mix(in oklab, var(--card) 60%, transparent);
+}
+
+.rte-btn {
+	min-width: 1.9rem;
+	min-height: 1.9rem;
+	padding: 0 var(--space-1);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--muted-foreground);
+	font-size: var(--fs-sm);
+	line-height: 1;
+	cursor: pointer;
+}
+.rte-btn:hover { background: var(--accent-surface); color: var(--foreground); border-color: var(--border); }
+
+.rte-sep { width: 1px; align-self: stretch; margin: 2px var(--space-1); background: var(--border); }
+
+.rte-swatch {
+	width: 1.1rem; height: 1.1rem;
+	min-width: 0; min-height: 0;
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: 50%;
+	cursor: pointer;
+}
+.rte-swatch:hover { transform: scale(1.15); }
+
+.rte-area {
+	min-height: 7rem;
+	max-height: 22rem;
+	overflow-y: auto;
+	padding: var(--space-2);
+	color: var(--foreground);
+	font-size: var(--fs-base);
+	line-height: 1.6;
+	outline: none;
+}
+.rte-area:focus { background: var(--background); }
+.rte-area a { color: var(--primary); }
+.rte-area ul, .rte-area ol { padding-left: 1.4em; margin: .3em 0; }

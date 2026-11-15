@@ -1,4 +1,4 @@
-const eveScout = new _EveScoutSignatureConnection();
+const eveScout = mapDataSuppliers.register(new _EveScoutSignatureConnection());
 
 function _EveScoutSignatureConnection() {
 	const _this = this;
@@ -20,7 +20,8 @@ function _EveScoutSignatureConnection() {
 			const eveScoutID = 'ES-' + eveScoutLink.id;
 			
 			const nodeDefaults = {
-				life: eveScoutLink.remaining_hours >= 4 ? 'stable' : 'critical',
+				life: eveScoutLink.remaining_hours >= 4 ? 'stable' :
+						eveScoutLink.remaining_hours >= 1 ? 'critical' : '<1h',
 				mass: 'stable',	// they no longer attempt to track mass
 				id: eveScoutID,
 			};

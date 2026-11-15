@@ -1,4 +1,4 @@
-		<link rel="stylesheet" href="css/donation-panel.css" />
+		<link rel="stylesheet" href="css/donation-panel.css?v=<?= VERSION ?>" />
 		<div id="donate-panel">
 			<p>Donate in game ISK/PLEX to support development? Send to <i>Kariyo Astrien</i> in game and put "Tripwire" in the comment!<br/>
 			Donate real money to pay for server hosting for public Tripwire? Click this!</p>

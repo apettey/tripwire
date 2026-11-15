@@ -66,9 +66,18 @@ $("#chain-zoom-reset").on("click", function() {
 	options.saveDelay(2000);
 });
 
+/** Is a keyboard event on this target in a text field, so we should let the default action proceed?
+Check activeElement too because some events are reported on the document body */
+function isInTextField(target) {
+        var $t = $(target);
+        if ($t.closest("input, textarea, select, [contenteditable=true], [role='dialog'], .ui-dialog, .cke").length > 0) { return true; }
+        var active = document.activeElement;
+        return !!(active && active !== target && (active.isContentEditable || $(active).is("input, textarea, select")));	
+}
+
 $(document).keydown(function(e)	{
 	//Abort - user is in input or textarea
-	if ($(document.activeElement).is("textarea, input")) return;
+	if (isInTextField(e.target)) return;
 
 	// Ctrl key hooks
 	if (e.metaKey || e.ctrlKey) {
@@ -219,6 +228,22 @@ $("#search").click(function(e) {
 	}
 });
 
+// The header system picker is a transient filter, not a form users should
+// have to dismiss separately. jQuery UI closes only its suggestion popup on
+// Escape, and selecting a suggestion ordinarily just fills the input. Close
+// the whole picker on Escape and submit a selected system immediately.
+$("body").on("keydown", "#searchSpan input.systemsAutocomplete", function(e) {
+	if (e.key === "Escape" && $("#search").hasClass("active")) {
+		e.preventDefault();
+		$("#search").trigger("click");
+	}
+});
+
+$("body").on("inlinecompleteselect", "#searchSpan input.systemsAutocomplete", function(e, ui) {
+	e.preventDefault();
+	$(this).val(ui.item.value).closest("form").trigger("submit");
+});
+
 $("#toggle-automapper").click(function(e) {
 	e.preventDefault();
 
@@ -255,7 +280,7 @@ $("#wrapper").click(function(e) { // Click outside closes
 	}
 });
 $("#login").click(function(e) { // click inside doesn't
-	e.originalEvent.isInPanel = true;
+	if(e.originalEvent) { e.originalEvent.isInPanel = true; }
 })
 
 
@@ -373,31 +398,29 @@ var OccupiedToolTips = new jBox("Tooltip", {
 
 		this.options.position = {x: targetPos.left + this.target[0].offsetWidth, y: targetPos.top - 3};
 
-		tooltip.setContent("&nbsp;");
+		tooltip.setContent("<span class='tip-muted'>Loading pilots\u2026</span>");
 
 		$.ajax({
 			url: "occupants.php",
 			dataType: "JSON",
 			data: "systemID="+systemID,
 			cache: false
+		}).fail(function() {
+			tooltip.setContent("<span class='tip-muted'>Pilots unavailable</span>");
 		}).done(function(data) {
-			if (data && data.occupants) {
+			if (data && data.occupants && data.occupants.length) {
 				var chars = "<table>";
 
-				// Sort by characterName
-				data.occupants.sort(function(a, b) {
-					if (a.characterName.toLowerCase() < b.characterName.toLowerCase()) return -1;
-					if (a.characterName.toLowerCase() > b.characterName.toLowerCase()) return 1;
-					return 0;
-				});
-
 				for (var x in data.occupants) {
-					chars += "<tr><td>"+$("<div>").text(data.occupants[x].characterName).html()+"</td><td style='padding-left: 10px;'>"+$("<div>").text(data.occupants[x].shipTypeName?data.occupants[x].shipTypeName:"").html()+"</td></tr>"; // fork: escaped
+					const occupant = data.occupants[x];
+					chars += "<tr class='" + (occupant.online ? 'online' : 'offline') + "'><td>"+$("<div>").text(occupant.characterName).html()+"</td><td style='padding-left: 10px;'>"+$("<div>").text(occupant.shipTypeName?occupant.shipTypeName:"").html()+"</td></tr>"; // fork: escaped
 				}
 
 				chars += "</table>";
 				tooltip.setContent(chars);
-			}
+			} else {
+				tooltip.setContent("<span class='tip-muted'>No pilots here</span>");
+			}				
 		});
 	}
 });
@@ -710,6 +733,9 @@ $("#chainParent").contextmenu({
 			case "green":
 				nodeElem.hasClass("greenNode") ? $(this).contextmenu("removeFlare", id, ui) : $(this).contextmenu("setFlare", id, ui.cmd, ui);
 				break;
+			case "flare": 
+				$("#dialog-flare").data("systemID", id).data('copyNode', nodeElem[0].cloneNode(true)).dialog("open");
+				break;			
 			case "mass":
 				$("#dialog-mass").data("id", nodeElem.data("sigid")).data("systemID", id).dialog("open");
 				break;
@@ -777,42 +803,6 @@ $("#chainParent").contextmenu({
 		$(menuElem).css("width", "auto");
 		$(menuElem).find(".ui-front").css("width", "auto");
 		$(menuElem).find(".ui-front").css("position", "");
-
-		$.moogle.contextmenu.prototype.setFlare = function(systemID, flare, ui) {
-			var data = {"systemID": systemID, "flare": flare};
-
-			$.ajax({
-				url: "flares.php",
-				type: "POST",
-				data: data,
-				dataType: "JSON"
-			}).done(function(data) {
-				if (data && data.result) {
-					// $(ui.target[0]).closest("td").removeClass("redNode yellowNode greenNode").addClass(flare+"Node");
-
-					chain.data.flares.flares.push({systemID: systemID, flare: flare, time: null});
-					chain.flares(chain.data.flares);
-				}
-			});
-		}
-
-		$.moogle.contextmenu.prototype.removeFlare = function(systemID, ui) {
-			var data = {"systemID": systemID};
-
-			$.ajax({
-				url: "flares.php",
-				type: "POST",
-				data: data,
-				dataType: "JSON"
-			}).done(function(data) {
-				if (data && data.result) {
-					// $(ui.target[0]).closest("td").removeClass("redNode yellowNode greenNode");
-
-					chain.data.flares.flares.splice(Object.index(chain.data.flares.flares, "systemID", systemID), 1);
-					chain.flares(chain.data.flares);
-				}
-			});
-		}
 	}
 });
 
@@ -917,12 +907,16 @@ function linkSig(sigName) {
 }
 
 // Initialize tablesorter plugin on signaturesWidget table
+// Do this with a custom parser (https://mottie.github.io/tablesorter/docs/example-parsers.html) because duplicateSpan doesn't work if we override textExtraction, so the life/mass columns don't sort as expected
+$.tablesorter.addParser({
+	id: 'data-age',
+	format: function(s, table, cell) { return new Date($(cell).find("span").data("age")).getTime(); },
+	type: 'numeric'
+});
 $("#sigTable").tablesorter({
 	sortReset: true,
+	duplicateSpan: false,
 	widgets: ['saveSort'],
-	textExtraction: {
-		2: function(node) { return $(node).find("span").data("age"); }
-	}
 });
 
 // Highlight signaturesWidget tr on click

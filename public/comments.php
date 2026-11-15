@@ -20,7 +20,7 @@ if(!isset($_SESSION['userID'])) {
 }
 
 require_once('../config.php');
-require_once('../db.inc.php');
+require_once('../db.php');
 require_once('../note-html.inc.php');
 
 header('Content-Type: application/json');
@@ -41,7 +41,11 @@ $mode = 		isset($_POST['mode']) ? $_POST['mode'] : null;
 $output = 		null;
 
 if ($mode == 'save') {
-	// Notes are shared stored content: clean them on the way in as well as on the way out (refresh.php).
+	// Notes are shared stored content: an older client must never be handed
+	// executable markup because it predates the client-side sanitiser, so the
+	// server cleans on the way in as well as on the way out. Without the DOM
+	// extension the sanitiser cannot run, and saving must wait rather than
+	// permanently replace a rich note with escaped markup.
 	if (!noteHtmlSanitizerAvailable()) {
 		http_response_code(503);
 		echo json_encode(array('result' => false, 'error' => 'PHP DOM extension is required to save notes.'));
@@ -50,6 +54,11 @@ if ($mode == 'save') {
 	$comment = sanitizeNoteHtml($comment);
 	// fork: an existing note may only be updated within the session mask (the upsert below would change any id)
 	if ($commentID) { $stmt = $mysql->prepare('SELECT 1 FROM comments WHERE id = :commentID AND maskID = :maskID'); $stmt->execute(array(':commentID' => $commentID, ':maskID' => $maskID)); if (!$stmt->fetchColumn()) { http_response_code(404); echo json_encode(array('result' => false, 'error' => 'Note not found')); exit(); } }
+	if (!noteHtmlHasContent($comment)) {
+		http_response_code(422);
+		echo json_encode(array('result' => false, 'error' => 'A note must contain content.'));
+		exit();
+	}
 	$query = 'INSERT INTO comments (id, systemID, comment, created, createdByID, createdByName, modifiedByID, modifiedByName, maskID)
 				VALUES (:commentID, :systemID, :comment, NOW(), :createdByID, :createdByName, :modifiedByID, :modifiedByName, :maskID)
 				ON DUPLICATE KEY UPDATE

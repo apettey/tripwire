@@ -30,6 +30,12 @@ define('EVE_SSO_REDIRECT', 'https://yourdomain/index.php?mode=sso');
 // value can be changed from 'false' to 'true'.
 define('ENABLE_SEARCH_SCOPE', true);
 
+// Optional third-party integrations. These are disabled by default so a new
+// installation does not contact Google Analytics or PayPal merely because the
+// corresponding include files are present.
+define('ENABLE_ANALYTICS', false);
+define('ENABLE_DONATIONS', false);
+
 // Discord integration
 /*define('DISCORD_WEB_HOOK', array(
 	'maskID' => 'https://discord.com/api/webhooks/[discord web hook url]'

@@ -15,7 +15,7 @@
 
 **Requirements:**  
 
-- PHP7+ (older requires polyfill for public/login.php as documented in that file)
+- PHP 8+ (php-jwt 7 needs it; the Docker image is `php:8-fpm-alpine`)
 - php-mbstring must be installed
 - MySQL (or some flavor of MySQL - needed because database EVENTS)
 - A my.cnf MySQL config file example is located in `.docker/mysql/my.cnf`
@@ -25,6 +25,7 @@
 **Setup: (Bare Metal, for docker see below)** 
 
 - Create a `tripwire` database using the export located in `.docker/mysql/tripwire.sql`
+- Upgrading an existing Tripwire database: back it up, then run `mysql --database=tripwire < tripwire_update.sql`. The script is cumulative and non-destructive (it never drops, truncates or recreates application tables) and can be re-run safely.
 - For development: create an EVE dump database, define it's name later in `config.php`. Download from: https://www.fuzzwork.co.uk/dump/ To download the latest use the following link: https://www.fuzzwork.co.uk/dump/mysql-latest.tar.bz2. You do not need a copy of the SDE to run Tripwire (since 1.21).
 - Clone the Tripwire repo to where you are going to serve to the public OR manually download repo and copy files yourself
 - Copy `db.inc.example.php` to `db.inc.php` - modify file per your setup
@@ -148,3 +149,21 @@ If you see that the .env file is not being loaded, run the stack with
 - Tripwire Public in-game channel
 - Discord: https://discord.gg/xjFkJAx
 - Josh Glassmaker AKA Daimian Mercer (Creator)
+
+## End-to-end tests
+
+`npm run e2e` drives a real browser (Playwright) against a running Tripwire
+-- by default `http://localhost:8080`, the OrbStack preview through the SSH
+tunnel -- and exercises the ways signatures get in: typed into the dialog and
+saved with Enter or the Add button, pasted with Ctrl-V, pasted with the
+Paste-scan button, re-pasted (update, not duplicate), and undone. It also
+covers the traps a person hits: Tab after the id auto-advances, a whole
+`ABC-123` typed into the first field, and Ctrl-V while the search box has
+focus. Each test creates and removes its own `ZZQ-*` signatures.
+
+    E2E_BASE_URL=https://host:port E2E_USER=... E2E_PASS=... npm run e2e
+    npm run e2e:headed          # watch it
+
+The suite signs in once (Tripwire rate-limits logins to one per IP per 30s)
+and keeps the session in `e2e/.auth/`, which is git-ignored.
+

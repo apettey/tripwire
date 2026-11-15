@@ -140,7 +140,7 @@ var options = new function() {
 		}
 
 		// Characters in Options
-		$("#dialog-options #characters").html("<img src='https://image.eveonline.com/Character/"+init.characterID+"_64.jpg' />");
+		$("#dialog-options #characters").html("<img class='avatar avatar-lg' alt='' src='https://images.evetech.net/characters/"+init.characterID+"/portrait?size=128' />");
 
 		// Active mask
 		$("#dialog-options input[name='mask']").filter("[value='"+this.masks.active+"']").attr("checked", true);

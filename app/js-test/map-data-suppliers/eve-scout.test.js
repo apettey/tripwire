@@ -2,6 +2,7 @@ const assert = require('assert');
 const { include, fakeAjax } = require('../helpers/helpers');
 
 fakeAjax();
+include('app/js/map-data-suppliers/_registry');   // eve-scout registers itself with this
 include('app/js/map-data-suppliers/eve-scout');
 //include('app/js/map-data-suppliers/old-thera');
 //const eveScout = thera;

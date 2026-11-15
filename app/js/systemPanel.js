@@ -3,12 +3,22 @@ const systemPanel = new function() {
 		// Update dependent controls: Path to chain/home
 		const exits = chain.data.exits;
 		var html = [
+			renderFlare(),
 			renderRoute((exits || []).map(function(x) { return x  - 30000000; }), true, 'chain', 'To chain'), 
 			renderRoute(guidance_profiles.blueLootSystems, false, 'blue-loot', 'Blue loot buyer')
 		].filter(function(x) { return x; }).join('');
 		$("#infoExtra").html(html);
 		Tooltips.attach($("#infoExtra [data-tooltip]"));
 	};
+	
+	function renderFlare() {
+		const flare = chain.data.flares[viewingSystemID];
+		return flare ? '<div id="flare-text">Flared ' +
+			'<span class="flare-' + flare.flare + '">' + flare.flare + 
+			(flare.reason ? ': ' + _.escape(flare.reason) : '') +
+			'</span></div>'
+		: undefined;
+	}
 	
 	function renderRoute(targets, addPathHome, cssClass, categoryText) {
 		const path = targets ? guidance.findShortestPath(tripwire.map.shortest, viewingSystemID - 30000000, targets) : null;

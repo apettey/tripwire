@@ -16,7 +16,7 @@ tripwire.systemChange = function(systemID, mode) {
         // Reset signatures
         $("#sigTable span[data-age]").countdown("destroy");
         $("#sigTable tbody").empty();
-        $("#signature-count").text('0');
+        $("#signature-count").text('');
         tripwire.signatures.list = {};
         tripwire.client.signatures = null;
 
@@ -118,7 +118,7 @@ tripwire.systemChange = function(systemID, mode) {
 		for (var fi in options.favorites) {
 			const f = options.favorites[fi];
 			const path = guidance.findShortestPath(tripwire.map.shortest, f, viewingSystemID);
-			if(path) { $('#infoStatics').append('<p><b><a href=".?system=' + tripwire.systems[f].name + '">' +tripwire.systems[f].name + '</a></b>: ' + systemRendering.renderPath(path) + '</p>'); }
+			if(path) { $('#infoStatics').append('<p style="margin:0"><b><a href=".?system=' + tripwire.systems[f].name + '">' +tripwire.systems[f].name + '</a></b>: ' + systemRendering.renderPath(path) + '</p>'); }
 		}
     }
 
@@ -132,6 +132,9 @@ tripwire.systemChange = function(systemID, mode) {
     $("#infoWidget .infoLink").each(function() {
         this.href = $(this).data("href").replace(/\$systemName/gi, system.name).replace(/\$systemID/gi, systemID);
     });
+
+    // In wormhole space the activity graph gives way to zKillboard's kill stream.
+    if (tripwire.killStream) { tripwire.killStream.refresh(systemID); }
 
     // Reset undo/redo
     tripwire.signatures.undo[systemID] && tripwire.signatures.undo[systemID].length > 0 ? $("#undo").removeClass("disabled") : $("#undo").addClass("disabled");

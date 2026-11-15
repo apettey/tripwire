@@ -1,5 +1,5 @@
 .validation-tooltip .jBox-container, .validation-tooltip .jBox-pointer:after {
-	background: #D93627;
+	background: var(--data-danger);
 	color: white;
 	border: none;
 	font-weight: bold;
@@ -8,8 +8,8 @@
 }
 
 .jBox-container {
-	background: #333;
-	color: #CCC;
+	background: var(--n-200);
+	color: var(--n-800);
 	min-height: 20px;
 }
 
@@ -22,20 +22,20 @@
 .jBox-pointer-right { right: 2px; }
 
 .jBox-pointer:after {
-	background: #333;
+	background: var(--n-200);
 }
 
 /* jBox Notice */
 
 .jBox-Notice .jBox-container {
     border-radius: 3px;
-	box-shadow: 0 0 3px #000;
+	box-shadow: 0 0 3px var(--n-000);
 
-	color: #fff;
+	color: var(--n-999);
 	font-size: 1.1em;
-	text-shadow: 0 -1px 0 #000;
-	background: #333;
-	background-image: linear-gradient(to bottom, #444, #222);
+	text-shadow: 0 -1px 0 var(--n-000);
+	background: var(--n-200);
+	background-image: linear-gradient(to bottom, var(--n-300), var(--n-100));
 }
 
 .jBox-Notice .jBox-content {
@@ -47,38 +47,38 @@
 }
 
 .jBox-Notice-color .jBox-container {
-	text-shadow: 0 -1px 0 rgba(0, 0, 0, .3);
+	text-shadow: 0 -1px 0 var(--shadow-30);
 }
 
 .jBox-Notice-gray .jBox-container {
-	color: #666;
-	text-shadow: 0 1px 0 #fff;
-	background: #f4f4f4;
-	background-image: linear-gradient(to bottom, #fafafa, #f0f0f0);
+	color: var(--n-500);
+	text-shadow: 0 1px 0 var(--n-999);
+	background: var(--n-920);
+	background-image: linear-gradient(to bottom, var(--n-960), var(--n-900));
 }
 
 .jBox-Notice-red .jBox-container {
-	background: #b02222;
-	background-image: linear-gradient(to bottom, #ee2222, #b02222);
+	background: var(--ui-red);
+	background-image: linear-gradient(to bottom, var(--ui-red-lit), var(--ui-red));
 }
 
 .jBox-Notice-green .jBox-container {
-	background: #70a800;
-	background-image: linear-gradient(to bottom, #95cc2a, #70a800);
+	background: var(--ui-green);
+	background-image: linear-gradient(to bottom, var(--ui-green-lit), var(--ui-green));
 }
 
 .jBox-Notice-blue .jBox-container {
-	background: #2b91d9;
-	background-image: linear-gradient(to bottom, #5abaff, #2b91d9);
+	background: var(--ui-blue);
+	background-image: linear-gradient(to bottom, var(--ui-blue-lit), var(--ui-blue));
 }
 
 .jBox-Notice-yellow .jBox-container {
-	color: #744700;
-	text-shadow: 0 1px 0 rgba(255, 255, 255, .6);
-	background: #ffb11f;
-	background-image: linear-gradient(to bottom, #ffd665, #ffb11f);
+	color: var(--data-brown);
+	text-shadow: 0 1px 0 var(--glow-60);
+	background: var(--ui-amber);
+	background-image: linear-gradient(to bottom, var(--ui-amber-lit), var(--ui-amber));
 }
 
 .jBox-Notice-yellow .jBox-container a {
-	color: #999;
+	color: var(--n-650);
 }

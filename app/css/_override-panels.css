@@ -1,0 +1,75 @@
+/* Panel cards.
+   The four panels already drag and resize (gridster, via "Customise layout").
+   What they lacked was any sign of being cards: no title, no edge, no way to
+   put one away. Added here rather than in tripwire.php so the markup stays
+   upstream's. */
+
+.cardlike.gridWidget {
+	border: 1px solid var(--n-300);
+	border-radius: 3px;
+	box-shadow: 0 1px 3px var(--shadow-25);
+}
+
+.cardlike.gridWidget > .controls {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	border-bottom: 1px solid var(--n-300);
+	background: var(--n-120);
+	padding: 3px 6px;
+	border-radius: 3px 3px 0 0;
+}
+
+/* The controls bar mixes floated children with the flow; let the floated
+   group sit at the end rather than fighting the flex line. */
+.cardlike.gridWidget > .controls > div[style*="float"] {
+	margin-left: auto;
+	float: none !important;
+}
+
+.panel-title {
+	flex: 0 0 auto;
+	color: var(--n-750);
+	font-weight: bold;
+	font-size: .95em;
+	text-transform: uppercase;
+	letter-spacing: .1em;
+	white-space: nowrap;
+	cursor: default;
+	
+	display: none;
+}
+.cardlike .panel-title { display: auto; }
+
+.panel-hide {
+	flex: 0 0 auto;
+	order: 99;
+	margin-left: 6px;
+	padding: 0 4px;
+	color: var(--n-500);
+	cursor: pointer;
+	font-size: 1.3em;
+	line-height: 1;
+	
+	display: none; /* because, in this build, there is no way to put them back */	
+}
+
+.panel-hide:hover,
+.panel-hide:focus-visible {
+	color: var(--data-critical);
+	outline: none;
+}
+
+/* A hidden panel leaves its grid cell empty rather than reflowing the others.
+   Gridster positions every widget absolutely from saved coordinates, so
+   collapsing the gap would mean rewriting those coordinates and losing the
+   layout the user arranged. Bring it back from the palette. */
+.gridWidget.panel-hidden {
+	display: none;
+}
+
+/* While the layout is being edited, make the cards read as movable. */
+#layout.active ~ * .gridWidget,
+.gridster.editing .gridWidget {
+	border-color: var(--accent, var(--data-info));
+}

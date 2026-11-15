@@ -28,9 +28,7 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
         // so the list comes back whole.
         data.signatureCount = tripwire.forceFullSync ? -1 : tripwire.serverSignatureCount;
         data.signatureTime = tripwire.forceFullSync ? "1970-01-01 00:00:00" : maxTimeByProperty(this.client.signatures, "modifiedTime");
-
-        data.flareCount = chain.data.flares ? chain.data.flares.flares.length : 0;
-        data.flareTime = chain.data.flares ? chain.data.flares.last_modified : 0;
+        tripwire.forceFullSync = false;
 
         data.commentCount = Object.keys(this.comments.data||{}).length;
         data.commentTime = maxTimeByProperty(this.comments.data, "modified");
@@ -113,10 +111,10 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
             }
 
             if (data.wormholes || data.occupied || data.flares) {
-                tripwire.chainMap.parse({"map": data.wormholes || null, "occupied": data.occupied || null, "flares": data.flares || null});
+                chain.draw({"map": data.wormholes || null, "occupied": data.occupied || null, "flares": data.flares || null});
             } else if (chain.data.occupied && chain.data.occupied.length && !data.occupied) {
                 // send update to remove all occupied system indicators
-                tripwire.chainMap.parse({"occupied": []});
+                chain.draw({"occupied": []});
             }
 
 			tripwire.updateReturnStatus();
@@ -131,7 +129,14 @@ tripwire.sync = function(mode, data, successCallback, alwaysCallback) {
         tripwire.data = {tracking: {}, esi: {}};
         successCallback ? successCallback(data) : null;
     }).always(function(data, status) {
-        tripwire.timer = setTimeout("tripwire.refresh();", tripwire.refreshRate);
+        // Back off hard while the tab is hidden. Nobody is reading a chain
+        // they cannot see, and a corp leaves these open all day -- at five
+        // seconds each that is 720 pointless round trips an hour per idle tab.
+        // Returning is instant: visibility-refresh.js refreshes on becoming
+        // visible, so nothing is stale on the way back.
+        // (Also drops the string form, which is an implicit eval.)
+        tripwire.timer = setTimeout(function() { tripwire.refresh(); }, // closure so 'this' is the right thing inside 'refresh'
+            document.hidden ? tripwire.refreshRateHidden : tripwire.refreshRate);
 
         alwaysCallback ? alwaysCallback(data) : null;
 

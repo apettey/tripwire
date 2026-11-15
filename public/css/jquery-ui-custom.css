@@ -4,17 +4,21 @@
     font-size: 1.1em;
 }
 
+.ui-widget-reset {
+	font-size: calc(1em / 1.1); /* resets the above */
+}
+
 .ui-widget input {
     font-family: Verdana,Arial,sans-serif;
     font-size: 1em;
 }
 
 .ui-widget.ui-widget-content, .ui-widget-content {
-    border: 1px solid #404040;
+    border: 1px solid var(--n-250);
 }
 
 .ui-widget {
-	background: #111;
+	background: var(--n-050);
 }
 
 .ui-state-hover .ui-icon, .ui-state-focus .ui-icon, .ui-button:hover .ui-icon, .ui-button:focus .ui-icon, .ui-state-active .ui-icon {
@@ -22,29 +26,29 @@
 }
 
 .ui-widget-content .ui-accordion-header {
-    border: 1px solid #000;
-	background-color: rgba(40,40,40, 1);
-	background-image: linear-gradient(to top,rgba(0,0,0,0.7) 0,rgba(0,0,0,0) 100%);
+    border: 1px solid var(--n-000);
+	background-color: var(--n-250);
+	background-image: linear-gradient(to top,var(--scrim-70) 0,var(--n-000) 100%);
     font-weight: normal;
     color: #ccc;
 }	
 
 .ui-widget-content .ui-accordion-header-active {
-    border: 1px solid #000;
+    border: 1px solid var(--n-000);
     color: #fff;
 	font-weight: bold;
 }
 
 .ui-widget .ui-state-default {
-	background: #111;
+	background: var(--n-050);
     font-weight: normal;
-    color: #999;
+    color: var(--n-650);
 }
 
 .ui-widget .ui-state-hover {
-	background: #333;
+	background: var(--n-200);
     font-weight: normal;
-    color: #aaa;
+    color: var(--n-700);
 }
 
 .ui-selectmenu-text {
@@ -59,11 +63,11 @@
 /** Menu Styling **/
 .ui-menu {
 	padding: 2px;
-	background: rgba(29, 29, 29, 1);
+	background: var(--n-100);
 	background-image: none;
 
 	min-width: 7em;
-	color: #BBB;
+	color: var(--n-750);
 
 	border: none;
     border-radius: 3px;
@@ -82,13 +86,13 @@
     padding: 2px .4em;
     display: inline-block;
     width: 100%;
-    color: #BBB;
+    color: var(--n-750);
     box-sizing: border-box;
 }
 
 .ui-menu-item .ui-menu-item-wrapper:hover, .ui-menu-item .ui-menu-item-wrapper.ui-state-active {
-    background: #222;
-    color: #CCC;
+    background: var(--n-100);
+    color: var(--n-800);
 }
 
 .ui-menu-item:last-child .ui-menu-item-wrapper:hover, .ui-menu-item:last-child .ui-menu-item-wrapper.ui-state-active {
@@ -97,18 +101,18 @@
 }
 
 .ui-menu li.ui-menu-item a {
-	color: #BBB;
+	color: var(--n-750);
 	font-weight: normal;
 	text-decoration: none;
 }
 
 .ui-menu .ui-state-focus, .ui-menu .ui-state-active {
 	margin: 0;
-	color: #aaa;
+	color: var(--n-700);
 }
 
 li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
-	color: #CCC;
+	color: var(--n-800);
 }
 
 .ui-menu .ui-menu-divider, .ui-menu .ui-state-disabled {
@@ -119,12 +123,12 @@ li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
 
 .ui-menu-item.ui-state-focus {
 	border: none;
-	background: #CCC;
+	background: var(--n-800);
 }
 
 .ui-menu-item.ui-state-active {
 	border: none;
-	background: #AAA;
+	background: var(--n-700);
 }
 /** Menu Styling  **/
 
@@ -134,22 +138,22 @@ li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
 }
 
 .ui-dialog, .dialog-like {
-	color: #AAA;
+	color: var(--n-700);
 	width: auto;
 	height: auto;
 
-	border: 1px solid #444;
+	border: 1px solid var(--n-300);
     border-radius: 5px;
 
-	background-color: rgba(40,40,40, 1);
-	background-image: linear-gradient(to bottom,rgba(0,0,0,0.7) 0,rgba(0,0,0,0) 100%);
+	background-color: var(--n-250);
+	background-image: linear-gradient(to bottom,var(--scrim-70) 0,var(--n-000) 100%);
 }
 
 .ui-widget-overlay {
 	background: none;
 }
 
-.ui-widget.ui-widget-content a { color: #ccc }
+.ui-widget.ui-widget-content a { color: var(--n-800) }
 
 .ui-dialog .ui-dialog-title {
     padding-bottom: 3px;
@@ -158,7 +162,7 @@ li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
 .ui-dialog .ui-dialog-titlebar {
 	background: none;
 	border: none;
-	color: #CA7;
+	color: var(--ui-warm-tint);
 }
 
 .ui-dialog .ui-dialog-titlebar .ui-dialog-titlebar-close {
@@ -171,7 +175,7 @@ li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
 }
 
 .ui-dialog .ui-dialog-content, .ui-widget-content {
-	color: #AAA;
+	color: var(--n-700);
 	overflow: visible;
 }
 
@@ -190,10 +194,32 @@ li.ui-menu-item.ui-state-focus > a, li.ui-menu-item.ui-state-active > a {
 }
 
 .ui-dialog-shadow {
-	-webkit-box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
-	-moz-box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
-	box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+	-webkit-box-shadow: 0px 0px 10px var(--scrim-60);
+	-moz-box-shadow: 0px 0px 10px var(--scrim-60);
+	box-shadow: 0px 0px 10px var(--scrim-60);
 }
 
-.ui-dialog hr { border-color: black }
+.ui-dialog hr { border-color: var(--n-000); }
+
+/*Dialog layout - prevent dialogs from overflowing the page and reinstate scrollbars if necessary */
+
+.ui-dialog {
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100vh - 2rem);
+	max-width: calc(100vw - 2rem);
+	box-sizing: border-box;
+}
+
+.ui-dialog > .ui-dialog-titlebar,
+.ui-dialog > .ui-dialog-buttonpane { flex: 0 0 auto; }
+
+.ui-dialog > .ui-dialog-content {
+	flex: 1 1 auto;
+	min-height: 0;          /* without this a flex child refuses to shrink */
+	overflow-y: auto;
+	max-height: none !important;
+	height: auto !important;
+}
+
 /** Dialog Styling **/

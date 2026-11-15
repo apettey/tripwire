@@ -17,20 +17,22 @@ html, body {
 html {
     font-size: .6em;
     font-family: Verdana, 'Helvetica Neue', Arial, sans-serif;
-    color: #888;
+    color: var(--n-600);
     line-height: 1.1;
     min-height: 100%;
 }
 
+p { margin-bottom: 0.5em; }
+
 a {
 	text-decoration: none;
 	font-weight: bold;
-	color: #CCC;
+	color: var(--n-800);
 }
 
 a:hover {
 	text-decoration: underline;
-	color: #FFF;
+	color: var(--n-999);
 }
 
 hr { margin: 4px; }
@@ -78,60 +80,65 @@ i.disabled {
 }
 
 i.active, a.active {
-	color: orange;
+	color: var(--active-orange);
 }
 
 /* All of these styles want to be more specific than a normal class selector so the text colour wins */
 body .wh, body .class-1, body .class-2, body .class-3 {
-	color: #4399F0;
+	color: var(--data-info);
 }
 
 body .class-4, body .class-5 {
-	color: #9060f0;
+	color: var(--data-loot-purple);
 }
 
 body .class-6 {
-	color: #f06090;
+	color: var(--data-loot-pink);
 }
 
 body .class-12 {	/* Thera */
-	color: #ffc800;
+	color: var(--data-loot-gold);
 }
 
 body .class-15, body .class-16, body .class-17 {	/* Drifter */
-	color: #f06060;
+	color: var(--data-loot-red);
 }
 
-body .hisec, body .stable, body .frig {
-	color: #50D25A;
+body .hisec, body .stable, body .frig, .flare-green {
+	color: var(--data-good);
 }
 
-body .lowsec, body .destab {
-	color: #F58504;
+body .lowsec, body .destab, .flare-yellow {
+	color: var(--data-loot-orange);
 }
 
-body .nullsec, body .critical {
-	color: #FF4747;
+body .nullsec, body .critical, .flare-red {
+	color: var(--data-critical);
 }
 
-body .triglavian { color: #FF2060; }
+body .triglavian { color: var(--data-triglavian); }
+body .drifter { color: var(--data-loot-red); }
 
-.blue-loot, .blue-loot .hisec { color: #6060f0; }
+body .supercritical, body .eol-1h { color: var(--data-supercritical); }
+
+.blue-loot, .blue-loot .hisec { color: var(--data-loot-blue); }
+
+.offline {color: #999; font-style: italic }
 
 .jumps {
-	color: #3366CC;
+	color: var(--chart-1);
 }
 
 .pods {
-	color: #DC3912;
+	color: var(--chart-2);
 }
 
 .ships {
-	color: #FF9900;
+	color: var(--chart-3);
 }
 
 .npcs {
-	color: #109618;
+	color: var(--chart-4);
 }
 
 .thermal-icon {
@@ -161,7 +168,7 @@ body .triglavian { color: #FF2060; }
 	body {
 		/* Standards - Firefox. Use slightly less contrasty colours because the bar will be wider */
 		scrollbar-width: thin;
-		scrollbar-color: #444 #111;
+		scrollbar-color: var(--n-300) var(--n-050);
 	}
 }
 
@@ -177,9 +184,9 @@ body .triglavian { color: #FF2060; }
     background-color: black;
 }
 
-::-webkit-scrollbar-track { background-color: #3b3b3b; }
-::-webkit-scrollbar-thumb {	background-color: #666;}
-::-webkit-scrollbar-thumb:hover { background-color: #999;}
+::-webkit-scrollbar-track { background-color: var(--n-220); }
+::-webkit-scrollbar-thumb {	background-color: var(--n-500);}
+::-webkit-scrollbar-thumb:hover { background-color: var(--n-650);}
 
 ::-webkit-scrollbar-corner {
 	background-color: transparent;
@@ -187,19 +194,19 @@ body .triglavian { color: #FF2060; }
 /* ---------- */
 
 ::-webkit-input-placeholder {
-   color: #888;
+   color: var(--n-600);
 }
 
 :-moz-placeholder { /* Firefox 18- */
-   color: #888;
+   color: var(--n-600);
 }
 
 ::-moz-placeholder {  /* Firefox 19+ */
-   color: #888;
+   color: var(--n-600);
 }
 
 :-ms-input-placeholder {
-   color: #888;
+   color: var(--n-600);
 }
 
 @-webkit-keyframes spin {

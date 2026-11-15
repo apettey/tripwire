@@ -20,13 +20,15 @@ const systemAnalysis = new function() {
 		
 		// Calculated final values
 		r.class = (!r.class || Array.isArray(r.class)) ? r.class : [1 * r.class];
-		r.systemTypeClass = r.class ? 'wh class-' + r.class[0] :
+		r.systemTypeClass = r.genericLabel === 'Drifter' ? 'wh drifter' :
+			r.class ? 'wh class-' + r.class[0] :
 			r.factionID == 500026 ? 'triglavian' :
 			r.security >= 0.45 ? 'hisec' :
 			r.security > 0.0 ? 'lowsec' :
 			r.security <= 0.0 ? 'nullsec' :
 			'unknown';
-		r.systemTypeName = r.class ? 'C' + r.class.join('/') :
+		r.systemTypeName = r.genericLabel === 'Drifter' ? 'Drifter' :
+			r.class ? 'C' + r.class.join('/') :
 			r.factionID == 500026 ? 'Trig' :
 			r.baseSecurity >= 0.45 ? 'HS' :
 			r.baseSecurity > 0.0 ? 'LS' :
@@ -54,6 +56,7 @@ const systemAnalysis = new function() {
 	function classForTypeName(leadsTo) {
 		return leadsTo && leadsTo.substring(0, 6) == 'Class-' ? [1 * leadsTo.substring(6)] :
 			'Dangerous' == leadsTo ? [4,5] :
+			'Drifter' == leadsTo ? [14,15,16,17,18] :
 			'Unknown' == leadsTo ? [2,3] :
 			'Unknown (small)' == leadsTo ? [1,2,3,13] :
 			undefined;
@@ -75,6 +78,6 @@ const systemAnalysis = new function() {
 			leadsToPointer == "Triglavian" ? 500026 :
 			undefined;
 		
-		return { security: nodeSecurity, class: nodeClass, factionID: nodeFaction };
+		return { security: nodeSecurity, class: nodeClass, factionID: nodeFaction, genericLabel: leadsToPointer };
 	}
 }

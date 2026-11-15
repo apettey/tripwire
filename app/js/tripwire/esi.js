@@ -27,9 +27,11 @@ tripwire.esi = function() {
 			shipName: character.shipName,
 			shipTypeID: character.shipTypeID,
 			shipTypeName: character.shipTypeName,
+			online: character.online,
 			massOptions: tripwire.massOptions,
-			characterOptions: options.tracking.characterOptions[character.characterID]
+			characterOptions: options.tracking.characterOptions[character.characterID],
 		};				
+		console.info('Updating tracking for ' + character.characterName, tripwire.data.tracking[character.characterID]);
 	}
 	this.esi.updateTracking = updateTracking;	// so it can be called outside
 
@@ -67,16 +69,18 @@ tripwire.esi = function() {
 						updateTracking(character);
                     }
 
-                    if (character.stationID != data.station_id) {
-                        character.stationID = data.station_id || null;
+					const stationID = data.station_id || data.structure_id;
+                    if (character.stationID != stationID) {
+                        character.stationID = stationID || null;
 
-                        if (data.station_id) {
-                            tripwire.esi.stationLookup(data.station_id, this.characterID)
+                        if (stationID) {
+                            tripwire.esi.stationLookup(stationID, this.characterID)
                                 .always(function(data) {
                                     var character = tripwire.esi.characters[this.reference];
 
                                     character.stationName = data.name || null;
-                                    $("#tracking .tracking-clone[data-characterid='"+ this.reference +"']").find(".station").html(data.name.substring(0, 17) + "..." || "&nbsp;").attr("data-tooltip", data.name);
+									const stationDisplayName = data.name || "&nbsp;";
+                                    $("#tracking .tracking-clone[data-characterid='"+ this.reference +"']").find(".station").html(stationDisplayName.length > 18 ? stationDisplayName.substring(0, 17) : stationDisplayName).attr("data-tooltip", stationDisplayName);
                                     Tooltips.attach($("#tracking .tracking-clone[data-characterid='"+ this.reference +"'] .station[data-tooltip]"));
 
                                     updateTracking(character);
@@ -201,10 +205,15 @@ tripwire.esi = function() {
         clearTimeout(onlineTimer);
 
         for (characterID in tripwire.esi.characters) {
-            var character = tripwire.esi.characters[characterID];
+            const character = tripwire.esi.characters[characterID];
 
             tripwire.esi.characterStatus(character.characterID, character)
                 .done(function(data) {
+					if(data.online !== character.online) {
+						character.online = data.online;
+						updateTracking(character);
+					}
+					
                     if (data.online) {
                         $("#tracking .tracking-clone[data-characterid='"+ this.reference.characterID +"']").find(".online").removeClass("critical").addClass("stable");
                     } else {
@@ -471,7 +480,7 @@ tripwire.esi = function() {
                 // instead of letting tracking stop silently. A character the user just removed is already gone from the list.
                 var gone = tripwire.esi.characters[characterID];
                 if (gone && gone.characterName && $("#tracking .tracking-clone[data-characterid='" + characterID + "']").length) {
-                    Notify.trigger(gone.characterName + "'s EVE token was refused. Link the character again to keep tracking.", "yellow", 15000, "esi-dropped-" + characterID);
+                    Notify.trigger(gone.characterName + "'s EVE token was refused. Link the character again in Settings to keep tracking.", "yellow", 15000, "esi-dropped-" + characterID);
                 }
                 delete tripwire.esi.characters[characterID];
                 tracking.remove(characterID);

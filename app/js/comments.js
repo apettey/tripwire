@@ -1,4 +1,7 @@
 $("body").on("dblclick", ".comment", function(e) {
+	// Once a note is being edited, double-click is the editor's (native word
+	// selection), not the display-mode shortcut. (Squizz, 6d65106.)
+	if ($(e.target).closest(".rte").length) return;
 	e.preventDefault();
 	document.getSelection().removeAllRanges();
 	$(this).find(".commentEdit").click();
@@ -8,16 +11,18 @@ $("body").on("click", ".commentEdit", function(e) {
 	e.preventDefault();
 
 	// Prevent multiple editors
-	if ($(".cke").length) return false;
+	if ($(".rte").length) return false;
 
 	var $comment = $(this).closest(".comment");
 
 	$comment.find(".commentToolbar").hide();
 
-	CKEDITOR.replace($comment.find(".commentBody").attr("id"), CKConfig).on("instanceReady", function() {
+	tripwire.editor.replace($comment.find(".commentBody").attr("id"), function(inst) {
 		$comment.find(".commentStatus").text("");
 		$comment.find(".commentFooter").show();
 		$comment.find(".commentFooter .commentControls").show();
+		// The editor opened without focus, so a paste went to the page.
+		if (inst && inst.focus) { inst.focus(); }		
 	});
 
 	tripwire.activity.editComment = $comment.data("id");
@@ -33,7 +38,14 @@ $("body").on("click", ".commentSave, .commentCancel", function(e) {
 	$this.attr("disabled", "true");
 
 	if ($this.hasClass("commentSave")) {
-		var data = {"mode": "save", "commentID": $comment.data("id"), "systemID": $comment.find(".commentSticky").hasClass("active") ? 0 : viewingSystemID, "comment": CKEDITOR.instances[$comment.find(".commentBody").attr("id")].getData()};
+		var commentHtml = tripwire.editor.get($comment.find(".commentBody").attr("id")).getData();
+		// An editor's idea of empty is <div><br></div>; do not save that.
+		if (!noteHtmlHasContent(commentHtml)) {
+			$comment.find(".commentStatus").text("Add content before saving.");
+			$this.removeAttr("disabled");
+			return false;
+		}
+		var data = {"mode": "save", "commentID": $comment.data("id"), "systemID": $comment.find(".commentSticky").hasClass("active") ? 0 : viewingSystemID, "comment": commentHtml};
 
 		$.ajax({
 			url: "comments.php",
@@ -46,15 +58,21 @@ $("body").on("click", ".commentSave, .commentCancel", function(e) {
 				$comment.find(".commentCreated").text("Posted by " + data.comment.createdByName + " at " + data.comment.createdDate);
 				Tooltips.attach($comment.find("[data-tooltip]"));
 
-				CKEDITOR.instances[$comment.find(".commentBody").attr("id")].destroy(false);
+				tripwire.editor.destroy($comment.find(".commentBody").attr("id"), false);
 				$comment.attr("data-id", data.comment.id);
 				$comment.find(".commentToolbar").show();
 				$comment.find(".commentFooter").hide();
 				$this.removeAttr("disabled");
 			}
+		}).fail(function(xhr) {
+			// The server refused (no DOM extension, or nothing to save): say so
+			// and give the button back rather than leaving it dead.
+			var body = xhr.responseJSON || {};
+			$comment.find(".commentStatus").text(body.error || "The note could not be saved.");
+			$this.removeAttr("disabled");
 		});
 	} else {
-		CKEDITOR.instances[$comment.find(".commentBody").attr("id")].destroy(true);
+		tripwire.editor.destroy($comment.find(".commentBody").attr("id"), true);
 
 		if (!$comment.attr("data-id")) {
 			$comment.remove();
@@ -118,7 +136,7 @@ $("body").on("click", "#add-comment", function(e) {
 	e.preventDefault();
 
 	// Prevent multiple editors
-	if ($(".cke").length) return false;
+	if ($(".rte").length) return false;
 
 	var $comment = $(".comment:last").clone();
 	var commentID = $(".comment:visible:last .commentBody").attr("id") ? $(".comment:visible:last .commentBody").attr("id").replace("comment", "") + 1 : 0;

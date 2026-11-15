@@ -75,7 +75,7 @@
 }
 [data-icon="pulsar"]:before {
 	content: "\e001";
-	color: #428BCA;
+	color: var(--data-link);
 }
 [data-icon="connection"]:before {
 	content: "\e002";
@@ -85,11 +85,11 @@
 }
 [data-icon="magnetar"]:before {
 	content: "\e004";
-	color: #E06FDF;
+	color: var(--data-magenta);
 }
 [data-icon="wolf-rayet"]:before {
 	content: "\e005";
-	color: #e28a0d;
+	color: var(--data-bronze);
 }
 [data-icon="portrait"]:before {
 	content: "\e006";
@@ -124,7 +124,7 @@
 }
 [data-icon="blackhole"]:before {
 	content: "\e010";
-	color: #f0f0f0;
+	color: var(--n-900);
 }
 [data-icon="fullscreen"]:before {
 	content: "\e011";
@@ -167,7 +167,7 @@
 }
 [data-icon="cataclysmic-variable"]:before {
 	content: "\e611";
-	color: #FFFFBB;
+	color: var(--data-pale-yellow);
 }
 [data-icon="layout"]:before {
 	content: "\e603";

@@ -42,23 +42,27 @@ html .ui-selectmenu-menu ul {
 }
 
 #sigTable th {
-	background: rgba(51, 51, 51, .7);
-	border: 1px solid #000;
+	background: var(--scrim-n200);
+	border: 1px solid var(--n-000);
 }
 
 #sigTable td {
-	background: rgba(17, 17, 17, .7);
-	border: 1px solid #000;
+	background: var(--scrim-n050);
+	border: 1px solid var(--n-000);
 	cursor: default;
 }
 
 #sigTable tr:hover td {
-	background-color: #444;
+	background-color: var(--n-300);
 }
 
 #sigTable tr.selected td {
-	background-color: #333;
+	background-color: var(--n-200);
 }
+
+#sigTable .sig-signature { background: rgba(128, 0, 0, 0.4); }
+#sigTable .sig-anomaly { background: rgba(0, 128, 0, 0.4); }
+#sigTable .sig-wormhole { background: rgba(90, 0, 70, 0.4); }
 
 #sigTable th:nth-child(1) {
 	width: 50px;
@@ -105,11 +109,11 @@ html .ui-selectmenu-menu ul {
 }
 
 #sigTable a.siteLink {
-	color: #990;
+	color: var(--data-olive);
 }
 
 #sigTable tbody .disabled {
-	color: #444;
+	color: var(--n-300);
 }
 
 .return-visible .return-link { display: inline }
@@ -135,7 +139,7 @@ html .ui-selectmenu-menu ul {
 .tablesorter .headerSortUp,
 .tablesorter .tablesorter-headerSortUp,
 .tablesorter .tablesorter-headerAsc {
-	color: #eee;
+	color: var(--n-880);
 }
 
 .tablesorter .headerSortUp i:before,
@@ -147,7 +151,7 @@ html .ui-selectmenu-menu ul {
 .tablesorter .headerSortDown,
 .tablesorter .tablesorter-headerSortDown,
 .tablesorter .tablesorter-headerDesc {
-	color: #eee;
+	color: var(--n-880);
 }
 
 .tablesorter .headerSortDown i:before,
@@ -159,6 +163,8 @@ html .ui-selectmenu-menu ul {
 .tablesorter thead .sorter-false {
 	cursor: default;
 }
+
+#sig-breakdown { font-size: 90%; vertical-align: middle; }
 
 #dialog-signature hr {
 	margin-left: 15px;
@@ -225,16 +231,8 @@ html .ui-selectmenu-menu ul {
 	transform-origin: left top 0;
 }
 
-#dialog-signature #wormhole .side:first-child .sideLabel  {
+#dialog-signature #wormhole .side .sideLabel  {
 	bottom: 0px;
-	width: 90px;
-	text-align: left;
-}
-
-#dialog-signature #wormhole .side:last-child .sideLabel {
-	bottom: -70px;
-	width: 135px;
-	text-align: right;
 }
 
 .custom-combobox {
@@ -301,10 +299,10 @@ html .ui-selectmenu-menu ul {
 	word-spacing: normal;
 	font-size: 0.875rem;
 	word-wrap: break-word;
-	background-color: #fff;
+	background-color: var(--n-999);
 	-webkit-background-clip: padding-box;
 					background-clip: padding-box;
-	border: 1px solid rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--shadow-20b);
 	border-radius: 0.3rem;
 }
 
@@ -320,13 +318,13 @@ html .ui-selectmenu-menu ul {
 .popover.popover-top::before, .popover.bs-tether-element-attached-bottom::before {
 	bottom: -11px;
 	margin-left: -11px;
-	border-top-color: rgba(0, 0, 0, 0.25);
+	border-top-color: var(--shadow-25);
 }
 
 .popover.popover-top::after, .popover.bs-tether-element-attached-bottom::after {
 	bottom: -10px;
 	margin-left: -10px;
-	border-top-color: #fff;
+	border-top-color: var(--n-999);
 }
 
 .popover.popover-right, .popover.bs-tether-element-attached-left {
@@ -341,13 +339,13 @@ html .ui-selectmenu-menu ul {
 .popover.popover-right::before, .popover.bs-tether-element-attached-left::before {
 	left: -11px;
 	margin-top: -11px;
-	border-right-color: rgba(0, 0, 0, 0.25);
+	border-right-color: var(--shadow-25);
 }
 
 .popover.popover-right::after, .popover.bs-tether-element-attached-left::after {
 	left: -10px;
 	margin-top: -10px;
-	border-right-color: #fff;
+	border-right-color: var(--n-999);
 }
 
 .popover.popover-bottom, .popover.bs-tether-element-attached-top {
@@ -362,13 +360,13 @@ html .ui-selectmenu-menu ul {
 .popover.popover-bottom::before, .popover.bs-tether-element-attached-top::before {
 	top: -11px;
 	margin-left: -11px;
-	border-bottom-color: rgba(0, 0, 0, 0.25);
+	border-bottom-color: var(--shadow-25);
 }
 
 .popover.popover-bottom::after, .popover.bs-tether-element-attached-top::after {
 	top: -10px;
 	margin-left: -10px;
-	border-bottom-color: #f7f7f7;
+	border-bottom-color: var(--n-940);
 }
 
 .popover.popover-bottom .popover-title::before, .popover.bs-tether-element-attached-top .popover-title::before {
@@ -379,7 +377,7 @@ html .ui-selectmenu-menu ul {
 	width: 20px;
 	margin-left: -10px;
 	content: "";
-	border-bottom: 1px solid #f7f7f7;
+	border-bottom: 1px solid var(--n-940);
 }
 
 .popover.popover-left, .popover.bs-tether-element-attached-right {
@@ -394,21 +392,21 @@ html .ui-selectmenu-menu ul {
 .popover.popover-left::before, .popover.bs-tether-element-attached-right::before {
 	right: -11px;
 	margin-top: -11px;
-	border-left-color: rgba(0, 0, 0, 0.25);
+	border-left-color: var(--shadow-25);
 }
 
 .popover.popover-left::after, .popover.bs-tether-element-attached-right::after {
 	right: -10px;
 	margin-top: -10px;
-	border-left-color: #fff;
+	border-left-color: var(--n-999);
 }
 
 .popover-title {
 	padding: 8px 14px;
 	margin-bottom: 0;
 	font-size: 1rem;
-	background-color: #f7f7f7;
-	border-bottom: 1px solid #ebebeb;
+	background-color: var(--n-940);
+	border-bottom: 1px solid var(--n-870);
 	border-top-right-radius: calc(0.3rem - 1px);
 	border-top-left-radius: calc(0.3rem - 1px);
 }

@@ -45,7 +45,7 @@
 	top: 0;
 	height: 45px;
 	width: 100%;
-	background: rgba(0, 0, 0, .8);
+	background: var(--scrim-80);
 	z-index: 3;
 	line-height: 40px;
 }
@@ -70,7 +70,7 @@
 
 #version {
 	position: absolute;
-	color: #4399f0;
+	color: var(--data-info);
 	font-size: 0.4em;
 	height: 0;
 	top: 4px;
@@ -86,6 +86,8 @@
 #searchSpan {
 	display: none;
 }
+
+#user-avatar { display: none }
 
 .controls {
     position: absolute;
@@ -104,20 +106,20 @@
 
 .controls button {
 	font-size: 1em;
-    color: #666;
+    color: var(--n-500);
     margin: 2px;
     padding: 1px;
-    background: #222;
-    border: 1px solid #000;
+    background: var(--n-100);
+    border: 1px solid var(--n-000);
 	outline: 0;
     cursor: pointer;
-    background-image: linear-gradient(#222,#111);
+    background-image: linear-gradient(var(--n-100),var(--n-050));
 }
 
 .tooltip-data {
-	background: rgba(40, 40, 40, .9);
+	background: var(--scrim-n120);
 	padding: 5px;
-	color: #CCC;
+	color: var(--n-800);
 	border: none;
 	box-shadow: none;
 	-webkit-box-shadow: none;
@@ -157,7 +159,7 @@
     -o-border-radius: 1em;
     border-radius: 1em;
 
-	border: 3px solid #000;
+	border: 3px solid var(--n-000);
 }
 
 /* Spinning circle mask */
@@ -196,7 +198,7 @@ div.overlay {
 	width: 100%;
 	height: 100%;
 	opacity: 0.3;
-	background: #aaaaaa url(images/ui-bg_flat_0_aaaaaa_40x100.png) 50% 50% repeat-x;;
+	background: var(--n-700) url(images/ui-bg_flat_0_aaaaaa_40x100.png) 50% 50% repeat-x;;
 }
 
 .control-group { display:inline-block; text-align: center }
@@ -211,12 +213,12 @@ td .control-group { width: 100% }
 #activityGraphControls { padding-bottom: 8px; }
 
 #activityGraph svg > g:nth-child(3) > g > path {
-	fill: rgba(10, 10, 10, 0.6);
-	stroke: rgba(40, 40, 40, 0.8);
+	fill: var(--scrim-n020);
+	stroke: var(--stroke-n120);
 }
 
 #activityGraph svg > g:nth-child(3) > g > g > text {
-	fill: #CCC;
+	fill: var(--n-800);
 }
 
 #activityGraph svg > g:nth-child(2) > g:last-child > g {

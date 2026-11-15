@@ -8,7 +8,7 @@ DB_PORT="${DB_PORT:-3306}"
 DB_ROOT_USER="${DB_ROOT_USER:-root}"
 DB_ROOT_PASS="${DB_ROOT_PASS:-}"
 TRIPWIRE_DB="${TRIPWIRE_DB:-tripwire_database}"
-SDE_DB="${SDE_DB:-eve_dump}"
+SDE_DB="${SDE_DB:-}"  # optional; only tools/json_builder.php uses it
 
 echo "[SEED] DB_HOST=$DB_HOST; DB_PORT=$DB_PORT; TRIPWIRE_DB=$TRIPWIRE_DB; SDE_DB=$SDE_DB"
 
@@ -86,10 +86,10 @@ else
   cd "$TEMP_DIR"
   
   if ! wget --no-verbose https://www.fuzzwork.co.uk/dump/mysql-latest.tar.bz2; then
-    echo "[SEED] ERROR: Failed to download SDE data. Skipping."
+    echo "[SEED] WARNING: Failed to download SDE data. Skipping (Tripwire runs without it)."
     cd - > /dev/null
     rm -rf "$TEMP_DIR"
-    exit 1
+    exit 0
   fi
   
   echo "[SEED] Extracting SDE data..."

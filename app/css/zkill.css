@@ -1,0 +1,41 @@
+/* ── Recent kills (zKillboard data) in wormhole space ───────────────────
+   The five newest kills as hull, value and age, in our own type and
+   palette, each a link to its mail on the board. The board is credited in
+   the label; the strip is ours, so it wears either room. */
+#infoWidget.is-wormhole #activityGraph,
+#infoWidget.is-wormhole #activityGraphControls,
+#infoWidget.is-wormhole > .controls .bar-right #sys-range { display: none; }
+/* :not(.hidden): a bare class rule would outrank .hidden and keep the block shown. */
+.sys-killstream:not(.hidden) { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.sys-killstream-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-height: 18px; }
+.sys-killstream-title { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted-foreground); white-space: nowrap; }
+.sys-killstream-window { font-size: var(--fs-xs); color: var(--muted-foreground); }
+/* The external links close the section, right-aligned, as they do under the graph. */
+.sys-killstream #infoLinks.in-killstream-foot { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; border: 0; }
+.sys-killstream #infoLinks.in-killstream-foot a { letter-spacing: .12em; padding: 0; }
+
+.sys-killstream-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; min-height: 92px; }
+.sys-killstream-strip .kill {
+	display: flex; flex-direction: column; align-items: center; gap: 3px;
+	padding: 6px 2px 5px; min-width: 0;
+	border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+	background: var(--card); color: var(--foreground); text-decoration: none;
+	transition: border-color .12s ease, background .12s ease;
+}
+.sys-killstream-strip .kill:hover { border-color: var(--primary); background: var(--accent-surface); }
+.sys-killstream-strip .kill-hull { width: 44px; height: 44px; border-radius: 4px; background: var(--muted); object-fit: cover; }
+.sys-killstream-strip .kill-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--foreground); }
+.sys-killstream-strip .kill-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: .02em; color: var(--muted-foreground); white-space: nowrap; }
+.sys-killstream-strip .kill-meta b { font-weight: 600; color: var(--foreground); }
+.sys-killstream-strip .kill.is-npc { opacity: .72; }
+.sys-killstream-strip .kill.is-npc .kill-name::after { content: " \00b7 NPC"; color: var(--muted-foreground); }
+/* While the board answers: the slots, empty, with a quiet pulse. */
+.sys-killstream.is-waiting .sys-killstream-strip::before { content: ""; grid-column: 1 / -1; min-height: 92px; border: 1px dashed var(--border-soft); border-radius: var(--radius-sm); animation: killstream-wait 1.4s ease-in-out infinite; }
+@keyframes killstream-wait { 50% { border-color: var(--border); } }
+@media (prefers-reduced-motion: reduce) { .sys-killstream.is-waiting .sys-killstream-strip::before { animation: none; } }
+.sys-killstream-quiet, .sys-killstream-fallback { margin: 0; font-size: var(--fs-sm); color: var(--muted-foreground); }
+.sys-killstream.is-quiet .sys-killstream-quiet { display: flex; align-items: center; justify-content: center; min-height: 92px; border: 1px dashed var(--border-soft); border-radius: var(--radius-sm); }
+.sys-killstream.is-quiet .sys-killstream-strip, .sys-killstream.is-failed .sys-killstream-strip { display: none; }
+.sys-killstream.is-failed .sys-killstream-fallback { display: block; }
+.sys-killstream-fallback a { color: var(--primary); }
+@media (max-width: 767px) { .sys-killstream-strip { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; } .sys-killstream-strip .kill-hull { width: 40px; height: 40px; } }

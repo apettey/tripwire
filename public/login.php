@@ -14,7 +14,7 @@ $startTime = microtime(true);
 if (!session_id()) session_start();
 
 require_once('../config.php');
-require_once('../db.inc.php');
+require_once('../db.php');
 require_once('../esi.class.php');
 
 $esi = new esi();
@@ -103,7 +103,7 @@ function doLogin(&$output, $account, $esi, $mysql, $ip, $username, $method) {
 		$_SESSION['characterID'] = $account->characterID;
 		$_SESSION['characterName'] = $account->characterName;
 		$_SESSION['corporationID'] = $account->corporationID;
-		$_SESSION['allianceID'] = $affiliation[$account->characterID]->alliance_id;
+		$_SESSION['allianceID'] = $affiliation[$account->characterID]->alliance_id ?? null;
 		$_SESSION['corporationName'] = $account->corporationName;
 		$_SESSION['admin'] = $account->admin;
 		$_SESSION['super'] = $account->super;
@@ -322,5 +322,13 @@ if ($mode == 'login') {
 
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);
 
-if (isset($_REQUEST['mode'])) { if (!headers_sent()) header('Content-Type: application/json'); echo json_encode($output, JSON_HEX_TAG | JSON_HEX_AMP); } // fork: JSON, not HTML
+if (isset($_REQUEST['mode'])) {
+	// Only label the response when login.php is the requested script -- the XHR
+	// path in landing.js. index.php also include()s this file mid-page, and
+	// typing that page as JSON would break the HTML that follows.
+	if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+		header('Content-Type: application/json');
+	}
+	echo json_encode($output, JSON_HEX_TAG | JSON_HEX_AMP); // fork: hex-escape < > & so the JSON can't be read as HTML
+}
 ?>

@@ -109,6 +109,7 @@ $(".options").click(function(e) {
 			$("#dialog-options #node-spacing-y-slider").slider("value", options.chain.nodeSpacing.y);
 			$("#dialog-options #node-spacing-line-weight-slider").slider("value", options.chain.lineWeight);
 			$("#dialog-options #background-image").val(options.background);
+			if (tripwire.settingsCharacters) { tripwire.settingsCharacters.render(); }
 		},
 		create: function() {
 			$("#optionsAccordion").accordion({heightStyle: "content", collapsible: true, active: false});

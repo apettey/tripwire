@@ -116,7 +116,9 @@ sigDialog.openSignatureDialog = function(e) {
 					}
 				});
 
-				// Ensure first signature ID field only accepts letters
+				// A whole id in the first field -- "ABC-123" pasted from the
+				// scanner, or typed straight through -- splits itself across the
+				// two fields rather than being clipped to "ABC" by the filter.
 				$("#dialog-signature [name='signatureID_Alpha'], #dialog-signature [name='signatureID2_Alpha']").on("input", function() {
 					// A whole id ("ABC-123" pasted from the scanner) splits itself across the two fields
 					// (adapted from mogglemoss/tripwire 09bcb40, MIT)
@@ -133,10 +135,22 @@ sigDialog.openSignatureDialog = function(e) {
 					this.value = this.value.substring(0, 3);
 				});
 
-				// Move to the numeric ID after filling out alpha ID
+				// Move to the numeric ID after filling out alpha ID -- and absorb
+				// the habitual Tab that follows. Measured: type "ZZQ", focus has
+				// already moved, Tab moves it again to the type menu, the digits
+				// go there, and the row saves as "ZZQ-###". The Tab pressed right
+				// after an auto-advance, into a still-empty numeric field, means
+				// "next field", and the numeric field is the next field.
+				var autoAdvancedAt = 0;
 				$("#dialog-signature [name='signatureID_Alpha']").on("input", function() {
 					if (this.value.length === 3) {
+						autoAdvancedAt = Date.now();
 						$("#dialog-signature [name='signatureID_Numeric']").select();
+					}
+				});
+				$("#dialog-signature [name='signatureID_Numeric']").on("keydown", function(e) {
+					if (e.key === "Tab" && !e.shiftKey && this.value === "" && Date.now() - autoAdvancedAt < 1500) {
+						e.preventDefault();
 					}
 				});
 
@@ -166,8 +180,8 @@ sigDialog.openSignatureDialog = function(e) {
 				
 				// Shortcut buttons to update leadsTo
 				$('#leadsToQuickBar').on('click', e => {
-					let target = e.target;
-					while(target.tagName !== 'BUTTON') { target = target.parentElement; }
+					const target = e.target.closest('button');
+					if (!target) { return; }   // the gap between chips, or the line break
 					$("#dialog-signature [name='leadsTo']").val(target.value).change();
 				});
 
@@ -178,7 +192,8 @@ sigDialog.openSignatureDialog = function(e) {
 
 						// Also auto calculate duration
 						if (appData.wormholes[this.value.toUpperCase()]) {
-							$("#dialog-signature #durationPicker").val(parseFloat(appData.wormholes[this.value.toUpperCase()].life) * 60 * 60).change();
+							// "4.5 Hours" as well as "16 Hours": the old substring(0, 2) read 4.5 as 4.
+							$("#dialog-signature #durationPicker").val(Math.round(parseFloat(appData.wormholes[this.value.toUpperCase()].life) * 60 * 60)).change();
 						}
 					} else if (this.value.toUpperCase() === "K162") {
 						if (aSigWormholes[$("#dialog-signature .wormholeType").not(this).val().toUpperCase()] || $("#dialog-signature .wormholeType").not(this).val().toUpperCase() === "K162") {
@@ -332,15 +347,10 @@ sigDialog.openSignatureDialog = function(e) {
 								}
 							}
 
-							payload = {"signatures": {"update": [{"wormhole": wormhole, "signatures": [signature, signature2]}]}};
-
-							if (tripwire.client.wormholes[wormhole.id]) {
-									//used to be a wormhole
-									undo.push({"wormhole": tripwire.client.wormholes[wormhole.id], "signatures": [tripwire.client.signatures[signature.id], tripwire.client.signatures[signature2.id]]});
-							} else {
-									// used to be just a regular signature
-									undo.push(tripwire.client.signatures[signature.id]);
-							}
+							// Shape and undo entry come from the shared module, so the
+							// inline editor and this dialog cannot drift apart.
+							payload = tripwire.signaturePayload.wormholeUpdatePayload(wormhole, signature, signature2);
+							undo.push(tripwire.signaturePayload.undoEntryFor(signature.id));
 						} else {
 							payload = {"signatures": {"add": [{"wormhole": wormhole, "signatures": [signature, signature2]}]}};
 						}
@@ -354,17 +364,8 @@ sigDialog.openSignatureDialog = function(e) {
 								"name": form.signatureName,
 								"lifeLength": form.signatureLength
 							};
-							payload = {"signatures": {"update": [signature]}};
-
-							if (tripwire.client.signatures[signature.id].type == "wormhole") {
-								//used to be a wormhole
-								var wormhole = $.map(tripwire.client.wormholes, function(wormhole) { if (wormhole.initialID == signature.id || wormhole.secondaryID == signature.id) return wormhole; })[0];
-								var signature2 = signature.id == wormhole.initialID ? tripwire.client.signatures[wormhole.secondaryID] : tripwire.client.signatures[wormhole.initialID];
-								undo.push({"wormhole": tripwire.client.wormholes[wormhole.id], "signatures": [tripwire.client.signatures[signature.id], tripwire.client.signatures[signature2.id]]});
-							} else {
-								// used to be just a regular signature
-								undo.push(tripwire.client.signatures[signature.id]);
-							}
+							payload = tripwire.signaturePayload.signatureUpdatePayload(signature);
+							undo.push(tripwire.signaturePayload.undoEntryFor(signature.id));
 						} else {
 							var signature = {
 								"signatureID": form.signatureID_Alpha + form.signatureID_Numeric,

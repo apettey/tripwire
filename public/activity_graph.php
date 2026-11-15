@@ -22,7 +22,7 @@ if(!isset($_SESSION['userID'])) {
 }
 
 require_once('../config.php');
-require_once('../db.inc.php');
+require_once('../db.php');
 
 $cache = 360;
 
@@ -75,10 +75,10 @@ for ($x = 0; $x <= $length -1; $x++) {
 		$row = $stmt->fetchObject();
 	} else {
 		$data[0] = Array('v' => $x);
-		$data[1] = Array('v' => 0);
-		$data[2] = Array('v' => 0);
-		$data[3] = Array('v' => 0);
-		$data[4] = Array('v' => 0);
+		$data[1] = Array('v' => null);
+		$data[2] = Array('v' => null);
+		$data[3] = Array('v' => null);
+		$data[4] = Array('v' => null);
 	}
 
 	$output['rows'][]['c'] = $data;

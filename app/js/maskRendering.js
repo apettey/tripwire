@@ -2,7 +2,7 @@
 const maskRendering = new function() { 
 	/** Render a mask, as returned from masks.php */
 	this.renderMask = function(mask) {
-		const icons = { global: 'eye', character: 'user', corporate: 'star', alliance: 'star' };
+		const icons = { global: 'eye', character: 'user', personal: 'user', corporate: 'star', alliance: 'star' };
 
 		return '<span class="mask" data-mask="' + mask.mask + '">'
 			+ '<i data-icon="' + icons[mask.ownerType] + '" class="' + mask.ownerType + '"></i>'

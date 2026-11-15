@@ -4,8 +4,8 @@ const tracking = {
 	},
 	add: function(character) {
 		var $clone = $("#tracking-clone").clone();
-		$clone.attr("data-characterid", characterID);
-		$clone.find(".avatar img").attr("src", "https://image.eveonline.com/Character/"+ character.characterID +"_32.jpg");
+		$clone.attr("data-characterid", character.characterID);
+		$clone.find(".avatar img").addClass("avatar").attr("src", "https://images.evetech.net/characters/"+ character.characterID +"/portrait?size=64");
 		$clone.find(".name").html(character.characterName);
 		$clone.removeAttr("id");
 		$clone.removeClass("hidden");
@@ -85,8 +85,12 @@ $("#login").on("click", "#removeESI", function() {
 
 /** Set UI text based on the current tracked character */
 function set_tracking_text() {
-	if(tripwire.esi.characters[options.tracking.active]) {
-		document.getElementById('user-track-name').textContent = tripwire.esi.characters[options.tracking.active].characterName;
+	var character = tripwire.esi.characters[options.tracking.active];
+	var characterID = character ? character.characterID : options.character.id;
+	document.getElementById('user-avatar').src = 'https://images.evetech.net/characters/' + characterID + '/portrait?size=128';
+
+	if(character) {
+		document.getElementById('user-track-name').textContent = character.characterName;
 		document.getElementById('user-track').style.display = '';
 		document.getElementById('user-no-track').style.display = 'none';
 	} else {

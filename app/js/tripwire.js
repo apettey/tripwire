@@ -8,6 +8,9 @@ var tripwire = new function() {
 	this.activity = {};
 	this.data = {tracking: {}, esi: {}};
 	this.refreshRate = 5000;
+	// Used while document.hidden. Long enough to stop the traffic, short enough
+	// that a tab surfaced by a notification is not minutes out of date.
+	this.refreshRateHidden = 60000;
 	this.connected = true;
 	this.ageFormat = "HM";
 	this.instance = window.name ? window.name : (new Date().getTime() / 1000, window.name = new Date().getTime() / 1000);
@@ -80,14 +83,6 @@ var tripwire = new function() {
 		}
 	}
     this.serverTime();
-
-    // Handles putting chain together
-	this.chainMap = function() {
-		this.chainMap.parse = function(data) {
-			chain.draw(data);
-		}
-	}
-    this.chainMap();
 
     this.pastEOL = function() {
 		var options = {since: $(this).countdown('option', 'until'), format: "HM", layout: "-{hnn}{sep}{mnn}&nbsp;"};

@@ -10,7 +10,7 @@ const systemRendering = new function() {
 				const systemID = 30000000 + 1 * s;
 				const system = systemAnalysis.analyse(systemID);
 				const securityClass = system.systemTypeClass;
-				return '<span class="' + securityClass + '" data-tooltip="' + system.name + ' (' + system.security + ')" onclick="tripwire.systemChange(' + systemID + ')">' + system.pathSymbol + '</span>';
+				return '<span class="' + securityClass + '" data-tooltip="' + system.name + ' (' + system.security.toFixed(2) + ')" onclick="tripwire.systemChange(' + systemID + ')">' + system.pathSymbol + '</span>';
 			});
 			var r = '<span class="path">';
 			for(var i = 0; i < systemMarkup.length; i++) {

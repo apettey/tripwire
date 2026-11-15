@@ -1,5 +1,5 @@
 .gridster > ul {
-	//background: rgba(0, 0, 0, .8);
+	//background: var(--scrim-80);
 	list-style-type: none;
 }
 
@@ -13,8 +13,8 @@
 
 .toggle-panel {
 	position: absolute;
-    background: #080808;
-    border: 1px #404040 solid;
+    background: var(--n-020);
+    border: 1px var(--n-250) solid;
     padding: 3px;
 }
 
@@ -68,8 +68,8 @@
 }
 
 .gridster .gs-w {
-    //background: rgba(120, 120, 120, .1);
-    background: rgba(0, 0, 0, .6);
+    //background: var(--veil-grey);
+    background: var(--scrim-60);
 }
 
 .gridster .gs-w:hover .grid-resize-both {
@@ -89,7 +89,7 @@
     cursor: se-resize;
     z-index: 20;
     opacity: 0;
-    color: #bbb;
+    color: var(--n-750);
 }
 
 .gridster .gs-resize-handle-both:before {
@@ -97,10 +97,10 @@
 }
 
 .gridster .player {
-    background: rgba(192, 192, 192, .3);
+    background: var(--veil-silver);
 }
 
 .gridster .preview-holder {
     border: none;
-    background: rgba(255, 0, 0, .3);
+    background: var(--veil-danger);
 }

@@ -2,9 +2,10 @@ tripwire.comments = function() {
     this.comments.data = {};
 
     this.comments.parse = function(data) {
-		function sanitise(html) {
-			return sanitiseHtml(html); // DOM allow-list sanitiser, app/js/fork/sanitise-html.js
-		}
+		// Parse-based; see app/js/sanitise-html.js for why the previous
+		// regex version was bypassable.
+		const sanitise = sanitiseHtml;
+
 		
         for (var x in data) {
             var id = data[x].id;

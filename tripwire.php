@@ -11,29 +11,32 @@ $startTime = microtime(true);
 require_once('config.php');
 require_once('settings.php');
 require_once('masks.inc.php');
+require_once('db.php');
+require_once('db-update.php');
 require('lib.inc.php');
 
-$system = htmlspecialchars(isset($_REQUEST['system']) ? (string) $_REQUEST['system'] : '', ENT_QUOTES, 'UTF-8'); // fork: escaped (reflected XSS)
+$system = $_REQUEST['system'] ?? '';
 require_once(__DIR__ . '/csrf.inc.php'); // fork
 ?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<meta name="system" content="<?= $system ?>">
+	<meta name="system" content="<?= htmlspecialchars($system, ENT_QUOTES, 'UTF-8') ?>">
 	<meta name="server" content="<?= CDN_DOMAIN ?>">
 	<meta name="app_name" content="<?= APP_NAME ?>">
 	<meta name="version" content="<?= VERSION ?>">
 	<meta name="csrf-token" content="<?= htmlspecialchars(fork_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
 	<link rel="shortcut icon" href="//<?= CDN_DOMAIN ?>/images/favicon.png" />
+	<script>var t = localStorage.getItem("tripwire.theme"); if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);</script>
 
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.duration-picker.css">
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.jbox.css">
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.jbox-notice.css">
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/gridster.min.css">
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery-ui-1.12.1.min.css">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.duration-picker.css?v=<?= VERSION ?>">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.jbox.css?v=<?= VERSION ?>">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery.jbox-notice.css?v=<?= VERSION ?>">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/gridster.min.css?v=<?= VERSION ?>">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery-ui-1.12.1.min.css?v=<?= VERSION ?>">
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/jquery-ui-custom.css?v=<?= VERSION ?>">
-	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/introjs.min.css">
+	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/introjs.min.css?v=<?= VERSION ?>">
 	<link rel="stylesheet" type="text/css" href="//<?= CDN_DOMAIN ?>/css/app.min.css?v=<?= VERSION ?>">
 
 	<title></title>
@@ -60,7 +63,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 		</span>
 		<span class="align-right">
 			<span id="login">
-				<h3><a id="user" href=""><span id="user-no-track"><?= $_SESSION['characterName'] ?></span><span id="user-track" style="display:none"><i data-icon="follow" data-tooltip="Tracking"></i><span id="user-track-name">...</span></span></a></h3>
+				<h3><a id="user" href=""><img id="user-avatar" class="avatar" alt="" src="https://images.evetech.net/characters/<?= htmlspecialchars($_SESSION['characterID'], ENT_QUOTES, 'UTF-8') ?>/portrait?size=64" /><span id="user-no-track"><?= htmlspecialchars($_SESSION['characterName'], ENT_QUOTES, 'UTF-8') ?></span><span id="user-track" style="display:none"><i data-icon="follow" data-tooltip="Tracking"></i><span id="user-track-name">...</span></span></a></h3>
 				<div id="panel">
 					<div id="content" class="dialog-like">
 						<div class="triangle"></div>
@@ -105,11 +108,11 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 									<table id="account">
 										<tr><th colspan="2">Characters</th></tr>
 										<tr>
-											<td id="avatar" rowspan="4"><img src="https://image.eveonline.com/Character/<?= $_SESSION['characterID'] ?>_64.jpg" /></td>
-											<td id="characterName" class="text"><?= $_SESSION['characterName'] ?></td>
+											<td id="avatar" rowspan="4"><img class="avatar avatar-lg" alt="" src="https://images.evetech.net/characters/<?= htmlspecialchars($_SESSION['characterID'], ENT_QUOTES, 'UTF-8') ?>/portrait?size=64" /></td>
+											<td id="characterName" class="text"><?= htmlspecialchars($_SESSION['characterName'], ENT_QUOTES, 'UTF-8') ?></td>
 										</tr>
 										<tr>
-											<td class="text"><?= $_SESSION['corporationName'] ?></td>
+											<td class="text"><?= htmlspecialchars($_SESSION['corporationName'], ENT_QUOTES, 'UTF-8') ?></td>
 										</tr>
 										<tr><td rowspan="2"></td></tr>
 									</table>
@@ -139,6 +142,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 			<h3> | </h3>
 
 			<i id="settings" style="font-size: 1.7em;" data-icon="settings" class="options" data-tooltip="Settings"></i>
+			<a href="#" style="font-size: 1.7em;" id="theme-toggle" class="themebtn" type="button" aria-label="Switch to light" data-tooltip="Switch to light">&#9788;</a>
 			<i id="layout" style="font-size: 1.7em;" data-icon="layout" data-tooltip="Customize layout"></i>
 		</span>
 	</div>
@@ -164,7 +168,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 				</div>
 				<div class="content">
 					<div id="infoGeneral" style="float: left; width: 50%; text-align: left;">
-						<h1 class="pointer" style="color: #CCC;"><span id="infoSystem"><?=$system?></span><a class="copy" href="#" title="Copy system name"></a></h1>
+						<h1 class="pointer" style="color: var(--n-800);"><span id="infoSystem"><?= htmlspecialchars($system, ENT_QUOTES, 'UTF-8') ?></span><a class="copy" href="#" title="Copy system name"></a></h1>
 						<h4 id="infoSecurity" class="pointer">&nbsp;</h4>
 						<h4 id="infoRegion" class="pointer">&nbsp;</h4>
 						<h4 id="infoFaction" class="pointer">&nbsp;</h4>
@@ -172,6 +176,15 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 					<div id="infoExtra" style="float: right; width: 50%; text-align: right;">
 					</div>
 					<br clear="all"/>
+					<div id="killStream" class="sys-killstream hidden">
+						<div class="sys-killstream-head">
+							<span class="sys-killstream-title">Recent kills</span>
+							<span class="sys-killstream-window" id="killStreamWindow">past 8 hours &middot; zKillboard</span>
+						</div>
+						<div class="sys-killstream-strip" id="killStreamStrip" role="list"></div>
+						<p class="sys-killstream-quiet hidden">No kills in the past 8 hours.</p>
+						<p class="sys-killstream-fallback hidden">zKillboard did not answer. <a id="killStreamLink" href="" target="_blank" rel="noopener noreferrer">Open the system on zKillboard</a>.</p>
+					</div>
 					<div id="activityGraph"></div>
 					<div id="activityGraphControls" style="text-align: center;"><a href="javascript: activity.time(168);">Week</a> - <a href="javascript: activity.time(48);">48Hour</a> - <a href="javascript: activity.time(24);">24Hour</a></div>
 					<div id="infoLinks" style="text-align: center;">
@@ -185,12 +198,21 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 			<li id="signaturesWidget" class="gridWidget" data-row="1" data-col="8" data-sizex="7" data-sizey="6" data-min-sizex="5" data-min-sizey="2" style="width: 410px; height: 350px;">
 				<div class="controls">
 					<i id="add-signature" data-icon="plus" data-tooltip="Add a new signature"></i>
+					<i id="paste-signatures" data-icon="plus-circle" data-tooltip="Paste probe scanner results. Ctrl-V anywhere on the page does the same."></i>
 					<i id="edit-signature" data-icon="edit" data-tooltip="Edit selected signature" class="disabled"></i>
 					<i id="delete-signature" data-icon="trash" data-tooltip="Delete selected signature(s)" class="disabled"></i>
 					<span>|</span>
-					<i id="signature-count" style="font-style: normal; cursor: default;" data-tooltip="Total signature count">0</i>
 					<i id="undo" data-icon="undo" class="disabled" data-tooltip="Undo last signature change"></i>
 					<i id="redo" data-icon="redo" class="disabled" data-tooltip="Redo what was undone"></i>
+					<span>|</span>
+					<i id="signature-count" style="font-style: normal; cursor: default;" data-tooltip="Total signature count<br><i data-icon='radio-off'></i> Wormholes; <span data-icon>&#xe004;</span> Signatures; <i data-icon='pin'></i> Anomalies">0</i>
+					<script>
+						const scanGroupText = {
+							wormhole: "<span data-icon='radio-off' data-tooltip='Wormhole'></span>",
+							anomaly: "<span data-icon='pin' data-tooltip='Anomaly'></span>",
+							signature: "<span data-icon data-tooltip='Signature'>&#xe004;</span>"
+						};
+					</script>
 					<div style="float: right;">
 						<i id="toggle-automapper" class="disabled" data-icon="auto" data-tooltip="Toggle Auto-Mapper"></i>
 						<i class="tutorial" data-tooltip="Show tutorial for this section">?</i>
@@ -203,7 +225,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 								<tr>
 									<th class="sortable">ID<i data-icon=""></i></th>
 									<th class="sortable">Type<i data-icon=""></i></th>
-									<th class="sortable" data-sorter="usLongDate">Age<i data-icon=""></i></th>
+									<th class="sortable" data-sorter="data-age">Age<i data-icon=""></i></th>
 									<th class="sortable">Leads To<i data-icon=""></i></th>
 									<th class="sortable">Life<i data-icon=""></i></th>
 									<th class="sortable">Mass<i data-icon=""></i></th>
@@ -259,10 +281,11 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 					<i id="show-favorite" data-icon="star" data-tooltip="Add favorite systems to chain"></i>
 					<i id="show-chainLegend" data-tooltip="<table id='guide'>
 						<tr><td><div class='guide stable'></td><td>Stable</td><th>Auras</th></tr>
-						<tr><td><div class='guide eol'></div></td><td>End of Life</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr>
-						<tr><td><div class='guide destab'></div></td><td>Mass Destabbed</td><td><div class='guide aura jm-62kt'></div></td><td>Medium</td></tr>
-						<tr><td><div class='guide critical'></div></td><td>Mass Critical</td><td><div class='guide aura jm-375kt'></div></td><td>Large</td></tr>
-						<tr><td><div class='guide frig'></div></td><td>Frigate</td><td><div class='guide aura jm-2000kt'></div></td><td>X-Large</td></tr>
+						<tr><td><div class='guide eol'></div></td><td>End of Life (&lt;4h)</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr>
+						<tr><td><div class='guide eol-1h'></div></td><td>Expiring (&lt;1h)</td><td><div class='guide aura jm-62kt'></div></td><td>Medium</td></tr>
+						<tr><td><div class='guide destab'></div></td><td>Mass Destabbed</td><td><div class='guide aura jm-375kt'></div></td><td>Large</td></tr>
+						<tr><td><div class='guide critical'></div></td><td>Mass Critical</td><td><div class='guide aura jm-2000kt'></div></td><td>X-Large</td></tr>
+						<tr><td><div class='guide frig'></div></td><td>Frigate</td><td></td></tr>
 					</table>">&equiv;</i>
 					<span>|</span>
 					<i id="hot-jump" data-icon="prop-mod" data-tooltip="Jumping hot (prop on)"></i>
@@ -338,13 +361,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 							</ul>
 						</li>
 						<li>
-							<li><a>Flares</a>
-								<ul style="width: 10em;">
-									<li data-command="red"><a>Battle (red)</a></li>
-									<li data-command="yellow"><a>Hold (yellow)</a></li>
-									<li data-command="green"><a>Fleet Op (green)</a></li>
-								</ul>
-							</li>
+							<li data-command="flare"><a>Flares ...</a></li>
 							<li data-command="mass"><a>Mass</a></li>
 							<li data-command="collapse"><a>Collapse</a></li>
 							<li data-command="ping"><a>Ping ...</a></li>
@@ -358,10 +375,10 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 	</div>
 
 	<div id="footer">
-		<?php include 'donation_panel.inc'; ?>
+		<?php if (defined('ENABLE_DONATIONS') && ENABLE_DONATIONS) include 'donation_panel.inc'; ?>
 		<?php printf("<span id='pageTime'>Page generated in %.3f seconds.</span>", microtime(true) - $startTime); ?>
-		<p>All Eve Related Materials are Property Of <a href="https://www.ccpgames.com" target="_blank">CCP Games</a></p>
-		<p id="legal" class="pointer">EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP is in no way responsible for the content on or functioning of this website, nor can it be liable for any damage arising from the use of this website.</p>
+		<p>All EVE related materials are the property of <a href="https://fenris.com" target="_blank" rel="noopener">Fenris Creations</a>, formerly CCP Games</p>
+		<p id="legal" class="pointer">All EVE related materials are the property of Fenris Creations, formerly CCP Games. EVE Online&reg; and Fenris Creations&trade; and all related logos and other elements are trademarks of Fenris Creations. &copy; 2026 Fenris Creations. All rights reserved. All other trademarks are the property of their respective owners. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of Fenris Creations. Fenris Creations is in no way responsible for the content on or functioning of this website, nor can it be liable for any damage arising from the use of this website.</p>
 	</div>
 	</div>
 	</div>
@@ -379,7 +396,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 			<input autocomplete="false" name="hidden" type="text" class="hidden" />
 			<div class="row">
 				<span class="label">ID:</span>
-				<input name="signatureID_Alpha" type="text" maxlength="7" size="2" class="signatureID" autocomplete="off" />
+				<input name="signatureID_Alpha" type="text" maxlength="7" size="2" class="signatureID" autocomplete="off" placeholder="ABC" />
 				<span class="label">-</span>
 				<input name="signatureID_Numeric" type="text" maxlength="3" size="2" placeholder="###" class="signatureID" autocomplete="off" />
 				<span id="signatureType" class="select">
@@ -440,7 +457,9 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 						<input type="radio" class="mini-selector" name="wormholeLife" id="wormholeLifeStable"  value="stable"/>
 						<label for="wormholeLifeStable" class="stable">Stable</label>
 						<input type="radio" class="mini-selector" name="wormholeLife" id="wormholeLifeEOL"  value="critical"/>
-						<label for="wormholeLifeEOL" class="critical">EOL</label>
+						<label for="wormholeLifeEOL" class="critical">EOL</label>	
+						<input type="radio" class="mini-selector" name="wormholeLife" id="wormholeLife1h"  value="<1h"/>
+						<label for="wormholeLife1h" class="supercritical">&lt;1h</label>
 					</div>
 					<div class="row">
 						<span class="label">Mass:</span>
@@ -636,17 +655,18 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 						<th>Username:</th>
 						<td id="username"></td>
 					</tr>
-					<tr>
-						<th colspan="2">Characters:</th>
-					</tr>
-					<tr>
-						<th colspan="2" id="characters"></th>
-					</tr>
-
 				</table>
-				<div style="border-top: 1px solid black; text-align: right; margin: 0 -5px; padding: 5px 5px 0 5px;">
+				<div class="button-bar">
 					<input type="button" id="usernameChange" value="Change Username" />
 					<input type="button" id="pwChange" value="Change Password" />
+				</div>
+				
+				<section id="tracked-characters">
+					<h4>Tracked characters:</h4>
+					<div id="characters"></div>
+				</section>
+				<div class="button-bar">
+					<input type="button" id="addESI" class="is-primary" value="Add character" />
 				</div>
 			</div>
 			<h3><a href="#">Chain Map Settings</a></h3>
@@ -1083,6 +1103,29 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 		</form>
 	</div>
 
+	<div id="dialog-flare" title="" class="hidden" style="width:300px">
+		<div id="flare-node" class="ui-widget-reset" style="float:right; padding-right: 20px; padding-top: 20px">
+			<!-- filled in dynamically -->
+		</div>
+		<form id="flare_form">
+			<p>Select or remove a flare:</p>
+			<p style="margin-left: 1em">
+			<label><input type="radio" name="flare-type" value="none"> None</label><br>
+			<label><input type="radio" name="flare-type" value="red" class="red"> Red (battle, hostile, dangerous)</label><br>
+			<label><input type="radio" name="flare-type" value="yellow" class="yellow"> Yellow (hold, warning)</label><br>
+			<label><input type="radio" name="flare-type" value="green" class="green"> Green (op, rally, friendly)</label>
+			</p>
+			
+			<p>Flare for:
+			<label><input type="radio" name="flare-expiry" value="86400"> 1 day</label>
+			<label><input type="radio" name="flare-expiry" value="none"> Forever</label>
+			</p>
+			
+			<p>Optionally, enter a reason:
+			<textarea id="flare-text" style="width:100%; margin-left: 0; margin-top: 8px; height: 70px"></textarea>
+		</form>
+	</div>
+	
 	<div id="dialog-newTab" title="New Tab" class="hidden">
 		<form id="newTab_form">
 			<table class="optionsTable" width="100%" cellpadding="1" cellspacing="0">
@@ -1195,8 +1238,9 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 	<textarea id="clipboard"></textarea>
 
 	<?php
+		$analytics_enabled = defined('ENABLE_ANALYTICS') && ENABLE_ANALYTICS;
 		$analytics_file = dirname( __FILE__ ) . "/analytics.inc.php";
-		if ( file_exists( $analytics_file ) ) include_once( $analytics_file );
+		if ( $analytics_enabled && file_exists( $analytics_file ) ) include_once( $analytics_file );
 		$init_fields = [
 			'characterID' => $_SESSION['characterID'],
 			'characterName' => $_SESSION['characterName'],
@@ -1205,9 +1249,10 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 	?>
 
 	<script type="text/javascript">
-		const init = <?= json_encode($init_fields) ?>;
-		init.masks = <?= json_encode(getMasks($_SESSION['characterID'], $_SESSION['corporationID'], $_SESSION['admin'], $_SESSION['mask'])) ?>;
+		const init = <?= json_encode($init_fields, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+		init.masks = <?= json_encode(getMasks($_SESSION['characterID'], $_SESSION['corporationID'], $_SESSION['admin'], $_SESSION['mask']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
+		<?php if ($analytics_enabled): ?>
 		var passiveHitTimer;
 		function passiveHit() {
 			ga('send', 'pageview');
@@ -1216,6 +1261,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 		}
 
 		setTimeout("passiveHit()", 240000);
+		<?php endif; ?>
 
 		// Monitor event listeners
 		var listenerCount = 0;
@@ -1235,25 +1281,24 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 	</script>
 
 	<!-- JS Includes -->
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery-3.7.1.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery-ui-1.13.3.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.tablesorter.combined.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.ui-contextmenu.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.plugin.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.countdown.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.gridster.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.knob.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-0.4.9.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-notice-0.4.9.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.duration-picker.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/ckeditor/ckeditor.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/dragscroll.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/lodash.js"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery-3.7.1.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery-ui-1.13.3.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.tablesorter.combined.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.ui-contextmenu.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.plugin.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.countdown.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.gridster.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.knob.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-0.4.9.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-notice-0.4.9.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.duration-picker.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/dragscroll.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/lodash.js?v=<?= VERSION ?>"></script>
 	<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 	<!-- Google Charts -->
 	<script type="text/javascript">google.charts.load('current', {packages: ['corechart', 'orgchart']});</script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/moment.min.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/intro.min.js"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/moment.min.js?v=<?= VERSION ?>"></script>
+	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/intro.min.js?v=<?= VERSION ?>"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/combine.js?v=<?= VERSION ?>"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/app.min.js?v=<?= VERSION ?>"></script>
 	<!-- JS Includes -->

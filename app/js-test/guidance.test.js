@@ -23,6 +23,11 @@ describe('Pathfinding', () => {
 	it('Routable using normal system IDs (ignoring Zarazkh)', () => { assert.deepEqual( 42, guidance.findShortestPath(appData.map.shortest, 30005003, 30001311 ).length); });
 	it('Routable system to multiple options system within limit', () => { assert.deepEqual( [ sid('Amygnon'), sid('Jufvitte'), sid('Ansalle'), sid('Gisleres'), sid('Scolluzer'), sid('Sortet') ], guidance.findShortestPath(appData.map.shortest, sid('Amygnon'), [sid('Sortet'), sid('Amarr')], 5 )); });
 	it('Routable many-to-many', () => { assert.deepEqual( [ sid('Arnon'), sid('Aere'), sid('Hulmate') ], guidance.findShortestPath(appData.map.shortest, [sid('Amygnon'), sid('Arnon')], [sid('Sortet'), sid('Hulmate')] )); });
+	
+	it('Routable system to system with highsec option through 0.45', () => { 
+		options.chain.routeSecurity = 'highsec';
+		assert.deepEqual( [ sid('Hirizan'), sid('Rayeret'), sid('Jakri'), sid('Nidupad'), sid('Zimse'), sid('Munory'), sid('Aband'), sid('Ghesis'), sid('Gamdis'), sid('Zororzih'), sid('Akhragan'), sid('Kehour'), sid('Ashab'), sid('Teshi'), sid('Somouh') ], guidance.findShortestPath(appData.map.shortest, sid('Hirizan'), sid('Somouh') ));
+	});	
 });
 
 describe('Route to profile', () => {

@@ -3,7 +3,7 @@
 ini_set('display_errors', 'On');
 
 require('config.php');
-require('db.inc.php');
+require('db.php');
 require('esi.class.php');
 
 $esi = new esi();

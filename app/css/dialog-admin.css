@@ -15,7 +15,7 @@
 }
 
 #dialog-admin .menu li a {
-	color: #666;
+	color: var(--n-500);
 }
 
 #dialog-admin .menu li a:focus {
@@ -23,16 +23,16 @@
 }
 
 #dialog-admin .menu li.active a {
-	color: orange;
+	color: var(--active-orange);
 }
 
 #dialog-admin #userTable th {
 	text-align: left;
-	border-bottom: 1px solid #333;
+	border-bottom: 1px solid var(--n-200);
 }
 
 #dialog-admin #userTable tr:nth-child(even) td {
-	border-bottom: 1px solid #aaa;
+	border-bottom: 1px solid var(--n-700);
 }
 
 #dialog-admin .tablesorter .tablesorter-header i:before, #dialog-admin .tablesorter .sortable i:before {
@@ -42,18 +42,18 @@
 #dialog-admin .tablesorter .headerSortUp,
 #dialog-admin .tablesorter .tablesorter-headerSortUp,
 #dialog-admin .tablesorter .tablesorter-headerAsc {
-	color: orange;
+	color: var(--active-orange);
 }
 
 #dialog-admin .tablesorter .headerSortDown,
 #dialog-admin .tablesorter .tablesorter-headerSortDown,
 #dialog-admin .tablesorter .tablesorter-headerDesc {
-	color: orange;
+	color: var(--active-orange);
 }
 
 div.ui-dialog[aria-describedby='dialog-admin'] .menu {
 	margin-right: 6px;
-	border-right: 1px solid #aaa;
+	border-right: 1px solid var(--n-700);
 }
 
 div.ui-dialog[aria-describedby='dialog-admin'] .window [data-window] {
@@ -61,12 +61,12 @@ div.ui-dialog[aria-describedby='dialog-admin'] .window [data-window] {
 }
 
 div.ui-dialog[aria-describedby='dialog-admin'] .window table tbody tr:nth-child(even) td {
-	border-bottom: 1px solid #999;
+	border-bottom: 1px solid var(--n-650);
 }
 
 div.ui-dialog[aria-describedby='dialog-admin'] .ui-dialog-traypane {
 	margin-left: 120px;
 	margin-top: 8px;
 	font-size: 16px;
-	color: #333;
+	color: var(--n-200);
 }

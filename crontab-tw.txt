@@ -1,2 +1,37 @@
-0 * * * * docker exec -t php-fpm php /opt/app/system_activity.cron.php
-*/3 * * * * docker exec -t  php-fpm php /opt/app/account_update.cron.php
+# Tripwire scheduled jobs.
+#
+# Appended to an existing crontab by the CRON step in README.md:
+#   crontab -l | cat - crontab-tw.txt >/tmp/crontab.txt && crontab /tmp/crontab.txt
+#
+# Container name is `php-fpm`, from docker-compose.yml. A different compose
+# file means a different name -- the local preview stack uses `tw-php` -- and
+# cron fails silently when it is wrong, because the failure goes to cron's
+# mail rather than anywhere anyone looks. Redirect to a log, as below, and
+# check it after the first scheduled run rather than assuming.
+#
+# On macOS hosts (OrbStack, Docker Desktop) `docker` must be given as an
+# absolute path: cron runs with a minimal PATH and will not find the shim.
+#   /Users/<you>/.orbstack/bin/docker exec ...
+
+# Activity samples for the system graph. Hourly, on the hour, matching the
+# hour bucket system_activity.cron.php stamps its rows with. Without this the
+# graph has nothing to draw and cannot fill in on its own -- it does not
+# degrade, it stays empty.
+0 * * * * docker exec -t php-fpm php /opt/app/system_activity.cron.php >> /tmp/tw-activity.log 2>&1
+
+# ESI account and character tracking refresh.
+*/3 * * * * docker exec -t php-fpm php /opt/app/account_update.cron.php >> /tmp/tw-account.log 2>&1
+
+# Retention sweep for system_activity. The collector writes ~4,900 rows an
+# hour and nothing else deletes from that table, so it grows by ~43 million
+# rows a year while the graph can only ever read the last 169 hours of it.
+# Deletes anything older than 192 hours (that reach plus a day of slack).
+#
+# Offset from the top of the hour so it never overlaps the activity insert.
+# Batched and resumable: a missed night just means more work the next one.
+#
+# Run it by hand the first time on a database that has never been pruned --
+# that run has years to get through, and watching the batch counts is worth
+# more than finding them in a log afterwards:
+#   docker exec -t php-fpm php /opt/app/system_activity_prune.cron.php --dry-run
+17 4 * * * docker exec -t php-fpm php /opt/app/system_activity_prune.cron.php >> /tmp/tw-prune.log 2>&1

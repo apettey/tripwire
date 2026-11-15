@@ -1,5 +1,5 @@
 <?php
-require_once('db.inc.php');
+require_once('db.php');
 
 /** Get the masks available for this character.
 Return value is a list of mask data */

@@ -48,3 +48,13 @@ describe('System analysis', () => {
 	});
 	
 });
+
+describe('Drifter as a leads-to destination', function() {
+	it('is a generic system type', () => assert.ok(appData.genericSystemTypes.indexOf('Drifter') >= 0));
+	it('covers the five Drifter classes', () => assert.deepEqual(systemAnalysis.classForTypeName('Drifter'), [14, 15, 16, 17, 18]));
+	it('is labelled Drifter, not C14/15/16/17/18', () => {
+		const r = systemAnalysis.analyse('Drifter');
+		assert.equal(r.systemTypeName, 'Drifter');
+		assert.equal(r.systemTypeClass, 'wh drifter');
+	});
+});
