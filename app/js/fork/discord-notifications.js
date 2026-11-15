@@ -4,7 +4,8 @@ const discordNotifications = {
 	// public/discord.php checks the mask admin rights on every request (403 otherwise). Webhook URLs never come back
 	// from the server; the page shows a name, '…/1234' and the webhook's status instead.
 	URL: "discord.php",
-	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass", "rolling", "structureTimer"],
+	KINDS: ["kspace", "chainKill", "corpKill", "corpLoss", "rally", "watchlist", "preserveMass", "rolling", "structureTimer", "chainHole", "homeStatic"],
+	STAGES: [["lt1h", "<1h"], ["expired", "EOL"]],
 	LEADS: [[1440, "24 hours before"], [60, "1 hour before"], [15, "15 minutes before"], [0, "when it ends"]],
 	LABELS: {
 		kspace: "New k-space near a ping system",
@@ -15,7 +16,9 @@ const discordNotifications = {
 		watchlist: "Watchlist match",
 		preserveMass: "Preserve mass",
 		rolling: "Rolling",
-		structureTimer: "Structure timers"
+		structureTimer: "Structure timers",
+		chainHole: "New hole in our chain",
+		homeStatic: "Home static <1h / EOL"
 	},
 	HELP: {
 		kspace: "A wormhole to a k-space system (high, low or null-sec) that was not on the chain yet, within the safe jump range of a ping system.",
@@ -26,11 +29,14 @@ const discordNotifications = {
 		watchlist: "A system connected to your home system (above) through live wormholes matches one of the mask's watchlist filters (Mask Admin > Watchlist): one message per filter and system, also when nobody has Tripwire open. Old chain fragments no longer connected to home are not posted; a system there is posted if it gets connected again while it still matches. What is already on the chain when you turn this on (or save or turn on a filter, or change the home system) is not announced, and a match is posted once for as long as its hole is on the chain. Filters with \"jumps from you / from home\" limits are not posted: they depend on who is looking.",
 		preserveMass: "Someone marks a connection \"preserve mass\" on the chain map (right-click a system > Preserve mass, or the Mass dialog), changes the mark (another pilot or reason) or clears it. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. Clearing it strikes through the message and says who cleared it and when, without a new message or a ping; marking it again within 30 seconds brings the message back. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing.",
 		rolling: "Someone marks a connection \"rolling\" on the chain map (right-click a system > Rolling, or the Mass dialog): we are rolling this hole. Pick your hole-roll channel. The message is short: the hole's name, the system it is in and the EVE time. Every member's change is posted. A change within 30 seconds edits the message; a later one posts a new message (with the pings) and strikes through the old one. When rolling is done (Stop rolling), the message is struck through with the time it was done; when the hole is gone from the map, it says the hole collapsed (checked every 10 minutes). Neither posts a new message or pings. Changes are posted about 10 seconds later, so quickly marking and clearing a hole posts nothing.",
-		structureTimer: "A reminder before a structure timer entered in the Structures panel ends (any system of the mask, in the chain or not): tick which ones to send. Only the latest due reminder is sent (a timer entered 30 minutes before its end gets the 15-minute one) and nothing after the timer ended. Timers that were already close when you turned this on or entered the timer are not announced retroactively."
+		structureTimer: "A reminder before a structure timer entered in the Structures panel ends (any system of the mask, in the chain or not): tick which ones to send. Only the latest due reminder is sent (a timer entered 30 minutes before its end gets the 15-minute one) and nothing after the timer ended. Timers that were already close when you turned this on or entered the timer are not announced retroactively.",
+		chainHole: "A new wormhole is mapped in your home system (above), or, if you untick it below, anywhere in the chain connected to it: one message per hole, with its signature, type and where it leads. Holes that were already on the map when you turned this on (or changed the home system) are not announced, nor are holes in old chain fragments. Each member can also get a pop-up for this (Settings > Kills & Intel > Chain alerts).",
+		homeStatic: "The static of your home system (above), scanned in home, reaches <1h or EOL (the life states of the signature list): one message per hole and stage, for the stages ticked below. A stage the hole was already in when you turned this on is not announced."
 	},
 	HOME_HELP: "Where your chain starts, usually your home wormhole. \"Any kill in our chain\" and \"Watchlist match\" (and \"Preserve mass\" and \"Rolling\", unless you untick their chain option) only count systems connected to it through live wormholes (not expired, not deleted).",
 	NO_HOME: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills are posted (nor preserve mass or rolling marks, while they are limited to the chain).",
 	NO_HOME_WATCHLIST: "Set a home system so Tripwire knows which chain is yours. Until then no watchlist matches are posted.",
+	NO_HOME_ALERTS: "Set a home system: new holes and the home static are only posted for it.",
 	NO_HOME_BOTH: "Set a home system so Tripwire knows which chain is yours. Until then no chain kills or watchlist matches are posted (nor preserve mass or rolling marks, while they are limited to the chain).",
 	// The one notice the worker posts to the chain kill channel while there is no home (discord/chain_notice.php)
 	NOTICE_LABELS: { chainPaused: "Chain kills paused notice", chainResumed: "Chain kills resumed notice" },
@@ -110,8 +116,10 @@ const discordNotifications = {
 		const limited = function(t) { return !!(t && t.enabled && t.chainOnly !== false); };	// preserve mass, rolling
 		const chain = !!(types.chainKill && types.chainKill.enabled) || limited(types.preserveMass) || limited(types.rolling);
 		const watchlist = !!(types.watchlist && types.watchlist.enabled);
-		if (Number(settings && settings.homeSystemID) > 0 || !(chain || watchlist)) { return ""; }
+		const alerts = !!(types.chainHole && types.chainHole.enabled) || !!(types.homeStatic && types.homeStatic.enabled);
+		if (Number(settings && settings.homeSystemID) > 0 || !(chain || watchlist || alerts)) { return ""; }
 		const dn = discordNotifications;
+		if (!(chain || watchlist)) { return dn.NO_HOME_ALERTS; }
 		return chain && watchlist ? dn.NO_HOME_BOTH : chain ? dn.NO_HOME : dn.NO_HOME_WATCHLIST;
 	},
 
@@ -213,6 +221,11 @@ const discordNotifications = {
 				type.leads = (v.leads || []).map(Number).filter(function(l) { return dn.LEADS.some(function(x) { return x[0] === l; }); }).sort(function(a, z) { return z - a; });
 				type.hostileOnly = !!v.hostileOnly;
 				if (type.enabled && !type.leads.length) { errors.push(dn.LABELS[kind] + ": tick at least one reminder"); }
+			} else if (kind === "chainHole") {
+				type.homeOnly = v.homeOnly !== false;
+			} else if (kind === "homeStatic") {
+				type.stages = dn.STAGES.map(function(x) { return x[0]; }).filter(function(x) { return (v.stages || []).indexOf(x) >= 0; });
+				if (type.enabled && !type.stages.length) { errors.push(dn.LABELS[kind] + ": tick <1h or EOL"); }
 			} else if (kind === "watchlist") {
 				// Only on/off, channel, ping and the text: the filters are in Mask Admin > Watchlist
 			} else if (kind === "kspace") {
@@ -389,6 +402,14 @@ const discordNotifications = {
 				}).join(" ") + "</td></tr>"
 					+ "<tr><th>Structures:</th><td><label title='On: structures of our own corporation / alliance (listed above) are not reminded'><input type='checkbox' class='dn-hostileOnly'"
 					+ (t.hostileOnly ? " checked" : "") + " /> only hostile or unowned structures (skip our own)</label></td></tr>";
+			} else if (kind === "chainHole") {
+				extra = "<tr><th>Holes:</th><td><label title='Off: new holes anywhere in the chain connected to the home system are posted'><input type='checkbox' class='dn-homeOnly'"
+					+ (t.homeOnly !== false ? " checked" : "") + " /> only holes in the home system</label></td></tr>";
+			} else if (kind === "homeStatic") {
+				const stages = Array.isArray(t.stages) ? t.stages : ["lt1h", "expired"];
+				extra = "<tr><th>Post at:</th><td>" + dn.STAGES.map(function(x) {
+					return "<label class='dn-lead-label'><input type='checkbox' class='dn-stage' value='" + x[0] + "'" + (stages.indexOf(x[0]) >= 0 ? " checked" : "") + " /> " + esc(x[1]) + "</label>";
+				}).join(" ") + "</td></tr>";
 			} else if (kind === "watchlist") {
 				extra = "";
 			} else if (kind === "kspace") {
@@ -484,7 +505,9 @@ const discordNotifications = {
 				includeHighsec: $t.find(".dn-includeHighsec").prop("checked"),
 				chainOnly: $t.find(".dn-chainOnly").prop("checked"),
 				leads: $t.find(".dn-lead:checked").map(function() { return Number($(this).val()); }).get(),
-				hostileOnly: $t.find(".dn-hostileOnly").prop("checked")
+				hostileOnly: $t.find(".dn-hostileOnly").prop("checked"),
+				homeOnly: $t.find(".dn-homeOnly").prop("checked"),
+				stages: $t.find(".dn-stage:checked").map(function() { return $(this).val(); }).get()
 			};
 		});
 		return values;
