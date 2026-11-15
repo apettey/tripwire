@@ -251,7 +251,21 @@ const lifeStates = {
 	/** The chain map legend (an HTML string in a tooltip): the <4h / <1h / EOL lines next to upstream's End of Life row,
 	or upstream's row back when off */
 	legend: function(html, on) {
-		let out = String(html || "").replace(/<tr class='life-states-legend'>.*?<\/tr>/g, "").replace("<td>&lt;4h (End of Life)</td>", "<td>End of Life</td>");
+		// Upstream 2.0's legend has "End of Life (<4h)" and "Expiring (<1h)" rows (drawn dotted magenta, which here is
+		// EOL); its rows also carry the aura column, so the cells are swapped in place and the EOL line is added after them
+		const U4 = "<td><div class='guide eol'></div></td><td>End of Life (&lt;4h)</td>", U1 = "<td><div class='guide eol-1h'></div></td><td>Expiring (&lt;1h)</td>";
+		const F4 = "<td><div class='guide eol'></div></td><td>&lt;4h (End of Life)</td>", F1 = "<td><div class='guide eol life-map-lt1h'></div></td><td>&lt;1h</td><td>";
+		const src = String(html || "");
+		if (src.indexOf(U1) >= 0 || src.indexOf(F1) >= 0) {
+			const up = src.replace(/<tr class='life-states-legend'>.*?<\/tr>/g, "").split(F4).join(U4).split(F1).join(U1 + "<td>");
+			if (!on) { return up; }
+			const res = up.split(U4).join(F4).split(U1 + "<td>").join(F1);
+			const row = /<tr><td><div class='guide eol life-map-lt1h'><\/div><\/td>.*?<\/tr>/.exec(res);
+			if (!row) { return res; }
+			const at = row.index + row[0].length;
+			return res.substring(0, at) + "<tr class='life-states-legend'><td><div class='guide eol life-map-eol'></div></td><td>EOL</td></tr>" + res.substring(at);
+		}
+		let out = src.replace(/<tr class='life-states-legend'>.*?<\/tr>/g, "").replace("<td>&lt;4h (End of Life)</td>", "<td>End of Life</td>");
 		if (!on) { return out; }
 		const row = /(<tr><td><div class='guide eol'><\/div><\/td><td>)End of Life(<\/td>.*?<\/tr>)/.exec(out);
 		if (!row) { return out; }

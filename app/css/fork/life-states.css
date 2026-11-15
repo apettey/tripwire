@@ -18,3 +18,7 @@ body .critical.life-expired { color: #F052D8; font-weight: bold; }
 #chainMap td.life-map-eol.google-visualization-orgchart-lineleft { border-left-width: 3px; }
 #chainMap td.life-map-eol.google-visualization-orgchart-lineright { border-right-width: 3px; }
 #guide div.eol.life-map-eol { border-bottom-width: 3px; }
+
+/* Upstream 2.0 added its own <1h radio to the signature dialog; the extra states above are this feature's (with the
+   setting off it is Stable / EOL as before). The server stores <1h as a critical hole with a 1 h timer. */
+#dialog-signature #wormholeLife1h, #dialog-signature label[for='wormholeLife1h'] { display: none; }

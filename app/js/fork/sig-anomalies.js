@@ -17,7 +17,8 @@ const sigAnomalies = {
 		"Kosmische Anomalie",	// de
 		"宇宙の特異点",			// ja
 		"코즈믹 어노말리",		// ko
-		"Космическая аномалия"	// ru
+		"Космическая аномалия",	// ru
+		"anomaly"				// upstream 2.0: paste.js turns the group name into its scan_group
 	],
 
 	isAnomalyGroup: function(group) {
@@ -32,7 +33,7 @@ const sigAnomalies = {
 
 	/** Whether a signature (client or server shape) is a marked anomaly */
 	isAnomaly: function(sig) {
-		return !!sig && sig.bookmark === sigAnomalies.MARKER;
+		return !!sig && (sig.bookmark === sigAnomalies.MARKER || sig.scan_group === "anomaly");   // scan_group: upstream 2.0
 	},
 
 	/** Whether a parsed paste row (paste.js rowParse result) is an anomaly */

@@ -119,6 +119,7 @@ class wormhole {
         $this->type = isset($wormhole['type']) && !empty($wormhole['type']) ? strtoupper($wormhole['type']) : $this->type;
         $this->parent = isset($wormhole['parent']) && in_array(strtolower($wormhole['parent']), $this->parent) ? strtolower($wormhole['parent']) : null;
         $this->life = isset($wormhole['life']) && in_array(strtolower($wormhole['life']), $this->life) ? strtolower($wormhole['life']) : $this->life[0];
+        if ($this->life === '<1h') $this->life = 'critical';   // fork: stored as a critical hole; its 1 h timer makes it <1h (life-states)
         $this->mass = isset($wormhole['mass']) && in_array(strtolower($wormhole['mass']), $this->mass) ? strtolower($wormhole['mass']) : $this->mass[0];
         $this->maskID = (float)$_SESSION['mask'];
     }
@@ -150,6 +151,7 @@ class wormhole {
                 break;
             case 'life':
                 $this->life = in_array(strtolower($value), ['stable', 'critical', '<1h']) ? strtolower($value) : $this->life;
+                if ($this->life === '<1h') $this->life = 'critical';   // fork: as in the constructor
                 break;
             case 'mass':
                 $this->mass = in_array(strtolower($value), ['stable', 'destab', 'critical']) ? strtolower($value) : $this->mass;

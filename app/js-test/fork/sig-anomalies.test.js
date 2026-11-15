@@ -12,6 +12,12 @@ describe('Cosmic anomalies in the signature list', () => {
 		['Cosmic Anomaly', 'Anomalie cosmique', 'Kosmische Anomalie', '宇宙の特異点', '코즈믹 어노말리', 'Космическая аномалия']
 			.forEach(g => assert.ok(sigAnomalies.isAnomalyGroup(g), g));
 	});
+	it('upstream 2.0: a paste row with scanGroup "anomaly", and a sig with scan_group "anomaly"', () => {
+		assert.equal(sigAnomalies.marker({ id: ['ABC', '125'], scanGroup: 'anomaly', type: 'Combat' }), 'anomaly');
+		assert.equal(sigAnomalies.marker({ id: ['ABC', '126'], scanGroup: 'signature', type: 'Data' }), undefined);
+		assert.ok(sigAnomalies.isAnomaly({ type: 'combat', scan_group: 'anomaly' }));
+		assert.ok(!sigAnomalies.isAnomaly({ type: 'data', scan_group: 'signature' }));
+	});
 	it('does not take signature groups for anomalies', () => {
 		['Cosmic Signature', 'Signature cosmique', 'Kosmische Signatur', '宇宙のシグネチャ', '코즈믹 시그니처', 'Скрытый сигнал', '', undefined]
 			.forEach(g => assert.ok(!sigAnomalies.isAnomalyGroup(g), String(g)));

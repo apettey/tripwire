@@ -654,10 +654,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				if (typeof console !== "undefined") { console.warn("rolling-calculator: could not refresh", e); }
 			}
 		}
-		// tripwire.parse handles synced signatures, tripwire.chainMap.parse synced wormholes
-		[typeof tripwire !== "undefined" ? tripwire : null, typeof tripwire !== "undefined" ? tripwire.chainMap : null].forEach(function(owner) {
-			if (!owner || typeof owner.parse !== "function" || owner.parse.rollingCalcWrapped) { return; }
-			const previous = owner.parse;
+		// tripwire.parse handles synced signatures, chain.draw synced wormholes (upstream 2.0 calls it directly; it
+		// used to go through tripwire.chainMap.parse)
+		[[typeof tripwire !== "undefined" ? tripwire : null, "parse"], [typeof chain !== "undefined" ? chain : null, "draw"]].forEach(function(pair) {
+			const owner = pair[0], fn = pair[1];
+			if (!owner || typeof owner[fn] !== "function" || owner[fn].rollingCalcWrapped) { return; }
+			const previous = owner[fn];
 			const wrapped = function() {
 				const result = previous.apply(this, arguments);
 				refreshIfChanged();
@@ -665,7 +667,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			};
 			Object.keys(previous).forEach(function(k) { wrapped[k] = previous[k]; });
 			wrapped.rollingCalcWrapped = true;
-			owner.parse = wrapped;
+			owner[fn] = wrapped;
 		});
 
 		// Settings > Wormhole Jumps & Mass: "Rolling guidance", applied on Save like its neighbours (Reset = on)

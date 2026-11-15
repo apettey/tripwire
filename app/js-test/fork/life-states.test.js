@@ -283,6 +283,23 @@ describe('Wormhole life states', () => {
 			assert.equal(lifeStates.legend(on, false), upstream);
 			assert.equal(lifeStates.legend(upstream, false), upstream);
 		});
+		const upstream2 = "<table id='guide'>\n<tr><td><div class='guide stable'></td><td>Stable</td><th>Auras</th></tr>\n"
+			+ "<tr><td><div class='guide eol'></div></td><td>End of Life (&lt;4h)</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td></tr>\n"
+			+ "<tr><td><div class='guide eol-1h'></div></td><td>Expiring (&lt;1h)</td><td><div class='guide aura jm-62kt'></div></td><td>Medium</td></tr>\n"
+			+ "<tr><td><div class='guide destab'></div></td><td>Mass Destabbed</td><td><div class='guide aura jm-375kt'></div></td><td>Large</td></tr></table>";
+		it('upstream 2.0 legend: <4h, <1h and EOL in our colours, auras kept', () => {
+			const on = lifeStates.legend(upstream2, true);
+			assert.ok(on.indexOf("<td>&lt;4h (End of Life)</td><td><div class='guide aura jm-5kt frig'></div></td><td>Small</td>") > 0);
+			assert.ok(on.indexOf("<div class='guide eol life-map-lt1h'></div></td><td>&lt;1h</td><td><div class='guide aura jm-62kt'></div></td><td>Medium</td></tr><tr class='life-states-legend'>") > 0);
+			assert.ok(on.indexOf("life-map-eol") > 0 && on.indexOf('Expiring') < 0 && on.indexOf("eol-1h") < 0);
+			assert.ok(on.indexOf('Mass Destabbed') > on.indexOf('life-map-eol'));
+		});
+		it('upstream 2.0 legend: idempotent, and upstream\'s again when off', () => {
+			const on = lifeStates.legend(upstream2, true);
+			assert.equal(lifeStates.legend(on, true), on);
+			assert.equal(lifeStates.legend(on, false), upstream2);
+			assert.equal(lifeStates.legend(upstream2, false), upstream2);
+		});
 	});
 
 	it('labels', () => {

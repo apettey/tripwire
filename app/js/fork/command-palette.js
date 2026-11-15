@@ -863,7 +863,12 @@ const commandPalette = {
 		const nodeOf = function(ctx) { return $("#chainMap [data-nodeid='" + ctx.viewingSystemID + "']").first(); };
 		const onChain = function(ctx) { return commandPalette.onChain(ctx.viewingSystemID) ? true : "Not on the chain map"; };
 		const flare = function(color) {
-			return function(args, ctx) { $("#chainParent").contextmenu("setFlare", ctx.viewingSystemID, color, {}); };
+			// Upstream 2.0: flares have a life and a reason and are set through flares.php (sendFlare in
+			// app/js/dialogs/flare-dialog.js); contextmenu("setFlare") is gone. 24 h like the dialog; a reason is kept
+			return function(args, ctx) {
+				const old = chain.data.flares && chain.data.flares[ctx.viewingSystemID];
+				sendFlare(ctx.viewingSystemID, color, 86400, old && old.reason ? old.reason : null, null);
+			};
 		};
 		const flareEnabled = function(color) {
 			return function(ctx) {

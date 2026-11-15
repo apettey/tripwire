@@ -596,6 +596,10 @@ const sigInline = {
 		sigInline.setupTip();
 		sigInline.syncBody();
 		document.addEventListener("keydown", sigInline.onKeydown, true);
+		// Upstream 2.0 has its own Life/Mass chips on these cells (app/js/inline-wormhole-edit.js, bound on ready before this
+		// file). This is a superset (four life states, keys, undo): remove upstream's handler so only one popover opens,
+		// and none with the setting off. Its cells keep upstream's class; sig-inline.css drops the look when off.
+		$("#sigTable").off("click", "tbody tr[data-id] > td:nth-child(5), tbody tr[data-id] > td:nth-child(6)");
 		// Delegated on the cells of the Life (5) and Mass (6) columns; non-wormhole rows have no such cells
 		$("#sigTable tbody").on("click", "td:nth-child(5), td:nth-child(6)", sigInline.onCellClick);
 		// A double click opens upstream's dialog; its own handler (on the row) runs unchanged

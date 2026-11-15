@@ -11,6 +11,7 @@
 const assert = require('assert');
 const { include, fakeAjax } = require('../helpers/helpers');
 
+if (typeof mapDataSuppliers === 'undefined') { include('app/js/map-data-suppliers/_registry'); }   // eve-scout registers itself with this (upstream 2.0)
 if (typeof eveScout === 'undefined') { fakeAjax(); include('app/js/map-data-suppliers/eve-scout'); }
 
 const THERA = 31000005, TURNUR = 30002086, KHERAM = 30003486, RETEKA = 30003880, RIMBAH = 30002241, J132401 = 31000598;

@@ -699,6 +699,7 @@ const smartNotes = {
 		return Array.prototype.filter.call(document.querySelectorAll("#comment-container .comment .commentBody"), function(body) {
 			const comment = body.closest(".comment");
 			if (!comment || comment.classList.contains("hidden")) { return false; }
+			if (body.id && typeof tripwire !== "undefined" && tripwire.editor && tripwire.editor.instances && tripwire.editor.instances[body.id]) { return false; }   // upstream 2.0 editor
 			return !(body.id && typeof CKEDITOR !== "undefined" && CKEDITOR.instances && CKEDITOR.instances[body.id]);
 		});
 	},
@@ -740,6 +741,22 @@ const smartNotes = {
 				if (element && element.classList && element.classList.contains("commentBody")) { smartNotes.restore(element); }
 			});
 			CKEDITOR.on("instanceDestroyed", smartNotes.scheduleScan);
+		}
+		// Upstream 2.0's note editor (app/js/editor.js) copies the note element's HTML when it opens: put the stored note
+		// back first, and enhance the note again when the editor closes
+		if (typeof tripwire !== "undefined" && tripwire.editor && !tripwire.editor.smartNotesWrapped) {
+			const replace = tripwire.editor.replace, destroy = tripwire.editor.destroy;
+			tripwire.editor.replace = function(id) {
+				const element = document.getElementById(id);
+				if (element && element.classList && element.classList.contains("commentBody")) { smartNotes.restore(element); }
+				return replace.apply(this, arguments);
+			};
+			tripwire.editor.destroy = function() {
+				const result = destroy.apply(this, arguments);
+				smartNotes.scheduleScan();
+				return result;
+			};
+			tripwire.editor.smartNotesWrapped = true;
 		}
 		// A zKillboard system chip whose system is on the chain map views it in Tripwire instead of opening zKillboard
 		$(document).on("click", "a.sn-system[target]", function(e) {

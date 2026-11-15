@@ -30,7 +30,7 @@ function extend(deep, target, ...sources) {
 	return target;
 }
 
-const GLOBALS = ['$', 'tripwire', 'appData', 'systemAnalysis', 'chain', 'Notify', 'viewingSystemID', 'viewingSystem',
+const GLOBALS = ['document', '$', 'tripwire', 'appData', 'systemAnalysis', 'chain', 'Notify', 'viewingSystemID', 'viewingSystem',
 	'setTimeout', 'clearTimeout', 'syncPending', 'maxTimeByProperty', 'tracking', 'options', 'set_tracking_text'];
 
 describe('Remove ESI character (#removeESI)', () => {
@@ -70,6 +70,7 @@ describe('Remove ESI character (#removeESI)', () => {
 		global.appData = { genericSystemTypes: [] };
 		global.systemAnalysis = { analyse: () => ({}) };
 		global.chain = { data: {} };
+		global.document = { hidden: false };   // upstream 2.0 sync.js backs off while the tab is hidden
 		global.Notify = { trigger() {} };
 		global.viewingSystemID = 31000005;
 		global.viewingSystem = 'J105246';

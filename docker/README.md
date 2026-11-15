@@ -70,7 +70,7 @@ cached base layer can't ship an unpatched PHP. Dependabot opens a PR for each ne
 "PHP syntax" job reads the version from the Dockerfile, lints with `php:<version>-cli-alpine` and fails when the
 compose file's PHP differs.
 Cron runs `/etc/crontabs/www-data` as `www-data` (`system_activity` hourly, `account_update` every
-3 minutes); jobs inherit the container environment and their output goes to the container log,
+3 minutes, upstream's `system_activity_prune` nightly); jobs inherit the container environment and their output goes to the container log,
 as do nginx access/error logs.
 
 On start the entrypoint (unless `DB_AUTO_INIT=false`) waits up to `DB_WAIT_SECONDS` for MySQL
@@ -97,6 +97,48 @@ copy `docker/sql/jump-jammed.sql`) and `fork_pilot_affiliation` / `fork_pilot_en
 DDL in `intel/pilots.inc.php`) and `fork_structures` / `fork_structure_writes` (the [Structures](#structures) panel, created by
 `public/structures.php`, DDL in `structures/structures.inc.php`, reference copy `docker/sql/structures.sql`). The app user therefore
 needs `CREATE` privileges on its database, which it already has.
+
+#### Database updates
+
+Since upstream Tripwire 2.0 the app updates its own schema. `db-update.php` (run by `tripwire.php`, the map page) holds an
+append-only list of SQL diffs; each one runs once, in order, and is recorded in the `update_history` table it creates.
+`cache/db-update-state.php` only remembers how many diffs ran, so the next page load doesn't ask the database; the
+file is inside the container (not in the image), so a new container checks `update_history` once and moves on. A
+request that finds diffs to run takes a file lock, so two page loads never run them twice.
+
+- Account: `DB_UPDATE_USER` / `DB_UPDATE_PASSWORD`, or the app connection when unset (the default; the app user already
+  has all privileges on its database). A separate account needs `ALTER, CREATE, INDEX, EVENT, SELECT, INSERT, UPDATE` on the database (the last three for
+  `update_history`).
+- Events: a diff `ALTER EVENT`s `flaresClean`, which makes the updating account the event's definer. With the default
+  (app user) nothing else is needed. With a separate update account that can't `DELETE FROM flares`, give the event
+  back to the app user as an admin: `ALTER DEFINER = 'tripwire'@'%' EVENT flaresClean ENABLE;`.
+- If it fails, the map page says "Tripwire's database needs to be updated, but no update connection is configured" or
+  "Error attempting to apply DB updates"; the reason is in the container log (`Diff ... executed successfully` lines
+  show what ran).
+- Restored an older database behind a running container? Delete `/opt/app/cache/db-update-state.php` (or restart the
+  container) so the diffs are checked again.
+  The dev stack bind-mounts the repo, so `cache/` is shared by every stack on that checkout: delete the file before
+  pointing a stack at a new or older database.
+- The 2.0 diffs: `wormholes.life` becomes `varchar(32)`, `flares` gets `lifeLength` and `reason` (flares with an
+  expiry), the `flaresClean` event deletes expired flares, `signatures.scan_group` (anomaly / signature from a paste),
+  `tracking.online` and `tracking.stationID` as `bigint` (docked in an Upwell structure). All are additive; old rows keep
+  their values (flares that existed before the update get a 24 h life).
+- Upstream also ships `tripwire_update.sql`, a cumulative, re-runnable script for databases made from much older
+  dumps (indexes, triggers, events). A database created from this image's `.docker/mysql/tripwire.sql` doesn't need it.
+
+**Upgrading production to 2.0** (the `deploy:manual` PR of the sync):
+
+1. Back up the database (`mysqldump --single-transaction --routines --events --triggers tripwire_database`).
+2. Optional: create a separate update account and set `DB_UPDATE_USER` / `DB_UPDATE_PASSWORD` in infra
+   (`GRANT ALTER, CREATE, INDEX, EVENT, SELECT, INSERT, UPDATE ON tripwire_database.* TO ...`). Skip it to use the app account.
+3. Deploy the new image. The first load of the map page runs the 8 diffs (well under a second on our data); watch the
+   container log for `Database diff update from 0 to 8 starting` and eight `executed successfully` lines.
+4. Check: `SELECT * FROM update_history;` has 8 rows; `SHOW COLUMNS FROM tracking LIKE 'online';` exists;
+   `SELECT DEFINER FROM information_schema.EVENTS WHERE EVENT_NAME = 'flaresClean';` is the app user (or run the
+   `ALTER DEFINER` above as an admin); `SELECT @@event_scheduler;` is `ON`.
+5. Rollback: the diffs are additive, so the previous image runs against the updated schema (flares it sets have no
+   expiry there, so `flaresClean` leaves them; remove them by hand). Restore the backup only if
+   a diff failed half-way.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
 its database (the `MYSQL_USER` the mysql image creates has them) to create triggers and events.
@@ -125,6 +167,7 @@ Every setting the image reads. "Read by" says where: `config.php` / `db.inc.php`
 | `DB_NAME` | `tripwire_database` | `db.inc.php`, entrypoint | Database name; the entrypoint creates it if missing |
 | `DB_USER` / `DB_PASSWORD` | `tripwire` / empty | `db.inc.php`, entrypoint | App connection (PDO, `charset=utf8mb4`); also the schema import account unless `DB_INIT_*` is set |
 | `DB_INIT_USER` / `DB_INIT_PASSWORD` | `DB_USER` / `DB_PASSWORD` | entrypoint | Separate account for the wait/create/import step |
+| `DB_UPDATE_USER` / `DB_UPDATE_PASSWORD` | `DB_USER` (the app connection) | `db.inc.php` | Account upstream's schema self-update (`db-update.php`) uses; needs `ALTER`, `CREATE`, `INDEX`, `EVENT`, `SELECT`, `INSERT` and `UPDATE` on the database. See [Database updates](#database-updates) |
 | `SESSION_COOKIE_SECURE` | `1` | `docker/php-security.ini` (php-fpm start) | `0` drops the `Secure` flag from the PHP session cookie, for serving plain HTTP |
 | `DB_AUTO_INIT` | `true` | entrypoint | `false` skips waiting for MySQL and the schema import entirely |
 | `DB_WAIT_SECONDS` | `60` | entrypoint | How long to wait for MySQL on start before exiting |

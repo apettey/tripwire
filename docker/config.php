@@ -55,6 +55,11 @@ if (tw_env('DISCORD_WEB_HOOK')) {
 // public/kills.php marks kills by/against these corporations (plus the user's own) as friendly
 define('ZKILL_FEED_ENABLED', tw_env_bool('ZKILL_FEED_ENABLED', true));
 define('KILL_REPORT_FRIENDLY_CORPORATIONS', tw_env('KILL_REPORT_FRIENDLY_CORPORATIONS', ''));
+// Upstream 2.0 includes analytics.inc.php and donation_panel.inc only when these are true. The image replaces both
+// with fork versions that decide for themselves (GA_MEASUREMENT_ID, DONATION_PANEL_HTML_FILE; empty = nothing), and
+// analytics.inc.php must load anyway: it defines the no-op ga() that tripwire.php calls. So both stay on.
+define('ENABLE_ANALYTICS', true);
+define('ENABLE_DONATIONS', true);
 
 // zKillboard integration (fork, zkill/): how long stored kills are kept (hours, 1-168) and the minimum
 // spacing of zKillboard API requests made by the worker for back-fills (seconds, 1-60)

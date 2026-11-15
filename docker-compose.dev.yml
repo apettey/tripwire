@@ -21,6 +21,9 @@ services:
       DB_NAME: tripwire_database
       DB_USER: ${MYSQL_USER:-tripwire}
       DB_PASSWORD: ${MYSQL_PASSWORD:-tripwire}
+      # Account for upstream 2.0's schema self-update (db-update.php); empty = DB_USER (docker/README.md#database-updates)
+      DB_UPDATE_USER: ${DB_UPDATE_USER:-}
+      DB_UPDATE_PASSWORD: ${DB_UPDATE_PASSWORD:-}
       TRIPWIRE_DOMAIN: localhost:${DEV_HTTP_PORT:-8080}
       TRIPWIRE_HTTPS: "false"
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}

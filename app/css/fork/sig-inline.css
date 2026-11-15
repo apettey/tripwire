@@ -82,3 +82,7 @@ body.sig-inline-on #sigTable tbody td:nth-child(6):hover {
 .sig-inline-pop .sig-inline-note:empty {
 	display: none;
 }
+
+/* Upstream 2.0 marks the Life/Mass cells editable (app/js/inline-wormhole-edit.js); with this setting off nothing edits them */
+body:not(.sig-inline-on) #sigTable td.inline-editable { cursor: inherit; }
+body:not(.sig-inline-on) #sigTable td.inline-editable:hover { color: inherit; text-decoration: none; }

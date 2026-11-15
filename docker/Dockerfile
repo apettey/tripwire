@@ -29,7 +29,8 @@ RUN npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
 # - fork/dev files: docs, change log, agent files, compose files, CI, docker/ (the runtime stage copies
 #   what it needs from the build context), .env.example, scripts/
 # - upstream dev/deploy files: example configs, bitbucket-pipelines.yml, crontab-tw.txt (docker/crontab
-#   replaces it), composer.json (vendor/ is committed), 403/404.html (copied to nginx below)
+#   replaces it), composer.json/.lock (vendor/ is committed), 403/404.html (copied to nginx below),
+#   upstream's Playwright suite (e2e/, playwright.config.js)
 # - front-end sources and tooling: app/ (bundles are built into public/ by the assets stage), gulpfile.js,
 #   package*.json, node_modules
 # - tools/: upstream admin scripts that regenerate public/js/combine.js from the EVE SDE; nothing at
@@ -44,7 +45,7 @@ COPY . .
 RUN rm -rf \
       AGENTS.md CLAUDE.md README.md docs changes .claude .github .idea docker \
       docker-compose*.yml .env.example .gitattributes .gitignore scripts traefik-data \
-      bitbucket-pipelines.yml crontab-tw.txt composer.json 403.html 404.html \
+      bitbucket-pipelines.yml crontab-tw.txt composer.json composer.lock 403.html 404.html e2e playwright.config.js \
       config.example.php db.inc.example.php db.inc.docker.example.php config.php db.inc.php \
       analytics.inc.php donation_panel.inc public/donate.html \
       app gulpfile.js package.json package-lock.json node_modules tools tests zkill/tests zkill/tools discord/tests discord/tools esi/tests intel/tests intel/tools watchlist/tests jumprange/tests jumprange/tools fight/tests structures/tests \
@@ -76,8 +77,10 @@ ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/relea
 RUN apk upgrade --no-cache \
  && apk add --no-cache nginx supervisor mariadb-client mariadb-connector-c bash tzdata \
     icu-libs libpng libjpeg-turbo freetype libwebp libavif libxpm
+# dom: upstream 2.0's note sanitiser (note-html.inc.php). The PHP image has it built in; the check fails the build if not
 RUN install-php-extensions pdo_mysql gd intl mbstring \
  && php -m 2>&1 | grep -qx gd && ! php -m 2>&1 | grep -q Warning \
+ && php -m 2>&1 | grep -qx dom \
  && mkdir -m 700 -p /var/lib/php/session \
  && chown www-data /var/lib/php/session
 
