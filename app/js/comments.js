@@ -1,4 +1,6 @@
 $("body").on("dblclick", ".comment", function(e) {
+	// fork: in the note editor, double-click selects a word
+	if ($(e.target).closest(".rte").length) return;
 	e.preventDefault();
 	document.getSelection().removeAllRanges();
 	$(this).find(".commentEdit").click();
@@ -8,13 +10,14 @@ $("body").on("click", ".commentEdit", function(e) {
 	e.preventDefault();
 
 	// Prevent multiple editors
-	if ($(".cke").length) return false;
+	if (tripwire.editor.isOpen()) return false;
 
 	var $comment = $(this).closest(".comment");
 
 	$comment.find(".commentToolbar").hide();
 
-	CKEDITOR.replace($comment.find(".commentBody").attr("id"), CKConfig).on("instanceReady", function() {
+	// fork: the note editor (app/js/fork/note-editor.js) in place of CKEditor 4
+	tripwire.editor.replace($comment.find(".commentBody").attr("id"), function() {
 		$comment.find(".commentStatus").text("");
 		$comment.find(".commentFooter").show();
 		$comment.find(".commentFooter .commentControls").show();
@@ -33,7 +36,7 @@ $("body").on("click", ".commentSave, .commentCancel", function(e) {
 	$this.attr("disabled", "true");
 
 	if ($this.hasClass("commentSave")) {
-		var data = {"mode": "save", "commentID": $comment.data("id"), "systemID": $comment.find(".commentSticky").hasClass("active") ? 0 : viewingSystemID, "comment": CKEDITOR.instances[$comment.find(".commentBody").attr("id")].getData()};
+		var data = {"mode": "save", "commentID": $comment.data("id"), "systemID": $comment.find(".commentSticky").hasClass("active") ? 0 : viewingSystemID, "comment": tripwire.editor.get($comment.find(".commentBody").attr("id")).getData()};
 
 		$.ajax({
 			url: "comments.php",
@@ -46,7 +49,9 @@ $("body").on("click", ".commentSave, .commentCancel", function(e) {
 				$comment.find(".commentCreated").text("Posted by " + data.comment.createdByName + " at " + data.comment.createdDate);
 				Tooltips.attach($comment.find("[data-tooltip]"));
 
-				CKEDITOR.instances[$comment.find(".commentBody").attr("id")].destroy(false);
+				tripwire.editor.destroy($comment.find(".commentBody").attr("id"), false);
+				// fork: show the note as the server stored it (sanitised there too)
+				if (typeof data.comment.comment === "string") $comment.find(".commentBody").html(sanitiseHtml(data.comment.comment));
 				$comment.attr("data-id", data.comment.id);
 				$comment.find(".commentToolbar").show();
 				$comment.find(".commentFooter").hide();
@@ -54,7 +59,7 @@ $("body").on("click", ".commentSave, .commentCancel", function(e) {
 			}
 		});
 	} else {
-		CKEDITOR.instances[$comment.find(".commentBody").attr("id")].destroy(true);
+		tripwire.editor.destroy($comment.find(".commentBody").attr("id"), true);
 
 		if (!$comment.attr("data-id")) {
 			$comment.remove();
@@ -118,7 +123,7 @@ $("body").on("click", "#add-comment", function(e) {
 	e.preventDefault();
 
 	// Prevent multiple editors
-	if ($(".cke").length) return false;
+	if (tripwire.editor.isOpen()) return false;
 
 	var $comment = $(".comment:last").clone();
 	var commentID = $(".comment:visible:last .commentBody").attr("id") ? $(".comment:visible:last .commentBody").attr("id").replace("comment", "") + 1 : 0;

@@ -143,7 +143,7 @@ $("#notesWidget .tutorial").click(function(e) {
 
                 tutorial.stepFunc = function() {
                     setTimeout(function() {
-                        tutorial._options.steps[2].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
+                        tutorial._options.steps[2].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
                         tutorial.setOption("steps", tutorial._options.steps);
 
                         tutorial.exiting = false;
@@ -181,8 +181,8 @@ $("#notesWidget .tutorial").click(function(e) {
 
                 tutorial.stepFunc = function() {
                     setTimeout(function() {
-                        tutorial._options.steps[7].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
-                        tutorial._options.steps[8].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
+                        tutorial._options.steps[7].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
+                        tutorial._options.steps[8].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
                         tutorial.setOption("steps", tutorial._options.steps);
 
                         tutorial.exiting = false;
@@ -227,7 +227,6 @@ $("#notesWidget .tutorial").click(function(e) {
             $("#notesWidget #add-comment").off("click", tutorial.stepFunc);
             $("#notesWidget").off("click", ".commentSave", tutorial.stepFunc);
             $("#notesWidget").off("click", ".commentEdit", tutorial.stepFunc);
-            $("#notesWidget").off("click", ".cke_toolgroup:has(.cke_button__toolbarswitch)", tutorial.stepFunc);
         }
     });
 

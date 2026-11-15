@@ -72,6 +72,7 @@ if ($mode == 'save') {
 		$stmt->bindValue(':maskID', $maskID);
 		$stmt->execute();
 		$output['comment'] = $stmt->fetchObject();
+		if ($output['comment']) $output['comment']->comment = $comment; // fork: the note as stored (sanitised above), for the editor to show
 		$output['result'] = $success;
 
 		// Log the user stats

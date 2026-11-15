@@ -21,7 +21,7 @@ tripwire.comments = function() {
                     $comment.find(".commentBody").html(sanitise(data[x].comment));
                 } catch (err) {
                     $comment.find(".commentFooter").show();
-                    $comment.find(".commentStatus").html("<span class='critical'>" + err.constructor.name + ": " + err.message + "</span>");
+                    $comment.find(".commentStatus").empty().append($("<span class='critical'></span>").text(err.constructor.name + ": " + err.message));
                     $comment.find(".commentFooter .commentControls").hide();
                 }
 
@@ -40,7 +40,7 @@ tripwire.comments = function() {
                     $comment.find(".commentBody").html(sanitise(data[x].comment));
                 } catch (err) {
                     $comment.find(".commentFooter").show();
-                    $comment.find(".commentStatus").html("<span class='critical'>" + err.constructor.name + ": " + err.message + "</span>");
+                    $comment.find(".commentStatus").empty().append($("<span class='critical'></span>").text(err.constructor.name + ": " + err.message));
                     $comment.find(".commentFooter .commentControls").hide();
                 }
 

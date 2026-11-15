@@ -652,13 +652,6 @@ const forkHints = {
 			document.addEventListener(type, function() { forkHints.signals.dragging = false; }, { capture: true, passive: true });
 		});
 		window.addEventListener("blur", function() { forkHints.signals.dragging = false; });
-		// CKEditor's iframe keeps its keystrokes from the page's listeners: count them as input too
-		if (typeof CKEDITOR !== "undefined" && CKEDITOR && typeof CKEDITOR.on === "function") {
-			const typed = function() { forkHints.signals.lastInput = Date.now(); };
-			const watch = function(editor) { if (editor && !editor.forkHintsWatched) { editor.forkHintsWatched = true; editor.on("key", typed); editor.on("change", typed); } };
-			Object.keys(CKEDITOR.instances || {}).forEach(function(k) { watch(CKEDITOR.instances[k]); });
-			CKEDITOR.on("instanceReady", function(e) { watch(e.editor); });
-		}
 		$(document).on("dialogopen", "#dialog-whatsNew", function() { forkHints.session.whatsNew = true; });
 		$(document).on("dialogopen", function(e) { forkHints.emit("dialog.open", { id: e.target && e.target.id || "" }); });
 		$(document).on("dialogclose", function(e) { forkHints.emit("dialog.close", { id: e.target && e.target.id || "" }); });
