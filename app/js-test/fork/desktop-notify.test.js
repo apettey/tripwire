@@ -216,5 +216,22 @@ describe('forkDesktopNotify', () => {
 			assert.strictEqual(await new Promise(resolve => dn.request(resolve)), 'denied');
 			assert.deepStrictEqual(tracked, ['desktopNotify.granted', 'desktopNotify.denied']);
 		});
+
+		it('does not ask, or count anything, once the browser has an answer', async () => {
+			let asked = 0;
+			FakeNotification.permission = 'granted';
+			FakeNotification.requestPermission = () => { asked++; return Promise.resolve('granted'); };
+			assert.strictEqual(await new Promise(resolve => dn.request(resolve)), 'granted');
+			assert.strictEqual(asked, 0);
+			assert.deepStrictEqual(tracked, []);
+		});
+
+		it('counts one answer when the browser both calls back and resolves', async () => {
+			FakeNotification.permission = 'default';
+			FakeNotification.requestPermission = (cb) => { FakeNotification.permission = 'granted'; cb('granted'); return Promise.resolve('granted'); };
+			await new Promise(resolve => dn.request(resolve));
+			await new Promise(r => setTimeout(r, 0));
+			assert.deepStrictEqual(tracked, ['desktopNotify.granted']);
+		});
 	});
 });

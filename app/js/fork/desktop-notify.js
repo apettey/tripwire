@@ -208,7 +208,11 @@ const forkDesktopNotify = {
 			if (typeof done === "function") { done(p); }
 			return result;
 		};
-		if (forkDesktopNotify.state() !== "default") { finish(); return; }
+		if (forkDesktopNotify.state() !== "default") {	// asked before: nothing to record
+			forkDesktopNotify.refreshRow();
+			if (typeof done === "function") { done(forkDesktopNotify.state()); }
+			return;
+		}
 		try {
 			// Older Safari takes a callback and returns nothing
 			const r = window.Notification.requestPermission(finish);
