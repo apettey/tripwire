@@ -864,10 +864,12 @@ const commandPalette = {
 		const onChain = function(ctx) { return commandPalette.onChain(ctx.viewingSystemID) ? true : "Not on the chain map"; };
 		const flare = function(color) {
 			// Upstream 2.0: flares have a life and a reason and are set through flares.php (sendFlare in
-			// app/js/dialogs/flare-dialog.js); contextmenu("setFlare") is gone. 24 h like the dialog; a reason is kept
+			// app/js/dialogs/flare-dialog.js); contextmenu("setFlare") is gone. A new flare lasts 24 h like the dialog's
+			// default; re-colouring one keeps its life (also "forever") and reason
 			return function(args, ctx) {
 				const old = chain.data.flares && chain.data.flares[ctx.viewingSystemID];
-				sendFlare(ctx.viewingSystemID, color, 86400, old && old.reason ? old.reason : null, null);
+				const life = old ? (old.lifeLength ? old.lifeLength : "none") : 86400;
+				sendFlare(ctx.viewingSystemID, color, life, old && old.reason ? old.reason : undefined, null);
 			};
 		};
 		const flareEnabled = function(color) {

@@ -15,7 +15,7 @@ require_once('db.php');
 require_once('db-update.php');
 require('lib.inc.php');
 
-$system = $_REQUEST['system'] ?? '';
+$system = isset($_REQUEST['system']) && is_string($_REQUEST['system']) ? $_REQUEST['system'] : ''; // fork: ?system[]=x is not a string
 require_once(__DIR__ . '/csrf.inc.php'); // fork
 ?>
 <!DOCTYPE html>

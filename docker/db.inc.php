@@ -44,6 +44,37 @@ if (isset($mysql) && !isset($mysql_update)) {
     unset($tw_update_user);
 }
 
+// cache/db-update-state.php counts the diffs that ran; it lives in the cache volume, so it outlives a database restore
+// (db-update.php would then skip diffs the restored database never had). It can also lag behind: db-update.php only
+// writes it after running a diff, not after skipping one already in update_history, so a lost file stays at 1 and every
+// map load re-checks the rest. On the map page only (the one page that runs db-update.php; polls pay nothing), set the
+// file to the number of rows in update_history whenever the two differ. Diffs run in order, so that count is the index
+// of the next diff to run. Under the file's lock, which db-update.php also takes.
+if (isset($mysql) && $mysql instanceof PDO && in_array(__DIR__ . '/tripwire.php', get_included_files(), true)) {
+    (function (PDO $db, $stateFile) {
+        if (!is_file($stateFile)) return;   // first run: db-update.php starts from 0
+        try {
+            $applied = (int)$db->query('SELECT COUNT(*) FROM update_history')->fetchColumn();
+        } catch (Throwable $e) {
+            $applied = 0;   // no update_history: a database from before 2.0
+        }
+        $fp = @fopen($stateFile, 'c+');
+        if (!$fp) return;
+        if (flock($fp, LOCK_EX)) {
+            $claimed = preg_match('/\$version\s*=\s*(\d+)/', (string)stream_get_contents($fp), $m) ? (int)$m[1] : 0;
+            if ($claimed !== $applied) {
+                if ($applied < $claimed) error_log("db-update: update_history has $applied rows, the state file claimed $claimed; checking again");
+                ftruncate($fp, 0);
+                rewind($fp);
+                fwrite($fp, '<?php $version = ' . $applied . ';');
+                fflush($fp);
+            }
+            flock($fp, LOCK_UN);
+        }
+        fclose($fp);
+    })($mysql, __DIR__ . '/cache/db-update-state.php');
+}
+
 // Fork: keep the session mask canonical and re-check access to it on every request (mask-guard.inc.php).
 require_once(__DIR__ . '/mask-guard.inc.php');
 if (isset($mysql)) tripwire_mask_guard($mysql);

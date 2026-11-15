@@ -555,6 +555,8 @@ if (isset($_POST['signatures'])) {
             $wormhole = null;
 
             if (isset($request['wormhole'])) {
+                // fork: <1h is stored as a critical hole with a 1 h timer (life-states); a new hole gets that timer too
+                if (isset($request['wormhole']['life']) && $request['wormhole']['life'] === '<1h' && isset($request['signatures']) && is_array($request['signatures'])) { foreach ($request['signatures'] as $i => $s) { if (is_array($s) && !isset($s['lifeLeft'])) $request['signatures'][$i]['lifeLeft'] = date('Y-m-d H:i:s', strtotime('1 hour')); } }
                 // Wormhole
                 if (isset($request['signatures']) && count($request['signatures'])  > 1) {
                     $automapLock = isset($_REQUEST['automap']) ? automapLock($request['signatures'][0], $request['signatures'][1], $mysql) : null;
