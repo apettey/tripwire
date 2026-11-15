@@ -74,14 +74,16 @@ const fleetMass = {
 	 * Parse a paste into hulls.
 	 * @param text fleet composition, d-scan (typeID, name, type, distance; or the old 3 columns) or ship names
 	 * @param massTable appData.mass
+	 * @param types optional public/intel/types.json (the d-scan feature's static data), to tell d-scan ships from the rest
 	 * @return {format: 'fleet'|'dscan'|'list'|'' (most rows), hulls: [{typeID, name, group, count, hullKg}] (heaviest
-	 *   first), ships: total count, unknown: [{name, count}] (rows no hull matched), lines: rows read}
+	 *   first), ships: total count, unknown: [{name, count}] (ships and names no hull mass matched), skipped: d-scan
+	 *   rows that aren't ships, lines: rows read}
 	 */
-	parse: function(text, massTable) {
+	parse: function(text, massTable, types) {
 		const index = fleetMass.nameIndex(massTable);
 		const table = massTable || {};
 		const byType = {}, unknown = {}, kinds = { fleet: 0, dscan: 0, list: 0 };
-		let lines = 0;
+		let lines = 0, skipped = 0;
 		const add = function(hull, count, group) {
 			const key = String(hull.typeID);
 			const h = byType[key] = byType[key] || { typeID: hull.typeID, name: hull.name, group: fleetMass.groupOf(hull.name, group), count: 0, hullKg: hull.mass };
@@ -105,16 +107,20 @@ const fleetMass = {
 				if (hull) { add(hull, 1, fleet.group); } else { miss(fleet.ship, 1); }
 				return;
 			}
-			// D-scan: typeID, name, type, distance (or the old name, type, distance). By type ID, else by type name; a row
-			// neither finds (a structure, drone or wreck, or a hull newer than mass.json) is listed as not recognised.
+			// D-scan: typeID, name, type, distance (or the old name, type, distance). By type ID, else by type name. A row
+			// neither finds is a ship missing from mass.json (listed as not recognised) or anything else (sun, planets,
+			// structures, drones, wrecks, or a type types.json doesn't know: counted as left out), by its kind in types.json.
 			const typed = fields.length >= 4 && /^\d{1,10}$/.test(fleetMass.clean(fields[0]));
 			if (typed || fields.length === 3) {
 				kinds.dscan++;
+				const typeID = typed ? parseInt(fleetMass.clean(fields[0]), 10) : null;
 				const typeName = fleetMass.clean(typed ? fields[2] : fields[1]);
-				const t = typed ? table[parseInt(fleetMass.clean(fields[0]), 10)] : null;
-				const hull = (t && t.typeName && parseFloat(t.mass) > 0 ? { typeID: parseInt(fleetMass.clean(fields[0]), 10), name: String(t.typeName), mass: parseFloat(t.mass) } : null) ||
+				const t = typed ? table[typeID] : null;
+				const hull = (t && t.typeName && parseFloat(t.mass) > 0 ? { typeID: typeID, name: String(t.typeName), mass: parseFloat(t.mass) } : null) ||
 					index[typeName.toLowerCase()];
-				if (hull) { add(hull, 1, ''); } else { miss(typeName, 1); }
+				if (hull) { add(hull, 1, ''); return; }
+				const ship = fleetMass.isShipType(typeID, typeName, types);
+				if (ship === true) { miss(typeName, 1); } else { skipped++; }
 				return;
 			}
 			kinds.list++;
@@ -133,8 +139,24 @@ const fleetMass = {
 			format: format, hulls: hulls,
 			ships: hulls.reduce(function(n, h) { return n + h.count; }, 0),
 			unknown: Object.keys(unknown).map(function(k) { return { name: k, count: unknown[k] }; }),
-			lines: lines
+			skipped: skipped, lines: lines
 		};
+	},
+
+	/** Whether a d-scan type is a ship, from types.json ({types: {typeID: [name, groupID]}, groups: {groupID: [name,
+		kind]}}): true / false, or null when the type (or the data) is unknown */
+	isShipType: function(typeID, typeName, types) {
+		if (!types || !types.types || !types.groups) { return null; }
+		let t = typeID !== null && typeID !== undefined ? types.types[String(typeID)] : null;
+		if (!t && typeName) {
+			const key = String(typeName).toLowerCase();
+			const ids = Object.keys(types.types);
+			for (let i = 0; i < ids.length && !t; i++) {
+				if (String(types.types[ids[i]][0]).toLowerCase() === key) { t = types.types[ids[i]]; }
+			}
+		}
+		const g = t ? types.groups[String(t[1])] : null;
+		return g ? g[1] === 'ship' : null;
 	},
 
 	// Prop module masses (kg), as in fit-mass-data.js: 1MN 500 t, 10MN/50MN 5,000 t, 100MN/500MN 50,000 t,
@@ -312,6 +334,7 @@ const fleetMass = {
 			html += "<p class='fleet-mass-note'>Not recognised, left out: " + shown.join(", ") +
 				(fleet.unknown.length > shown.length ? " and " + (fleet.unknown.length - shown.length) + " more" : "") + ".</p>";
 		}
+		if (fleet.skipped) { html += "<p class='fleet-mass-note'>" + fleet.skipped + " d-scan row" + (fleet.skipped === 1 ? " that isn't a ship" : "s that aren't ships") + " left out.</p>"; }
 		if (ctx.preserved) { html += "<p class='fleet-mass-warning'>" + e(ctx.preserved) + "</p>"; }
 		if (!fleet.ships) { return html; }
 
@@ -405,6 +428,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return $p;
 		}
 
+		// The d-scan feature's static type data (public/intel/types.json), to tell ships missing from mass.json from the
+		// rest of a d-scan. Shared with intel-scans.js when it already loaded it; fetched once (same file, cached) otherwise.
+		let typesData = null, typesXhr = null;
+		function types() {
+			return typesData || (typeof intelScans !== "undefined" && intelScans.types) || null;
+		}
+		function loadTypes() {
+			if (typesXhr) { return; }
+			typesXhr = $.ajax({ url: "intel/types.json", dataType: "JSON", cache: true, timeout: 20000 })
+				.done(function(data) { if (data && data.types) { typesData = data; render(); } });
+		}
+
 		function render() {
 			const $p = panel();
 			if (!fleetMass.enabled(opts())) { $p.hide(); return; }
@@ -417,7 +452,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			$p.find(".fleet-mass-hot").prop("checked", state.hot);
 			$p.find(".fleet-mass-back").prop("checked", state.back);
 			const table = typeof appData !== "undefined" ? appData.mass : {};
-			const fleet = fleetMass.parse(state.text, table);
+			const fleet = fleetMass.parse(state.text, table, types());
+			if (fleet.format === 'dscan' && fleet.skipped && !types()) { loadTypes(); }
 			const result = fleetMass.check(fleet, info.hole, { hot: state.hot, back: state.back });
 			$p.find(".fleet-mass-result").html(fleetMass.resultHtml(fleet, result, {
 				typeName: info.typeName, inferred: info.inferred, preserved: info.preserved,

@@ -29,8 +29,10 @@ Mass dialog opens (retires once a fleet is checked).
   fixtures in `app/js-test/testdata/fleet-mass/`) and `app/css/fork/fleet-mass.css`.
 - Parsing: the fleet composition copy is tab-separated `Pilot, System, Ship type, Ship group, Position, Skills
   "n - n - n" [, Wing / Squad]` (the format aa-intel-tool's fleetcomp parser reads; the fixture follows it). D-scans are
-  read by type ID, else by type name (rows matching no hull, such as structures, drones or hulls newer than
-  `mass.json`, are listed as not recognised), plain lists as "Paladin", "3x Paladin", "Kronos x3",
+  read by type ID, else by type name; rows matching no hull are told apart with the d-scan feature's type data
+  (`public/intel/types.json`, loaded once when needed): ship types missing from `mass.json` are listed as not
+  recognised, everything else (sun, planets, structures, drones, wrecks) is counted as "rows that aren't ships left
+  out". Plain lists as "Paladin", "3x Paladin", "Kronos x3",
   "Guardian 4", "Marshal<TAB>2" or an EFT header. Unknown names are listed, not guessed.
 - Mass: hull masses from `appData.mass` (`tools/mass.json`, which already has the 24.01 Marauder/Black Ops masses).
   "Prop mods on" (default) adds the usual prop module for the hull's size, using the module masses of the fitted jump

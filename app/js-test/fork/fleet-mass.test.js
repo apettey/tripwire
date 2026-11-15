@@ -8,6 +8,7 @@ include('app/js/fork/fleet-mass');
 const root = path.join(__dirname, '..', '..', '..');
 const fixture = name => fs.readFileSync(path.join(root, 'app/js-test/testdata/fleet-mass', name), 'utf8');
 const MASS = loadJSON(path.join(root, 'tools/mass'));
+const TYPES = loadJSON(path.join(root, 'public/intel/types'));	// the d-scan feature's static type data
 const kt = n => n * 1e6;
 const byName = (fleet, name) => fleet.hulls.filter(h => h.name === name)[0];
 // B274: C2 -> high-sec, 2,000,000 t total, 375,000 t per jump
@@ -50,7 +51,7 @@ describe('Fleet mass check', () => {
 	});
 
 	describe('parse: d-scan', () => {
-		const fleet = fleetMass.parse(fixture('dscan.txt'), MASS);
+		const fleet = fleetMass.parse(fixture('dscan.txt'), MASS, TYPES);
 		it('detects the format', () => assert.strictEqual(fleet.format, 'dscan'));
 		it('counts ships by type id', () => {
 			assert.strictEqual(byName(fleet, 'Paladin').count, 2);
@@ -59,18 +60,46 @@ describe('Fleet mass check', () => {
 			assert.strictEqual(fleet.ships, 4);
 		});
 		it('groups by the known names when the paste has no group', () => assert.strictEqual(byName(fleet, 'Sin').group, 'Black Ops'));
-		it('lists rows that match no hull (structures, drones) as not recognised', () => {
-			assert.deepStrictEqual(fleet.unknown, [{ name: 'Astrahus', count: 1 }, { name: 'Acolyte I', count: 1 }]);
+		it('counts rows that are not ships (structures, drones) as left out, not as unrecognised', () => {
+			assert.strictEqual(fleet.skipped, 2);
+			assert.deepStrictEqual(fleet.unknown, []);
+		});
+		it('a normal d-scan (sun, planets, gates, wrecks) reads as ships plus rows left out', () => {
+			const f = fleetMass.parse('3796\tJita\tSun G5 (Yellow)\t12 AU\n2015\tJita IV\tPlanet (Temperate)\t2 AU\n' +
+				'16\tPerimeter\tStargate (Caldari System)\t5 AU\n26468\tRifter Wreck\tSmall Wreck\t20 km\n587\tBob\'s Rifter\tRifter\t20 km', MASS, TYPES);
+			assert.strictEqual(f.ships, 1);
+			assert.strictEqual(f.skipped, 4);
+			assert.deepStrictEqual(f.unknown, []);
+			const h = fleetMass.resultHtml(f, fleetMass.check(f, B274), {});
+			assert.ok(h.includes('4 d-scan rows that aren&#39;t ships left out') || h.includes("4 d-scan rows that aren't ships left out"), h);
+			assert.ok(!h.includes('Not recognised'));
 		});
 		it('falls back to the type name when the type id is not in mass.json', () => {
-			const f = fleetMass.parse('99999999\tNew Paladin\tPaladin\t-\n99999998\tSomething\tBrand New Hull\t5 km', MASS);
+			const f = fleetMass.parse('99999999\tNew Paladin\tPaladin\t-', MASS, TYPES);
 			assert.strictEqual(byName(f, 'Paladin').count, 1);
+		});
+		it('lists a ship type missing from mass.json as not recognised', () => {
+			const types = { types: { '99999998': ['Brand New Hull', 25] }, groups: { '25': ['Frigate', 'ship', 'frigate'] } };
+			const f = fleetMass.parse('99999998\tSomething\tBrand New Hull\t5 km', MASS, types);
 			assert.deepStrictEqual(f.unknown, [{ name: 'Brand New Hull', count: 1 }]);
+			assert.strictEqual(f.skipped, 0);
+		});
+		it('a type nobody knows, or no type data, is left out (not called unrecognised)', () => {
+			assert.strictEqual(fleetMass.parse('99999998\tSomething\tBrand New Thing\t5 km', MASS, TYPES).skipped, 1);
+			assert.strictEqual(fleetMass.parse('35832\tHome\tAstrahus\t5 km', MASS).skipped, 1);
 		});
 		it('reads the old three-column d-scan by type name', () => {
-			const f = fleetMass.parse('My Paladin\tPaladin\t-\nTower\tCaldari Control Tower\t5 km', MASS);
+			const f = fleetMass.parse('My Paladin\tPaladin\t-\nTower\tCaldari Control Tower\t5 km', MASS, TYPES);
 			assert.strictEqual(byName(f, 'Paladin').count, 1);
-			assert.deepStrictEqual(f.unknown, [{ name: 'Caldari Control Tower', count: 1 }]);
+			assert.strictEqual(f.skipped, 1);
+			assert.deepStrictEqual(f.unknown, []);
+		});
+		it('isShipType', () => {
+			assert.strictEqual(fleetMass.isShipType(28659, 'Paladin', TYPES), true);
+			assert.strictEqual(fleetMass.isShipType(35832, 'Astrahus', TYPES), false);
+			assert.strictEqual(fleetMass.isShipType(null, 'acolyte i', TYPES), false);
+			assert.strictEqual(fleetMass.isShipType(1, 'nope', TYPES), null);
+			assert.strictEqual(fleetMass.isShipType(28659, 'Paladin', undefined), null);
 		});
 	});
 
