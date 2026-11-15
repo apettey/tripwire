@@ -53,6 +53,7 @@ hidden behind a right-click, a key or a dialog.
 - **Map** (`app/js/fork/fight-now.js`, `app/css/fork/kill-tags.css`): high-sec systems are never marked (same rule as the
   Chain kill feed; trade hubs and gank systems would always be lit). The marker sits just outside the node's right edge,
   polls once a minute for the systems on the chain map, and its click opens the link without selecting the system.
+- Map key: a "Fight now" entry under Marks on systems (`forkLegend.register` from `fight-now.js`).
 - Mask defaults allow-list (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`): `killTags`, `fightNow`.
 - Usage: two catalog entries, `killTags` (`filtered`, `window`; shown via `.kill-tag`) and `fightNow` (`opened`; shown via
   `.fight-now`), so each toggle's on/off is counted.

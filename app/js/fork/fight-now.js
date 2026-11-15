@@ -178,8 +178,24 @@ const fightNow = {
 		}
 	},
 
+	/** Map key entry (map-legend.js) */
+	setupLegend: function() {
+		if (typeof forkLegend === "undefined") { return; }
+		forkLegend.register({
+			id: "fightNow", group: "systemMarks", order: 95, title: "Fight now",
+			text: "2 or more player kills here in the last hour (not shown in high-sec). Click it for zKillboard's battle report.",
+			settingId: "fightNow-enabled",
+			sample: function() {
+				const marker = fightNow.markerHtml({ kills: 4, lastKill: new Date(Date.now() - 6 * 60000).toISOString(),
+					url: fightNow.RELATED_URL }, Date.now()).replace(/^<a [^>]*?href='[^']*'/, "<span class='fight-now'").replace(/<\/a>$/, "</span>");
+				return forkLegend.node({ before: marker, label: "<span class='nullsec'>NS</span>", name: "HED-GP", type: "K162" });
+			}
+		});
+	},
+
 	init: function() {
 		fightNow.setupSettings();
+		fightNow.setupLegend();
 		// Redraws replace the nodes: put the markers back
 		if (typeof chain !== "undefined" && chain && typeof chain.draw === "function" && !chain.draw.fightNowWrapped) {
 			const draw = chain.draw;

@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-15 | [Kill tags, tag filter and Fight now markers](2026-11-15-kill-type-tags/README.md) | Gate camp / Bubble / Smartbomb / Gank / Solo / Awox / NPC tags on System and Chain kill feed rows with a filter by tag, a 1h / 24h / 48h (up to 7d) window on the System kill feed, and a Fight now marker on non-high-sec chain systems with 2+ player kills in the last hour linking to zKillboard's related kills; tag facts stored by the pooled zKill worker |
 | 2026-11-15 | [Undo and redo any edit](2026-11-15-undo-any-edit/README.md) | One undo / redo history per session and mask for every signature and map edit (dialog, paste, inline, hole life / mass / type / leads-to, deletes, automapped holes) in any system; Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, steps named on the arrows and in the palette, refused when someone else changed the item since |
 | 2026-11-15 | [Gas and ore site value](2026-11-15-site-value-estimate/README.md) | Estimated ISK chip on wormhole gas and ore sites in the signature list with a units x price breakdown; contents from EVE University (gas cross-checked), prices from ESI's public market average cached hourly by the server, ore at compressed prices |
 | 2026-11-15 | [Map key](2026-11-15-map-key/README.md) | Map key button in the chain map header: a panel explaining every colour, line and marker the map can show, with live samples, plain lines and where to turn each off; `forkLegend.register` for new features |
