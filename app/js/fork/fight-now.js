@@ -15,6 +15,15 @@ const fightNow = {
 		return !(opts && opts.fightNow && opts.fightNow.enabled === false);
 	},
 
+	/**
+	 * Whether a system is high-sec, where Fight now never marks (busy trade hubs and gank systems would always be lit).
+	 * The Chain kill feed's rule (chainKillFeed.systemKind: security 0.45+; J-space and Pochven never).
+	 * @param info {class, factionID, baseSecurity|security}, e.g. systemAnalysis.analyse(systemID)
+	 */
+	isHighsec: function(info) {
+		return typeof chainKillFeed !== "undefined" && chainKillFeed.systemKind(info) === "hs";
+	},
+
 	/** zKillboard's related kills (battle report) for a system and the hour of an ISO time: /related/<system>/<YYYYMMDDHH>00/ */
 	relatedURL: function(systemID, isoTime) {
 		const id = parseInt(systemID, 10);
@@ -76,13 +85,21 @@ const fightNow = {
 		return fightNow.enabled(typeof options !== "undefined" ? options : undefined);
 	},
 
-	/** Real systems on the drawn chain map (not route / destination nodes) */
+	/** What isHighsec needs to know about a system: systemAnalysis when it knows the system, else the static data */
+	info: function(systemID) {
+		if (typeof systemAnalysis !== "undefined" && typeof tripwire !== "undefined" && tripwire.systems && tripwire.systems[systemID]) {
+			return systemAnalysis.analyse(systemID);
+		}
+		return typeof appData !== "undefined" && appData.systems ? appData.systems[String(systemID)] || null : null;
+	},
+
+	/** Real systems on the drawn chain map, high-sec left out (not route / destination nodes) */
 	chainIDs: function() {
 		const seen = {};
 		$("#chainMap .node[data-nodeid]").each(function() {
 			if ($(this).closest(".destination-node").length) { return; }
 			const id = parseInt($(this).attr("data-nodeid"), 10);
-			if (id >= 30000000 && id < 32000000) { seen[id] = true; }
+			if (id >= 30000000 && id < 32000000 && !fightNow.isHighsec(fightNow.info(id))) { seen[id] = true; }
 		});
 		return Object.keys(seen).map(Number).sort(function(a, b) { return a - b; }).slice(0, fightNow.MAX_SYSTEMS);
 	},
@@ -143,7 +160,7 @@ const fightNow = {
 		// Drawn on the map, so Map Markers; takes effect on Save like its neighbours (Reset = on)
 		forkSettings.register({
 			section: "markers", order: 72, id: "fightNow-enabled", type: "checkbox", key: "fightNow",
-			label: "Fight now:", text: "Mark chain systems with 2+ player kills in the last hour (links to the zKillboard battle report)",
+			label: "Fight now:", text: "Mark chain systems (not high-sec) with 2+ player kills in the last hour (links to the zKillboard battle report)",
 			get: function() { return fightNow.isOn(); },
 			set: function(o, on) { o.fightNow = Object.assign({}, o.fightNow || {}, { enabled: on }); }
 		});
@@ -178,7 +195,7 @@ const fightNow = {
 		// The marker is a link: don't let the click also select the system on the map
 		$(document).on("mousedown click", "#chainMap .fight-now", function(e) {
 			e.stopPropagation();
-			if (e.type === "click" && typeof forkUsage !== "undefined") { forkUsage.track("killTags", "fight_opened"); }
+			if (e.type === "click" && typeof forkUsage !== "undefined") { forkUsage.track("fightNow", "opened"); }
 		});
 		document.addEventListener("visibilitychange", function() {
 			if (!document.hidden && fightNow.missed) { fightNow.poll(); }

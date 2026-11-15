@@ -23,9 +23,10 @@ function check($name, $actual, $expected) {
 }
 
 const BASE = 990000200000;        // test kill IDs: BASE .. BASE + 999
-const SYS_A = 31002479;           // J100820
-const SYS_B = 30001161;           // HED-GP
-const SYS_C = 30000142;           // Jita
+// Systems unlikely to hold dev data; the checks still work from deltas and kill IDs, so other kills there don't matter
+const SYS_A = 31000010;
+const SYS_B = 30000003;
+const SYS_C = 30000004;
 const SESSION = ['userID' => 900102, 'mask' => '98000001.2'];
 
 /** Run public/fight_now.php in a separate PHP process. @return [status, decoded body] */
@@ -55,6 +56,12 @@ function store(PDO $mysql, $n, $systemID, $minutesAgo, array $zkb = [], ?array $
     zk_store_row($mysql, zk_killmail_row($esi + ['zkb' => $zkb + ['hash' => 'h' . $n]]), 'feed');
 }
 
+/** Our kill from a system_kills response (other kills in the system are not ours) */
+function ours(array $response, $killID) {
+    foreach ($response['kills'] as $kill) if ($kill['killID'] === $killID) return $kill;
+    return null;
+}
+
 $mysql->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 zk_ensure_schema($mysql);
 cleanup($mysql);
@@ -70,12 +77,12 @@ zk_ensure_schema($mysql);
 check('ensure again: nothing added twice', count($mysql->query('SHOW COLUMNS FROM zkill_killmails')->fetchAll(PDO::FETCH_COLUMN)), count($columns));
 
 // --- Stored facts come back in the API shape ---
-store($mysql, 1, SYS_A, 5, ['locationID' => 50001248, 'labels' => ['ganked']]);
-$kill = zk_system_kills($mysql, [SYS_A], 3600, 5, ['queue' => false])['kills'][0];
+store($mysql, 1, SYS_A, 0, ['locationID' => 50001248, 'labels' => ['ganked']]);
+$kill = ours(zk_system_kills($mysql, [SYS_A], 3600, 50, ['queue' => false]), BASE + 1);
 check('json: tag facts', [$kill['killID'], $kill['locationID'], $kill['attackerShips'], $kill['attackerWeapons'], $kill['concord'], $kill['ganked']],
     [BASE + 1, 50001248, [22456], [3937], false, true]);
 $mysql->exec('UPDATE zkill_killmails SET locationID = NULL, attackerShips = \'\', attackerWeapons = \'\' WHERE killID = ' . (BASE + 1));
-$kill = zk_system_kills($mysql, [SYS_A], 3600, 5, ['queue' => false])['kills'][0];
+$kill = ours(zk_system_kills($mysql, [SYS_A], 3600, 50, ['queue' => false]), BASE + 1);
 check('json: a kill stored before the columns has no facts', [$kill['locationID'], $kill['attackerShips'], $kill['attackerWeapons']], [null, [], []]);
 check('json: row without the columns at all', array_intersect_key(zk_kill_json(['id' => 1, 'killID' => 2, 'systemID' => 3, 'killTime' => '2026-01-01 00:00:00',
     'victimCharacterID' => null, 'victimCorporationID' => null, 'victimAllianceID' => null, 'victimShipTypeID' => null, 'finalBlowCharacterID' => null,
@@ -83,14 +90,19 @@ check('json: row without the columns at all', array_intersect_key(zk_kill_json([
     'totalValue' => 0, 'npc' => 0, 'solo' => 0, 'awox' => 0]), array_flip(['locationID', 'attackerShips', 'concord'])),
     ['locationID' => null, 'attackerShips' => [], 'concord' => false]);
 
-// --- zk_fight_now: player kills in the window, per system ---
+// --- zk_fight_now: player kills in the window, per system (as deltas over whatever else is stored there) ---
+$systems = [SYS_A, SYS_B, SYS_C];
+$kills = function ($fights, $id) { return $fights[$id]['kills'] ?? 0; };
+$base = zk_fight_now($mysql, $systems, 3600, time());
+$baseEndpoint = call(['systems' => SYS_A . ',' . SYS_B . ',' . SYS_C])[1]['systems'];
 store($mysql, 2, SYS_A, 20);
 store($mysql, 3, SYS_A, 70);                       // outside the hour
 store($mysql, 4, SYS_B, 10, ['npc' => true]);      // NPC kill: left out
 store($mysql, 5, SYS_C, 50);
 $now = time();
-$fights = zk_fight_now($mysql, [SYS_A, SYS_B, SYS_C], 3600, $now);
-check('fight now: counts', [$fights[SYS_A]['kills'] ?? null, isset($fights[SYS_B]), $fights[SYS_C]['kills'] ?? null], [2, false, 1]);
+$fights = zk_fight_now($mysql, $systems, 3600, $now);
+check('fight now: counts (delta)', [$kills($fights, SYS_A) - $kills($base, SYS_A), $kills($fights, SYS_B) - $kills($base, SYS_B),
+    $kills($fights, SYS_C) - $kills($base, SYS_C)], [1, 0, 1]);
 check('fight now: last kill time', $fights[SYS_A]['lastKill'], gmdate('Y-m-d\TH:i:s\Z', strtotime($mysql->query('SELECT killTime FROM zkill_killmails WHERE killID = ' . (BASE + 1))->fetchColumn() . ' UTC')));
 check('fight now: no systems', zk_fight_now($mysql, [], 3600, $now), []);
 
@@ -103,8 +115,9 @@ check('endpoint: array parameter 400', call(['systems' => [(string) SYS_A]])[0],
 check('endpoint: 201 systems 400', call(['systems' => implode(',', range(30000001, 30000201))])[0], 400);
 [$status, $body] = call(['systems' => SYS_A . ', ' . SYS_B . ',,' . SYS_C]);
 check('endpoint: 200', $status, 200);
-check('endpoint: shape', [$body['windowSeconds'], is_array($body['feed']), $body['systems'][(string) SYS_A]['kills'], $body['systems'][(string) SYS_C]['kills'],
-    isset($body['systems'][(string) SYS_B])], [3600, true, 2, 1, false]);
+check('endpoint: shape and counts (delta)', [$body['windowSeconds'], is_array($body['feed']),
+    $kills($body['systems'], (string) SYS_A) - $kills($baseEndpoint, (string) SYS_A), $kills($body['systems'], (string) SYS_B) - $kills($baseEndpoint, (string) SYS_B),
+    $kills($body['systems'], (string) SYS_C) - $kills($baseEndpoint, (string) SYS_C)], [3600, true, 1, 0, 1]);
 [$status, $body] = call(['systems' => '']);
 check('endpoint: no systems is an empty object', [$status, $body['systems']], [200, []]);
 

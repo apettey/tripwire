@@ -2,6 +2,7 @@ const assert = require('assert');
 const { include, loadJSON } = require('../helpers/helpers');
 include('app/js/fork/kill-tags');
 include('app/js/fork/system-killfeed');
+include('app/js/fork/chain-killfeed');
 include('app/js/fork/fight-now');
 
 const fixtures = loadJSON('app/js-test/testdata/kill-tags-killmails');
@@ -16,6 +17,14 @@ describe('Kill tags', () => {
 			it(c.name, () => {
 				assert.deepStrictEqual(killTags.classify(c.kill, c.security), c.expected);
 			});
+		});
+
+		it('knows which kills carry the tag facts', () => {
+			assert.strictEqual(killTags.hasFacts({ attackerShips: [16240] }), true);
+			assert.strictEqual(killTags.hasFacts({ attackerShips: [], locationID: 40009087 }), true);
+			assert.strictEqual(killTags.hasFacts({ attackerShips: [], locationID: null }), false);
+			assert.strictEqual(killTags.hasFacts({}), false);
+			assert.strictEqual(killTags.hasFacts(null), false);
 		});
 
 		it('copes with missing or junk data', () => {
@@ -92,6 +101,25 @@ describe('Kill tags', () => {
 			assert.strictEqual(killTags.window('nope').key, '24h');
 			assert.strictEqual(killTags.window(null).seconds, 86400);
 		});
+		it('collapses windows longer than the server keeps kills into one labelled with the retention', () => {
+			assert.deepStrictEqual(killTags.windows(172800).map(w => w.text), ['1h', '24h', '48h']);
+			assert.deepStrictEqual(killTags.windows(604800).map(w => w.text), ['1h', '24h', '7d']);
+			assert.deepStrictEqual(killTags.windows(86400).map(w => w.text), ['1h', '24h']);
+			assert.deepStrictEqual(killTags.windows(30 * 3600).map(w => w.text), ['1h', '24h', '30h']);
+			assert.deepStrictEqual(killTags.windows(3600).map(w => w.text), ['1h']);
+			assert.deepStrictEqual(killTags.windows(120 * 3600).map(w => w.text), ['1h', '24h', '5d']);
+			assert.deepStrictEqual(killTags.windows(null).map(w => w.text), ['1h', '24h', '7d']);
+			const clamped = killTags.windows(172800)[2];
+			assert.deepStrictEqual([clamped.key, clamped.seconds], ['7d', 172800]);
+			assert.match(clamped.tip, /48h \(all this server keeps\)/);
+		});
+		it('marks the clamped button when the picked window is longer than the retention', () => {
+			const html = killTags.windowHtml('7d', 172800);
+			assert.match(html, /class='kill-window active' data-killwindow='7d'[^>]*>48h<\/a>/);
+			assert.strictEqual((html.match(/kill-window active/g) || []).length, 1);
+			assert.ok(html.indexOf('>7d<') < 0);
+			assert.match(killTags.windowHtml('24h', 172800), /class='kill-window active' data-killwindow='24h'/);
+		});
 		it('window buttons mark the selected one', () => {
 			const html = killTags.windowHtml('1h');
 			assert.match(html, /class='kill-window active' data-killwindow='1h'/);
@@ -141,6 +169,15 @@ describe('Fight now', () => {
 	it('is on unless explicitly false', () => {
 		assert.strictEqual(fightNow.enabled(undefined), true);
 		assert.strictEqual(fightNow.enabled({ fightNow: { enabled: false } }), false);
+	});
+
+	it('never marks high-sec (the Chain kill feed rule): J-space, low, null and Pochven yes', () => {
+		assert.strictEqual(fightNow.isHighsec({ class: null, security: 0.946 }), true);
+		assert.strictEqual(fightNow.isHighsec({ class: null, baseSecurity: 0.45 }), true);
+		assert.strictEqual(fightNow.isHighsec({ class: null, security: 0.44 }), false);
+		assert.strictEqual(fightNow.isHighsec({ class: 5, security: -0.99 }), false);
+		assert.strictEqual(fightNow.isHighsec({ class: null, factionID: 500026, security: 0.6 }), false);
+		assert.strictEqual(fightNow.isHighsec(null), false);
 	});
 
 	it('links to zKillboard related kills for the system and hour (UTC)', () => {

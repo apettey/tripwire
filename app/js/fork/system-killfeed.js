@@ -415,6 +415,7 @@ const systemKillFeed = {
 		xhr.done(function(response) {
 			if (id !== systemKillFeed.systemID) { return; }
 			systemKillFeed.response = response;
+			if (response && response.retentionSeconds > 0) { systemKillFeed.retention = response.retentionSeconds; }
 			systemKillFeed.provisional = !queue;
 			systemKillFeed.error = "";
 			systemKillFeed.lastLoad = Date.now();
@@ -457,15 +458,17 @@ const systemKillFeed = {
 	},
 
 	windowKey: null,	// killTags.WINDOWS key (null = killTags.DEFAULT_WINDOW)
+	retention: null,	// seconds the server keeps kills (retentionSeconds of the last answer): longer windows collapse
 
 	/** The window buttons in the header */
 	showWindows: function() {
 		const $span = systemKillFeed.$widget().find(".skf-windows");
 		if (!$span.length || typeof killTags === "undefined") { return; }
 		const key = killTags.window(systemKillFeed.windowKey).key;
-		if ($span.attr("data-window") === key) { return; }
+		const state = key + ":" + (systemKillFeed.retention || "");
+		if ($span.attr("data-window") === state) { return; }
 		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $span.find("[data-tooltip]"));
-		$span.html(killTags.windowHtml(key)).attr("data-window", key);
+		$span.html(killTags.windowHtml(key, systemKillFeed.retention)).attr("data-window", state);
 		if (typeof Tooltips !== "undefined") { Tooltips.attach($span.find("[data-tooltip]")); }
 	},
 
@@ -473,7 +476,9 @@ const systemKillFeed = {
 	setWindow: function(key) {
 		if (typeof killTags === "undefined") { return; }
 		const next = killTags.window(key).key;
-		if (next === killTags.window(systemKillFeed.windowKey).key) { return false; }
+		// Same key, or the same window once clamped to what the server keeps (e.g. 7d and the 48h it collapses to)
+		const clamp = function(k) { return Math.min(killTags.window(k).seconds, systemKillFeed.retention || Infinity); };
+		if (next === killTags.window(systemKillFeed.windowKey).key || clamp(next) === clamp(systemKillFeed.windowKey)) { return false; }
 		systemKillFeed.windowKey = next;
 		killTags.remember("window", next);
 		systemKillFeed.response = null;

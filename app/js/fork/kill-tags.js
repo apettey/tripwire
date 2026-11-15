@@ -11,7 +11,7 @@ const killTags = {
 		{ key: "gatecamp", text: "Gate", label: "Gate camp", tip: "Gate camp: killed next to a stargate" },
 		{ key: "bubble", text: "Bubble", label: "Bubble", tip: "Bubble: an Interdictor or Heavy Interdiction Cruiser was on the kill" },
 		{ key: "smartbomb", text: "Smartbomb", label: "Smartbomb", tip: "Smartbomb: a smartbomb did damage" },
-		{ key: "gank", text: "Gank", label: "Gank", tip: "Gank: a high-sec suicide gank (CONCORD on the mail, zKillboard's ganked label, or 3+ pilots on an unarmed hull)" },
+		{ key: "gank", text: "Gank", label: "Gank", tip: "Gank: a high-sec suicide gank (zKillboard's ganked label or CONCORD on the mail)" },
 		{ key: "solo", text: "Solo", label: "Solo", tip: "Solo: one pilot on the kill" },
 		{ key: "awox", text: "Awox", label: "Awox", tip: "Awox: killed by their own corporation" },
 		{ key: "npc", text: "NPC", label: "NPC", tip: "NPC: killed by NPCs" }
@@ -64,6 +64,12 @@ const killTags = {
 		return false;
 	},
 
+	/** Whether a kill was stored with the tag facts (attacker hulls or a location); older rows have neither */
+	hasFacts: function(kill) {
+		const k = kill || {};
+		return (Array.isArray(k.attackerShips) && k.attackerShips.length > 0) || (k.locationID !== null && k.locationID !== undefined);
+	},
+
 	/**
 	 * Tag keys of a kill (system_kills.php shape), in TAGS order. An NPC kill (zKillboard's npc flag, or no pilot among
 	 * the attackers) is only "npc".
@@ -82,7 +88,10 @@ const killTags = {
 		const sec = security === null || security === undefined || security === "" ? NaN : Number(security);
 		const highsec = isFinite(sec) && sec >= killTags.HIGHSEC;
 		const victimShip = Number(k.victim && k.victim.shipTypeID);
-		if (k.ganked || highsec && (k.concord || pilots >= killTags.GANK_MIN_PILOTS && killTags.UNARMED_HULLS.indexOf(victimShip) >= 0)) {
+		// The hull rule only for kills stored before the tag facts: it can't tell a gank from a war-dec, limited engagement or
+		// suspect kill, so kills with facts trust zKillboard's ganked label (and CONCORD on the mail)
+		const hullRule = !killTags.hasFacts(k) && pilots >= killTags.GANK_MIN_PILOTS && killTags.UNARMED_HULLS.indexOf(victimShip) >= 0;
+		if (k.ganked || highsec && (k.concord || hullRule)) {
 			tags.push("gank");
 		}
 		if (pilots === 1) { tags.push("solo"); }
@@ -157,13 +166,43 @@ const killTags = {
 			+ shown.map(function(t) { return chip(t.key, t.label, counts[t.key] || 0, t.tip); }).join("") + "</div>";
 	},
 
-	/** Window buttons of the System kill feed */
-	windowHtml: function(selected) {
+	/** "48h" / "3d" for a number of seconds (whole days from 3 days up) */
+	durationText: function(seconds) {
+		const hours = Math.round(seconds / 3600);
+		return hours >= 72 && hours % 24 === 0 ? hours / 24 + "d" : hours + "h";
+	},
+
+	/**
+	 * The windows to offer when the server keeps kills for `retention` seconds (system_kills.php retentionSeconds): the
+	 * longer ones collapse into one button for everything it keeps, labelled with that ("48h" instead of a 7d that would
+	 * show the same). Unknown retention: all of WINDOWS.
+	 */
+	windows: function(retention) {
+		const r = Number(retention);
+		if (!(r > 0)) { return killTags.WINDOWS.slice(); }
+		const out = [];
+		killTags.WINDOWS.forEach(function(w) {
+			if (w.seconds <= r) { out.push(w); return; }
+			if (out.some(function(x) { return x.seconds >= r; })) { return; }
+			const text = killTags.durationText(r);
+			out.push({ key: w.key, seconds: r, text: text, tip: "Kills in the last " + text + " (all this server keeps)", clamped: true });
+		});
+		return out;
+	},
+
+	/** Window buttons of the System kill feed; the selected one is marked (a window past the retention marks the longest) */
+	windowHtml: function(selected, retention) {
 		const esc = killTags.escape;
-		const current = killTags.window(selected).key;
-		return "<span class='kill-windows'>" + killTags.WINDOWS.map(function(w) {
-			return "<a href='#' class='kill-window" + (w.key === current ? " active" : "") + "' data-killwindow='" + esc(w.key) + "' role='button' aria-pressed='"
-				+ (w.key === current) + "' data-tooltip='" + esc(esc(w.tip)) + "'>" + esc(w.text) + "</a>";
+		const list = killTags.windows(retention);
+		const wanted = killTags.window(selected).seconds;
+		let current = list[list.length - 1];
+		for (let i = 0; i < list.length; i++) {
+			if (list[i].seconds >= wanted) { current = list[i]; break; }
+		}
+		return "<span class='kill-windows'>" + list.map(function(w) {
+			const on = w === current;
+			return "<a href='#' class='kill-window" + (on ? " active" : "") + "' data-killwindow='" + esc(w.key) + "' role='button' aria-pressed='"
+				+ on + "' data-tooltip='" + esc(esc(w.tip)) + "'>" + esc(w.text) + "</a>";
 		}).join("") + "</span>";
 	},
 

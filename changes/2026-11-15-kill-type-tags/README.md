@@ -40,16 +40,20 @@ hidden behind a right-click, a key or a dialog.
   - Gate camp: the nearest celestial is a stargate (item IDs 50000000-59999999).
   - Bubble: an Interdictor or Heavy Interdiction Cruiser among the attackers.
   - Smartbomb: a smartbomb (group 72) among the attackers' weapons.
-  - Gank: zKillboard's ganked label, or in high-sec (security 0.45+) CONCORD on the mail or 3+ pilots on an unarmed hull
-    (haulers, freighters, barges, exhumers, Orca, expedition frigates, shuttles).
+  - Gank: zKillboard's ganked label, or in high-sec (security 0.45+) CONCORD on the mail. Only kills stored before the tag
+    facts (no attacker hulls, no location) fall back to 3+ pilots on an unarmed hull (haulers, freighters, barges, exhumers,
+    Orca, expedition frigates, shuttles), since that rule can't tell a gank from a war-dec, limited engagement or suspect kill.
   - Solo: exactly one pilot among the attackers. Awox: zKillboard's awox flag. NPC: zKillboard's npc flag or no pilot
     (an NPC kill gets no other tag).
 - **Feeds** (`app/js/fork/system-killfeed.js`, `chain-killfeed.js`): tag chips after the victim's name, a filter bar
   (All plus each tag that occurs, with counts) over the list, remembered per panel in the browser. The System kill feed
-  asks for up to 50 kills (was 20) so the filter has something to pick from, and its window is 1h / 24h / 7d (default 24h;
-  the server still clamps to `ZKILL_RETENTION_HOURS`).
-- **Map** (`app/js/fork/fight-now.js`, `app/css/fork/kill-tags.css`): the marker sits just outside the node's right edge,
+  asks for up to 50 kills (was 20) so the filter has something to pick from, and its window is 1h / 24h / 7d (default 24h).
+  Windows longer than the server keeps kills (`retentionSeconds`, `ZKILL_RETENTION_HOURS`) collapse into one button labelled
+  with the retention, e.g. 1h / 24h / 48h at the default 48 hours.
+- **Map** (`app/js/fork/fight-now.js`, `app/css/fork/kill-tags.css`): high-sec systems are never marked (same rule as the
+  Chain kill feed; trade hubs and gank systems would always be lit). The marker sits just outside the node's right edge,
   polls once a minute for the systems on the chain map, and its click opens the link without selecting the system.
 - Mask defaults allow-list (`app/js/fork/mask-defaults.js`, `maskadmin/maskadmin.inc.php`): `killTags`, `fightNow`.
-- Usage: `killTags.filtered`, `killTags.window`, `killTags.fight_opened`; shown via `.kill-tag, .fight-now`.
+- Usage: two catalog entries, `killTags` (`filtered`, `window`; shown via `.kill-tag`) and `fightNow` (`opened`; shown via
+  `.fight-now`), so each toggle's on/off is counted.
 - Upstream files touched: none.

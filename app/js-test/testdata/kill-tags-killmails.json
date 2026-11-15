@@ -71,11 +71,24 @@
       "expected": ["gank"]
     },
     {
-      "name": "high-sec gank by the hull rule: 3 pilots on an unarmed hull (Retriever)",
+      "name": "a kill stored before the tag facts: gank by the hull rule, 3 pilots on an unarmed hull (Retriever) in high-sec",
       "security": 0.5,
-      "kill": { "killID": 10, "systemID": 30002768, "victim": { "shipTypeID": 17478 }, "attackerCount": 3, "attackerTotal": 3, "npc": false,
-        "attackerShips": [16240], "attackerWeapons": [3001], "concord": false, "ganked": false },
+      "kill": { "killID": 10, "systemID": 30002768, "victim": { "shipTypeID": 17478 }, "attackerCount": 3, "attackerTotal": 3, "npc": false, "awox": false },
       "expected": ["gank"]
+    },
+    {
+      "name": "not a gank: war-dec freighter kill, 3 war targets on an Obelisk in high-sec (tag facts stored, no ganked label, no CONCORD)",
+      "security": 0.9,
+      "kill": { "killID": 18, "systemID": 30000142, "victim": { "shipTypeID": 20187 }, "attackerCount": 3, "attackerTotal": 3, "npc": false, "awox": false,
+        "locationID": 40009087, "attackerShips": [24702, 29990], "attackerWeapons": [2929], "concord": false, "ganked": false },
+      "expected": []
+    },
+    {
+      "name": "not a gank: limited engagement / suspect kill of a Retriever with a location only (tag facts stored)",
+      "security": 0.7,
+      "kill": { "killID": 19, "systemID": 30002768, "victim": { "shipTypeID": 17478 }, "attackerCount": 4, "attackerTotal": 4, "npc": false,
+        "locationID": 40170001, "attackerShips": [], "attackerWeapons": [], "concord": false, "ganked": false },
+      "expected": []
     },
     {
       "name": "the ganker's own loss: CONCORD on the mail with a pilot (high-sec)",
