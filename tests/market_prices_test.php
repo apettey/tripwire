@@ -32,6 +32,11 @@ check('normalise drops bad rows', market_prices_normalise(array('prices' => arra
 $types = market_prices_types();
 check('types come from sites.json', isset($types[30378]) && isset($types[22]) && count($types) >= 10, true);
 check('types include the compressed ore the ore is priced as', isset($types[62568]), true);
+// relic sites (changes/2026-11-15-relic-data-site-values): all 38 pirate salvage types of the Ruined expected-loot model
+$salvage = 0;
+for ($id = 25588; $id <= 25625; $id++) if (isset($types[$id])) $salvage++;
+check('types include every relic salvage type (T1 and T2)', $salvage, 38);
+check('types include Logic Circuit', isset($types[25619]), true);
 
 $file = tempnam(sys_get_temp_dir(), 'market-prices-test-');
 unlink($file);

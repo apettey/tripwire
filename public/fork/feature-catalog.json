@@ -110,7 +110,7 @@
       "success": "undo used by >=15% of active users by day 28, refused (conflict) steps <5% of undos" },
     { "id": "lifeStates", "title": "Wormhole life: Stable, <4h, <1h, EOL", "section": "signatures", "prs": [104, 109], "settingsKey": "lifeStates",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
-    { "id": "siteValues", "title": "Gas and ore site value", "section": "signatures", "prs": [165], "settingsKey": "siteValues",
+    { "id": "siteValues", "title": "Site value (gas, ore, relic and data)", "section": "signatures", "prs": [165], "settingsKey": "siteValues",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".site-value-chip",
       "success": "shown to >=30% of active users by day 28, opt-out <10%" },
     { "id": "campaignTags", "title": "Campaign and Fabricator tags", "section": "signatures", "prs": [168], "settingsKey": "campaignTags",
