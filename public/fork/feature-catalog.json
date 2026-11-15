@@ -5,7 +5,8 @@
   "generic": ["hint_shown", "hint_acted", "wn_listed"],
   "skip": [
     { "pr": 34, "why": "game data refresh (ship masses, Pochven holes), nothing to use" },
-    { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" }
+    { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" },
+    { "pr": 172, "why": "upstream Tripwire 2.0 sync: upstream features, fork ones kept as they were" }
   ],
   "features": [
     { "id": "whatsNew", "try": "app.whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,

@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 172,
+      "date": "2026-11-15",
+      "title": "Tripwire 2.0",
+      "description": "Tripwire 2.0 from upstream is in. Flares now have a reason and a life (1 day or forever): right-click a system and pick Flare. Notes use a new, lighter editor, and characters can be managed in Settings > Account Settings. The sun/moon button in the header switches to a light theme (some panels stay dark for now).\n\nYour life states (Stable, <4h, <1h, EOL), inline Life/Mass editing and kill feeds work as before; turn them off in Settings > Signatures and Kills & Intel.",
+      "images": [
+        { "src": "whats-new/img/pr-172-upstream-2-0.png", "caption": "Set a flare with a reason and how long it lasts" }
+      ]
+    },
+    {
       "pr": 171,
       "date": "2026-11-15",
       "title": "Chain alerts: new holes, home static, exits in jump range",
