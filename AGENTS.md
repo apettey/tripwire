@@ -3,8 +3,8 @@
 These rules apply to everyone changing this repo: people and AI agents alike.
 
 This is a fork of [Tripwire](https://bitbucket.org/daimian/tripwire) (upstream, `production` branch).
-We iterate on it here, and we must keep being able to pull in upstream's changes
-(see [docker/README.md](docker/README.md#pulling-upstream-changes)).
+It no longer syncs with upstream (it has drifted too far; decided 2026-11-15). Upstream is a source of
+ideas: useful upstream changes are ported one at a time, as ordinary features (see §3).
 
 ## 0. Context
 
@@ -117,20 +117,17 @@ change-log entry.
 - Check it in the dev stack with `forkHints.debug(true)` (logs every decision, skips the 2-minute grace and 30-minute
   gap) and `forkHints.show("<id>", {force: true})`.
 
-## 3. Stay easy to sync with upstream
+## 3. Upstream code and porting upstream changes
 
-Upstream changes are applied as a 3-way diff (`.github/scripts/sync-upstream.sh`). Every line we change
-in an upstream file is a line that can conflict later.
+We no longer sync with upstream, so editing upstream's files is fine: fix and change them where that is
+the right place.
 
-- **Prefer new files over editing upstream files.** Put fork code in fork-owned places: `docker/`,
-  `.github/`, `changes/`, or new files/directories you create. Override behaviour from outside
-  (config, nginx, Docker image) where you can.
-- When you must edit an upstream file, keep the edit **small and local**: don't reformat, re-indent,
-  reorder, rename, or "tidy" surrounding code, and don't change line endings.
-  Mention the touched upstream files in the change-log entry.
-- Don't hand-edit `.github/upstream-base`; only the sync script updates it.
-- Upstream syncs are their own commits/PRs ("Sync upstream Tripwire ..."); don't mix them with
-  feature work.
+- **Still prefer fork-owned files for new features** (`app/js/fork/`, `app/css/fork/`, `docker/`, new
+  files/directories you create): it keeps each feature modular, easy to test and easy to switch off.
+- **No reformatting sweeps:** don't reformat, re-indent, reorder or "tidy" code unrelated to your change,
+  and don't change line endings. It hides the real change in review.
+- **Porting an upstream change:** treat it as an ordinary feature or fix. Adapt it to the fork's code
+  (don't paste it over our changes) and credit the upstream commit (hash and link) in the change-log entry.
 - New settings belong in `docker/config.php` (read from env) and `.env.example`; also update
   `docker/README.md`.
 
