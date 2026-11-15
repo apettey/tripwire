@@ -5,6 +5,9 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-15 | [Gas and ore site value](2026-11-15-site-value-estimate/README.md) | Estimated ISK chip on wormhole gas and ore sites in the signature list with a units x price breakdown; contents from EVE University (gas cross-checked), prices from ESI's public market average cached hourly by the server, ore at compressed prices |
+| 2026-11-15 | [Map key](2026-11-15-map-key/README.md) | Map key button in the chain map header: a panel explaining every colour, line and marker the map can show, with live samples, plain lines and where to turn each off; `forkLegend.register` for new features |
+| 2026-11-15 | [Pochven holes and hull masses pinned to patch 24.01](2026-11-15-pochven-and-hull-mass/README.md) | Rechecked Pochven hole types and Marauder/Black Ops masses against patch 24.01 and ESI (already correct); a mocha test pins them so the upstream 2.0 sync can't restore old values |
 | 2026-11-15 | [Multi-character jumps: every online character](2026-11-15-multi-track-online-characters/README.md) | Map jumps of all my tracked characters uses every online character with its A switch on; offline ones no longer take a slot, no limit of 5 |
 | 2026-11-13 | [Favourites: one-line rows with every route](2026-11-13-favourites-compact-routes/README.md) | Wanderer-style one-line Favourites rows; every favourite routed, Thera/Turnur through EVE-Scout, from the tracked or viewed system |
 | 2026-11-08 | [Watchlist: several systems per filter](2026-11-08-watchlist-several-systems/README.md) | The Watchlist's System field takes a comma-separated list (up to 50); any of them matches |
