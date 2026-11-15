@@ -5,6 +5,9 @@
 
 -- Every kill the instance knows about (stream: all of New Eden; back-fill: requested systems), pruned after
 -- ZKILL_RETENTION_HOURS. attackerCount = attackers with a character (pilots), attackerTotal = all attackers.
+-- Kill tags: locationID = zKillboard's nearest celestial, attackerShips / attackerWeapons = distinct type IDs (CSV),
+-- concord = CONCORD on the mail, ganked = zKillboard's "ganked" label. A table from before these columns gets them
+-- from zk_ensure_schema (ZK_KILLMAIL_ADDED_COLUMNS).
 -- `id` is the since-cursor handed to readers (monotonic, single writer: the worker); killID dedupes.
 CREATE TABLE IF NOT EXISTS `zkill_killmails` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -28,6 +31,11 @@ CREATE TABLE IF NOT EXISTS `zkill_killmails` (
   `npc` tinyint(1) NOT NULL DEFAULT 0,
   `solo` tinyint(1) NOT NULL DEFAULT 0,
   `awox` tinyint(1) NOT NULL DEFAULT 0,
+  `locationID` bigint unsigned DEFAULT NULL,
+  `attackerShips` varchar(400) NOT NULL DEFAULT '',
+  `attackerWeapons` varchar(400) NOT NULL DEFAULT '',
+  `concord` tinyint(1) NOT NULL DEFAULT 0,
+  `ganked` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `killID` (`killID`),
   KEY `system_time` (`systemID`, `killTime`),

@@ -35,6 +35,8 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] If an upstream file must change, keep the diff tiny, keep its line endings, and list it in the
       change-log entry.
 - [ ] Put pure logic (no DOM) in one global object so it can be unit-tested.
+- [ ] Draws something on the chain map? Add its Map key entry with `forkLegend.register({...})` at DOM ready (fields at the
+      top of `app/js/fork/map-legend.js`); `app/js-test/fork/map-legend.test.js` fails for a Map Markers row without one.
 
 ## 3. Tests (mocha)
 - [ ] Tests in `app/js-test/fork/<feature>.test.js`, loading the script with

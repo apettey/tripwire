@@ -145,8 +145,11 @@ function discord_outbox_prune(PDO $db) {
         . (DISCORD_OUTBOX_EXPIRE / 3600) . " h' WHERE status = 'queued' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_EXPIRE . ' SECOND');
     $deleted = $db->exec("DELETE FROM discord_outbox WHERE (status = 'sent' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_KEEP_SENT . " DAY)
         OR (status = 'failed' AND createdAt < UTC_TIMESTAMP() - INTERVAL " . DISCORD_OUTBOX_KEEP_FAILED . ' DAY)');
-    // A "no home" episode (discord/chain_notice.php) lasts until it ends, however long: its row is kept
-    $db->exec('DELETE FROM discord_sent WHERE createdAt < UTC_TIMESTAMP() - INTERVAL ' . DISCORD_DEDUPE_KEEP . " DAY AND kind <> '" . DISCORD_NOTICE_KIND . "'");
+    // A "no home" episode (discord/chain_notice.php) lasts until it ends, however long: its row is kept. So are the holes
+    // the new-hole type has seen and its baseline (discord/chain_alerts.php forgets a hole when it is gone): a hole that
+    // lives longer than the dedupe window must not be announced again
+    $db->exec('DELETE FROM discord_sent WHERE createdAt < UTC_TIMESTAMP() - INTERVAL ' . DISCORD_DEDUPE_KEEP . " DAY AND kind NOT IN ('"
+        . DISCORD_NOTICE_KIND . "', '" . DISCORD_CHOLE_KIND . "', '" . DISCORD_CHOLE_BASE_KIND . "')");
     return [(int) $expired, (int) $deleted];
 }
 
