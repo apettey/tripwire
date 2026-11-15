@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 177,
+      "date": "2026-11-15",
+      "title": "Relic and data site value",
+      "description": "Relic and data sites now get a value chip in the signature list too. Ruined relic sites show their expected salvage at today's prices (for example \"~26M exp.\"), Forgotten wormhole relic sites show the Sleeper loot from their rats, and other pirate relic and data sites show a rough range (dashed). Sites without a reliable figure show \"?\". Hover a chip to see the breakdown, where the figure comes from and how far to trust it.\n\nWormhole Unsecured data sites get no chip. Turn it off in Settings > Signatures > Site value.",
+      "images": [
+        { "src": "whats-new/img/pr-177-relic-data-site-values.png", "caption": "A Ruined relic site's expected salvage, broken down into T2 and T1 salvage" }
+      ]
+    },
+    {
       "pr": 176,
       "date": "2026-11-15",
       "title": "Flare reason and lifetime",
