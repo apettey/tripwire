@@ -103,6 +103,9 @@
     { "id": "siteValues", "title": "Gas and ore site value", "section": "signatures", "prs": [165], "settingsKey": "siteValues",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".site-value-chip",
       "success": "shown to >=30% of active users by day 28, opt-out <10%" },
+    { "id": "campaignTags", "title": "Campaign and Fabricator tags", "section": "signatures", "prs": [], "settingsKey": "campaignTags",
+      "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["opened"], "exposed": ".campaign-tag",
+      "success": "Rampancy counter opened by >=25% of users shown a Fabricator tag within 28 days, opt-out <10%" },
 
     { "id": "destinations", "try": "destinations.open", "title": "Saved destinations", "section": "routes", "prs": [7], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["destinations.open", "destinations.add"], "panels": [], "use": ["opened"] },
