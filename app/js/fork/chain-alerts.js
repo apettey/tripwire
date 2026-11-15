@@ -87,8 +87,13 @@ const chainAlerts = {
 	/** The side ("a" / "b") the real type was scanned on */
 	typedSide: function(hole) { return hole && hole.parent === "secondary" ? "b" : "a"; },
 
-	/** The type seen from a side: the real type where it was scanned, else K162; "" when not known */
+	/** Whether it is known which side the real type was scanned on (parent "initial" / "secondary") */
+	sideKnown: function(hole) { return !!hole && (hole.parent === "initial" || hole.parent === "secondary"); },
+
+	/** The type seen from a side: the real type where it was scanned, else K162; "" when not known (also when neither
+	side's type is known: no parent, so neither side is the K162) */
 	typeFrom: function(hole, side) {
+		if (!chainAlerts.sideKnown(hole)) { return ""; }
 		if (chainAlerts.typedSide(hole) !== side) { return "K162"; }
 		return chainAlerts.typeCode(hole.type);
 	},
@@ -124,6 +129,28 @@ const chainAlerts = {
 		return { fresh: fresh, seen: next };
 	},
 
+	EMPTY_MS: 10000,	// a mask seen without holes this long (and still active) counts as loaded and empty
+
+	/** Whether every signature loaded belongs to the mask (none loaded: yes) */
+	sigsOfMask: function(signatures, mask) {
+		return Object.keys(signatures || {}).every(function(k) {
+			const m = signatures[k] && signatures[k].maskID;
+			return m === undefined || m === null || String(Number(m)) === String(Number(mask));
+		});
+	},
+
+	/**
+	 * The baseline for the first holes of a mask (mask: maskOf the holes): {} (nothing known, so its first hole alerts)
+	 * when the mask was seen loaded without holes (empty: {mask, since} recorded while it was active and had no holes)
+	 * for at least EMPTY_MS, the mask has been active since before that (activeSince) and this is still that mask; else
+	 * null (prime: the holes are the old data or the mask's first load).
+	 */
+	baselineFor: function(mask, empty, now, activeSince) {
+		if (!empty || String(empty.mask) !== String(mask)) { return null; }
+		if (empty.since < activeSince || now - empty.since < chainAlerts.EMPTY_MS) { return null; }
+		return {};
+	},
+
 	/** New-hole pop-ups: [{hole, near, home}] for fresh holes (not yours) in home or (scope "chain") on the chain */
 	newHoleAlerts: function(fresh, ctx) {
 		const out = [];
@@ -152,6 +179,7 @@ const chainAlerts = {
 	/** Whether a hole is a static of home: its real type was scanned in home and is one of home's statics */
 	isHomeStatic: function(hole, homeID, statics) {
 		if (!homeID || !Array.isArray(statics) || !statics.length) { return false; }
+		if (!chainAlerts.sideKnown(hole)) { return false; }
 		const side = chainAlerts.typedSide(hole);
 		const type = chainAlerts.typeCode(hole.type);
 		return Number(hole[side]) === Number(homeID) && !!type && statics.map(function(s) { return String(s).toUpperCase(); }).indexOf(type) >= 0;
@@ -203,15 +231,22 @@ const chainAlerts = {
 
 	/**
 	 * Where a jump ship would jump from: [{id, start}] - your Get home start (the Jump planner's origin) when one is set,
-	 * else every other k-space system of the chain a jump drive works in.
+	 * else every other k-space system of the chain a jump drive works in. High-sec exits only for the ships that may be in
+	 * high-sec (HS_SHIPS: jump freighters and Black Ops battleships; other capitals can't enter it). The start is your own
+	 * pick, checked by the Jump planner, so it is taken as it is.
+	 * @param shipKey the Jump planner's ship (jumpPlanner.settings().ship, e.g. "group-547")
 	 */
-	capRefs: function(exitID, origin, chain, systems) {
+	capRefs: function(exitID, origin, chain, systems, shipKey) {
 		if (typeof jumpRange === "undefined") { return []; }
 		if (origin && jumpRange.canJumpFrom(origin, systems[origin])) { return Number(origin) === Number(exitID) ? [] : [{ id: Number(origin), start: true }]; }
+		const hsOk = chainAlerts.HS_SHIPS.indexOf(String(shipKey || "").split("-").slice(0, 2).join("-")) >= 0;
 		return Object.keys(chain || {}).map(Number).filter(function(id) {
-			return id !== Number(exitID) && chainAlerts.isReal(id) && jumpRange.canJumpFrom(id, systems[id]);
+			if (id === Number(exitID) || !chainAlerts.isReal(id) || !jumpRange.canJumpFrom(id, systems[id])) { return false; }
+			return hsOk || jumpRange.kind(id, systems[id]) !== "hs";
 		}).map(function(id) { return { id: id, start: false }; });
 	},
+
+	HS_SHIPS: ["group-902", "group-898"],	// Jump Freighter, Black Ops: allowed in high-sec
 
 	/** refs within rangeLy of the exit, nearest first: [{id, start, ly}]. pos: {systemID: {x, y, z}} (jumpRange.decode) */
 	capHits: function(exitID, refs, pos, rangeLy) {
@@ -306,6 +341,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		let seen = null;			// {holeID: true} of the mask below, null until primed
 		let context = null;			// the mask the holes belong to: another one primes again
 		let lastChain = {};			// systems on the chain as last drawn
+		let lastActive = null, activeSince = 0;	// options.masks.active and since when
+		let empty = null;			// {mask, since}: the active mask seen loaded without holes
 		let staticShown = loadStatic();
 		let jumpData = null, jumpLoading = null, jumpFailedAt = 0;
 		let pendingCap = [];		// capital range candidates waiting for the jump range data
@@ -314,6 +351,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function current() { return ca.settings(opts()); }
 		function systems() { return (typeof appData !== "undefined" && appData.systems) || {}; }
 		function generic() { return (typeof appData !== "undefined" && appData.genericSystemTypes) || []; }
+		function activeMask() { const o = opts(); return o && o.masks && o.masks.active ? String(Number(o.masks.active)) : ""; }
 		function meID() { const o = opts(); return o && o.character ? o.character.id : null; }
 
 		function homeID() {
@@ -373,12 +411,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			loadJumpData().done(function(data) {
 				const list = pendingCap;
 				pendingCap = [];
-				if (!current().capRange) { return; }
 				const planner = jumpPlanner.settings(opts());
+				if (!current().capRange || !planner.enabled) { return; }
 				const r = jumpPlanner.range(planner, data.presets);
 				if (!r.preset || !(r.range > 0)) { return; }
 				list.forEach(function(c) {
-					const hits = ca.capHits(c.exitID, ca.capRefs(c.exitID, planner.origin, lastChain, systems()), data.pos, r.range);
+					const hits = ca.capHits(c.exitID, ca.capRefs(c.exitID, planner.origin, lastChain, systems(), planner.ship), data.pos, r.range);
 					if (hits.length) { show("capRange", ca.capText(c.exitID, hits, r.preset.label, planner.jdc, r.range, systems()), c.exitID); }
 				});
 			}).fail(function() { pendingCap = []; });
@@ -393,10 +431,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const before = lastChain;
 			if (result) { lastChain = ca.chainSystems(result); }
 			// Primed per mask of the data itself (not options.masks.active, which switches before the new mask's data
-			// arrives): holes of another mask are all known. No holes yet (still loading): nothing to prime with.
-			if (!holes.length) { return; }
+			// arrives): holes of another mask are all known. No holes: remember that the active mask was seen empty, so its
+			// first hole alerts once that was long enough ago to be the mask's own data (baselineFor), not a load in progress.
+			const active = activeMask();
+			if (active !== lastActive) { lastActive = active; activeSince = Date.now(); }
+			if (!holes.length) {
+				if (active && (!empty || empty.mask !== active) && ca.sigsOfMask(client.signatures, active)) { empty = { mask: active, since: Date.now() }; }
+				return;
+			}
 			const mask = ca.maskOf(holes);
-			if (mask !== context) { context = mask; seen = null; }
+			if (mask !== context) { context = mask; seen = ca.baselineFor(mask, empty, Date.now(), activeSince); }
+			empty = null;
 			const d = ca.diff(seen, holes);
 			seen = d.seen;
 			if (!ca.anyOn(s)) { return; }
@@ -407,7 +452,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					show("newHole", ca.holeText(a, systems(), generic()), a.hole[a.near]);
 				});
 			}
-			if (s.capRange && typeof jumpPlanner !== "undefined") {
+			if (s.capRange && typeof jumpPlanner !== "undefined" && jumpPlanner.settings(opts()).enabled) {
 				// Only exits the chain didn't have before (a second hole into a system already on the chain is no news)
 				const candidates = ca.capCandidates(d.fresh, ctx, systems(), jumpPlanner.settings(opts())).filter(function(c) { return !before[c.exitID]; });
 				if (candidates.length) { checkCap(candidates); }
@@ -496,7 +541,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					id: "chainAlerts.capRange", feature: "chainAlerts", section: "intel",
 					trigger: "chain.exit", kind: "toast",
 					eligible: function(ctx, data) {
-						if (!ca.settings(ctx.options).capRange || !data || !Array.isArray(data.systemIDs) || typeof jumpRange === "undefined") { return false; }
+						if (!ca.settings(ctx.options).capRange || typeof jumpPlanner === "undefined" || !jumpPlanner.enabled(ctx.options) || !data || !Array.isArray(data.systemIDs) || typeof jumpRange === "undefined") { return false; }
 						return data.systemIDs.some(function(id) { return jumpRange.isValidCynoTarget(id, systems()[id], {}); });
 					},
 					title: "Exits in jump range",

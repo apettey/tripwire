@@ -63,6 +63,14 @@ describe('Chain alerts', () => {
 			const s = hole(2, HOME, C5, { parent: 'secondary', type: '????' });
 			assert.deepStrictEqual([ca.typeFrom(s, 'a'), ca.typeFrom(s, 'b')], ['K162', '']);
 		});
+		it('neither side known (no parent): no K162 on either side', () => {
+			[null, undefined, ''].forEach(p => {
+				const n = hole(3, HOME, C5, { parent: p, type: '????' });
+				assert.deepStrictEqual([ca.typeFrom(n, 'a'), ca.typeFrom(n, 'b')], ['', ''], String(p));
+			});
+			const t = ca.holeText({ hole: hole(3, HOME, C5, { parent: null, type: null }), near: 'b', home: false }, S, appData.genericSystemTypes);
+			assert.ok(/^ABC-032 in J152820 \(C5\) to /.test(t.text), t.text);
+		});
 	});
 
 	describe('new holes', () => {
@@ -73,6 +81,21 @@ describe('Chain alerts', () => {
 			const second = ca.diff(first.seen, [a, b]);
 			assert.deepStrictEqual(second.fresh.map(h => h.id), ['2']);
 			assert.deepStrictEqual(ca.diff(second.seen, [a, b]).fresh, [], 'one alert per hole, not per refresh');
+		});
+		it('a mask seen loaded and empty gets an empty baseline, so its first hole alerts', () => {
+			const M = '98000001.2', t0 = 1000000;
+			assert.deepStrictEqual(ca.baselineFor(M, { mask: M, since: t0 }, t0 + ca.EMPTY_MS, t0 - 5), {});
+			assert.strictEqual(ca.baselineFor(M, { mask: M, since: t0 }, t0 + 2000, t0 - 5), null, 'seen empty only just now: maybe still loading');
+			assert.strictEqual(ca.baselineFor(M, { mask: M, since: t0 }, t0 + ca.EMPTY_MS, t0 + 1), null, 'the mask was switched since');
+			assert.strictEqual(ca.baselineFor('98000002.2', { mask: M, since: t0 }, t0 + ca.EMPTY_MS, t0), null, 'another mask: prime');
+			assert.strictEqual(ca.baselineFor(M, null, t0, 0), null);
+			const first = ca.diff(ca.baselineFor(M, { mask: M, since: t0 }, t0 + ca.EMPTY_MS, t0), [hole(1, HOME, C5)]);
+			assert.deepStrictEqual(first.fresh.map(h => h.id), ['1']);
+		});
+		it('only signatures of the active mask count as its data', () => {
+			assert.strictEqual(ca.sigsOfMask({}, '98000001.2'), true);
+			assert.strictEqual(ca.sigsOfMask({ 1: sig(1, HOME) }, '98000001.2'), true);
+			assert.strictEqual(ca.sigsOfMask({ 1: sig(1, HOME, { maskID: '98000002.2' }) }, '98000001.2'), false);
 		});
 		it('a hole in home is a home alert, one elsewhere on the chain a chain alert; scope home skips the latter', () => {
 			const chain = { [HOME]: true, [C5]: true, [C3]: true };
@@ -132,6 +155,8 @@ describe('Chain alerts', () => {
 			// The static's type scanned on the other side is the other system's static, not home's
 			assert.deepStrictEqual(ca.staticAlerts([hole(5, HOME, C5, { type: STATIC, life: 'critical', parent: 'secondary' }, { lifeLeft: at(now + 1000) })], HOME, [STATIC], now, {}), []);
 			assert.deepStrictEqual(ca.staticAlerts([crit(1000)], null, [STATIC], now, {}), []);
+			assert.deepStrictEqual(ca.staticAlerts([hole(5, HOME, C5, { type: STATIC, life: 'critical', parent: null }, { lifeLeft: at(now + 1000) })], HOME, [STATIC], now, {}), [],
+				'no parent: not known to be scanned in home');
 		});
 		it('says how long is left', () => {
 			const a = ca.staticAlerts([crit(40 * 60000)], HOME, [STATIC], now, {})[0];
@@ -154,7 +179,12 @@ describe('Chain alerts', () => {
 		});
 		it('jumps from your Get home start when set, else from the other exits of the chain', () => {
 			assert.deepStrictEqual(ca.capRefs(LS, sid('Hek'), {}, S), [{ id: sid('Hek'), start: true }]);
-			assert.deepStrictEqual(ca.capRefs(LS, null, { [LS]: true, [C5]: true, [HS]: true, [NS]: true }, S).map(r => r.id).sort(), [HS, NS].sort());
+			const chain = { [LS]: true, [C5]: true, [HS]: true, [NS]: true };
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-547').map(r => r.id), [NS], 'a carrier never starts in high-sec');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-902').map(r => r.id).sort(), [HS, NS].sort(), 'a jump freighter may');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-898').map(r => r.id).sort(), [HS, NS].sort(), 'so may Black Ops');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-902-12.5').map(r => r.id).sort(), [HS, NS].sort(), 'a hull key of the group');
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Jita'), chain, S, 'group-547'), [{ id: sid('Jita'), start: true }], 'your own start as you set it');
 		});
 		it('hits are the refs within range, nearest first', () => {
 			const hek = sid('Hek'), rens = sid('Rens'), jita = sid('Jita');

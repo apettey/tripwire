@@ -63,6 +63,10 @@ check('plan: homeOnly announces only holes in home', array_map(function ($x) { r
     discord_chain_hole_plan([$h(3, C3, C5), $h(5, C5, $HOME)], [], true, $HOME, $chain, true)['announce']), [5]);
 check('hole type seen from each side', [discord_chain_alerts_hole_type($h(1, $HOME, C5), 'a'), discord_chain_alerts_hole_type($h(1, $HOME, C5), 'b'),
     discord_chain_alerts_hole_type($h(1, $HOME, C5, ['parent' => 'secondary', 'type' => '????']), 'b')], ['H296', 'K162', '']);
+check('hole type: neither side known (no parent) is not a K162 on either side', [discord_chain_alerts_hole_type($h(1, $HOME, C5, ['parent' => null, 'type' => null]), 'a'),
+    discord_chain_alerts_hole_type($h(1, $HOME, C5, ['parent' => null, 'type' => null]), 'b'), discord_chain_alerts_hole_type($h(1, $HOME, C5, ['parent' => '', 'type' => '????']), 'b')], ['', '', '']);
+check('new hole message: unknown type when no side is known', discord_payload(discord_chain_hole_context($h(1, C3, C5, ['parent' => null, 'type' => null]), 'a', $HOME,
+    ['template' => '{hole}', 'ping' => ''], 'Corp', ''))['content'], 'unknown type');
 
 $now = 1800000000;
 $t = function ($s) { return date('Y-m-d H:i:s', $s); };
@@ -70,7 +74,7 @@ $st = function ($left, array $o = []) use ($h, $HOME, $STATIC, $now, $t) {
     return $h(7, $HOME, C5, $o + ['type' => $STATIC, 'life' => 'critical', 'aLeft' => $t($now + $left), 'bLeft' => $t($now + $left + 600), 'aTime' => $t($now - 3600), 'bTime' => $t($now - 3600)]);
 };
 check('static: home side when scanned in home and a static', [discord_home_static_side($st(100), $HOME, [$STATIC]), discord_home_static_side($st(100, ['parent' => 'secondary']), $HOME, [$STATIC]),
-    discord_home_static_side($st(100, ['type' => 'K162']), $HOME, [$STATIC])], ['a', null, null]);
+    discord_home_static_side($st(100, ['type' => 'K162']), $HOME, [$STATIC]), discord_home_static_side($st(100, ['parent' => null]), $HOME, [$STATIC])], ['a', null, null, null]);
 $both = ['lt1h', 'expired'];
 check('static: <4h, <1h, EOL, stable', [discord_home_static_due($st(7200), $now, $both), discord_home_static_due($st(2400), $now, $both), discord_home_static_due($st(-60), $now, $both),
     discord_home_static_due($st(2400, ['life' => 'stable']), $now, $both)], [null, 'lt1h', 'expired', null]);

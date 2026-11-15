@@ -85,7 +85,7 @@ $webhookRow = (int) $db->lastInsertId();
 $settings = discord_settings_defaults((int) $me['corporationID']);
 $settings['homeSystemID'] = $HOME;
 $settings['types']['chainHole'] = ['enabled' => true, 'webhookID' => $webhookRow, 'ping' => '@here', 'enabledAt' => time(), 'homeOnly' => false] + $settings['types']['chainHole'];
-$settings['types']['homeStatic'] = ['enabled' => true, 'webhookID' => $webhookRow, 'ping' => '', 'enabledAt' => time()] + $settings['types']['homeStatic'];
+$settings['types']['homeStatic'] = ['enabled' => true, 'webhookID' => $webhookRow, 'ping' => '', 'enabledAt' => time() - 60] + $settings['types']['homeStatic'];   // a minute ago: <1h is reached after it
 $db->prepare("INSERT INTO discord_settings (maskID, settings, updatedBy, updatedAt) VALUES (?, ?, 'chain-alerts-test', UTC_TIMESTAMP())")->execute([$mask, json_encode($settings)]);
 mock('/reset');
 
@@ -103,7 +103,7 @@ check('baseline: nothing posted for holes already on the map', mock('/channel') 
 $hole($HOME, 'fts005', 6, 'fts006', '????', 'secondary');
 $hole($J152820, 'fts007', $FLOSESWIN, 'fts008', '????', 'secondary');
 $db->prepare("UPDATE wormholes w INNER JOIN signatures a ON a.id = w.initialID SET w.life = 'critical' WHERE a.signatureID = 'fts001' AND w.maskID = ?")->execute([$mask]);
-$db->prepare("UPDATE signatures SET lifeLeft = ? WHERE signatureID IN ('fts001', 'fts002') AND maskID = ?")->execute([date('Y-m-d H:i:s', time() + 3590), $mask]);   // just went <1h (as picking <1h in the sig list does)
+$db->prepare("UPDATE signatures SET lifeLeft = ? WHERE signatureID IN ('fts001', 'fts002') AND maskID = ?")->execute([date('Y-m-d H:i:s', time() + 3599), $mask]);   // just went <1h (as picking <1h in the sig list does)
 
 echo "waiting for the worker (polls every 15 s)...\n";
 $posted = [];

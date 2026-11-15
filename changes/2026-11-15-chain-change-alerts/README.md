@@ -45,12 +45,14 @@ and static pop-ups show themselves when they matter, so they need no tip.
 
 - `app/js/fork/chain-alerts.js` (new): pure logic in `chainAlerts` (mocha: `app/js-test/fork/chain-alerts.test.js`) and a
   `chain.nodes` hook. Home is the active chain tab's system (as the Watchlist reads it), the chain is what the map draws.
-  Holes on the map when the page loads or the mask changes are known (primed per mask of the data); a new hole is shown
-  once; holes whose signatures were last changed by your own character are skipped. The static is checked on every
+  Holes on the map when the page loads or the mask changes are known (primed per mask of the data; a mask seen loaded
+  and empty for 10 s gets an empty baseline, so its first hole alerts too); a new hole is shown once; a hole whose
+  scanned side isn't known (no parent) is not called a K162; holes whose signatures were last changed by your own character are skipped. The static is checked on every
   chain change and every 30 s; each (hole, stage) is shown once (remembered in localStorage, last 100). The range check
   reuses the Jump planner's engine and data read-only (`jumpRange`, `jumpPlanner.settings/range`, `public/jumprange/*.json`
-  fetched on the first candidate): from your Get home start when set, else from the other k-space exits of the chain,
-  honouring the planner's low/null-sec ticks. Pop-ups are jBox notices, so they go to the pop-up dock.
+  fetched on the first candidate): from your Get home start when set, else from the other k-space exits of the chain
+  (high-sec ones only for a jump freighter or Black Ops, the jump ships allowed there), honouring the planner's
+  low/null-sec ticks. Off (alert and tip) while the Jump planner itself is turned off. Pop-ups are jBox notices, so they go to the pop-up dock.
 - `discord/chain_alerts.php` (new): types 10-11, polled by `discord_notify.worker.php` with the watchlist (same leader,
   15 s). New holes: baseline on turn-on / home change, then each hole once (`discord_sent` kinds `chole` / `choleBase`,
   kept past the 7-day prune and forgotten when the hole is gone, `discord/outbox.php`). Static: one message per (hole,

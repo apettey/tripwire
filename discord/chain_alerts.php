@@ -65,8 +65,15 @@ function discord_chain_alerts_typed_side(array $hole) {
     return ($hole['parent'] ?? '') === 'secondary' ? 'b' : 'a';
 }
 
-/** The type seen from a side: the real type on the side it was scanned on, else K162; '' when not known */
+/** Whether it is known which side the real type was scanned on (parent 'initial' / 'secondary') */
+function discord_chain_alerts_side_known(array $hole) {
+    return in_array($hole['parent'] ?? null, ['initial', 'secondary'], true);
+}
+
+/** The type seen from a side: the real type on the side it was scanned on, else K162; '' when not known (also when
+    neither side's type is known: no parent, so neither side is the K162) */
 function discord_chain_alerts_hole_type(array $hole, $side) {
+    if (!discord_chain_alerts_side_known($hole)) return '';
     $type = strtoupper(trim((string) ($hole['type'] ?? '')));
     if (discord_chain_alerts_typed_side($hole) !== $side) return 'K162';
     return $type === '' || $type === '????' ? '' : $type;
@@ -116,6 +123,7 @@ function discord_chain_hole_stamp($enabledAt, $homeID) {
  * home side ('a' / 'b') or null.
  */
 function discord_home_static_side(array $hole, $homeID, array $statics) {
+    if (!discord_chain_alerts_side_known($hole)) return null;
     $side = discord_chain_alerts_typed_side($hole);
     if ((int) $homeID <= 0 || (int) $hole[$side] !== (int) $homeID) return null;
     $type = strtoupper(trim((string) ($hole['type'] ?? '')));
