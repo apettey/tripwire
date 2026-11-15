@@ -37,7 +37,9 @@ Tip: none. The chip is visible on the row itself, and its tooltip explains it.
   mined unit compresses into one compressed unit (both items have portion size 100 in the SDE, the compressed one at
   1/100 of the volume), so value = units x compressed price.
 - An item with no live price uses the price stored in `sites.json` (2026-11-15), and the tooltip names it.
-- The chip floats at the right end of the name cell, so in a narrow list the name wraps and the value stays whole.
+- The chip sits right after the name and never breaks: in a narrow list it wraps under the name, whole. The name cell
+  gets `data-text` (the name alone), so sorting the Leads To column still sorts by name. The breakdown opens beside the
+  right edge of the list, so it doesn't cover the other rows' chips.
 - Code: `app/js/fork/site-values.js` (pure logic in `siteValues`, mocha tests in `app/js-test/fork/site-values.test.js`,
   which also checks the data file), `app/css/fork/site-values.css`; PHP test `tests/market_prices_test.php`.
 - Catalog: `siteValues` (passive, exposed `.site-value-chip`); mask-default allow-lists (`app/js/fork/mask-defaults.js`,

@@ -182,23 +182,56 @@ const siteValues = {
 			const $cell = $(this).children("td").eq(3);
 			const site = on ? siteValues.siteFor(signatures[$(this).attr("data-id")], siteValues.sites) : null;
 			let $chip = $cell.children(".site-value-chip");
-			if (!site) { $chip.remove(); return; }
+			if (!site) {
+				if ($chip.length) { $chip.remove(); siteValues.sortText($cell); }
+				return;
+			}
 			const est = siteValues.estimate(site, siteValues.data, siteValues.live);
 			const text = siteValues.chipText(est);
 			const tip = siteValues.tooltip(site, est, siteValues.data.fallbackPrices && siteValues.data.fallbackPrices.date);
 			if ($chip.length && $chip.text() === text && $chip.attr("data-tooltip") === tip) { return; }
 			if (!$chip.length) {
-				// first in the cell: it floats right, so in a narrow cell the name wraps beside it instead of pushing it out
-				$chip = $("<span class=\"site-value-chip\"></span>").prependTo($cell);
+				// right after the name; an inline-block that doesn't break, so in a narrow cell it wraps under the name whole
+				$chip = $("<span class=\"site-value-chip sig-name-extra\"></span>").appendTo($cell);
 			}
 			$chip.text(text).attr("data-tooltip", tip)
 				.toggleClass("site-value-approx", est.status === "approximate")
 				.toggleClass("site-value-unknown", est.status === "unverified");
-			if (typeof Tooltips !== "undefined" && Tooltips.attach && !$chip.data("siteValueTip")) {
-				Tooltips.attach($chip);
+			siteValues.sortText($cell);
+			const box = siteValues.tipBox();
+			if (box && !$chip.data("siteValueTip")) {
+				box.attach($chip);
 				$chip.data("siteValueTip", true);
 			}
 		});
+	},
+
+	box: null,
+	/** Our own tooltip (like upstream's Tooltips, but opened beside the right edge of the name cell rather than the chip,
+	so it covers the next column instead of the chips of the rows above and below) */
+	tipBox: function() {
+		if (siteValues.box || typeof jBox === "undefined") { return siteValues.box; }
+		siteValues.box = new jBox("Tooltip", {
+			getContent: "data-tooltip",
+			position: { x: "right", y: "center" },
+			outside: "x",
+			repositionOnOpen: true,
+			onOpen: function() {
+				const chip = this.source && this.source[0], cell = chip && this.source.closest("td")[0];
+				const gap = cell ? Math.max(0, cell.getBoundingClientRect().right - chip.getBoundingClientRect().right) : 0;
+				this.options.offset = { x: gap, y: 0 };
+			}
+		});
+		return siteValues.box;
+	},
+
+	/** Tablesorter reads a cell's data-text instead of its text: keep the Leads To column sorting by the site name alone.
+	Fork additions in the name cell carry the class sig-name-extra (any fork feature may add one); without any, the
+	attribute goes and upstream's own text counts again. */
+	sortText: function($cell) {
+		const $extras = $cell.children(".sig-name-extra");
+		if (!$extras.length) { $cell.removeAttr("data-text"); return; }
+		$cell.attr("data-text", $cell.clone().children(".sig-name-extra").remove().end().text().trim());
 	},
 
 	scheduled: null,

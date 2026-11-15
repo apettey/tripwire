@@ -1,9 +1,9 @@
 /* Gas and ore site value (fork feature: site-values).
-   A small chip at the right end of the name cell; dashed border for approximate ore figures, grey "?" for sites
-   without a value. Floated, so in a narrow cell the name wraps and the chip always stays whole and readable. */
+   A small chip right after the site name; dashed border for approximate ore figures, grey "?" for sites without a
+   value. An unbreakable inline-block: in a narrow cell it wraps under the name and stays whole. */
 #sigTable .site-value-chip {
-	float: right;
-	margin: 0 1px 0 4px;
+	display: inline-block;
+	margin-left: 5px;
 	padding: 0 4px;
 	border: 1px solid rgba(110, 200, 120, 0.7);
 	border-radius: 3px;
