@@ -67,7 +67,9 @@ function lookup_db() {
         victimCharacterID INTEGER, victimCorporationID INTEGER, victimAllianceID INTEGER, victimShipTypeID INTEGER,
         finalBlowCharacterID INTEGER, finalBlowCorporationID INTEGER, finalBlowAllianceID INTEGER, finalBlowShipTypeID INTEGER,
         attackerCount INTEGER NOT NULL DEFAULT 0, attackerTotal INTEGER NOT NULL DEFAULT 0, totalValue REAL NOT NULL DEFAULT 0,
-        npc INTEGER NOT NULL DEFAULT 0, solo INTEGER NOT NULL DEFAULT 0, awox INTEGER NOT NULL DEFAULT 0)");
+        npc INTEGER NOT NULL DEFAULT 0, solo INTEGER NOT NULL DEFAULT 0, awox INTEGER NOT NULL DEFAULT 0,
+        locationID INTEGER, attackerShips TEXT NOT NULL DEFAULT '', attackerWeapons TEXT NOT NULL DEFAULT '',
+        concord INTEGER NOT NULL DEFAULT 0, ganked INTEGER NOT NULL DEFAULT 0)");
     return $db;
 }
 function lookup_row(PDO $db, $killID) {
@@ -250,7 +252,8 @@ $racy->exec("CREATE TABLE zkill_kill_lookup (killID INTEGER PRIMARY KEY, status 
     requestedBy INTEGER NOT NULL DEFAULT 0, requestedAt TEXT NOT NULL, attemptedAt TEXT NULL, error TEXT NOT NULL DEFAULT '')");
 $racy->exec('CREATE TABLE zkill_killmails (killID INTEGER, systemID INTEGER, killTime TEXT, victimCharacterID INTEGER, victimCorporationID INTEGER,
     victimAllianceID INTEGER, victimShipTypeID INTEGER, finalBlowCharacterID INTEGER, finalBlowCorporationID INTEGER, finalBlowAllianceID INTEGER,
-    finalBlowShipTypeID INTEGER, attackerCount INTEGER, attackerTotal INTEGER, totalValue REAL, npc INTEGER, solo INTEGER, awox INTEGER)');
+    finalBlowShipTypeID INTEGER, attackerCount INTEGER, attackerTotal INTEGER, totalValue REAL, npc INTEGER, solo INTEGER, awox INTEGER,
+    locationID INTEGER, attackerShips TEXT, attackerWeapons TEXT, concord INTEGER, ganked INTEGER)');
 $racy->race = function ($db) { lookup_add($db, 4242, ['requestedBy' => 99]); };
 check('race: duplicate insert is not an error', zk_lookup_request($racy, [4242], 7, true)[4242], ['status' => 'queued']);
 check('race: the other request keeps its row', [(int) lookup_row($racy, 4242)['requestedBy'], (int) $racy->query('SELECT COUNT(*) FROM zkill_kill_lookup')->fetchColumn()], [99, 1]);

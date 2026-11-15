@@ -49,6 +49,14 @@ $d = esi_limit_decision($url, 429, ['x-ratelimit-group' => 'char-detail', 'retry
 check('429: per-character group pause', $d['pauses'], ['group:char-detail:90000001' => 90]);
 $d = esi_limit_decision($url, 429, ['x-ratelimit-group' => 'char-detail', 'retry-after' => '90'], false);
 check('429 unauthenticated: group pause', $d['pauses'], ['group:char-detail' => 90]);
+$d = esi_limit_decision('https://esi.evetech.net/fw/systems/', 503, ['retry-after' => '120'], false);
+check('503 with Retry-After: route pause', $d['pauses'], ['route:fw/systems' => 120]);
+$d = esi_limit_decision($url, 502, ['x-ratelimit-group' => 'char-detail', 'retry-after' => '30'], true);
+check('502 with Retry-After: per-character group pause', $d['pauses'], ['group:char-detail:90000001' => 30]);
+$d = esi_limit_decision('https://esi.evetech.net/fw/systems/', 503, [], false);
+check('503 without Retry-After: no pause (the caller serves its stale cache)', $d['pauses'], []);
+$d = esi_limit_decision('https://esi.evetech.net/fw/systems/', 404, ['retry-after' => '120'], false);
+check('404 with Retry-After: no pause', $d['pauses'], []);
 $d = esi_limit_decision('https://esi.evetech.net/fw/systems/', 429, [], false);
 check('429 without headers: route pause, default length', $d['pauses'], ['route:fw/systems' => ESI_DEFAULT_PAUSE]);
 $d = esi_limit_decision($url, 429, ['retry-after' => '99999'], false);
