@@ -176,8 +176,11 @@ const brokenHoles = {
 		const clean = {};
 		result.map.rows.forEach(function(row) {
 			if (!row || !row.c || !row.c[0]) { return; }
-			if (crosses(row, 0)) { row.brokenPath = true; }
-			else if (clean[String(row.c[0].systemID)] === undefined) { clean[String(row.c[0].systemID)] = row; }
+			if (crosses(row, 0)) { row.brokenPath = true; return; }
+			// a clean row that could stand for its system: on a way home through holes (not a root, not a calculated gate route)
+			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
+			const last = pathHome[pathHome.length - 1];
+			if (pathHome.length && !(last && last.path) && clean[String(row.c[0].systemID)] === undefined) { clean[String(row.c[0].systemID)] = row; }
 		});
 		if (result.systemsInChainMap && typeof result.systemsInChainMap === "object") {
 			Object.keys(result.systemsInChainMap).forEach(function(id) {

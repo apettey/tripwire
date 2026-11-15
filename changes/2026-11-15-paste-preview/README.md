@@ -58,7 +58,8 @@ key or Mask Admin.
   honour the marks with one guarded line each (fork files): `rally.systemConnections` skips broken lines (the hole
   graph of Favourites, Destinations, Fight here and the route filters), `routeDestinations.chainExits` skips
   cut-off rows and prefers a clean row (an exit reached only through a loop stays, flagged `brokenPath`, without the
-  broken hole's name, and Destinations judges it only by the route from where you are), `routeDestinations.chainSystems`,
+  broken hole's name; Destinations judges it by the route from where you are, else from the chain's root over the
+  hole graph, else it is unreachable and ranks last there and in Loot buyers via `routeHoleFilters.pickRoutes`), `routeDestinations.chainSystems`,
   `favouritesPanel.chainSystems` and `jumpPlanner.isExtraRow` skip `row.brokenHole`, `jumpPlanner.homePaths` (Get
   home) skips a way home through a broken line so the fewest-holes choice takes another, and the system panel's routes and the region map read the filtered `exits`.
 - **Storage** (`broken_wormholes.inc.php`, new): fork-owned table `fork_broken_wormholes (maskID, wormholeID, markedBy,
@@ -78,7 +79,8 @@ key or Mask Admin.
 - `life-states.js` (fork): its 15 s Life refresh skips a broken hole's cell (1 line).
 - Map key: entry "Broken (missing from a paste)" under Connections, always shown (mask-mates' broken holes draw
   whatever this user's Preview pastes setting is).
-- `rally.js`, `route-destinations.js`, `favourites-panel.js`, `jump-planner.js` (fork): one guarded line each (above).
+- `rally.js`, `route-destinations.js`, `favourites-panel.js`, `jump-planner.js`, `route-hole-filters.js` (fork): small
+  guarded changes (above).
 - Mask defaults: `pastePreview` added to the allow-lists (`mask-defaults.js`, `maskadmin/maskadmin.inc.php`).
 - Tests: `app/js-test/fork/paste-preview.test.js`, `app/js-test/fork/broken-holes.test.js` (classify, Apply plan, routing
   split / restore, undo parts); `tests/broken_wormholes_test.php` (ids, CSRF, mask isolation, mark / restore / list, gone

@@ -121,6 +121,7 @@ describe('brokenHoles: route features honour the marks, the rest still sees the 
 	include('app/js/fork/favourites-panel');
 	include('app/js/fork/jump-planner');
 	include('app/js/fork/chain-alerts');
+	include('app/js/fork/route-hole-filters');
 	it('routes leave the hole out; chain alerts, the automapper\'s inChain and the kill feed still see the systems', () => {
 		global.appData = global.appData || { systems: {} };
 		[AMARR, JITA, THERA, J105, HERE].forEach(id => { if (!appData.systems[id]) { appData.systems[id] = id < 31000000 ? { name: String(id), security: 0.9 } : { name: String(id), security: -1, class: 3 }; } });
@@ -147,12 +148,16 @@ describe('brokenHoles: route features honour the marks, the rest still sees the 
 		const n = (v, sys, p, pathHome) => ({ c: [node(v, sys), { v: p }], pathHome: pathHome });
 		const rows = [n(1, HERE, null, undefined), n(2, AMARR, 1, [{ systemID: AMARR, name: 'via-amarr' }]),
 			n(3, JITA, 2, [{ systemID: AMARR }, { systemID: JITA, name: 'through-broken' }]), n(4, JITA, 1, [{ systemID: JITA, name: 'direct' }]),
-			n(5, J105, 3, [{ systemID: AMARR }, { systemID: JITA }, { systemID: J105 }])];
+			n(5, J105, 3, [{ systemID: AMARR }, { systemID: JITA }, { systemID: J105 }]),
+			// show viewing: a calculated gate route Jita -> Amarr hung under the direct Jita (never a clean row for Amarr)
+			n(6, AMARR, 4, [{ systemID: JITA, name: 'direct' }, { systemID: AMARR, path: [1, 2] }]),
+			// Thera behind another broken hole (15): where the pilot is, cut off
+			n(7, THERA, 1, [{ systemID: THERA }])];
 		const sim = { [AMARR]: rows[1], [JITA]: rows[2], [J105]: rows[4] };	// upstream keeps one row per system: here the stale one
-		const r = { map: { rows: rows }, lines: [[2, 1, [], 11], [3, 2, [], 12], [4, 1, [], 13], [5, 3, [], 14]], systemsInChainMap: sim, exits: [String(AMARR), String(JITA)] };
-		brokenHoles.flag(r, brokenOf([11]));
-		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenHole).map(x => x.c[0].v), [], 'Amarr is still reached through Jita (hole 12)');
-		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenPath).map(x => x.c[0].v), [2, 3, 5]);
+		const r = { map: { rows: rows }, lines: [[2, 1, [], 11], [3, 2, [], 12], [4, 1, [], 13], [5, 3, [], 14], [6, 4, [], undefined], [7, 1, [], 15]], systemsInChainMap: sim, exits: [String(AMARR), String(JITA)] };
+		brokenHoles.flag(r, brokenOf([11, 15]));
+		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenHole).map(x => x.c[0].v), [7], 'Amarr is still reached through Jita (hole 12); Thera is cut off');
+		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenPath).map(x => x.c[0].v), [2, 3, 5, 7]);
 		assert.deepStrictEqual(r.exits, [String(AMARR), String(JITA)]);
 		assert.strictEqual(r.systemsInChainMap[JITA], rows[3], '"To chain:" reads the direct row');
 		assert.deepStrictEqual(r.systemsInChainMap[AMARR].pathHome, [{ systemID: AMARR, name: 'via-amarr' }], 'no clean row: "To chain:" shows just the system');
@@ -166,10 +171,35 @@ describe('brokenHoles: route features honour the marks, the rest still sees the 
 		const conns = rally.systemConnections(r.map.rows, r.lines);
 		const route = rally.routeTo(conns, String(HERE), String(AMARR));
 		assert.ok(route && route.every(i => r.lines[i][3] !== 11), 'the route to Amarr goes via Jita');
+		// Destinations decorate: the flagged exit is routed from the chain root over the hole graph (via Jita)
+		// The pilot sits in the cut-off Thera: no route from there, so the flagged exit is judged from the chain's root
+		const prevCtx = routeHoleFilters.contextFor, prevLoc = rally.currentLocations;
+		routeHoleFilters.contextFor = lines => routeHoleFilters.makeContext(lines, {}, { wormholes: {} });
+		rally.currentLocations = () => ({ tracked: THERA, viewing: THERA });
+		try {
+			routeDestinations.decorate(r, [], 0);
+			const amarr = routeDestinations.lastExits.filter(e => e.systemID === AMARR)[0];
+			assert.deepStrictEqual(amarr.holes.map(i => r.lines[i][3]), [13, 12], 'judged by the way via Jita, not by the broken tree path');
+			assert.strictEqual(amarr.unreachable, undefined);
+			assert.strictEqual(amarr.fromRoot, true);
+		} finally { routeHoleFilters.contextFor = prevCtx; rally.currentLocations = prevLoc; }
 		const hp = jumpPlanner.homePaths(r);
 		assert.deepStrictEqual(hp.paths[JITA].holes.map(h => h.wormholeID), [13], 'Get home goes the direct way');
 		assert.strictEqual(hp.paths[AMARR], undefined, 'the map has no row for the other way to Amarr: no Get home rather than a wrong one');
 		assert.strictEqual(hp.paths[J105], undefined, 'its only way home on the map crosses the broken hole');
+	});
+	it('an exit with no way on the map at all is unreachable: bad and last (Destinations, Loot buyers)', () => {
+		const rated = routeHoleFilters.pickRoutes([
+			{ exit: { systemID: AMARR, holes: [], unreachable: true }, jumps: 1, index: 0 },
+			{ exit: { systemID: JITA, holes: [] }, jumps: 5, index: 1 }
+		], {});
+		assert.deepStrictEqual(rated.map(x => x.exit.systemID), [JITA], 'a clean exit wins');
+		const only = routeHoleFilters.pickRoutes([
+			{ exit: { systemID: AMARR, holes: [], unreachable: true }, jumps: 1, index: 0 },
+			{ exit: { systemID: JITA, holes: [0] }, jumps: 5, index: 1 }
+		], { 0: { all: [{ key: 'eol' }], avoid: [{ key: 'eol', noun: 'EOL hole', short: 'EOL' }] } });
+		assert.deepStrictEqual(only.map(x => x.exit.systemID), [JITA, AMARR], 'all bad: the unreachable one ranks last');
+		assert.strictEqual(only[1].note, 'no route to it on the map');
 	});
 });
 
