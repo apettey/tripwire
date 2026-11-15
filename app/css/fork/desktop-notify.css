@@ -9,3 +9,4 @@
 #desktopNotify-section .dn-enable { display: block; margin: 4px 0 2px; }
 #dialog-options .dn-type { display: block; }
 #dialog-options .dn-type-note { color: #aaa; padding-left: 22px; }
+#desktopNotify-section .dn-kill-note { color: #aaa; margin-left: 22px; }

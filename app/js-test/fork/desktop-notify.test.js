@@ -63,6 +63,13 @@ describe('forkDesktopNotify', () => {
 			assert.strictEqual(dn.decide(note('watchlist'), ctx({ opts: { desktopNotify: { timer: false } } })).show, true);
 			assert.strictEqual(dn.decide(note('kill'), ctx({ opts: { killReporting: { desktop: false } } })).reason, 'type_off');
 		});
+		it('leaves kills to Kill Reporting alone: the master switch (or its mask default) never turns them off', () => {
+			const off = { desktopNotify: { enabled: false } };
+			assert.deepStrictEqual(dn.decide(note('kill'), ctx({ opts: off })), { show: true, reason: '' });
+			assert.deepStrictEqual(dn.decide(note('kill'), ctx({ opts: { desktopNotify: { enabled: false, kill: false } } })), { show: true, reason: '' });
+			assert.strictEqual(dn.decide(note('kill'), ctx({ opts: { desktopNotify: { enabled: false }, killReporting: { desktop: false } } })).reason, 'type_off');
+			assert.strictEqual(dn.decide(note('timer'), ctx({ opts: off })).reason, 'off');
+		});
 		it('ignores unknown types and empty titles', () => {
 			assert.strictEqual(dn.decide(note('nope'), ctx()).reason, 'unknown_type');
 			assert.strictEqual(dn.decide(null, ctx()).reason, 'unknown_type');

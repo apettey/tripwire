@@ -213,6 +213,23 @@ describe('Chain alerts', () => {
 		});
 	});
 
+	it('opens a pop-up at once on screen, and in a background tab only once the tab is back', () => {
+		const doc = { hidden: false, listeners: [], addEventListener(e, f) { this.listeners.push(f); }, removeEventListener(e, f) { this.listeners = this.listeners.filter(x => x !== f); } };
+		let shown = 0;
+		assert.strictEqual(ca.whenVisible(doc, () => shown++), true);
+		assert.strictEqual(shown, 1);
+		doc.hidden = true;
+		assert.strictEqual(ca.whenVisible(doc, () => shown++), false);
+		assert.strictEqual(shown, 1);
+		doc.listeners.slice().forEach(f => f());	// still hidden: keeps waiting
+		assert.strictEqual(shown, 1);
+		doc.hidden = false;
+		doc.listeners.slice().forEach(f => f());
+		assert.strictEqual(shown, 2);
+		assert.strictEqual(doc.listeners.length, 0);	// once only
+		assert.strictEqual(ca.whenVisible(null, () => shown++), true);
+	});
+
 	it('keeps the last shown static stages', () => {
 		assert.deepStrictEqual(ca.trim({ a: true, b: true, c: true }, 2), { b: true, c: true });
 	});

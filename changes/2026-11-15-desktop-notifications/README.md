@@ -30,7 +30,8 @@ Toggle: Settings > General > Desktop notifications (on by default), right under 
 "Desktop alerts for:" with one switch per alert. General because it is how pop-ups from several sections reach you,
 next to the other pop-up settings. Nothing shows until the user allows notifications, so the browser permission is the
 real opt-in: the master switch being on does nothing on its own. Kills keep their existing switch (Settings > Kill
-Reporting > Desktop alerts). `desktopNotify` is in the mask-defaults allow-list.
+Reporting > Desktop alerts) and only that one: the new master switch, or a mask default for it, never turns off kill
+alerts users already had (the General row says so). `desktopNotify` is in the mask-defaults allow-list.
 
 Tip: yes, the browser never asks by itself, so the feature is easy to miss. One toast tip (`desktopNotify.enable`)
 after an in-app alert while the browser hasn't been asked yet; its Enable button asks for permission.
@@ -48,8 +49,11 @@ after an in-app alert while the browser hasn't been asked yet; its Enable button
   victim's ship image from image.eveonline.com, as before). The text is the in-app pop-up's own text, nothing more.
 - Permission is only ever requested from a click: the Settings button, the tip's button, or Kill Reporting's existing
   "Also alert me" link and Save (now through `forkDesktopNotify.request`).
-- Kill Reporting's own desktop code now goes through `forkDesktopNotify` (master switch, analytics). The home static
-  check of chain alerts also runs while the tab is hidden when a desktop notification could show.
+- Kill Reporting's own desktop code now goes through `forkDesktopNotify` (permission, hidden check, tags, analytics);
+  its `killReporting.desktop` switch alone decides. The home static check of chain alerts also runs while the tab is
+  hidden when a desktop notification could show.
+- Chain alerts in a background tab: the desktop notification goes out at once, and the in-app pop-up now waits until the
+  tab is visible again (`chainAlerts.whenVisible`) instead of closing itself after 20 s unseen.
 - Analytics: `desktopNotify.granted` / `clicked` (use), `denied` / `shown` (events); catalog entry `desktopNotify`.
   New tip trigger `alert.shown` in `hints.js`.
 - Fork files touched: `kill-reporting.js`, `structure-timers.js`, `watchlist.js`, `chain-alerts.js`, `rally.js`,

@@ -9,7 +9,8 @@ const forkDesktopNotify = {
 	//   - Clicking one focuses Tripwire, closes it and runs the pop-up's own action (e.g. show the system).
 	//   - The browser asks for permission only from a click: the button in Settings > General, or the tip's button.
 	// Settings: options.desktopNotify = {enabled, timer, watchlist, newHole, homeStatic, capRange, rally} (missing = on).
-	// Kills keep their existing switch, Settings > Kill Reporting > Desktop alerts (options.killReporting.desktop).
+	// Kills keep their existing switch, Settings > Kill Reporting > Desktop alerts (options.killReporting.desktop), and only
+	// that one: the master switch here doesn't affect them, so it can't take away a setting users already had.
 	// Pure logic first (tested), browser code at the bottom. Keep `const forkDesktopNotify` on the first line (test helper).
 
 	// [type, Settings text]; "kill" is switched in Kill Reporting (its own, older setting)
@@ -31,6 +32,9 @@ const forkDesktopNotify = {
 	isType: function(type) {
 		return forkDesktopNotify.TYPES.some(function(t) { return t[0] === type; });
 	},
+
+	/** Types switched only by their own feature's setting, not by the master switch (kills: Kill Reporting > Desktop alerts) */
+	independent: function(type) { return type === "kill"; },
 
 	/** options.desktopNotify with the defaults: the master switch and every type on (kill: Kill Reporting's switch) */
 	settings: function(opts) {
@@ -60,7 +64,8 @@ const forkDesktopNotify = {
 		if (!note || !forkDesktopNotify.isType(note.type)) { return no("unknown_type"); }
 		if (!forkDesktopNotify.plain(note.title, forkDesktopNotify.TITLE_MAX)) { return no("empty"); }
 		const s = forkDesktopNotify.settings(ctx && ctx.opts);
-		if (!s.enabled) { return no("off"); }
+		// Kills are Kill Reporting's older setting alone: the master switch (or a mask default for it) can't take it away
+		if (!s.enabled && !forkDesktopNotify.independent(note.type)) { return no("off"); }
 		if (!s.types[note.type]) { return no("type_off"); }
 		if (!ctx || ctx.permission !== "granted") { return no("permission"); }
 		if (!ctx.hidden) { return no("visible"); }
@@ -250,6 +255,7 @@ const forkDesktopNotify = {
 				keywords: "desktop notification browser background tab alert permission os toast",
 				html: "<div id='desktopNotify-section'>"
 					+ "<label><input type='checkbox' id='desktopNotify-enabled' /> Also show alerts on the desktop while Tripwire is in the background</label>"
+					+ "<div class='dn-kill-note'>Kill alerts have their own switch: Settings &gt; Kill Reporting &gt; Desktop alerts.</div>"
 					+ "<div id='desktopNotify-state' class='dn-state'><span class='dn-state-text'></span> "
 					+ "<input type='button' class='dn-enable' value='Enable desktop notifications' /></div></div>",
 				load: function(o) {
@@ -266,7 +272,7 @@ const forkDesktopNotify = {
 				keywords: "desktop notification kill timer watchlist hole static exit range fight",
 				html: "<div class='dn-types'>"
 					+ dn.TYPES.map(function(t) {
-						if (t[0] === "kill") { return "<div class='dn-type dn-type-note'>" + esc(t[1]) + ": set in Kill Reporting &gt; Desktop alerts</div>"; }
+						if (t[0] === "kill") { return "<div class='dn-type dn-type-note'>" + esc(t[1]) + ": switched only in Kill Reporting &gt; Desktop alerts</div>"; }
 						return "<label class='dn-type'><input type='checkbox' id='desktopNotify-" + t[0] + "' /> " + esc(t[1]) + "</label>";
 					}).join("")
 					+ "</div>",

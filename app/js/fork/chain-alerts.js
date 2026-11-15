@@ -327,6 +327,19 @@ const chainAlerts = {
 			+ "</div>";
 	},
 
+	/** Run fn now when the page is on screen, else once it comes back (a pop-up that closes itself after NOTICE_MS would
+	 *  otherwise be gone before anyone looks; the desktop notification goes out at once). Returns whether it ran now. */
+	whenVisible: function(doc, fn) {
+		if (!doc || !doc.hidden || typeof doc.addEventListener !== "function") { fn(); return true; }
+		const onChange = function() {
+			if (doc.hidden) { return; }
+			doc.removeEventListener("visibilitychange", onChange);
+			fn();
+		};
+		doc.addEventListener("visibilitychange", onChange);
+		return false;
+	},
+
 	/** Keys to keep in storage: the last `max` */
 	trim: function(shown, max) {
 		const keys = Object.keys(shown || {});
@@ -374,11 +387,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		function show(kind, t, systemID, key) {
 			if (typeof jBox === "undefined") { return; }
 			const name = systems()[systemID] ? systems()[systemID].name : "";
-			new jBox("Notice", {
-				content: ca.noticeHtml(kind, t.title, t.text, systemID, name), color: kind === "homeStatic" ? "yellow" : "blue",
-				autoClose: ca.NOTICE_MS, closeOnClick: false, offset: { y: 35 }, animation: "flip", addClass: "chain-alert-notice"
-			});
 			if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.chainAlertNote(kind, t, key !== undefined ? key : systemID), function() { if (name) { tripwire.systemChange(systemID); } }); }
+			// In a background tab the pop-up waits for you to come back (its 20 s would run out unseen)
+			ca.whenVisible(document, function() {
+				new jBox("Notice", {
+					content: ca.noticeHtml(kind, t.title, t.text, systemID, name), color: kind === "homeStatic" ? "yellow" : "blue",
+					autoClose: ca.NOTICE_MS, closeOnClick: false, offset: { y: 35 }, animation: "flip", addClass: "chain-alert-notice"
+				});
+			});
 			if (typeof forkUsage !== "undefined") {
 				if (kind === "newHole") { forkUsage.track("chainAlerts", "alert_hole"); }
 				else if (kind === "homeStatic") { forkUsage.track("chainAlerts", "alert_static"); }
