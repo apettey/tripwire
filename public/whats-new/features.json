@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 175,
+      "date": "2026-11-15",
+      "title": "New note editor",
+      "description": "System notes have a new, lighter editor in place of the old one, which no longer gets security updates. Bold, lists, indent, links, text size, text colour and highlight work as before; anything unsafe in pasted text is removed before it reaches the note.\n\nThere is no setting for this: it is a security fix. Existing notes look the same.",
+      "images": [
+        { "src": "whats-new/img/pr-175-note-editor.png", "caption": "The note editor with its text colour menu open" }
+      ]
+    },
+    {
       "pr": 174,
       "date": "2026-11-15",
       "title": "Desktop notifications",
