@@ -182,22 +182,19 @@ const siteValues = {
 			const $cell = $(this).children("td").eq(3);
 			const site = on ? siteValues.siteFor(signatures[$(this).attr("data-id")], siteValues.sites) : null;
 			let $chip = $cell.children(".site-value-chip");
-			if (!site) {
-				if ($chip.length) { $chip.remove(); siteValues.sortText($cell); }
-				return;
-			}
+			if (!site) { $chip.remove(); return; }
 			const est = siteValues.estimate(site, siteValues.data, siteValues.live);
 			const text = siteValues.chipText(est);
 			const tip = siteValues.tooltip(site, est, siteValues.data.fallbackPrices && siteValues.data.fallbackPrices.date);
 			if ($chip.length && $chip.text() === text && $chip.attr("data-tooltip") === tip) { return; }
 			if (!$chip.length) {
-				// right after the name; an inline-block that doesn't break, so in a narrow cell it wraps under the name whole
-				$chip = $("<span class=\"site-value-chip sig-name-extra\"></span>").appendTo($cell);
+				// right after the name (so the Leads To column still sorts by name); an inline-block that doesn't break, so in a
+				// narrow cell it wraps under the name whole
+				$chip = $("<span class=\"site-value-chip\"></span>").appendTo($cell);
 			}
 			$chip.text(text).attr("data-tooltip", tip)
 				.toggleClass("site-value-approx", est.status === "approximate")
 				.toggleClass("site-value-unknown", est.status === "unverified");
-			siteValues.sortText($cell);
 			const box = siteValues.tipBox();
 			if (box && !$chip.data("siteValueTip")) {
 				box.attach($chip);
@@ -223,15 +220,6 @@ const siteValues = {
 			}
 		});
 		return siteValues.box;
-	},
-
-	/** Tablesorter reads a cell's data-text instead of its text: keep the Leads To column sorting by the site name alone.
-	Fork additions in the name cell carry the class sig-name-extra (any fork feature may add one); without any, the
-	attribute goes and upstream's own text counts again. */
-	sortText: function($cell) {
-		const $extras = $cell.children(".sig-name-extra");
-		if (!$extras.length) { $cell.removeAttr("data-text"); return; }
-		$cell.attr("data-text", $cell.clone().children(".sig-name-extra").remove().end().text().trim());
 	},
 
 	scheduled: null,
