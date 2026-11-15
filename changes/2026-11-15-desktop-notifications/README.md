@@ -52,8 +52,10 @@ after an in-app alert while the browser hasn't been asked yet; its Enable button
 - Kill Reporting's own desktop code now goes through `forkDesktopNotify` (permission, hidden check, tags, analytics);
   its `killReporting.desktop` switch alone decides. The home static check of chain alerts also runs while the tab is
   hidden when a desktop notification could show.
-- Chain alerts in a background tab: the desktop notification goes out at once, and the in-app pop-up now waits until the
-  tab is visible again (`chainAlerts.whenVisible`) instead of closing itself after 20 s unseen.
+- Home static alert in a background tab: the desktop notification goes out at once, and the in-app pop-up waits until
+  the tab is visible again instead of closing itself after 20 s unseen. One queue (latest stage per hole) and one
+  `visibilitychange` listener; on return a hole that is gone, no longer home's static or at another stage is dropped
+  (`chainAlerts.queueStatic` / `staticOnReturn`). New-hole and jump-range pop-ups show at once as before.
 - Analytics: `desktopNotify.granted` / `clicked` (use), `denied` / `shown` (events); catalog entry `desktopNotify`.
   New tip trigger `alert.shown` in `hints.js`.
 - Fork files touched: `kill-reporting.js`, `structure-timers.js`, `watchlist.js`, `chain-alerts.js`, `rally.js`,

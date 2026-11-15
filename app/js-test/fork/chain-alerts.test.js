@@ -213,21 +213,20 @@ describe('Chain alerts', () => {
 		});
 	});
 
-	it('opens a pop-up at once on screen, and in a background tab only once the tab is back', () => {
-		const doc = { hidden: false, listeners: [], addEventListener(e, f) { this.listeners.push(f); }, removeEventListener(e, f) { this.listeners = this.listeners.filter(x => x !== f); } };
-		let shown = 0;
-		assert.strictEqual(ca.whenVisible(doc, () => shown++), true);
-		assert.strictEqual(shown, 1);
-		doc.hidden = true;
-		assert.strictEqual(ca.whenVisible(doc, () => shown++), false);
-		assert.strictEqual(shown, 1);
-		doc.listeners.slice().forEach(f => f());	// still hidden: keeps waiting
-		assert.strictEqual(shown, 1);
-		doc.hidden = false;
-		doc.listeners.slice().forEach(f => f());
-		assert.strictEqual(shown, 2);
-		assert.strictEqual(doc.listeners.length, 0);	// once only
-		assert.strictEqual(ca.whenVisible(null, () => shown++), true);
+	it('home static pop-ups from a background tab: latest stage per hole, dropped when gone or moved on', () => {
+		const crit = (id, left) => hole(id, HOME, C5, { type: STATIC, life: 'critical' }, { lifeLeft: at(now + left) });
+		const pending = {};
+		ca.queueStatic(pending, { hole: crit(5, 40 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, { hole: crit(5, -60000), stage: 'expired' });	// the same hole moved on: replaces it
+		ca.queueStatic(pending, { hole: crit(6, 30 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, { hole: crit(7, 20 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, null);
+		assert.deepStrictEqual(pending, { 5: 'expired', 6: 'lt1h', 7: 'lt1h' });
+		// On return: 5 still EOL (shown once, its latest stage), 6 now past its lifetime (stage changed: dropped), 7 gone
+		const back = ca.staticOnReturn(pending, [crit(5, -60000), crit(6, -1000)], HOME, [STATIC], now);
+		assert.deepStrictEqual(back.map(a => [a.key, a.stage]), [['5:expired', 'expired']]);
+		assert.deepStrictEqual(ca.staticOnReturn(pending, [crit(5, -60000)], 30000002, [STATIC], now), [], 'home changed');
+		assert.deepStrictEqual(ca.staticOnReturn({}, [crit(5, -60000)], HOME, [STATIC], now), []);
 	});
 
 	it('keeps the last shown static stages', () => {
