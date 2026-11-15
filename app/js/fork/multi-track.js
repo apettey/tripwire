@@ -553,7 +553,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!c) { return debugCharacters[id] && debugCharacters[id].stale || ""; }
 			try {
 				if (c.tokenExpire && typeof moment === "function" && moment.utc(c.tokenExpire).isBefore(moment())) { return "token expired"; }
-				if (typeof esiBackoff !== "undefined" && esiBackoff.failing(id).length) { return "token rejected"; }
+				if (typeof esiBackoff !== "undefined" && esiBackoff.failing(id).some(function(f) { return f.route === "location"; })) { return "token rejected"; }
 				if (typeof esiLimits !== "undefined" && esiLimits.pausedFor("char:" + id) > 0) { return "ESI paused"; }
 			} catch (e) { /* unknown: say nothing */ }
 			return "";

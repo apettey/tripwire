@@ -56,6 +56,17 @@ describe('esiBackoff', () => {
 			assert.strictEqual(esiBackoff.cacheMs(headers({ Expires: new Date(NOW + 30000).toUTCString(), Date: new Date(NOW + 20000).toUTCString() }), NOW), 10000);
 			assert.strictEqual(esiBackoff.cacheMs(headers({ Expires: new Date(NOW - 30000).toUTCString() }), NOW), 0);
 		});
+		it('caps a lifetime from Expires per route: a slow PC clock must not stall polling', () => {
+			// ESI's Expires is 5 s ahead of its clock; this PC is 2 minutes slow, so it looks 125 s away
+			const slow = headers({ Expires: new Date(NOW + 125000).toUTCString() });
+			assert.strictEqual(esiBackoff.cacheMs(slow, NOW, esiBackoff.EXPIRES_CEILING_MS.location), 5000);
+			assert.strictEqual(esiBackoff.cacheMs(slow, NOW, esiBackoff.EXPIRES_CEILING_MS.online), 60000);
+			assert.strictEqual(esiBackoff.cacheMs(headers({ 'Cache-Control': 'max-age=30' }), NOW, 5000), 30000, 'max-age is relative: not capped');
+			const quiet2 = fn => { const w = console.warn; console.warn = () => {}; try { return fn(); } finally { console.warn = w; } };
+			const entry = quiet2(() => esiBackoff.record('https://esi.evetech.net/characters/7/location/?token=t', 200, 'success', slow, NOW));
+			assert.strictEqual(entry.expires, NOW + 5000);
+			assert.strictEqual(esiBackoff.due(entry, 't', NOW + 5000), true, 'polled again on the next 5 s tick');
+		});
 		it('no-cache / no-store mean ask every time; no header means unknown', () => {
 			assert.strictEqual(esiBackoff.cacheMs(headers({ 'Cache-Control': 'no-cache', Expires: new Date(NOW + 30000).toUTCString() }), NOW), 0);
 			assert.strictEqual(esiBackoff.cacheMs(headers({ 'Cache-Control': 'private, no-store' }), NOW), 0);
@@ -83,13 +94,19 @@ describe('esiBackoff', () => {
 
 	describe('backoff', () => {
 		it('backs off 5xx and network errors exponentially, capped at 5 minutes', () => {
-			assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7, 10].map(esiBackoff.errorDelay), [5, 10, 20, 40, 80, 160, 300, 300]);
+			assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7, 10].map(n => esiBackoff.errorDelay(n, 503)), [5, 10, 20, 40, 80, 160, 300, 300]);
 			let e = null;
 			const waits = [];
 			for (let i = 0; i < 4; i++) { e = esiBackoff.next(e, { kind: 'error', status: 503 }, NOW, 0.5); waits.push(e.until - NOW); }
 			assert.deepStrictEqual(waits, [5000, 10000, 20000, 40000]);
 			assert.strictEqual(esiBackoff.due(e, 'tok', NOW + 39000), false);
 			assert.strictEqual(esiBackoff.due(e, 'tok', NOW + 40000), true);
+		});
+		it('caps network errors and timeouts at 30 s (they never reached ESI)', () => {
+			assert.deepStrictEqual([1, 2, 3, 4, 5, 10].map(n => esiBackoff.errorDelay(n, 0)), [5, 10, 20, 30, 30, 30]);
+			let e = null;
+			for (let i = 0; i < 6; i++) { e = esiBackoff.next(e, { kind: 'error', status: 0 }, NOW, 0.5); }
+			assert.strictEqual(e.until - NOW, 30000);
 		});
 		it('adds +-25% jitter so many characters do not retry together', () => {
 			const low = esiBackoff.next(null, { kind: 'error', status: 502 }, NOW, 0);
@@ -113,11 +130,23 @@ describe('esiBackoff', () => {
 			assert.strictEqual(e.until - NOW, 120000);
 			e = esiBackoff.next(e, { kind: 'auth', status: 403, token: 'old' }, NOW, 0.5);
 			assert.strictEqual(e.stopped, true);
-			assert.strictEqual(esiBackoff.due(e, 'old', NOW + 86400000), false, 'never with the same token');
-			assert.strictEqual(esiBackoff.due(e, 'new', NOW), true, 'one try with a new token');
+			assert.strictEqual(esiBackoff.due(e, 'old', NOW + esiBackoff.STOPPED_RETRY_MS - 1), false, 'not soon with the same token');
+			assert.strictEqual(esiBackoff.due(e, 'old', NOW + esiBackoff.STOPPED_RETRY_MS), true, 'but every 5 min (an SSO blip)');
+			assert.strictEqual(esiBackoff.due(e, 'new', NOW), true, 'at once with a new token');
 			const again = esiBackoff.next(e, { kind: 'auth', status: 403, token: 'new' }, NOW, 0.5);
 			assert.strictEqual(again.stopped, true, 'the new token fails too: stopped again at once');
 			assert.strictEqual(esiBackoff.due(again, 'new', NOW + 1000), false);
+		});
+		it('the active character\'s location never waits more than 60 s, stopped or not', () => {
+			let e = esiBackoff.next(null, { kind: 'auth', status: 401, token: 'a' }, NOW, 0.5);
+			e = esiBackoff.next(e, { kind: 'auth', status: 401, token: 'a' }, NOW, 0.5);	// 120 s pause
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 59000, true), false);
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 60000, true), true);
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 60000, false), false, 'others wait the full 120 s');
+			e = esiBackoff.next(e, { kind: 'auth', status: 401, token: 'a' }, NOW, 0.5);
+			assert.strictEqual(e.stopped, true);
+			assert.strictEqual(esiBackoff.due(e, 'a', NOW + 60000, true), true);
+			assert.strictEqual(esiBackoff.due(Object.assign({}, e, { inflight: NOW + 59000 }), 'a', NOW + 60000, true), false, 'not while one is out');
 		});
 		it('an ok answer clears everything; a different failure starts its own count', () => {
 			let e = esiBackoff.next(null, { kind: 'auth', status: 401 }, NOW, 0.5);
@@ -271,16 +300,39 @@ describe('esiBackoff', () => {
 				assert.strictEqual(sent.length, 2, 'then 120 s');
 				t += 130000; tripwire.esi.location(); sent[2].answer(403);	// 160 s: past 120 s plus the jitter
 				assert.deepStrictEqual(esiBackoff.failing(1), [{ route: 'location', status: 403 }]);
-				for (let i = 0; i < 100; i++) { t += 5000; tripwire.esi.location(); }
+				for (let i = 0; i < 50; i++) { t += 5000; tripwire.esi.location(); }
 				assert.strictEqual(sent.length, 3, 'stopped');
+				t += 60000; tripwire.esi.location();
+				assert.strictEqual(sent.length, 4, 'retried after 5 min with the same token');
+				sent[3].answer(401);
 				tripwire.esi.ship();
-				assert.strictEqual(sent.length, 4, 'other routes keep their own state');
+				assert.strictEqual(sent.length, 5, 'other routes keep their own state');
 				tripwire.esi.characters[1].accessToken = 'refreshed';
 				tripwire.esi.location();
-				assert.strictEqual(sent.length, 5, 'one try with the new token');
-				sent[4].answer(200, { 'Cache-Control': 'max-age=5' });
+				assert.strictEqual(sent.length, 6, 'at once with the new token');
+				sent[5].answer(200, { 'Cache-Control': 'max-age=5' });
 				assert.deepStrictEqual(esiBackoff.failing(1), []);
 			} finally { Date.now = now; }
+		});
+		it('keeps polling the active character\'s location every 60 s while its token is rejected', () => {
+			const now = Date.now;
+			let t = NOW;
+			Date.now = () => t;
+			global.options = { tracking: { active: '1' } };
+			try {
+				tripwire.esi.characters = { 1: { characterID: 1, accessToken: 'a' }, 2: { characterID: 2, accessToken: 'b' } };
+				for (let i = 0; i < 3; i++) {
+					tripwire.esi.location();
+					flush();
+					sent.filter(s => !s.done).forEach(s => { s.done = true; s.answer(401); });
+					t += 150000;
+				}
+				assert.deepStrictEqual(esiBackoff.failing(1).map(f => f.route), ['location']);
+				const before = sent.length;
+				for (let i = 0; i < 24; i++) { t += 5000; tripwire.esi.location(); flush(); sent.filter(s => !s.done).forEach(s => { s.done = true; s.answer(401); }); }
+				const extra = sent.slice(before).map(s => esiBackoff.routeOf(s.settings.url).id);
+				assert.deepStrictEqual(extra, ['1', '1'], 'the active one every 60 s, the other not at all in 2 min');
+			} finally { Date.now = now; delete global.options; }
 		});
 		it('does not ask again while the cache is current or a request is out', () => {
 			const now = Date.now;
@@ -303,8 +355,8 @@ describe('esiBackoff', () => {
 			global.moment = Object.assign(() => ({}), { utc: () => ({ subtract: () => ({ isBefore: () => true }) }) });
 			try {
 				tripwire.esi.characters = { 1: { characterID: 1, accessToken: 'a', tokenExpire: '2020-01-01' } };
-				esiBackoff.state['1:location'] = { stopped: true, token: 'a', status: 401 };
-				esiBackoff.state['1:online'] = { stopped: true, token: 'a', status: 403 };
+				esiBackoff.state['1:location'] = { stopped: true, token: 'a', status: 401, at: Date.now() };
+				esiBackoff.state['1:online'] = { stopped: true, token: 'a', status: 403, at: Date.now() };
 				tripwire.esi.location();
 				tripwire.esi.online();
 				assert.deepStrictEqual(sent.map(s => esiBackoff.routeOf(s.settings.url).route), ['location'], 'online has no expiry check upstream: stays stopped');

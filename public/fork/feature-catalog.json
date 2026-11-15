@@ -162,6 +162,8 @@
     { "id": "usageStats", "title": "Usage statistics", "section": "general", "prs": [120], "settingsKey": "usageStats",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "analyticsDashboard", "try": "analytics.open", "title": "Usage analytics dashboard", "section": "general", "prs": [], "settingsKey": null,
-      "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] }
+      "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] },
+    { "id": "esiTokenAlert", "title": "Warning when ESI rejects a character's token", "section": "general", "prs": [], "settingsKey": null,
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".esi-token-failing" }
   ]
 }

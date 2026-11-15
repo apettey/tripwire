@@ -6,12 +6,15 @@ const esiBackoff = {
 	// this file handles what upstream's loop does on its own:
 	// - 401/403 (token rejected): upstream kept polling every 5 s (and a 403 made it ask the server for the characters
 	//   again, whose answer re-ran every poller at once, so a rejected token looped as fast as the network allowed).
-	//   Now that route waits 30 s, then 120 s, and after the 3rd failure in a row it stops until the server hands over a
-	//   different token (tokens are refreshed every ~20 min; one try per new token). The character's tracking card
-	//   shows a small alert icon while it is stopped.
-	// - 5xx, network errors and other 4xx: exponential backoff per route, 5 s doubling to 5 min, +-25% jitter.
+	//   Now that route waits 30 s, then 120 s, and after the 3rd failure in a row it is "stopped": asked at once when
+	//   the server hands over a different token, else only every 5 min (a blip at SSO mustn't stop it for the ~15 min
+	//   until the next refresh). The active character's location never waits more than 60 s (it drives the automapper).
+	//   The character's tracking card shows a small alert icon while it is stopped.
+	// - 5xx and other 4xx: exponential backoff per route, 5 s doubling to 5 min, +-25% jitter. Network errors and
+	//   timeouts (they never reached ESI, so cost no tokens) the same but capped at 30 s.
 	// - Cache lifetime: a route isn't asked again while ESI's Cache-Control max-age (Expires only when there is no
-	//   max-age) says the last answer is still current, nor while a request for it is still out.
+	//   max-age) says the last answer is still current, nor while a request for it is still out. Expires is measured
+	//   against the local clock, so a lifetime from it is capped per route (a slow PC clock mustn't stall polling).
 	// - Spreading: the requests of one poll go out spaced over up to 2 s (250 ms apart) instead of all at once.
 	// Composes with esi-limits.js and esi-offline-skip.js, which wrap the same pollers (this file sorts first, so its
 	// wrapper is the inner one). Keep `const esiBackoff` on the first line: the test helper strips it to define a global.
@@ -19,8 +22,12 @@ const esiBackoff = {
 	ROUTES: ["location", "ship", "online"],
 	AUTH_PAUSES: [30, 120],		// s after the 1st and 2nd 401/403 in a row; the next one stops the route
 	AUTH_STOP_AFTER: 3,
-	ERROR_BASE: 5,				// s after the first 5xx / network error / other 4xx, doubling
+	STOPPED_RETRY_MS: 300000,	// a stopped route with the same token is still tried this often
+	ACTIVE_LOCATION_MAX_MS: 60000,	// the active character's location never waits longer than this after a failure
+	ERROR_BASE: 5,				// s after the first 5xx / other 4xx, doubling
 	ERROR_MAX: 300,				// s
+	NETWORK_MAX: 30,			// s; network errors and timeouts (status 0) never reached ESI
+	EXPIRES_CEILING_MS: { location: 5000, ship: 5000, online: 60000 },	// cap on a lifetime taken from Expires
 	JITTER: 0.25,				// +-25% on every backoff
 	CACHE_SLACK_MS: 3000,		// ask this much before the cache expires: a poll's requests go out up to 2 s late
 	INFLIGHT_MS: 30000,			// a request older than this no longer blocks the next one
@@ -60,8 +67,9 @@ const esiBackoff = {
 
 	/** How long (ms) an answer stays current: Cache-Control max-age (less Age), else Expires; null if it doesn't say.
 	 *  header(name) reads a response header. In the browser Date and Age aren't readable (not CORS-exposed by ESI), so
-	 *  Expires is then measured against the local clock. */
-	cacheMs: function(header, now) {
+	 *  Expires is then measured against the local clock, and capped at `ceiling` ms when one is given (a slow clock
+	 *  would otherwise make every answer look current for minutes). */
+	cacheMs: function(header, now, ceiling) {
 		const read = function(name) { try { const v = header(name); return v === null || v === undefined ? "" : String(v); } catch (e) { return ""; } };
 		const cc = read("Cache-Control").toLowerCase();
 		if (/(^|[\s,])(no-store|no-cache)([\s,=]|$)/.test(cc)) { return 0; }
@@ -74,7 +82,8 @@ const esiBackoff = {
 		const expires = Date.parse(read("Expires"));
 		if (isNaN(expires)) { return 0; }	// an invalid Expires means already expired (RFC 9111)
 		const date = Date.parse(read("Date"));
-		return Math.max(0, expires - (isNaN(date) ? now : date));
+		const ms = Math.max(0, expires - (isNaN(date) ? now : date));
+		return typeof ceiling === "number" ? Math.min(ms, ceiling) : ms;
 	},
 
 	/** Seconds from a Retry-After value (delta seconds or HTTP date), or null */
@@ -91,10 +100,11 @@ const esiBackoff = {
 		return 1 - esiBackoff.JITTER + 2 * esiBackoff.JITTER * r;
 	},
 
-	/** Seconds to wait after the n-th error in a row (before jitter) */
-	errorDelay: function(failures) {
+	/** Seconds to wait after the n-th error in a row (before jitter); status 0 (network, timeout) caps lower */
+	errorDelay: function(failures, status) {
 		const n = Math.max(1, failures || 1);
-		return Math.min(esiBackoff.ERROR_MAX, esiBackoff.ERROR_BASE * Math.pow(2, Math.min(n - 1, 20)));
+		const max = Number(status) ? esiBackoff.ERROR_MAX : esiBackoff.NETWORK_MAX;
+		return Math.min(max, esiBackoff.ERROR_BASE * Math.pow(2, Math.min(n - 1, 20)));
 	},
 
 	/**
@@ -113,23 +123,26 @@ const esiBackoff = {
 			return { kind: "ok", failures: 0, expires: typeof o.cacheMs === "number" ? now + o.cacheMs : 0 };
 		}
 		const failures = (prev.kind === o.kind ? prev.failures || 0 : 0) + 1;
-		const out = { kind: o.kind, failures: failures, status: Number(o.status) || 0, token: o.token || "" };
+		const out = { kind: o.kind, failures: failures, status: Number(o.status) || 0, token: o.token || "", at: now };
 		if (o.kind === "auth" && failures >= esiBackoff.AUTH_STOP_AFTER) {
 			out.stopped = true;
 			return out;
 		}
-		const seconds = o.kind === "auth" ? esiBackoff.AUTH_PAUSES[failures - 1] : esiBackoff.errorDelay(failures);
+		const seconds = o.kind === "auth" ? esiBackoff.AUTH_PAUSES[failures - 1] : esiBackoff.errorDelay(failures, o.status);
 		out.until = now + Math.round(seconds * 1000 * esiBackoff.jitter(rand));
 		// A Retry-After on the error (a 503, say) is a minimum, capped like esi-limits.js caps its pauses (15 min)
 		if (typeof o.retryAfter === "number" && o.retryAfter > 0) { out.until = Math.max(out.until, now + Math.min(o.retryAfter, 900) * 1000); }
 		return out;
 	},
 
-	/** May this route be asked now? token: the character's current access token */
-	due: function(entry, token, now) {
+	/** May this route be asked now? token: the character's current access token; urgent: the active character's
+	 *  location (never waits more than ACTIVE_LOCATION_MAX_MS after a failure) */
+	due: function(entry, token, now, urgent) {
 		if (!entry) { return true; }
 		if (entry.inflight && now - entry.inflight < esiBackoff.INFLIGHT_MS) { return false; }
-		if (entry.stopped) { return String(token || "") !== String(entry.token || ""); }
+		const since = typeof entry.at === "number" ? now - entry.at : Infinity;
+		if (urgent && since >= esiBackoff.ACTIVE_LOCATION_MAX_MS) { return true; }
+		if (entry.stopped) { return String(token || "") !== String(entry.token || "") || since >= esiBackoff.STOPPED_RETRY_MS; }
 		if (entry.until && entry.until > now) { return false; }
 		if (entry.expires && entry.expires - now > esiBackoff.CACHE_SLACK_MS) { return false; }
 		return true;
@@ -144,18 +157,20 @@ const esiBackoff = {
 	},
 
 	/** The characters (same objects, a new map) whose `route` may be asked now. keep(c): poll anyway (token expiring:
-	 *  upstream then skips it without a request and asks the server to refresh the token) */
-	filter: function(characters, route, state, now, keep) {
+	 *  upstream then skips it without a request and asks the server to refresh the token). urgent(id): see due() */
+	filter: function(characters, route, state, now, keep, urgent) {
 		const out = {};
 		Object.keys(characters || {}).forEach(function(id) {
 			const c = characters[id];
 			if (!c) { return; }
-			if ((typeof keep === "function" && keep(c)) || esiBackoff.due(state && state[esiBackoff.key(id, route)], c.accessToken, now)) { out[id] = c; }
+			const hurry = typeof urgent === "function" && !!urgent(id);
+			if ((typeof keep === "function" && keep(c)) || esiBackoff.due(state && state[esiBackoff.key(id, route)], c.accessToken, now, hurry)) { out[id] = c; }
 		});
 		return out;
 	},
 
-	/** Routes stopped for this character because ESI keeps rejecting its token: [{route, status}] (empty = fine) */
+	/** Routes stopped for this character because ESI keeps rejecting its token: [{route, status}] (empty = fine; a
+	 *  stopped route is still retried, see due()) */
 	failing: function(id, state) {
 		const s = state || esiBackoff.state;
 		const out = [];
@@ -185,13 +200,13 @@ const esiBackoff = {
 		const kind = esiBackoff.classify(status, textStatus);
 		const k = esiBackoff.key(r.id, r.route);
 		const entry = esiBackoff.next(esiBackoff.state[k], {
-			kind: kind, status: status, token: esiBackoff.tokenOf(url), cacheMs: kind === "ok" ? esiBackoff.cacheMs(header, now) : null,
+			kind: kind, status: status, token: esiBackoff.tokenOf(url), cacheMs: kind === "ok" ? esiBackoff.cacheMs(header, now, esiBackoff.EXPIRES_CEILING_MS[r.route]) : null,
 			retryAfter: kind === "ok" ? null : esiBackoff.retryAfter((function() { try { return header("Retry-After"); } catch (e) { return null; } })(), now)
 		}, now, typeof rand === "number" ? rand : Math.random());
 		const was = esiBackoff.state[k];
 		esiBackoff.state[k] = entry;
 		if (entry.stopped && !(was && was.stopped) && typeof console !== "undefined") {
-			console.warn("ESI HTTP " + status + " for character " + r.id + " " + r.route + " (" + entry.failures + " in a row): stopped polling it until its token changes");
+			console.warn("ESI HTTP " + status + " for character " + r.id + " " + r.route + " (" + entry.failures + " in a row): now asked only when its token changes or every few minutes");
 		}
 		if ((entry.stopped || 0) !== ((was && was.stopped) || 0)) { esiBackoff.showFailing(r.id); }
 		return entry;
@@ -304,9 +319,13 @@ const esiBackoff = {
 			// Upstream's location / ship loops skip a character whose token is about to expire (no request) and ask the
 			// server to refresh it, so those stay in; /online/ has no such check
 			const keep = route === "online" ? null : expiring;
+			// The active character's location drives the automapper: it never waits long
+			const urgent = route !== "location" ? null : function(id) {
+				return typeof options !== "undefined" && options && options.tracking && String(options.tracking.active) === String(id);
+			};
 			const wrapped = function() {
 				const all = tripwire.esi.characters;
-				const due = esiBackoff.filter(all, route, esiBackoff.state, Date.now(), keep);
+				const due = esiBackoff.filter(all, route, esiBackoff.state, Date.now(), keep, urgent);
 				const count = Object.keys(due).filter(function(id) { return !keep || !keep(due[id]); }).length;
 				tripwire.esi.characters = due;
 				try {
