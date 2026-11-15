@@ -168,9 +168,28 @@ const campaignTags = {
 
 	counts: {},
 
-	closeCounter: function() {
+	anchor: null,		// the tag that opened the counter, focused again when it closes by keyboard or ×
+	onScroll: null,		// capture-phase scroll / resize listener while the counter is open
+
+	/** Close the counter; refocus: true puts the focus back on the tag that opened it (Escape, ×) */
+	closeCounter: function(refocus) {
+		const was = $("#campaignRampancy").length > 0;
 		$("#campaignRampancy").remove();
 		$(document).off(".campaignRampancy");
+		if (campaignTags.onScroll) {
+			window.removeEventListener("scroll", campaignTags.onScroll, true);
+			window.removeEventListener("resize", campaignTags.onScroll);
+			campaignTags.onScroll = null;
+		}
+		const anchor = campaignTags.anchor;
+		campaignTags.anchor = null;
+		if (refocus && was && anchor) {
+			// the row may have been redrawn meanwhile: then focus the new tag in the same row
+			const row = anchor.closest ? anchor.closest("tr[data-id]") : null;
+			const tag = document.body.contains(anchor) ? anchor
+				: row ? document.querySelector("#sigTable tbody tr[data-id='" + row.getAttribute("data-id") + "'] .campaign-tag-fabricator") : null;
+			if (tag) { tag.focus(); }
+		}
 	},
 
 	openCounter: function(anchor) {
@@ -195,7 +214,16 @@ const campaignTags = {
 			$pop.find(".campaign-rampancy-result").text(campaignTags.rampancyText(r)).attr("data-escalation", r.escalation);
 		};
 		$pop.on("input", "input", update);
-		$pop.on("click", ".campaign-rampancy-close", function(e) { e.preventDefault(); campaignTags.closeCounter(); });
+		$pop.on("click", ".campaign-rampancy-close", function(e) { e.preventDefault(); campaignTags.closeCounter(true); });
+		// Tab stays inside the pop-up (it is a small dialog): wrap from the last field to the first and back
+		$pop.on("keydown", function(e) {
+			if (e.key !== "Tab") { return; }
+			const items = $pop.find("a, input").filter(":visible").get();
+			if (!items.length) { return; }
+			const first = items[0], last = items[items.length - 1];
+			if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+			else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+		});
 		update();
 		const a = anchor.getBoundingClientRect();
 		const w = $pop.outerWidth(), h = $pop.outerHeight();
@@ -203,10 +231,19 @@ const campaignTags = {
 			left: Math.max(4, Math.min(window.innerWidth - w - 4, a.left)) + "px",
 			top: Math.max(4, a.bottom + h + 4 > window.innerHeight ? a.top - h - 4 : a.bottom + 4) + "px"
 		});
+		campaignTags.anchor = anchor;
 		$pop.find("input").first().trigger("focus");
 		setTimeout(function() {
+			if ($pop[0] !== document.getElementById("campaignRampancy")) { return; }	// closed (or reopened) meanwhile
 			$(document).on("mousedown.campaignRampancy", function(e) { if (!$(e.target).closest("#campaignRampancy").length) { campaignTags.closeCounter(); } });
-			$(document).on("keydown.campaignRampancy", function(e) { if (e.key === "Escape") { campaignTags.closeCounter(); } });
+			$(document).on("keydown.campaignRampancy", function(e) { if (e.key === "Escape") { campaignTags.closeCounter(true); } });
+			// placed once with position: fixed, so close it when anything scrolls under it or the window resizes
+			campaignTags.onScroll = function(e) {
+				if (e && e.type === "scroll" && e.target && e.target.nodeType === 1 && e.target.closest("#campaignRampancy")) { return; }
+				campaignTags.closeCounter();
+			};
+			window.addEventListener("scroll", campaignTags.onScroll, true);
+			window.addEventListener("resize", campaignTags.onScroll);
 		}, 0);
 		if (typeof forkUsage !== "undefined") { forkUsage.track("campaignTags", "opened"); }
 	},
