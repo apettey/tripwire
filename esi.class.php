@@ -78,14 +78,27 @@ class esi {
 			JWT::$leeway = 60;
 			// php-jwt 6+ binds each key to the algorithm its JWK declares, so a
 			// token can only verify with the key and algorithm EVE published for it.
-			$jwt = JWT::decode($token, JWK::parseKeySet($jwks));
+			// fork: a bad token (wrong key, expired, malformed) is a failed login, not an uncaught exception (HTTP 500)
+			try {
+				$jwt = JWT::decode($token, JWK::parseKeySet($jwks));
+			} catch (\Throwable $e) {
+				$this->lastError = 'Could not validate the access token: ' . $e->getMessage();
+				return false;
+			}
 			$url = parse_url(self::$loginUrl);
 			$issuer = array(
 				$url['host'],
 				$url['scheme']."://".$url['host']
 			);
-			if (!in_array($jwt->iss,$issuer)) {
+			if (!isset($jwt->iss) || !in_array($jwt->iss,$issuer,true)) {
 				$this->lastError = 'Could not validate the authenticity of the access token';
+				return false;
+			}
+			// fork: as EVE's SSO docs ask: the token was issued to this app (aud holds our client ID), for a character
+			$audience = isset($jwt->aud) ? (array) $jwt->aud : array();
+			if ((defined('EVE_SSO_CLIENT') && EVE_SSO_CLIENT !== '' && !in_array(EVE_SSO_CLIENT, $audience, true))
+				|| !isset($jwt->sub) || !is_string($jwt->sub) || !preg_match('/^CHARACTER:EVE:\d+$/', $jwt->sub)) {
+				$this->lastError = 'The access token was not issued to this application for a character';
 				return false;
 			}
 			return $jwt;

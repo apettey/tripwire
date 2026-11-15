@@ -1053,6 +1053,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					const $toast = $(toastHtml(group));
 					$box.append($toast);
 					setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, wl.TOAST_MS);
+					if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.watchlistNote(group, systemAnalysis.analyse), function() { tripwire.systemChange(group.systemIDs[0]); }); }
 				});
 				while ($box.children(".watchlist-toast").length > 4) { $box.children(".watchlist-toast").first().remove(); }
 			}

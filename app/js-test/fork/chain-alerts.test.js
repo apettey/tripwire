@@ -213,6 +213,22 @@ describe('Chain alerts', () => {
 		});
 	});
 
+	it('home static pop-ups from a background tab: latest stage per hole, dropped when gone or moved on', () => {
+		const crit = (id, left) => hole(id, HOME, C5, { type: STATIC, life: 'critical' }, { lifeLeft: at(now + left) });
+		const pending = {};
+		ca.queueStatic(pending, { hole: crit(5, 40 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, { hole: crit(5, -60000), stage: 'expired' });	// the same hole moved on: replaces it
+		ca.queueStatic(pending, { hole: crit(6, 30 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, { hole: crit(7, 20 * 60000), stage: 'lt1h' });
+		ca.queueStatic(pending, null);
+		assert.deepStrictEqual(pending, { 5: 'expired', 6: 'lt1h', 7: 'lt1h' });
+		// On return: 5 still EOL (shown once, its latest stage), 6 now past its lifetime (stage changed: dropped), 7 gone
+		const back = ca.staticOnReturn(pending, [crit(5, -60000), crit(6, -1000)], HOME, [STATIC], now);
+		assert.deepStrictEqual(back.map(a => [a.key, a.stage]), [['5:expired', 'expired']]);
+		assert.deepStrictEqual(ca.staticOnReturn(pending, [crit(5, -60000)], 30000002, [STATIC], now), [], 'home changed');
+		assert.deepStrictEqual(ca.staticOnReturn({}, [crit(5, -60000)], HOME, [STATIC], now), []);
+	});
+
 	it('keeps the last shown static stages', () => {
 		assert.deepStrictEqual(ca.trim({ a: true, b: true, c: true }, 2), { b: true, c: true });
 	});
