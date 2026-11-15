@@ -9,7 +9,7 @@ include('app/js/fork/rolling-calculator');
 
 // Game data from Patch Notes Version 24.01 (releases 2026-09-22.1, 2026-10-06.1, 2026-10-07.1), checked against public
 // ESI GET /universe/types/{id}/ on 2026-11-15 (wormholes: dogma 1382 life in minutes, 1383 total mass, 1385 jump mass).
-// Pinned so an upstream sync can't bring back older values: upstream Tripwire 2.0 (a9c49177) has the intra-Pochven
+// Pinned so a port from upstream can't bring back older values: upstream Tripwire 2.0 (a9c49177) has the intra-Pochven
 // holes at "5 Hours" and F216 at 300,000,000 jump mass.
 const tools = f => JSON.parse(fs.readFileSync('tools/' + f + '.json', 'utf8'));
 
