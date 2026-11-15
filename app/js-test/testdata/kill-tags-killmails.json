@@ -1,0 +1,127 @@
+{
+  "comment": "Kills as public/system_kills.php serves them (zk_kill_json), with the tags killTags.classify must give. security = the system's security status (null = unknown).",
+  "cases": [
+    {
+      "name": "gate camp with an Interdictor bubble (null-sec)",
+      "security": -0.146,
+      "kill": { "killID": 1, "systemID": 30001161, "killTime": "2026-11-15T10:00:00Z",
+        "victim": { "characterID": 92000001, "corporationID": 98100002, "allianceID": null, "shipTypeID": 33470 },
+        "finalBlow": { "characterID": 92000101, "corporationID": 98100001, "allianceID": null, "shipTypeID": 22456 },
+        "attackerCount": 6, "attackerTotal": 6, "totalValue": 412000000, "npc": false, "solo": false, "awox": false,
+        "locationID": 50001248, "attackerShips": [22456, 11995, 29990, 17738], "attackerWeapons": [22456, 2929], "concord": false, "ganked": false },
+      "expected": ["gatecamp", "bubble"]
+    },
+    {
+      "name": "pod smartbombed on a gate by a Sabre and a Rokh",
+      "security": -0.146,
+      "kill": { "killID": 2, "systemID": 30001161, "killTime": "2026-11-15T10:00:00Z",
+        "victim": { "characterID": 92000002, "corporationID": 98100002, "allianceID": null, "shipTypeID": 670 },
+        "finalBlow": { "characterID": 92000107, "corporationID": 98100001, "allianceID": null, "shipTypeID": 24688 },
+        "attackerCount": 2, "attackerTotal": 2, "totalValue": 25000000, "npc": false, "solo": false, "awox": false,
+        "locationID": 50001248, "attackerShips": [22456, 24688], "attackerWeapons": [22456, 3937], "concord": false, "ganked": false },
+      "expected": ["gatecamp", "bubble", "smartbomb"]
+    },
+    {
+      "name": "HIC (Laelaps) away from a gate",
+      "security": -0.5,
+      "kill": { "killID": 3, "systemID": 30001161, "victim": { "shipTypeID": 626 }, "attackerCount": 4, "attackerTotal": 4, "npc": false, "awox": false,
+        "locationID": 40072112, "attackerShips": [60764, 24702], "attackerWeapons": [2929] },
+      "expected": ["bubble"]
+    },
+    {
+      "name": "solo kill at a planet",
+      "security": -0.146,
+      "kill": { "killID": 4, "systemID": 30001161, "victim": { "characterID": 92000003, "shipTypeID": 587 },
+        "attackerCount": 1, "attackerTotal": 1, "npc": false, "solo": true, "awox": false,
+        "locationID": 40072112, "attackerShips": [585], "attackerWeapons": [2873], "concord": false, "ganked": false },
+      "expected": ["solo"]
+    },
+    {
+      "name": "solo by pilot count although zKillboard's solo flag is off (a drone or NPC also on the mail)",
+      "security": 0.3,
+      "kill": { "killID": 5, "systemID": 30002813, "victim": { "shipTypeID": 587 }, "attackerCount": 1, "attackerTotal": 3, "npc": false, "solo": false },
+      "expected": ["solo"]
+    },
+    {
+      "name": "awox: killed by their own corporation",
+      "security": -0.146,
+      "kill": { "killID": 6, "systemID": 30001161, "victim": { "corporationID": 98100002, "shipTypeID": 626 },
+        "finalBlow": { "corporationID": 98100002 }, "attackerCount": 2, "attackerTotal": 2, "npc": false, "awox": true,
+        "locationID": 40072113, "attackerShips": [24702], "attackerWeapons": [2929] },
+      "expected": ["awox"]
+    },
+    {
+      "name": "NPC kill (zKillboard's npc flag): only NPC, even next to a gate",
+      "security": -0.146,
+      "kill": { "killID": 7, "systemID": 30001161, "victim": { "shipTypeID": 32880 }, "attackerCount": 0, "attackerTotal": 1, "npc": true,
+        "locationID": 50001248, "attackerShips": [23707], "attackerWeapons": [] },
+      "expected": ["npc"]
+    },
+    {
+      "name": "no pilot among the attackers (e.g. a structure or rats without the npc flag) counts as NPC",
+      "security": 0.9,
+      "kill": { "killID": 8, "systemID": 30000142, "victim": { "shipTypeID": 587 }, "attackerCount": 0, "attackerTotal": 2, "npc": false },
+      "expected": ["npc"]
+    },
+    {
+      "name": "high-sec freighter gank: zKillboard's ganked label",
+      "security": 0.946,
+      "kill": { "killID": 9, "systemID": 30000142, "victim": { "shipTypeID": 20187 }, "attackerCount": 14, "attackerTotal": 14, "npc": false, "awox": false,
+        "locationID": 40009087, "attackerShips": [16240], "attackerWeapons": [3001], "concord": false, "ganked": true },
+      "expected": ["gank"]
+    },
+    {
+      "name": "high-sec gank by the hull rule: 3 pilots on an unarmed hull (Retriever)",
+      "security": 0.5,
+      "kill": { "killID": 10, "systemID": 30002768, "victim": { "shipTypeID": 17478 }, "attackerCount": 3, "attackerTotal": 3, "npc": false,
+        "attackerShips": [16240], "attackerWeapons": [3001], "concord": false, "ganked": false },
+      "expected": ["gank"]
+    },
+    {
+      "name": "the ganker's own loss: CONCORD on the mail with a pilot (high-sec)",
+      "security": 0.5,
+      "kill": { "killID": 11, "systemID": 30002768, "victim": { "shipTypeID": 16240 }, "attackerCount": 1, "attackerTotal": 4, "npc": false,
+        "attackerShips": [3885, 16240], "attackerWeapons": [3885], "concord": true, "ganked": false },
+      "expected": ["gank", "solo"]
+    },
+    {
+      "name": "not a gank: 2 pilots on a hauler in high-sec (could be a war target)",
+      "security": 0.9,
+      "kill": { "killID": 12, "systemID": 30000142, "victim": { "shipTypeID": 657 }, "attackerCount": 2, "attackerTotal": 2, "npc": false,
+        "attackerShips": [24702], "attackerWeapons": [2929], "concord": false, "ganked": false },
+      "expected": []
+    },
+    {
+      "name": "not a gank: many pilots on an armed hull in high-sec",
+      "security": 0.9,
+      "kill": { "killID": 13, "systemID": 30000142, "victim": { "shipTypeID": 24702 }, "attackerCount": 8, "attackerTotal": 8, "npc": false,
+        "attackerShips": [24702], "attackerWeapons": [2929], "concord": false, "ganked": false },
+      "expected": []
+    },
+    {
+      "name": "not a gank: 4 pilots on a hauler in low-sec (gate camp)",
+      "security": 0.28,
+      "kill": { "killID": 14, "systemID": 30002813, "victim": { "shipTypeID": 657 }, "attackerCount": 4, "attackerTotal": 4, "npc": false,
+        "locationID": 50013210, "attackerShips": [22456, 29990], "attackerWeapons": [2929], "concord": false, "ganked": false },
+      "expected": ["gatecamp", "bubble"]
+    },
+    {
+      "name": "unknown security: the hull rule needs high-sec, so no gank",
+      "security": null,
+      "kill": { "killID": 15, "systemID": 30000142, "victim": { "shipTypeID": 20187 }, "attackerCount": 10, "attackerTotal": 10, "npc": false, "concord": false },
+      "expected": []
+    },
+    {
+      "name": "a kill stored before the tag columns: only what the old fields allow",
+      "security": -0.146,
+      "kill": { "killID": 16, "systemID": 30001161, "victim": { "shipTypeID": 587 }, "attackerCount": 1, "attackerTotal": 1, "npc": false, "solo": true, "awox": true },
+      "expected": ["solo", "awox"]
+    },
+    {
+      "name": "station / planet location next to the stargate range is not a gate (60000000 = a station)",
+      "security": -0.146,
+      "kill": { "killID": 17, "systemID": 30001161, "victim": { "shipTypeID": 587 }, "attackerCount": 2, "attackerTotal": 2, "npc": false, "locationID": 60003760 },
+      "expected": []
+    }
+  ]
+}
