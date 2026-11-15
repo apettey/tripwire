@@ -165,7 +165,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.show", "panel.structures"], "panels": ["structuresWidget"], "use": ["saved"] },
     { "id": "structureTimers", "try": "structures.timers", "title": "Structure timers", "section": "intel", "prs": [81, 83], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["structures.timers"], "panels": [], "use": ["opened"], "exposed": ".str-marker" },
-    { "id": "chainAlerts", "title": "Chain alerts: new holes, home static, exits in jump range", "section": "intel", "prs": [], "settingsKey": "chainAlerts",
+    { "id": "chainAlerts", "title": "Chain alerts: new holes, home static, exits in jump range", "section": "intel", "prs": [171], "settingsKey": "chainAlerts",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["clicked"],
       "events": ["alert_hole", "alert_static", "alert_range"], "exposed": ".chain-alert",
       "success": "shown to >=30% of active users by day 28; turned off by <15% of those who saw one" },
