@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 166,
+      "date": "2026-11-15",
+      "title": "Undo and redo any signature or map edit",
+      "description": "Ctrl+Z now undoes your last signature or map edit wherever you made it: a deleted or pasted signature, a hole's life, mass, type or leads-to, a deleted hole, or a hole the automapper mapped. Ctrl+Shift+Z or Ctrl+Y redoes it. Hover the undo arrow, or search \"undo\" in the command palette, to see which step is next.\n\nIf someone else has changed that signature or hole since, the undo is refused and you are told who changed it, so their work is never overwritten. There is no setting to turn this off; it replaces the old per-system undo.",
+      "images": [
+        { "src": "whats-new/img/pr-166-undo-any-edit.png", "caption": "The command palette names the step Ctrl+Z will undo" }
+      ]
+    },
+    {
       "pr": 165,
       "date": "2026-11-15",
       "title": "Gas and ore site value",
