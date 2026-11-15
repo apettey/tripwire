@@ -6,8 +6,8 @@ const systemKillFeed = {
 	// the test helper strips it to define a global.
 	URL: "system_kills.php",
 	WIDGET_ID: "systemKillFeedWidget",
-	LIMIT: 20,
-	WINDOW_SECONDS: 86400,	// asked of the server (it clamps to its retention)
+	LIMIT: 50,	// the server's maximum, so the tag filter (kill-tags.js) has kills to pick from
+	WINDOW_SECONDS: 86400,	// asked of the server (it clamps to its retention) unless a window is picked (killTags.WINDOWS)
 	QUEUE_DELAY_MS: 1000,	// a system must be viewed this long before the server is asked to back-fill it
 	REFRESH_MS: 90000,	// while the system is viewed
 	PENDING_MS: 4000,	// while a back-fill or names are pending
@@ -123,7 +123,9 @@ const systemKillFeed = {
 				pilots: pilots,
 				npc: !!k.npc || pilots === 0,
 				solo: !!k.solo,
-				value: systemKillFeed.formatISK(k.totalValue)
+				value: systemKillFeed.formatISK(k.totalValue),
+				// Kill tags (app/js/fork/kill-tags.js), when they are on
+				tags: typeof killTags !== "undefined" && killTags.isOn() ? killTags.classify(k, killTags.securityOf(k.systemID)) : null
 			};
 		});
 	},
@@ -171,11 +173,13 @@ const systemKillFeed = {
 			row.finalBlowShipName ? "in a " + row.finalBlowShipName : ""];
 		const pilotsText = row.npc && row.pilots === 0 ? "NPC" : String(row.pilots);
 		const pilotsTip = row.npc && row.pilots === 0 ? "Killed by NPCs" : (row.pilots === 1 ? "1 pilot involved" : row.pilots + " pilots involved") + (row.solo ? " (solo)" : "");
+		const chips = row.tags && typeof killTags !== "undefined" ? killTags.chipsHtml(row.tags) : "";
+		const name = "<span class='skf-name" + (row.victimIsPilot ? "" : " skf-structure") + "'>" + esc(row.victimName) + "</span>";
 		return "<a class='skf-row" + (row.npc ? " skf-npc" : "") + (add.className ? " " + esc(add.className) : "") + "' href='" + esc(row.url) + "' target='_blank' rel='noopener noreferrer' data-killid='" + row.killID + "'>"
 			+ img("skf-ship", systemKillFeed.imageURL("type", row.shipTypeID, 64), tip(row.shipName || "Unknown ship"))
 			+ img("skf-corp", systemKillFeed.imageURL("corporations", row.victimCorporationID, 64), tip(victimCorp))
 			+ "<span class='skf-main'>"
-			+ "<span class='skf-name" + (row.victimIsPilot ? "" : " skf-structure") + "'>" + esc(row.victimName) + "</span>"
+			+ (chips ? "<span class='skf-nameline'>" + name + chips + "</span>" : name)
 			+ "<span class='skf-sub'><span class='skf-shipname'>" + esc(row.victimIsPilot ? row.shipName : (row.victimCorporationName || row.shipName)) + "</span>"
 			+ (row.value ? "<span class='skf-value'>" + esc(row.value) + "</span>" : "") + "</span>"
 			+ "</span>"
@@ -188,15 +192,25 @@ const systemKillFeed = {
 			+ "</a>";
 	},
 
-	/** Inner HTML of the panel body for a view model (or an error / loading state without one) */
-	bodyHtml: function(model, nowMs, error) {
+	/**
+	 * Inner HTML of the panel body for a view model (or an error / loading state without one)
+	 * @param tagFilter optional kill tag filter (app/js/fork/kill-tags.js): the selected tag key ("" = all); undefined /
+	 *        null = no filter bar
+	 */
+	bodyHtml: function(model, nowMs, error, tagFilter) {
 		const esc = systemKillFeed.escape;
 		if (!model) {
 			return error ? "<div class='skf-state skf-error'>" + esc(error) + "</div>"
 				: "<div class='skf-state skf-loading'>Loading kills…</div>";
 		}
 		let html;
-		if (model.state === "list") {
+		if (model.state === "list" && typeof tagFilter === "string" && typeof killTags !== "undefined") {
+			const rows = killTags.filter(model.rows, tagFilter);
+			const tag = killTags.tag(tagFilter);
+			html = killTags.filterHtml(killTags.counts(model.rows), model.rows.length, tagFilter)
+				+ (rows.length ? "<div class='skf-list'>" + rows.map(function(r) { return systemKillFeed.rowHtml(r, nowMs); }).join("") + "</div>"
+					: "<div class='skf-state'>No " + esc(tag ? tag.label : tagFilter) + " kills among these.</div>");
+		} else if (model.state === "list") {
 			html = "<div class='skf-list'>" + model.rows.map(function(r) { return systemKillFeed.rowHtml(r, nowMs); }).join("") + "</div>";
 		} else if (model.state === "loading") {
 			html = "<div class='skf-state skf-loading'>Loading kills from zKillboard…</div>";
@@ -260,6 +274,7 @@ const systemKillFeed = {
 			+ "<span class='skf-title ph-heading'>Kills in</span> <span class='skf-system ph-heading'></span>"
 			+ "<div style='float: right;'>"
 			+ "<span class='skf-status'></span>"
+			+ "<span class='skf-windows'></span>"
 			+ "<a class='skf-zkill' href='#' target='_blank' rel='noopener noreferrer' data-tooltip='Open the system on zKillboard'>zKillboard</a>"
 			+ "</div>"
 			+ "</div>"
@@ -394,12 +409,13 @@ const systemKillFeed = {
 		if (systemKillFeed.xhr) { systemKillFeed.xhr.abort(); }
 		systemKillFeed.$widget().find(".skf-status").text("updating…");
 		const xhr = $.ajax({ url: systemKillFeed.URL, type: "GET",
-			data: { systemID: id, limit: systemKillFeed.LIMIT, pastSeconds: systemKillFeed.WINDOW_SECONDS, queue: queue ? 1 : 0 },
+			data: { systemID: id, limit: systemKillFeed.LIMIT, pastSeconds: systemKillFeed.windowSeconds(), queue: queue ? 1 : 0 },
 			dataType: "JSON", cache: false, timeout: 15000 });
 		systemKillFeed.xhr = xhr;
 		xhr.done(function(response) {
 			if (id !== systemKillFeed.systemID) { return; }
 			systemKillFeed.response = response;
+			if (response && response.retentionSeconds > 0) { systemKillFeed.retention = response.retentionSeconds; }
 			systemKillFeed.provisional = !queue;
 			systemKillFeed.error = "";
 			systemKillFeed.lastLoad = Date.now();
@@ -426,12 +442,50 @@ const systemKillFeed = {
 		const $body = $w.find(".skf-body");
 		const scroll = $w.find(".content").scrollTop();
 		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $body.find("[data-tooltip]"));
-		$body.html(systemKillFeed.bodyHtml(model, Date.now(), systemKillFeed.error));
+		const tagFilter = typeof killTags !== "undefined" && killTags.isOn() ? killTags.selected(systemKillFeed.WIDGET_ID) : null;
+		$body.html(systemKillFeed.bodyHtml(model, Date.now(), systemKillFeed.error, tagFilter));
+		systemKillFeed.showWindows();
 		$w.find(".content").scrollTop(scroll);
 		if (typeof Tooltips !== "undefined") { Tooltips.attach($body.find("[data-tooltip]")); }
 		let status = "";
 		if (model && model.state === "list") { status = model.rows.length + (model.rows.length === 1 ? " kill" : " kills"); }
 		$w.find(".skf-status").text(status);
+	},
+
+	/** The window asked for: the one picked with the window buttons (kill-tags.js), else WINDOW_SECONDS */
+	windowSeconds: function() {
+		return typeof killTags !== "undefined" ? killTags.window(systemKillFeed.windowKey).seconds : systemKillFeed.WINDOW_SECONDS;
+	},
+
+	windowKey: null,	// killTags.WINDOWS key (null = killTags.DEFAULT_WINDOW)
+	retention: null,	// seconds the server keeps kills (retentionSeconds of the last answer): longer windows collapse
+
+	/** The window buttons in the header */
+	showWindows: function() {
+		const $span = systemKillFeed.$widget().find(".skf-windows");
+		if (!$span.length || typeof killTags === "undefined") { return; }
+		const key = killTags.window(systemKillFeed.windowKey).key;
+		const state = key + ":" + (systemKillFeed.retention || "");
+		if ($span.attr("data-window") === state) { return; }
+		systemKillFeed.detachTooltips(typeof Tooltips !== "undefined" ? Tooltips : null, $span.find("[data-tooltip]"));
+		$span.html(killTags.windowHtml(key, systemKillFeed.retention)).attr("data-window", state);
+		if (typeof Tooltips !== "undefined") { Tooltips.attach($span.find("[data-tooltip]")); }
+	},
+
+	/** Pick a window (a killTags.WINDOWS key): reload the viewed system's kills for it. Returns whether it changed. */
+	setWindow: function(key) {
+		if (typeof killTags === "undefined") { return; }
+		const next = killTags.window(key).key;
+		// Same key, or the same window once clamped to what the server keeps (e.g. 7d and the 48h it collapses to)
+		const clamp = function(k) { return Math.min(killTags.window(k).seconds, systemKillFeed.retention || Infinity); };
+		if (next === killTags.window(systemKillFeed.windowKey).key || clamp(next) === clamp(systemKillFeed.windowKey)) { return false; }
+		systemKillFeed.windowKey = next;
+		killTags.remember("window", next);
+		systemKillFeed.response = null;
+		systemKillFeed.render();
+		systemKillFeed.pendingPolls = 0;
+		systemKillFeed.fetch(true, true);
+		return true;
 	},
 
 	/** Refresh the "time ago" labels */

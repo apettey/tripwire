@@ -1,0 +1,122 @@
+/* Kill tags (fork feature, see app/js/fork/kill-tags.js and fight-now.js): tag chips on kill feed rows, the filter bar and
+   window buttons of the kill feeds, and the Fight now marker on chain map nodes. */
+
+/* Tag colours (RGB, used with alpha) */
+.kill-tag-gatecamp  { --kt: 255, 179, 71; }
+.kill-tag-bubble    { --kt: 92, 200, 245; }
+.kill-tag-smartbomb { --kt: 199, 125, 255; }
+.kill-tag-gank      { --kt: 255, 92, 92; }
+.kill-tag-solo      { --kt: 120, 220, 120; }
+.kill-tag-awox      { --kt: 255, 110, 199; }
+.kill-tag-npc       { --kt: 150, 150, 150; }
+
+/* Victim name and chips on the first line of a row: the name gives way (ellipsis), the chips stay */
+.skf-nameline {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+.skf-nameline .skf-name { flex: 0 1 auto; min-width: 0; }
+
+.kill-tags {
+	flex: 0 0 auto;
+	display: inline-flex;
+	gap: 2px;
+}
+.kill-tag {
+	display: inline-block;
+	padding: 0 3px;
+	font-size: 8px;
+	font-weight: normal;
+	line-height: 11px;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	color: rgb(var(--kt, 180, 180, 180));
+	background: rgba(var(--kt, 180, 180, 180), 0.14);
+	border: 1px solid rgba(var(--kt, 180, 180, 180), 0.55);
+	border-radius: 4px;
+}
+/* Narrow panels: only the first two tags */
+.skf-lt280 .kill-tag:nth-child(n+3) { display: none; }
+
+/* Filter bar over a kill feed's list */
+.kill-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 3px;
+	padding: 3px 4px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.kill-filter {
+	padding: 0 5px;
+	font-size: 0.85em;
+	line-height: 15px;
+	color: #999;
+	text-decoration: none;
+	white-space: nowrap;
+	border: 1px solid #444;
+	border-radius: 8px;
+}
+.kill-filter:hover { color: #fff; border-color: #777; }
+.kill-filter.active {
+	color: rgb(var(--kt, 230, 230, 230));
+	background: rgba(var(--kt, 230, 230, 230), 0.16);
+	border-color: rgba(var(--kt, 230, 230, 230), 0.7);
+}
+.kill-filter .kill-filter-n { color: #777; }
+.kill-filter.active .kill-filter-n { color: inherit; opacity: 0.8; }
+/* Small view (panel-modes.js): the newest kills only */
+.skf-panel.ph-small .kill-filters { display: none; }
+
+/* Window buttons in the System kill feed's header */
+.kill-windows { margin-right: 8px; }
+.kill-window {
+	padding: 0 3px;
+	font-size: 0.9em;
+	color: #777;
+	text-decoration: none;
+}
+.kill-window:hover { color: #fff; }
+.kill-window.active { color: #ddd; font-weight: bold; }
+
+/* Fight now: a red pill just outside the node's right edge (the corners are taken: threat badge top-left, skyhook icon /
+   jump ring top-right, intel dot and environment tags bottom-right, STG badge bottom-left, targets on the left edge) */
+#chainMap .fight-now {
+	position: absolute;	/* [data-nodeid] is position: relative */
+	z-index: 3;
+	left: calc(100% - 3px);
+	top: calc(50% - 7px);
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	height: 14px;
+	padding: 0 4px 0 3px;
+	border: 1px solid #ff5c5c;
+	border-radius: 7px;
+	background: #4a1010;
+	color: #ffd0d0;
+	font-size: 9px;
+	font-weight: bold;
+	line-height: 12px;
+	white-space: nowrap;
+	text-decoration: none;
+	cursor: pointer;
+	animation: fight-now-glow 1.6s ease-in-out infinite;
+}
+#chainMap .fight-now:hover { background: #7a1c1c; color: #fff; }
+.fight-now-icon {
+	font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols", sans-serif;
+	font-size: 11px;
+	font-weight: normal;
+	color: #ff8a8a;
+}
+
+@keyframes fight-now-glow {
+	0%, 100% { box-shadow: 0 0 2px 0 rgba(255, 92, 92, 0.5); }
+	50% { box-shadow: 0 0 7px 2px rgba(255, 92, 92, 0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+	#chainMap .fight-now { animation: none; }
+}
