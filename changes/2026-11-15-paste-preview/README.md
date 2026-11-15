@@ -52,11 +52,14 @@ key or Mask Admin.
   kill feeds, kill reporting, the palette, life states and size tags still see those systems. `chain.nodes` is wrapped
   when the file loads (innermost; a mocha test pins that no fork file before it wraps at load) and marks its result:
   the broken line gets the `broken-hole` modifier, rows whose system can only be reached through a broken hole get
-  `row.brokenHole`, and `exits` leaves those systems out (a loop through another hole keeps them). The route features
+  `row.brokenHole`, rows whose own way home crosses a broken hole get `row.brokenPath`, and `exits` leaves the cut-off
+  systems out (a loop through another hole keeps them; `systemsInChainMap` then points at the row with a clean way home,
+  so the system panel's "To chain:" text doesn't run through the broken hole). The route features
   honour the marks with one guarded line each (fork files): `rally.systemConnections` skips broken lines (the hole
-  graph of Favourites, Destinations, Fight here and the route filters), `routeDestinations.chainExits` /
-  `chainSystems`, `favouritesPanel.chainSystems` and `jumpPlanner.isExtraRow` (Get home, jump ranges) skip
-  `row.brokenHole`, and the system panel's routes and the region map read the filtered `exits`.
+  graph of Favourites, Destinations, Fight here and the route filters), `routeDestinations.chainExits` skips
+  `row.brokenPath` (so its hole names come from the clean row), `routeDestinations.chainSystems`,
+  `favouritesPanel.chainSystems` and `jumpPlanner.isExtraRow` skip `row.brokenHole`, `jumpPlanner.homePaths` (Get
+  home) skips a way home through a broken line so the fewest-holes choice takes another, and the system panel's routes and the region map read the filtered `exits`.
 - **Storage** (`broken_wormholes.inc.php`, new): fork-owned table `fork_broken_wormholes (maskID, wormholeID, markedBy,
   markedAt)`, created on first use; no change to upstream's `wormholes` schema, so syncs never conflict, and a restore is
   just deleting our row. No foreign key (as `preserve_mass.inc.php`); rows of holes that are gone are never listed and are

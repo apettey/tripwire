@@ -158,6 +158,37 @@ const brokenHoles = {
 				if (tag && end >= 0) { node.f = node.f.substring(0, end) + tag + node.f.substring(end); }
 			}
 		});
+		// Rows whose own way home (the tree path, as pathHome) crosses a broken hole: row.brokenPath. A system on the
+		// chain twice (a loop) is looked up in systemsInChainMap by the routes' texts ("To chain:"): give it a row
+		// whose way home is clean when it has one.
+		const pathMemo = {};
+		const crosses = function(row, depth) {
+			const v = row.c[0].v;
+			if (pathMemo[v] !== undefined) { return pathMemo[v]; }
+			const parent = row.c[1] ? row.c[1].v : null;
+			let out = false;
+			if (parent !== null && parent !== undefined) {
+				const line = lineOf[v];
+				out = (line && brokenHoles.isBrokenLine(line)) || (rowOf[parent] && depth < 200 ? crosses(rowOf[parent], depth + 1) : false);
+			}
+			return (pathMemo[v] = !!out);
+		};
+		const clean = {};
+		result.map.rows.forEach(function(row) {
+			if (!row || !row.c || !row.c[0]) { return; }
+			if (crosses(row, 0)) { row.brokenPath = true; }
+			else if (clean[String(row.c[0].systemID)] === undefined) { clean[String(row.c[0].systemID)] = row; }
+		});
+		if (result.systemsInChainMap && typeof result.systemsInChainMap === "object") {
+			Object.keys(result.systemsInChainMap).forEach(function(id) {
+				const row = result.systemsInChainMap[id];
+				if (row && row.brokenPath && clean[String(id)]) {
+					const pathHome = Array.isArray(clean[String(id)].pathHome) ? clean[String(id)].pathHome : [];
+					const last = pathHome[pathHome.length - 1];
+					if (pathHome.length && !(last && last.path)) { result.systemsInChainMap[id] = clean[String(id)]; }
+				}
+			});
+		}
 		if (Array.isArray(result.exits)) {
 			result.exits = result.exits.filter(function(x) { return cut.indexOf(String(x)) < 0; });
 		}

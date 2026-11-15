@@ -122,7 +122,7 @@ const routeDestinations = {
 		const seen = {}, exits = [];
 		const scout = routeDestinations.scoutNodes(lines);
 		(Array.isArray(rows) ? rows : []).forEach(function(row) {
-			if (!row || !row.c || !row.c[0] || row.destination || row.brokenHole) return;	// brokenHole: behind a broken hole (broken-holes.js)
+			if (!row || !row.c || !row.c[0] || row.destination || row.brokenPath) return;	// brokenPath: its way home crosses a broken hole (broken-holes.js); a loop's other row is used
 			const node = row.c[0];
 			if (scout[node.v]) return;
 			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];

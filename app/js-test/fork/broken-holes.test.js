@@ -142,6 +142,28 @@ describe('brokenHoles: route features honour the marks, the rest still sees the 
 		assert.ok(r.systemsInChainMap[JITA], 'hole naming / smart notes / kill feed lookups');
 		assert.strictEqual(chainAlerts.chainSystems(r)[JITA], true, 'chain alerts still watch Jita');
 	});
+	it('a loop: Get home, the exits\' hole names and "To chain:" use the way that avoids the broken hole', () => {
+		// root J164104 -> Amarr (hole 11, broken) -> Jita (hole 12); root -> Jita (hole 13); Jita (under Amarr) -> J105 (hole 14)
+		const n = (v, sys, p, pathHome) => ({ c: [node(v, sys), { v: p }], pathHome: pathHome });
+		const rows = [n(1, HERE, null, undefined), n(2, AMARR, 1, [{ systemID: AMARR, name: 'via-amarr' }]),
+			n(3, JITA, 2, [{ systemID: AMARR }, { systemID: JITA, name: 'through-broken' }]), n(4, JITA, 1, [{ systemID: JITA, name: 'direct' }]),
+			n(5, J105, 3, [{ systemID: AMARR }, { systemID: JITA }, { systemID: J105 }])];
+		const sim = { [AMARR]: rows[1], [JITA]: rows[2], [J105]: rows[4] };	// upstream keeps one row per system: here the stale one
+		const r = { map: { rows: rows }, lines: [[2, 1, [], 11], [3, 2, [], 12], [4, 1, [], 13], [5, 3, [], 14]], systemsInChainMap: sim, exits: [String(AMARR), String(JITA)] };
+		brokenHoles.flag(r, brokenOf([11]));
+		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenHole).map(x => x.c[0].v), [], 'Amarr is still reached through Jita (hole 12)');
+		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenPath).map(x => x.c[0].v), [2, 3, 5]);
+		assert.deepStrictEqual(r.exits, [String(AMARR), String(JITA)]);
+		assert.strictEqual(r.systemsInChainMap[JITA], rows[3], '"To chain:" reads the direct row');
+		assert.strictEqual(r.systemsInChainMap[AMARR], rows[1], 'no clean row: kept as it is');
+		assert.strictEqual(r.systemsInChainMap[J105], rows[4], 'no clean row: kept as it is');
+		const exits = routeDestinations.chainExits(r.map.rows, r.lines);
+		assert.deepStrictEqual(exits.map(e => [e.systemID, e.holeName]), [[JITA, 'direct']]);
+		const hp = jumpPlanner.homePaths(r);
+		assert.deepStrictEqual(hp.paths[JITA].holes.map(h => h.wormholeID), [13], 'Get home goes the direct way');
+		assert.strictEqual(hp.paths[AMARR], undefined, 'the map has no row for the other way to Amarr: no Get home rather than a wrong one');
+		assert.strictEqual(hp.paths[J105], undefined, 'its only way home on the map crosses the broken hole');
+	});
 });
 
 describe('brokenHoles: undo', () => {
