@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 165,
+      "date": "2026-11-15",
+      "title": "Gas and ore site value",
+      "description": "Wormhole gas and ore sites in the signature list now show their estimated ISK value, such as \"~1.4B\". Hover the chip to see each gas or ore with its units and current market price. Gas figures come from EVE University and are cross-checked; ore figures are approximate (dashed chip), and sites without reliable figures show \"?\".\n\nTurn it off in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-165-site-value-estimate.png", "caption": "The value chip and its breakdown for a Vital Core Reservoir" }
+      ]
+    },
+    {
       "pr": 164,
       "date": "2026-11-15",
       "title": "Map key",
