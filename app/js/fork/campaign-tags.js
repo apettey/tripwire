@@ -88,19 +88,19 @@ const campaignTags = {
 	tooltip: function(site, systemClass) {
 		if (!site) { return ""; }
 		if (site.kind === "fabricator") {
-			return "<b>Rampant Drone Fabricator</b><br>"
+			return "<div class=\"campaign-tip\"><b>Rampant Drone Fabricator</b><br>"
 				+ "Rogue drone waves that escalate with the ships near the Fabricator, up to 100 waves. Rewards grow with every "
 				+ "wave you clear and you can leave with your loot at any time. Built for small teams; CCP says solo pilots are "
 				+ "unlikely to get much past wave 40. Back in C1-C6 wormholes for good (patch 24.01).<br>"
-				+ "Escalations at " + campaignTags.THRESHOLDS.join(", ") + " Rampancy. Click the tag to add up your fleet's Rampancy.";
+				+ "Escalations at " + campaignTags.THRESHOLDS.join(", ") + " Rampancy. Click the tag to add up your fleet's Rampancy.</div>";
 		}
 		const lowClass = systemClass >= 1 && systemClass <= 3;
-		return "<b>" + site.name + "</b> (Military Campaign cache)<br>"
+		return "<div class=\"campaign-tip\"><b>" + site.name + "</b> (Military Campaign cache)<br>"
 			+ "Hack it for data for the empires' research projects. It can drop the new Aberrant modules, Penumbral Shadows SKINs "
 			+ "and hardwirings that reduce rig drawbacks (Fractured Skies).<br>"
 			+ (lowClass
 				? "This is a C" + systemClass + " wormhole: C1-C3 have the most lucrative caches and the only Omega Logging and Rogue Stockpile containers, the best chance of an Aberrant module."
-				: "The most lucrative caches, and the Omega Logging and Rogue Stockpile containers, are in C1-C3 wormholes.");
+				: "The most lucrative caches, and the Omega Logging and Rogue Stockpile containers, are in C1-C3 wormholes.") + "</div>";
 	},
 
 	// ---- DOM ----

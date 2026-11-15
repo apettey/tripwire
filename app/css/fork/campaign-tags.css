@@ -27,7 +27,12 @@
 	outline-offset: 1px;
 }
 
+.campaign-tip {
+	max-width: 360px;
+}
+
 #campaignRampancy {
+	max-width: 330px;
 	position: fixed;
 	z-index: 10050;
 	padding: 6px 8px;
