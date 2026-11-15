@@ -20,4 +20,4 @@ Toggle: Settings > <section> > <name> (on by default) / No toggle, because <reas
 
 ## Change
 
-What is different now. Mention any upstream files touched.
+What is different now. Porting an upstream change? Credit the upstream commit (hash and link).

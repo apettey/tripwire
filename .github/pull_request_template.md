@@ -16,5 +16,5 @@
 - [ ] **Settings toggle?** Yes: Settings > ... > ... (on by default) / No, because ...
 - [ ] **Feature tip?** Yes: `forkHints.register` id ..., trigger ... / No, because ... (visible button, bug fix, ...)
 - [ ] Tests added/updated; `npx mocha --recursive app/js-test` passes
-- [ ] Upstream files touched (list them, keep the diff minimal): none
+- [ ] No reformatting of unrelated code; ported from upstream? Upstream commit credited in the change-log entry
 - [ ] Version bump: default (feature = minor, other = patch, docs = none) or a `semver:*` label
