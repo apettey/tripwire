@@ -84,6 +84,48 @@ describe('Game data, patch 24.01', () => {
 			['C729', 'F216', 'U372', 'R081', 'X450', 'O753', 'R327'].forEach(t => assert.strictEqual(rollingGuide.guideFor(t, appData.wormholes), '1b', t));
 		});
 	});
+
+	describe('Marauder and Black Ops hull masses (2026-09-22.1: cut 20-25 %)', () => {
+		// typeID: [name, new kg, kg before 24.01]; every published hull of groups 900 (Marauder) and 898 (Black Ops)
+		const hulls = {
+			28659: ['Paladin', 128000000, 160000000],
+			28661: ['Kronos', 118400000, 148000000],
+			28665: ['Vargur', 120000000, 150000000],
+			28710: ['Golem', 125600000, 157000000],
+			88001: ['Babaroga', 114400000, 143000000],
+			22428: ['Redeemer', 112700000, 150300000],
+			22430: ['Sin', 106300000, 141700000],
+			22436: ['Widow', 113300000, 151100000],
+			22440: ['Panther', 111600000, 148800000],
+			44996: ['Marshal', 112500000, 150000000],
+			85236: ['Python', 106300000, 141700000]
+		};
+		const json = tools('mass');
+
+		Object.keys(hulls).forEach(id => {
+			const h = hulls[id];
+			it(h[0] + ' (' + id + ') weighs ' + h[1] + ' kg in tools/mass.json and combine.js', () => {
+				assert.deepStrictEqual(json[id], { typeName: h[0], mass: h[1] });
+				assert.deepStrictEqual(appData.mass[id], { typeName: h[0], mass: h[1] });
+			});
+			it(h[0] + ' is 20-25 % lighter than before 24.01 (rounded to 0.1 Mkg)', () => {
+				const cut = 1 - h[1] / h[2];
+				assert.ok(cut >= 0.2 - 1e-9 && cut <= 0.255, (cut * 100).toFixed(1) + ' %');
+			});
+		});
+
+		it('a hot Kronos takes 168,400,000 kg off a hole (hull + 50,000,000 kg prop)', () => {
+			assert.strictEqual(rollingCalc.passMass(appData.mass[28661].mass, { prop: true }), 168400000);
+		});
+
+		it('no hull is listed twice', () => {
+			assert.deepStrictEqual(duplicateKeys(fs.readFileSync('tools/mass.json', 'utf8'), '    '), []);
+			const combine = fs.readFileSync('public/js/combine.js', 'latin1');
+			const start = combine.indexOf('    "mass": {'), end = combine.indexOf('\n    }', start);
+			assert.ok(start > 0 && end > start);
+			assert.deepStrictEqual(duplicateKeys(combine.slice(start, end), '        '), []);
+		});
+	});
 });
 
 module.exports = { duplicateKeys };
