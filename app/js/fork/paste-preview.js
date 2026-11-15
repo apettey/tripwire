@@ -271,6 +271,14 @@ const pastePreview = {
 		return parts.join(", ");
 	},
 
+	/** The plan's counts with the broken marks and restores the server says it made (data.brokenHolesResult: a hole
+	someone else marked or restored first, or that is gone, isn't counted) */
+	savedCounts: function(counts, data) {
+		const r = data && data.brokenHolesResult;
+		const n = function(list) { return Array.isArray(list) ? list.length : 0; };
+		return Object.assign({}, counts || {}, { marked: r && r.result ? n(r.marked) : 0, restored: r && r.result ? n(r.restored) : 0 });
+	},
+
 	/** The counts of the ticked rows (for the dialog's summary line) */
 	countChoices: function(groups) {
 		const c = { neu: 0, upd: 0, same: (groups.same || []).length, gone: (groups.gone || []).length, marked: 0, deleted: 0, kept: 0 };
@@ -519,7 +527,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					Notify.trigger("Paste: not everything was saved (" + pp.escape(why) + "). Check the list." + undoLink(entry), "red", 10000);
 					return;
 				}
-				Notify.trigger("Paste saved: " + pp.escape(pp.summary(plan.counts) || "nothing changed") + "." + undoLink(entry), "blue", 8000);
+				Notify.trigger("Paste saved: " + pp.escape(pp.summary(pp.savedCounts(plan.counts, data)) || "nothing changed") + "." + undoLink(entry), "blue", 8000);
 				if (typeof forkUsage !== "undefined") { forkUsage.track("pastePreview", "applied"); }
 			};
 			const send = typeof s.next === "function" ? s.next : tripwire.refresh;

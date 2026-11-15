@@ -275,7 +275,7 @@ const jumpPlanner = {
 	/** A synthetic or calculated chain row (route destinations, favourites' gate routes): not a system on the chain */
 	isExtraRow: function(row) {
 		const node = row && row.c && row.c[0];
-		if (!node) { return true; }
+		if (!node || row.brokenHole) { return true; }	// brokenHole: behind a broken hole, no way home (broken-holes.js)
 		const html = typeof node.f === "string" ? node.f : "";
 		const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
 		const last = pathHome[pathHome.length - 1];

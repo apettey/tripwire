@@ -7,11 +7,15 @@ const brokenHoles = {
 	// refresh.php) so everyone on the mask sees it; it lasts until the hole itself expires or is deleted. Marks and
 	// restores are undoable (undo-history.js extra "brokenHoles") and in the audit log; they never post to Discord.
 	//
-	// Routes: the fork's route features all read chain.nodes() output (rows with pathHome, lines, systemsInChainMap,
-	// exits). chain.nodes is wrapped here first (this file sorts before every other wrapper, which wrap at DOM ready),
-	// so the rows behind a broken hole are taken out before any of them sees the result (split), and put back only for
-	// drawing (each renderer's draw is wrapped: restore). Features that decorate systems (badges, kill marks) therefore
-	// don't decorate the systems behind a broken hole either: they are cut off until the hole is restored.
+	// Routes only: the chain keeps every row and line (chain alerts, the automapper, kill feeds, the palette, life and
+	// size marks all still see the systems behind a broken hole). chain.nodes is wrapped when this file loads (every
+	// other wrapper wraps at DOM ready or later, so this one is innermost; app/js-test/fork/broken-holes.test.js pins
+	// it) and flag() marks the result: the broken line gets LINE_CLASS in its modifiers, rows whose system can't be
+	// reached from the chain's roots without a broken hole get row.brokenHole, and `exits` leaves those systems out.
+	// The route features honour the marks: rally.systemConnections (the hole graph of Favourites, Destinations,
+	// Fight here, the route filters) skips broken lines; routeDestinations.chainExits / chainSystems,
+	// favouritesPanel.chainSystems and jumpPlanner.isExtraRow (Get home, jump ranges) skip broken rows; systemPanel and
+	// the region map read the filtered `exits`.
 	//
 	// The pure part is mocha-tested; the DOM part is below "---- DOM ----".
 	// Keep `const brokenHoles` on the first line: the test helper strips it to define a global.
@@ -65,106 +69,99 @@ const brokenHoles = {
 		return out;
 	},
 
+	/** Whether a chain line is a broken hole's (its modifiers carry LINE_CLASS, set by flag()) */
+	isBrokenLine: function(line) {
+		return !!line && Array.isArray(line[2]) && line[2].indexOf(brokenHoles.LINE_CLASS) >= 0;
+	},
+
 	/**
-	 * Take the parts of chain.nodes() output behind broken holes out, in place: the broken hole's line and its far
-	 * system's row, and every row further out (their lines too), so routes never use them. systemsInChainMap and exits
-	 * are rebuilt without them. The removed rows are decorated for drawing (the line gets LINE_CLASS, the far node
-	 * FAR_CLASS and a Restore link, nodes further out BEYOND_CLASS).
+	 * Mark chain.nodes() output for broken holes, in place; nothing is removed (only routes leave them out).
+	 * - each broken hole's line gets LINE_CLASS in its modifiers (drawn red and dashed; route graphs skip it);
+	 * - rows whose system can't be reached from the chain's roots without a broken hole get row.brokenHole = true and
+	 *   are dimmed (the broken hole's far node FAR_CLASS plus the tag, nodes further out BEYOND_CLASS); a far system
+	 *   also reachable another way (a loop) keeps its route;
+	 * - result.exits leaves the unreachable systems out (systemsInChainMap is kept whole: it is also a "what is on the
+	 *   chain" lookup).
 	 * result: {map: {rows: [{c: [{v, f, systemID}, {v}], pathHome}]}, lines: [[childV, parentV, modifiers, wormholeID]],
-	 *   systemsInChainMap, exits}; isBroken(wormholeID); tagHtml(wormholeID) -> markup added to the far node (optional).
-	 * Returns {rows: [{row, after}], lines: [line], wormholes: [ids]} (after: the node id of the row just before it,
-	 * kept or not; null for the first), or null when nothing is broken on this map.
+	 *   exits}; isBroken(wormholeID); tagHtml(wormholeID) -> markup added to the far node's hole line (optional).
+	 * Returns {wormholes: [ids on this map], cut: [system ids cut off]} or null when no broken hole is on this map.
 	 */
-	split: function(result, isBroken, tagHtml) {
+	flag: function(result, isBroken, tagHtml) {
 		if (!result || !result.map || !Array.isArray(result.map.rows) || !Array.isArray(result.lines)) { return null; }
 		const far = {}, wormholes = [];
 		result.lines.forEach(function(line) {
-			if (line && line[3] !== undefined && isBroken(line[3])) {
+			if (line && line[3] !== undefined && line[3] !== null && isBroken(line[3])) {
 				far[line[0]] = line[3];
 				if (wormholes.indexOf(line[3]) < 0) { wormholes.push(line[3]); }
+				if (Array.isArray(line[2]) && line[2].indexOf(brokenHoles.LINE_CLASS) < 0) { line[2].push(brokenHoles.LINE_CLASS); }
 			}
 		});
 		if (!wormholes.length) { return null; }
-		const out = {};
-		Object.keys(far).forEach(function(v) { out[v] = true; });
-		let grew = true;
-		while (grew) {
-			grew = false;
-			result.map.rows.forEach(function(row) {
-				const v = row && row.c && row.c[0] ? row.c[0].v : undefined;
-				const parent = row && row.c && row.c[1] ? row.c[1].v : null;
-				if (v !== undefined && !out[v] && parent !== null && parent !== undefined && out[parent]) { out[v] = true; grew = true; }
-			});
-		}
-		const removed = [], kept = [];
-		let previous = null;
+		// The systems reachable from the roots over every line but the broken ones (system level: a loop counts)
+		const sysOf = {}, roots = [];
 		result.map.rows.forEach(function(row) {
-			const v = row && row.c && row.c[0] ? row.c[0].v : undefined;
-			if (v !== undefined && out[v]) {
-				const node = row.c[0];
-				if (typeof node.f === "string") {
-					const cls = far[v] !== undefined ? brokenHoles.FAR_CLASS : brokenHoles.BEYOND_CLASS;
-					node.f = node.f.replace("class='node ", "class='node " + cls + " ");
-					if (far[v] !== undefined && typeof tagHtml === "function") {
-						// on the node's hole line ("K162"), so the node keeps its size
-						const tag = tagHtml(far[v]) || "";
-						const start = node.f.indexOf("<h4 class='nodeType'>");
-						const end = start >= 0 ? node.f.indexOf("</h4>", start) : -1;
-						if (tag && end >= 0) { node.f = node.f.substring(0, end) + tag + node.f.substring(end); }
-					}
-				}
-				removed.push({ row: row, after: previous });
-			} else {
-				kept.push(row);
-			}
-			previous = v === undefined ? previous : v;
+			const node = row && row.c && row.c[0];
+			if (!node || node.v === undefined) { return; }
+			sysOf[node.v] = String(node.systemID);
+			const parent = row.c[1] ? row.c[1].v : null;
+			if (parent === null || parent === undefined) { roots.push(String(node.systemID)); }
 		});
-		const lines = [], keptLines = [];
+		const adj = {}, lineOf = {}, rowOf = {};
+		const link = function(a, b) { (adj[a] = adj[a] || []).push(b); };
+		const hole = function(line) { return line[3] !== undefined && line[3] !== null && line[3] !== "?"; };	// not a calculated gate route
+		result.map.rows.forEach(function(row) { if (row && row.c && row.c[0]) { rowOf[row.c[0].v] = row; } });
 		result.lines.forEach(function(line) {
-			if (line && out[line[0]]) {
-				if (far[line[0]] !== undefined && Array.isArray(line[2]) && line[2].indexOf(brokenHoles.LINE_CLASS) < 0) { line[2].push(brokenHoles.LINE_CLASS); }
-				lines.push(line);
-			} else {
-				keptLines.push(line);
-			}
+			if (line) { lineOf[line[0]] = line; }
+			if (!line || !hole(line) || far[line[0]] !== undefined && line[3] === far[line[0]]) { return; }
+			const a = sysOf[line[0]], b = sysOf[line[1]];
+			if (a === undefined || b === undefined) { return; }
+			link(a, b); link(b, a);
 		});
-		result.map.rows = kept;
-		result.lines = keptLines;
-		// The systems reachable without a broken hole
-		if (result.systemsInChainMap && typeof result.systemsInChainMap === "object") {
-			const gone = removed.map(function(r) { return r.row; });
-			Object.keys(result.systemsInChainMap).forEach(function(id) {
-				if (gone.indexOf(result.systemsInChainMap[id]) >= 0) { delete result.systemsInChainMap[id]; }
-			});
-			kept.forEach(function(row) {
-				const node = row && row.c && row.c[0];
-				const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
-				const last = pathHome[pathHome.length - 1];
-				if (!node || node.systemID === undefined || (last && last.path) || !pathHome.length) { return; }	// root or calculated route node
-				if (!result.systemsInChainMap[node.systemID]) { result.systemsInChainMap[node.systemID] = row; }
-			});
-			result.exits = Object.keys(result.systemsInChainMap).filter(function(x) { return x < 31000000; });
+		const reach = {};
+		const queue = roots.slice();
+		roots.forEach(function(s) { reach[s] = true; });
+		while (queue.length) {
+			const s = queue.shift();
+			(adj[s] || []).forEach(function(t) { if (!reach[t]) { reach[t] = true; queue.push(t); } });
 		}
-		return { rows: removed, lines: lines, wormholes: wormholes };
-	},
-
-	/** The rows and lines to draw: kept ones plus what split() took out, each removed row back right after the row
-	that was before it (new arrays; the inputs are not changed) */
-	restore: function(rows, lines, split) {
-		const outRows = (rows || []).slice();
-		if (!split) { return { rows: outRows, lines: (lines || []).slice() }; }
-		split.rows.forEach(function(r) {
-			let at = 0;
-			if (r.after !== null && r.after !== undefined) {
-				at = -1;
-				for (let i = 0; i < outRows.length; i++) {
-					if (outRows[i] && outRows[i].c && outRows[i].c[0] && outRows[i].c[0].v === r.after) { at = i + 1; break; }
-				}
-				if (at < 0) { at = outRows.length; }
+		// A calculated node (a gate route hung under a system) is cut off when the system it hangs under is
+		const offMemo = {};
+		const isOff = function(row, depth) {
+			const v = row.c[0].v;
+			if (offMemo[v] !== undefined) { return offMemo[v]; }
+			const parent = row.c[1] ? row.c[1].v : null;
+			const line = lineOf[v];
+			let off;
+			if (parent === null || parent === undefined) { off = false; }
+			else if (line && !hole(line) && rowOf[parent] && depth < 200) { off = isOff(rowOf[parent], depth + 1); }
+			else { off = !reach[String(row.c[0].systemID)]; }
+			return (offMemo[v] = off);
+		};
+		const cut = [];
+		result.map.rows.forEach(function(row) {
+			const node = row && row.c && row.c[0];
+			if (!node || node.v === undefined) { return; }
+			const isFar = far[node.v] !== undefined;
+			const off = isOff(row, 0);
+			if (off) {
+				row.brokenHole = true;
+				if (!reach[String(node.systemID)] && cut.indexOf(String(node.systemID)) < 0) { cut.push(String(node.systemID)); }
 			}
-			outRows.splice(at, 0, r.row);
+			if (typeof node.f !== "string" || (!isFar && !off)) { return; }
+			const cls = isFar ? brokenHoles.FAR_CLASS : brokenHoles.BEYOND_CLASS;
+			if (off || isFar) { node.f = node.f.replace("class='node ", "class='node " + cls + " "); }
+			if (isFar && typeof tagHtml === "function") {
+				// on the node's hole line ("K162"), so the node keeps its size
+				const tag = tagHtml(far[node.v]) || "";
+				const start = node.f.indexOf("<h4 class='nodeType'>");
+				const end = start >= 0 ? node.f.indexOf("</h4>", start) : -1;
+				if (tag && end >= 0) { node.f = node.f.substring(0, end) + tag + node.f.substring(end); }
+			}
 		});
-		return { rows: outRows, lines: split.lines.concat(lines || []) };
+		if (Array.isArray(result.exits)) {
+			result.exits = result.exits.filter(function(x) { return cut.indexOf(String(x)) < 0; });
+		}
+		return { wormholes: wormholes, cut: cut };
 	},
 
 	/** The far node's tag: "✗ Restore" after the hole type, with a tooltip naming the hole (sigName: its ID on the
@@ -192,47 +189,18 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && typeof cha
 			} catch (e) { return ""; }
 		}
 
-		// ---- Routes: the innermost chain.nodes wrapper (loaded before the others, which wrap at DOM ready) ----
+		// ---- Routes: the innermost chain.nodes wrapper, installed when this file loads (the others wrap at DOM ready) ----
 		const nodes = chain.nodes;
 		const wrapped = function() {
 			const result = nodes.apply(this, arguments);
 			try {
-				if (result) { result.brokenSplit = Object.keys(bh.ids).length ? bh.split(result, bh.isBroken, function(id) { return bh.tag(id, sigName(id)); }) : null; }
+				if (result && Object.keys(bh.ids).length) { bh.flag(result, bh.isBroken, function(id) { return bh.tag(id, sigName(id)); }); }
 			} catch (e) { console.warn("broken-holes: chain", e); }
 			return result;
 		};
 		Object.keys(nodes).forEach(function(k) { wrapped[k] = nodes[k]; });
 		wrapped.brokenHolesWrapped = true;
 		chain.nodes = wrapped;
-
-		// ---- Drawing: every renderer draws the broken parts back ----
-		function hookRenderer(r) {
-			if (!r || typeof r.draw !== "function" || r.draw.brokenHolesWrapped) { return; }
-			const draw = r.draw;
-			r.draw = function(map, lines) {
-				const s = chain.data ? chain.data.brokenSplit : null;
-				if (s && map && map === chain.data.map) {
-					const back = bh.restore(map.rows, lines, s);
-					const args = Array.prototype.slice.call(arguments);
-					args[0] = Object.assign({}, map, { rows: back.rows });
-					args[1] = back.lines;
-					return draw.apply(this, args);
-				}
-				return draw.apply(this, arguments);
-			};
-			r.draw.brokenHolesWrapped = true;
-		}
-		hookRenderer(chain.renderer);
-		const useRenderer = chain.useRenderer;
-		if (typeof useRenderer === "function") {
-			chain.useRenderer = function(name) {
-				// hook the new renderer before useRenderer draws with it
-				const before = chain.renderer;
-				const ret = useRenderer.apply(this, arguments);
-				if (chain.renderer !== before) { hookRenderer(chain.renderer); if (chain.data && chain.data.rawMap) { chain.redraw(); } }
-				return ret;
-			};
-		}
 
 		function redrawChain() {
 			if (chain.data && chain.data.rawMap && !chain.drawing) { chain.redraw(); }
@@ -356,7 +324,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && typeof cha
 				forkLegend.register({
 					id: "brokenHole", group: "connections", order: 40, title: "Broken (missing from a paste)",
 					text: "A hole that was missing from your last probe scan. Routes leave it out; Restore brings it back.",
-					settingId: "pastePreview-enabled",
+					// always on: mask-mates' broken holes draw whatever this user's Preview pastes setting is
+					enabled: function() { return true; },
+					where: "Always shown. Holes are marked broken from the paste preview (Settings > Signatures > Preview pastes).",
 					sample: function() {
 						return forkLegend.line(bh.LINE_CLASS, "broken")
 							+ forkLegend.node({ cls: bh.FAR_CLASS, wrap: "", type: "O477", before: "", statics: "" });

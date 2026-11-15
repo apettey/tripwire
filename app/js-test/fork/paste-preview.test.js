@@ -193,6 +193,13 @@ describe('pastePreview: plan (Apply)', () => {
 		[].concat(g.neu, g.upd, g.gone).forEach(r => { r.on = false; });
 		assert.strictEqual(pastePreview.isEmpty(pastePreview.plan(g, upstreamPayload(), c.signatures, c.wormholes)), true);
 	});
+	it('the notice counts the marks and restores the server made', () => {
+		const counts = { added: 2, updated: 1, restored: 1, marked: 2, deleted: 1 };
+		assert.deepStrictEqual(pastePreview.savedCounts(counts, { brokenHolesResult: { result: true, marked: [12], restored: [] } }),
+			{ added: 2, updated: 1, restored: 0, marked: 1, deleted: 1 });
+		assert.deepStrictEqual(pastePreview.savedCounts(counts, {}), { added: 2, updated: 1, restored: 0, marked: 0, deleted: 1 });
+		assert.strictEqual(counts.marked, 2, 'not changed');
+	});
 	it('counts the dialog\'s summary line', () => {
 		const { g } = classify();
 		g.gone[1].on = false;

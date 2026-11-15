@@ -763,28 +763,61 @@ undoHistory.ui = {
 	/** Book a step's answer: the step leaves its stack and what was applied of it goes on the other stack (all of it,
 	or the applied part when the server did only some of it: it has no rollback, adds then updates then removes).
 	Returns {status: "done" | "partial" | "failed" | "unknown", applied, sent, why}. */
+	/** What of a step the answer applied (pure): {status: "done" | "partial" | "failed" | "unknown", part: {entries,
+	snapshots, applied, sent}} (part null for unknown). Each extra part (see extras) counts as one item: when its answer
+	says it failed the step is at most partial, and it doesn't go on the other stack (an entry with only the extra is
+	left out, an entry with signatures too loses its extra there); when it was saved it goes on the other stack, also
+	when some signatures failed. */
+	settlePart: function(which, step, snapshots, data) {
+		const entries = step || [];
+		const hasExtra = function(entry) { return undoHistory.extraKeys([entry]).length > 0; };
+		const extraOnly = function(entry) { return hasExtra(entry) && !entry.signatures.filter(Boolean).length; };
+		const extraCount = entries.filter(hasExtra).length;
+		const extraOk = extraCount ? !!data && undoHistory.extrasOk(entries, data) : true;
+		const sigParts = undoHistory.parts(which, entries).length;
+		let base;
+		if (!sigParts) {
+			base = { entries: [], snapshots: [], applied: 0, sent: 0 };
+			if (!extraCount && undoHistory.succeeded(data)) { return { status: "done", part: { entries: entries, snapshots: snapshots, applied: 0, sent: 0 } }; }
+		} else if (undoHistory.succeeded(data)) {
+			base = { entries: [], snapshots: [], applied: sigParts, sent: sigParts };
+			entries.forEach(function(entry, i) {
+				if (!extraOnly(entry)) { base.entries.push(entry); base.snapshots.push(snapshots ? snapshots[i] : undefined); }
+			});
+		} else {
+			const outcome = undoHistory.outcome(which, entries, data);
+			if (!outcome) { return { status: "unknown", part: null }; }
+			base = undoHistory.appliedPart(entries, snapshots, outcome);
+		}
+		if (extraCount) {
+			if (extraOk) {
+				entries.forEach(function(entry, i) {
+					if (extraOnly(entry)) { base.entries.push(entry); base.snapshots.push(snapshots && snapshots[i] ? snapshots[i] : []); }
+				});
+			} else {
+				base.entries = base.entries.map(function(entry) {
+					if (!hasExtra(entry)) { return entry; }
+					const meta = Object.assign({}, entry.meta || {});
+					delete meta.extra;
+					return Object.assign({}, entry, { meta: meta });
+				});
+			}
+			base.sent += extraCount;
+			if (extraOk) { base.applied += extraCount; }
+		}
+		const status = base.applied === base.sent ? (base.sent ? "done" : "failed") : base.applied ? "partial" : "failed";
+		return { status: status, part: base };
+	},
+
 	settle: function(which, step, snapshots, data, mask) {
 		const ui = undoHistory.ui;
 		const other = which === "undo" ? "redo" : "undo";
-		let part, status;
-		const sigParts = undoHistory.parts(which, step).length;
-		if (!sigParts && undoHistory.extraKeys(step).length) {
-			// Only extra parts (e.g. a restore of a broken hole): their own answer decides
-			const ok = !!data && undoHistory.extrasOk(step, data);
-			part = { entries: ok ? step : [], snapshots: ok ? snapshots : [], applied: 0, sent: 0 };
-			status = ok ? "done" : "failed";
-		} else if (undoHistory.succeeded(data)) {
-			part = { entries: step, snapshots: snapshots, applied: 0, sent: 0 };
-			status = "done";
-		} else {
-			const outcome = undoHistory.outcome(which, step, data);
-			if (!outcome) {
-				ui.drop(which, step, mask);
-				return { status: "unknown", applied: 0, sent: 0, why: undoHistory.failure(data) };
-			}
-			part = undoHistory.appliedPart(step, snapshots, outcome);
-			status = part.applied ? "partial" : "failed";
+		const r = ui.settlePart(which, step, snapshots, data);
+		if (r.status === "unknown") {
+			ui.drop(which, step, mask);
+			return { status: "unknown", applied: 0, sent: 0, why: undoHistory.failure(data) };
 		}
+		const part = r.part, status = r.status;
 		// Only the successful adds are in data.results, in order: the applied part's adds line up with them
 		const opp = undoHistory.opposite(which, part.entries, part.snapshots, data && data.results);
 		ui.internal = true;

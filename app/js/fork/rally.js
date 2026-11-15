@@ -89,6 +89,7 @@ const rally = {
 		const result = [];
 		(lines || []).forEach(function(line, index) {
 			if (!line || line[3] === undefined || line[3] === null || line[3] === "?") { return; }
+			if (typeof brokenHoles !== "undefined" && brokenHoles.isBrokenLine(line)) { return; }	// marked broken (paste preview): no route through it
 			const a = systems[line[0]], b = systems[line[1]];
 			if (a === undefined || b === undefined) { return; }
 			result.push([a, b, line[2], index]);

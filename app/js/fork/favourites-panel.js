@@ -277,7 +277,7 @@ const favouritesPanel = {
 		const result = {};
 		(rows || []).forEach(function(row) {
 			const node = row && row.c && row.c[0];
-			if (!node || row.destination || favouritesPanel.isCalcRow(row)) { return; }
+			if (!node || row.destination || row.brokenHole || favouritesPanel.isCalcRow(row)) { return; }	// brokenHole: broken-holes.js
 			const id = favouritesPanel.toID(node.systemID);
 			if (id) { result[String(id)] = true; }
 		});

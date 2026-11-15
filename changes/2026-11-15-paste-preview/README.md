@@ -48,11 +48,15 @@ key or Mask Admin.
   `return-sig-paste.js` (fork) exposes its hit for the call as `returnSigPaste.current` (2 lines).
 - **Broken holes** (`app/js/fork/broken-holes.js`, new): the far side of a broken hole stays on the map with a red dashed
   connection, a dimmed, dashed node and a "✗ Restore" link; its sig row shows "Broken" with the Leads To struck through
-  and a Restore link. Routes: `chain.nodes` is wrapped first (this file loads before every other wrapper), and the rows
-  and lines behind a broken hole are taken out of its result, with `systemsInChainMap` and `exits` rebuilt, so every
-  route feature that reads the chain (Favourites, Destinations, Get home / jump planner, route filters, Thera, Fight
-  here, rally) leaves them out. Each renderer's `draw` gets them back for drawing only. Features that decorate systems
-  don't decorate the systems behind a broken hole (they are cut off until restored).
+  and a Restore link. Only routes leave it out; the chain keeps every row and line, so chain alerts, the automapper,
+  kill feeds, kill reporting, the palette, life states and size tags still see those systems. `chain.nodes` is wrapped
+  when the file loads (innermost; a mocha test pins that no fork file before it wraps at load) and marks its result:
+  the broken line gets the `broken-hole` modifier, rows whose system can only be reached through a broken hole get
+  `row.brokenHole`, and `exits` leaves those systems out (a loop through another hole keeps them). The route features
+  honour the marks with one guarded line each (fork files): `rally.systemConnections` skips broken lines (the hole
+  graph of Favourites, Destinations, Fight here and the route filters), `routeDestinations.chainExits` /
+  `chainSystems`, `favouritesPanel.chainSystems` and `jumpPlanner.isExtraRow` (Get home, jump ranges) skip
+  `row.brokenHole`, and the system panel's routes and the region map read the filtered `exits`.
 - **Storage** (`broken_wormholes.inc.php`, new): fork-owned table `fork_broken_wormholes (maskID, wormholeID, markedBy,
   markedAt)`, created on first use; no change to upstream's `wormholes` schema, so syncs never conflict, and a restore is
   just deleting our row. No foreign key (as `preserve_mass.inc.php`); rows of holes that are gone are never listed and are
@@ -64,9 +68,13 @@ key or Mask Admin.
   (`brokenHoles`), so the paste is one request and everyone on the mask sees a change with their next refresh.
 - **Undo** (`undo-history.js`, fork, PR #166): a step may carry extra parts (`meta.extra`, `undoHistory.registerExtra`);
   broken marks and restores ride in the same step and request as the paste's sig changes, and undo / redo swap mark and
-  restore. Restore from the map or the list is its own undoable step.
+  restore. A step is done only when its signatures and its extra parts were all saved; otherwise it is partial and
+  only what was saved goes on the other stack (`ui.settlePart`, mocha-tested). Restore from the map or the list is its
+  own undoable step.
 - `life-states.js` (fork): its 15 s Life refresh skips a broken hole's cell (1 line).
-- Map key: entry "Broken (missing from a paste)" under Connections.
+- Map key: entry "Broken (missing from a paste)" under Connections, always shown (mask-mates' broken holes draw
+  whatever this user's Preview pastes setting is).
+- `rally.js`, `route-destinations.js`, `favourites-panel.js`, `jump-planner.js` (fork): one guarded line each (above).
 - Mask defaults: `pastePreview` added to the allow-lists (`mask-defaults.js`, `maskadmin/maskadmin.inc.php`).
 - Tests: `app/js-test/fork/paste-preview.test.js`, `app/js-test/fork/broken-holes.test.js` (classify, Apply plan, routing
   split / restore, undo parts); `tests/broken_wormholes_test.php` (ids, CSRF, mask isolation, mark / restore / list, gone
