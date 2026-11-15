@@ -106,10 +106,10 @@ append-only list of SQL diffs; each one runs once, in order, and is recorded in 
 production `/opt/app/cache` is a named volume (`cache:` in `docker-compose.prod.yml`; check that eve-infrastructure's
 `stacks/tripwire/compose.yaml` mounts it the same way), so the file survives restarts and new images. A request that
 finds diffs to run takes a file lock, so two page loads never run them twice.
-`docker/db.inc.php` adds one guard: on the map page it compares the file with the row count of `update_history` and
-sets the file to that count when they differ, so a restored or replaced database gets its missing diffs without a
-manual step. (It also fixes an upstream quirk: db-update.php doesn't advance the file past diffs it skips as already
-applied, so after a lost file every map load re-checked them.)
+`docker/db.inc.php` adds one guard: on the map page it sets the file to the first diff (in `db-update.php`'s order)
+whose name `update_history` doesn't have, when the two differ. That covers a stale or lost file. (It also fixes an
+upstream quirk: db-update.php doesn't advance the file past diffs it skips as already applied, so after a lost file
+every map load re-checked them.) It trusts `update_history`, so it can't see a schema older than that table says.
 
 - Account: `DB_UPDATE_USER` / `DB_UPDATE_PASSWORD`, or the app connection when unset (the default; the app user already
   has all privileges on its database). A separate account needs `ALTER, CREATE, INDEX, EVENT, SELECT, INSERT, UPDATE` on the database (the last three for
@@ -120,8 +120,11 @@ applied, so after a lost file every map load re-checked them.)
 - If it fails, the map page says "Tripwire's database needs to be updated, but no update connection is configured" or
   "Error attempting to apply DB updates"; the reason is in the container log (`Diff ... executed successfully` lines
   show what ran).
-- Restored an older database? The guard above notices on the next map page load. By hand:
-  `docker compose exec app rm /opt/app/cache/db-update-state.php` (restarting is not enough: the file is in the volume).
+- Restoring a backup from before 2.0 (or from before a later diff)? A `mysqldump` restore only replaces the tables in
+  the dump, so the newer `update_history` stays and the diffs would be skipped. Drop it first, or drop and recreate
+  the database, then restore, then delete the state file (restarting is not enough: the file is in the volume):
+  `DROP TABLE update_history;` then `docker compose exec app rm /opt/app/cache/db-update-state.php`. The next map page
+  load runs the diffs. A backup taken after the update carries its own `update_history` and needs neither step.
   The dev stack bind-mounts the repo, so `cache/` is shared by every stack on that checkout; the guard keeps each
   stack right on its map page, or delete the file before pointing a stack at a new or older database.
 - The 2.0 diffs: `wormholes.life` becomes `varchar(32)`, `flares` gets `lifeLength` and `reason` (flares with an
@@ -143,8 +146,9 @@ applied, so after a lost file every map load re-checked them.)
    `ALTER DEFINER` above as an admin); `SELECT @@event_scheduler;` is `ON`.
 5. Rollback: the diffs are additive, so the previous image runs against the updated schema (flares it sets have no
    expiry there, so `flaresClean` leaves them; remove them by hand). Restore the backup only if
-   a diff failed half-way; then `docker compose exec app rm /opt/app/cache/db-update-state.php` (the guard in
-   `docker/db.inc.php` also catches it on the next map page load) so the diffs run again on the new image.
+   a diff failed half-way, and then as in "Restoring a backup from before 2.0" above: `DROP TABLE update_history;`
+   before the restore (or drop and recreate the database), restore, then
+   `docker compose exec app rm /opt/app/cache/db-update-state.php` so the diffs run again on the new image.
 
 The import runs as the app user; no root credentials are needed. That user needs all privileges on
 its database (the `MYSQL_USER` the mysql image creates has them) to create triggers and events.

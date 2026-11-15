@@ -68,7 +68,8 @@ Two commits in one PR: the sync (`.github/scripts/sync-upstream.sh`, conflicts r
 - **Upstream files touched after the sync**: `signatures.php` (3 lines: `<1h` stored as critical with a 1 h timer),
   `tripwire.php` (1 line: the fork's `is_string` check on `?system=` is back, so `?system[]=x` no longer gives a 500).
 - **DB update state** (`docker/db.inc.php`): in production `cache/` is a volume, so the state file outlives a database
-  restore. On the map page the file is set to the row count of `update_history` when they differ.
+  restore. On the map page the file is set to the first diff whose name `update_history` lacks.
+  Restoring a pre-2.0 backup needs `DROP TABLE update_history` first (docker/README.md#database-updates).
 - **Tested**: mocha 3609 passing (main: 3599; the 4 failures and 1 load error the sync caused are fixed); PHP tests all
   pass except `analytics_dashboard_test.php`, which fails the same way on main; `docker build` OK; upstream Playwright
   (run with Chrome against the dev stack): 16 passed, 4 fail by design (kill stream off, 10 panels not 4, stricter

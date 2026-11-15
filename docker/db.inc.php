@@ -48,22 +48,28 @@ if (isset($mysql) && !isset($mysql_update)) {
 // (db-update.php would then skip diffs the restored database never had). It can also lag behind: db-update.php only
 // writes it after running a diff, not after skipping one already in update_history, so a lost file stays at 1 and every
 // map load re-checks the rest. On the map page only (the one page that runs db-update.php; polls pay nothing), set the
-// file to the number of rows in update_history whenever the two differ. Diffs run in order, so that count is the index
-// of the next diff to run. Under the file's lock, which db-update.php also takes.
+// file to the index of the first diff whose name update_history doesn't have, whenever the two differ. Under the file's
+// lock, which db-update.php also takes. A restored pre-2.0 backup keeps the newer update_history table: see
+// docker/README.md#database-updates.
 if (isset($mysql) && $mysql instanceof PDO && in_array(__DIR__ . '/tripwire.php', get_included_files(), true)) {
     (function (PDO $db, $stateFile) {
         if (!is_file($stateFile)) return;   // first run: db-update.php starts from 0
-        try {
-            $applied = (int)$db->query('SELECT COUNT(*) FROM update_history')->fetchColumn();
-        } catch (Throwable $e) {
-            $applied = 0;   // no update_history: a database from before 2.0
-        }
+        // The diff names in their order, read from db-update.php (it runs its update when loaded, so it isn't included here)
+        if (!preg_match_all("/\\['name'\\s*=>\\s*'([^']*)'/", (string)@file_get_contents(__DIR__ . '/db-update.php'), $names)) return;
         $fp = @fopen($stateFile, 'c+');
         if (!$fp) return;
         if (flock($fp, LOCK_EX)) {
+            try {
+                $done = array_flip($db->query('SELECT diff_name FROM update_history')->fetchAll(PDO::FETCH_COLUMN));
+            } catch (Throwable $e) {
+                $done = [];   // no update_history: a database from before 2.0
+            }
+            // The next diff to run: the first one in the list that update_history doesn't have
+            $applied = count($names[1]);
+            foreach ($names[1] as $i => $name) { if (!isset($done[$name])) { $applied = $i; break; } }
             $claimed = preg_match('/\$version\s*=\s*(\d+)/', (string)stream_get_contents($fp), $m) ? (int)$m[1] : 0;
             if ($claimed !== $applied) {
-                if ($applied < $claimed) error_log("db-update: update_history has $applied rows, the state file claimed $claimed; checking again");
+                if ($applied < $claimed) error_log("db-update: next diff by update_history is $applied, the state file claimed $claimed; checking again");
                 ftruncate($fp, 0);
                 rewind($fp);
                 fwrite($fp, '<?php $version = ' . $applied . ';');
