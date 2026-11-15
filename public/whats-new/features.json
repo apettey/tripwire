@@ -1,6 +1,51 @@
 {
   "features": [
     {
+      "pr": 168,
+      "date": "2026-11-15",
+      "title": "Campaign and Fabricator tags",
+      "description": "Military Campaign caches (Collapsed Drifter Cache, Fabricated Rogue Cache) and the Rampant Drone Fabricator now get a tag in the signature list. Hover it to see what the site is and why it is worth running. Click the Fabricator tag to add up your fleet's Rampancy and see which escalation (12, 36 or 72) it triggers.\n\nTurn it off in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-168-campaign-fabricator-tags.png", "caption": "The Fabricator tag and its tooltip in the signature list" }
+      ]
+    },
+    {
+      "pr": 167,
+      "date": "2026-11-15",
+      "title": "Kill tags and Fight now",
+      "description": "Kills in the System and Chain kill feeds now carry small tags: Gate camp, Bubble, Smartbomb, Gank, Solo, Awox and NPC. Click a tag in the row above the list to show only those kills. The System kill feed also lets you pick the last hour, day or as far back as the server keeps kills.\n\nChain map systems outside high-sec with 2 or more player kills in the last hour get a red Fight now marker; click it to open zKillboard's battle report for that system and hour. Turn the tags off in Settings > Kills & Intel and the marker in Settings > Map Markers.",
+      "images": [
+        { "src": "whats-new/img/pr-167-kill-type-tags.png", "caption": "Tags and the tag filter in the kill feeds, Fight now markers on the chain map" }
+      ]
+    },
+    {
+      "pr": 166,
+      "date": "2026-11-15",
+      "title": "Undo and redo any signature or map edit",
+      "description": "Ctrl+Z now undoes your last signature or map edit wherever you made it: a deleted or pasted signature, a hole's life, mass, type or leads-to, a deleted hole, or a hole the automapper mapped. Ctrl+Shift+Z or Ctrl+Y redoes it. Hover the undo arrow, or search \"undo\" in the command palette, to see which step is next.\n\nIf someone else has changed that signature or hole since, the undo is refused and you are told who changed it, so their work is never overwritten. There is no setting to turn this off; it replaces the old per-system undo.",
+      "images": [
+        { "src": "whats-new/img/pr-166-undo-any-edit.png", "caption": "The command palette names the step Ctrl+Z will undo" }
+      ]
+    },
+    {
+      "pr": 165,
+      "date": "2026-11-15",
+      "title": "Gas and ore site value",
+      "description": "Wormhole gas and ore sites in the signature list now show their estimated ISK value, such as \"~1.4B\". Hover the chip to see each gas or ore with its units and current market price. Gas figures come from EVE University and are cross-checked; ore figures are approximate (dashed chip), and sites without reliable figures show \"?\".\n\nTurn it off in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-165-site-value-estimate.png", "caption": "The value chip and its breakdown for a Vital Core Reservoir" }
+      ]
+    },
+    {
+      "pr": 164,
+      "date": "2026-11-15",
+      "title": "Map key",
+      "description": "The new Map key button in the chain map header (next to the ≡ icon) explains what the map's colours, lines and markers mean: system classes, mass and life lines, hole size tags, threat badges, Fight here and more. Each comes with a sample and where to switch it off. It lists only what you have switched on; tick Show all to see every marker.\n\nYou can also open it from the command palette (Ctrl+K, \"Map key\"), and hide the button in Settings > Chain Map > Map key button.",
+      "images": [
+        { "src": "whats-new/img/pr-164-map-key.png", "caption": "The Map key, opened from the chain map header" }
+      ]
+    },
+    {
       "pr": 162,
       "date": "2026-11-15",
       "title": "Map jumps of every online character",
