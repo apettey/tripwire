@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 167,
+      "date": "2026-11-15",
+      "title": "Kill tags and Fight now",
+      "description": "Kills in the System and Chain kill feeds now carry small tags: Gate camp, Bubble, Smartbomb, Gank, Solo, Awox and NPC. Click a tag in the row above the list to show only those kills. The System kill feed also lets you pick the last hour, day or as far back as the server keeps kills.\n\nChain map systems outside high-sec with 2 or more player kills in the last hour get a red Fight now marker; click it to open zKillboard's battle report for that system and hour. Turn the tags off in Settings > Kills & Intel and the marker in Settings > Map Markers.",
+      "images": [
+        { "src": "whats-new/img/pr-167-kill-type-tags.png", "caption": "Tags and the tag filter in the kill feeds, Fight now markers on the chain map" }
+      ]
+    },
+    {
       "pr": 166,
       "date": "2026-11-15",
       "title": "Undo and redo any signature or map edit",

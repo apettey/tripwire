@@ -140,7 +140,7 @@
       "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.systemKills"], "panels": ["systemKillFeedWidget"], "use": ["clicked"] },
     { "id": "chainKillFeed", "try": "panel.chainKills", "title": "Chain kill feed", "section": "intel", "prs": [21], "settingsKey": "chainKillFeed",
       "stage": "core", "audience": "all", "kind": "active", "commands": ["panel.chainKills"], "panels": ["chainKillFeedWidget"], "use": ["clicked"] },
-    { "id": "killTags", "title": "Kill tags and the tag filter", "section": "intel", "prs": [], "settingsKey": "killTags",
+    { "id": "killTags", "title": "Kill tags and the tag filter", "section": "intel", "prs": [167], "settingsKey": "killTags",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["filtered", "window"],
       "exposed": ".kill-tag",
       "success": "tag filter or window used by >=15% of kill feed users by day 28; tags turned off by <10%" },
