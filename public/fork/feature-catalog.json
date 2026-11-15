@@ -73,7 +73,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["opened"], "exposed": ".rolling-log-head" },
     { "id": "rollingGuide", "try": "rollingGuide.open", "title": "Rolling guide", "section": "jumps", "prs": [118], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rollingGuide.open"], "panels": ["rollingGuideWidget"], "use": [] },
-    { "id": "fleetMass", "title": "Fleet mass check", "section": "jumps", "prs": [], "settingsKey": "fleetMass",
+    { "id": "fleetMass", "title": "Fleet mass check", "section": "jumps", "prs": [169], "settingsKey": "fleetMass",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["fleetMass.check"], "panels": [], "use": ["checked"],
       "exposed": "#fleet-mass", "success": "a fleet checked in >=10% of weeks where the Mass dialog is opened by day 28; opt-out <10%" },
     { "id": "autoMass", "title": "Fitted jump mass", "section": "jumps", "prs": [38], "settingsKey": "autoMass",

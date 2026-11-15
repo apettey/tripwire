@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 169,
+      "date": "2026-11-15",
+      "title": "Fleet mass check",
+      "description": "Will your fleet fit through this hole? Open a hole's Mass dialog (right-click the system > Mass, or Ctrl+K > Fleet mass check) and paste your fleet composition (Fleet window > Fleet Composition, Ctrl+A, Ctrl+C), a d-scan or a list of ship names. You see the fleet's mass, which hulls fit the hole's jump limit, how many jumps it takes before the hole may collapse, and how many of each hull a fresh hole takes, such as Marauders and Black Ops.\n\nTurn it off in Settings > Wormhole Jumps & Mass.",
+      "images": [
+        { "src": "whats-new/img/pr-169-fleet-mass-check.png", "caption": "Paste the fleet into the Mass dialog to see what fits" }
+      ]
+    },
+    {
       "pr": 168,
       "date": "2026-11-15",
       "title": "Campaign and Fabricator tags",
