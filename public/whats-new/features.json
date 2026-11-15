@@ -1,6 +1,42 @@
 {
   "features": [
     {
+      "pr": 171,
+      "date": "2026-11-15",
+      "title": "Chain alerts: new holes, home static, exits in jump range",
+      "description": "Tripwire now tells you when the chain changes in a way that matters: a pop-up when someone else maps a new hole into home or the chain, when your home static goes <1h or EOL, and when a new low-sec or null-sec exit is within one jump of the Jump planner's ship (from your Get home start, or another exit of the chain). Turn each one off in Settings > Kills & Intel > Chain alerts.\n\nMask admins can also post new holes and the home static to Discord: Mask Admin > Discord, both off until you turn them on.",
+      "images": [
+        { "src": "whats-new/img/pr-171-chain-alerts.png", "caption": "Chain alerts in the pop-up corner" }
+      ]
+    },
+    {
+      "pr": 170,
+      "date": "2026-11-15",
+      "title": "Clear warning when ESI rejects a character's token",
+      "description": "When EVE keeps rejecting a tracked character's login token, Tripwire stops asking ESI over and over and puts a small amber warning next to the character in the Tracking panel (click your name). Hover it to see what is affected; it clears by itself once the token works again. If it stays, remove the character and add it again.",
+      "images": [
+        { "src": "whats-new/img/pr-170-esi-token-alert.png", "caption": "The warning on a character's Tracking card and its tooltip" }
+      ]
+    },
+    {
+      "pr": 169,
+      "date": "2026-11-15",
+      "title": "Fleet mass check",
+      "description": "Will your fleet fit through this hole? Open a hole's Mass dialog (right-click the system > Mass, or Ctrl+K > Fleet mass check) and paste your fleet composition (Fleet window > Fleet Composition, Ctrl+A, Ctrl+C), a d-scan or a list of ship names. You see the fleet's mass, which hulls fit the hole's jump limit, how many jumps it takes before the hole may collapse, and how many of each hull a fresh hole takes, such as Marauders and Black Ops.\n\nTurn it off in Settings > Wormhole Jumps & Mass.",
+      "images": [
+        { "src": "whats-new/img/pr-169-fleet-mass-check.png", "caption": "Paste the fleet into the Mass dialog to see what fits" }
+      ]
+    },
+    {
+      "pr": 168,
+      "date": "2026-11-15",
+      "title": "Campaign and Fabricator tags",
+      "description": "Military Campaign caches (Collapsed Drifter Cache, Fabricated Rogue Cache) and the Rampant Drone Fabricator now get a tag in the signature list. Hover it to see what the site is and why it is worth running. Click the Fabricator tag to add up your fleet's Rampancy and see which escalation (12, 36 or 72) it triggers.\n\nTurn it off in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-168-campaign-fabricator-tags.png", "caption": "The Fabricator tag and its tooltip in the signature list" }
+      ]
+    },
+    {
       "pr": 167,
       "date": "2026-11-15",
       "title": "Kill tags and Fight now",

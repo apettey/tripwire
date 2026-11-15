@@ -10,7 +10,7 @@
 const DISCORD_CONTENT_MAX = 2000;
 const DISCORD_ZWSP = "\u{200B}";
 
-const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass', 'rolling', 'structureTimer'];
+const DISCORD_KINDS = ['kspace', 'chainKill', 'corpKill', 'corpLoss', 'rally', 'watchlist', 'preserveMass', 'rolling', 'structureTimer', 'chainHole', 'homeStatic'];
 
 /** Placeholders per notification type (UI help and validation) */
 function discord_placeholders() {
@@ -66,6 +66,14 @@ function discord_placeholders() {
             'endsEve' => 'when the timer ends, EVE time (UTC), e.g. 2026-10-12 18:30', 'endsRelative' => 'the same moment as a live Discord countdown, e.g. "in 15 minutes"',
             'lead' => 'which reminder: "in 24h", "in 1h", "in 15m" or "now"', 'setBy' => 'who entered the timer', 'note' => 'the structure\'s note (empty without one)',
             'map' => 'Tripwire link to the system'],
+        'chainHole' => ['pings' => 'the ping field of this type', 'mask' => 'mask name',
+            'where' => '"home" when the hole is in the home system, else "the chain"', 'system' => 'the system the hole is in (home, or the chain system)',
+            'class' => 'class of {system}, e.g. C5', 'label' => 'chain label of {system}, e.g. AB (empty for home)', 'labelSystem' => 'label and system, e.g. "AB · J163701"',
+            'sig' => 'signature ID of the hole in {system}', 'hole' => 'its type seen from {system}: the type scanned there, K162 when it was scanned on the other side, "unknown type"',
+            'to' => 'the other side with its class, e.g. "J152820 (C5)", or "an unknown system"', 'mapper' => 'who mapped it', 'map' => 'Tripwire link to {system}'],
+        'homeStatic' => ['pings' => 'the ping field of this type', 'mask' => 'mask name', 'system' => 'the home system',
+            'hole' => 'the type of the static, e.g. U210', 'sig' => 'its signature ID in home', 'to' => 'the other side with its class, e.g. "Amamake (LS)", or "an unknown system"',
+            'state' => '<1h or EOL', 'when' => '"about 40 minutes left", or "past its lifetime, it can collapse any time" at EOL', 'map' => 'Tripwire link to home'],
     ];
 }
 
@@ -164,6 +172,9 @@ function discord_default_templates() {
         'rollingClear' => "{mark}\n{outcome} at {time} EVE",
         // Structure timers (discord/structure_timers.php): one reminder per lead
         'structureTimer' => "{pings} \u{23F0} {timer} {lead}: {type} \"{structure}\" ({owner}) in {system} {chainLabel}, ends {endsEve} EVE ({endsRelative})",
+        // New hole in the chain / home static <1h or EOL (discord/chain_alerts.php)
+        'chainHole'  => "{pings} New hole in {where}: **{sig}** {hole} in **{labelSystem}** to {to}, mapped by *{mapper}*\n{map}",
+        'homeStatic' => "{pings} Home static **{hole}** ({sig}) in **{system}** is **{state}**: {when}\n{map}",
     ];
 }
 
@@ -250,6 +261,7 @@ function discord_payload(array $ctx) {
     if ($kind === 'preserveMass') return discord_preserve_payload($ctx);   // discord/preserve_mass.php
     if ($kind === 'rolling') return discord_rolling_payload($ctx);   // discord/rolling.php
     if ($kind === 'structureTimer') return discord_structure_timer_payload($ctx);   // discord/structure_timers.php
+    if ($kind === 'chainHole' || $kind === 'homeStatic') return discord_chain_alerts_payload($ctx);   // discord/chain_alerts.php
     if ($kind === 'chainPaused' || $kind === 'chainResumed') return discord_chain_notice_payload($ctx);   // discord/chain_notice.php
     $values = [
         'pings' => $ctx['ping'] ?? '', 'mask' => $ctx['mask'] ?? '', 'system' => $ctx['system'] ?? '',
