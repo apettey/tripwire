@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 176,
+      "date": "2026-11-15",
+      "title": "Flare reason and lifetime",
+      "description": "Flares can now say why and how long. Right-click a system on the map, pick Flares, then Set flare ... to choose the colour, keep it for 1 day or until removed, and add a reason. Everyone on your mask sees the reason in the system panel and by hovering the (i) icon on the flared system. Battle, Hold and Fleet Op still work as before and keep the flare's reason and lifetime.\n\nThis comes from upstream Tripwire 2.0, thanks to its developers. There is no setting for it: flares without a reason look and work as before.",
+      "images": [
+        { "src": "whats-new/img/pr-176-flare-reason-life.png", "caption": "A flare with a reason: the system panel line and the tooltip on the map" }
+      ]
+    },
+    {
       "pr": 175,
       "date": "2026-11-15",
       "title": "New note editor",

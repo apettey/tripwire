@@ -56,7 +56,7 @@
     { "id": "rolling", "title": "Rolling: show which holes we are rolling", "section": "markers", "prs": [63], "settingsKey": "rolling",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rolling.mark", "rolling.stop"], "panels": [], "use": ["marked"],
       "exposed": ".hole-rolling-marker" },
-    { "id": "flareDetails", "title": "Flare reason and lifetime", "section": "markers", "prs": [], "settingsKey": null,
+    { "id": "flareDetails", "title": "Flare reason and lifetime", "section": "markers", "prs": [176], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["chain.flareSet"], "panels": [], "use": ["saved"],
       "exposed": ".fork-flare-mark",
       "success": "a reason or Until removed saved by >=20% of users who flare a system, by day 28" },
