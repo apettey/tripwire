@@ -182,11 +182,14 @@ const brokenHoles = {
 		if (result.systemsInChainMap && typeof result.systemsInChainMap === "object") {
 			Object.keys(result.systemsInChainMap).forEach(function(id) {
 				const row = result.systemsInChainMap[id];
-				if (row && row.brokenPath && clean[String(id)]) {
-					const pathHome = Array.isArray(clean[String(id)].pathHome) ? clean[String(id)].pathHome : [];
-					const last = pathHome[pathHome.length - 1];
-					if (pathHome.length && !(last && last.path)) { result.systemsInChainMap[id] = clean[String(id)]; }
-				}
+				if (!row || !row.brokenPath) { return; }
+				const other = clean[String(id)];
+				const otherPath = other && Array.isArray(other.pathHome) ? other.pathHome : [];
+				const otherLast = otherPath[otherPath.length - 1];
+				if (otherPath.length && !(otherLast && otherLast.path)) { result.systemsInChainMap[id] = other; return; }
+				// No row with a clean way home: a copy whose way home is just the system itself (the map row is untouched)
+				const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
+				if (pathHome.length > 1) { result.systemsInChainMap[id] = Object.assign({}, row, { pathHome: pathHome.slice(-1) }); }
 			});
 		}
 		if (Array.isArray(result.exits)) {

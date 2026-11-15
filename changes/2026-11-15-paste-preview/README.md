@@ -53,11 +53,12 @@ key or Mask Admin.
   when the file loads (innermost; a mocha test pins that no fork file before it wraps at load) and marks its result:
   the broken line gets the `broken-hole` modifier, rows whose system can only be reached through a broken hole get
   `row.brokenHole`, rows whose own way home crosses a broken hole get `row.brokenPath`, and `exits` leaves the cut-off
-  systems out (a loop through another hole keeps them; `systemsInChainMap` then points at the row with a clean way home,
-  so the system panel's "To chain:" text doesn't run through the broken hole). The route features
+  systems out (a loop through another hole keeps them; `systemsInChainMap` then points at the row with a clean way home, or at
+  a copy whose way home is just the system, so the system panel's "To chain:" text never runs through the broken hole). The route features
   honour the marks with one guarded line each (fork files): `rally.systemConnections` skips broken lines (the hole
   graph of Favourites, Destinations, Fight here and the route filters), `routeDestinations.chainExits` skips
-  `row.brokenPath` (so its hole names come from the clean row), `routeDestinations.chainSystems`,
+  cut-off rows and prefers a clean row (an exit reached only through a loop stays, flagged `brokenPath`, without the
+  broken hole's name, and Destinations judges it only by the route from where you are), `routeDestinations.chainSystems`,
   `favouritesPanel.chainSystems` and `jumpPlanner.isExtraRow` skip `row.brokenHole`, `jumpPlanner.homePaths` (Get
   home) skips a way home through a broken line so the fewest-holes choice takes another, and the system panel's routes and the region map read the filtered `exits`.
 - **Storage** (`broken_wormholes.inc.php`, new): fork-owned table `fork_broken_wormholes (maskID, wormholeID, markedBy,

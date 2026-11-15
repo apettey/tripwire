@@ -155,10 +155,17 @@ describe('brokenHoles: route features honour the marks, the rest still sees the 
 		assert.deepStrictEqual(r.map.rows.filter(x => x.brokenPath).map(x => x.c[0].v), [2, 3, 5]);
 		assert.deepStrictEqual(r.exits, [String(AMARR), String(JITA)]);
 		assert.strictEqual(r.systemsInChainMap[JITA], rows[3], '"To chain:" reads the direct row');
-		assert.strictEqual(r.systemsInChainMap[AMARR], rows[1], 'no clean row: kept as it is');
-		assert.strictEqual(r.systemsInChainMap[J105], rows[4], 'no clean row: kept as it is');
+		assert.deepStrictEqual(r.systemsInChainMap[AMARR].pathHome, [{ systemID: AMARR, name: 'via-amarr' }], 'no clean row: "To chain:" shows just the system');
+		assert.strictEqual(rows[1].pathHome.length, 1, 'the map row itself is untouched');
+		assert.deepStrictEqual(r.systemsInChainMap[J105].pathHome, [{ systemID: J105 }]);
+		assert.strictEqual(rows[4].pathHome.length, 3, 'the map row keeps its whole way home');
 		const exits = routeDestinations.chainExits(r.map.rows, r.lines);
-		assert.deepStrictEqual(exits.map(e => [e.systemID, e.holeName]), [[JITA, 'direct']]);
+		assert.deepStrictEqual(exits.map(e => [e.systemID, e.holeName, !!e.brokenPath]), [[AMARR, '', true], [JITA, 'direct', false]],
+			'Amarr stays an exit (reached through Jita), flagged; Jita comes from its clean row');
+		// Destinations: a flagged exit is judged by the route from where you are, never by its tree way home
+		const conns = rally.systemConnections(r.map.rows, r.lines);
+		const route = rally.routeTo(conns, String(HERE), String(AMARR));
+		assert.ok(route && route.every(i => r.lines[i][3] !== 11), 'the route to Amarr goes via Jita');
 		const hp = jumpPlanner.homePaths(r);
 		assert.deepStrictEqual(hp.paths[JITA].holes.map(h => h.wormholeID), [13], 'Get home goes the direct way');
 		assert.strictEqual(hp.paths[AMARR], undefined, 'the map has no row for the other way to Amarr: no Get home rather than a wrong one');

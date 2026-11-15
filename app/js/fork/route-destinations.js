@@ -121,8 +121,15 @@ const routeDestinations = {
 	chainExits: function(rows, lines) {
 		const seen = {}, exits = [];
 		const scout = routeDestinations.scoutNodes(lines);
+		// Broken holes (broken-holes.js): a cut-off row (brokenHole) is no exit; a row whose way home crosses a broken hole
+		// (brokenPath) is used only when its system has no other row, flagged e.brokenPath (routes avoid the broken line)
+		const cleanRow = {};
 		(Array.isArray(rows) ? rows : []).forEach(function(row) {
-			if (!row || !row.c || !row.c[0] || row.destination || row.brokenPath) return;	// brokenPath: its way home crosses a broken hole (broken-holes.js); a loop's other row is used
+			if (row && row.c && row.c[0] && !row.brokenPath) { cleanRow[routeDestinations.toID(row.c[0].systemID)] = true; }
+		});
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			if (!row || !row.c || !row.c[0] || row.destination || row.brokenHole) return;
+			if (row.brokenPath && cleanRow[routeDestinations.toID(row.c[0].systemID)]) return;
 			const node = row.c[0];
 			if (scout[node.v]) return;
 			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
@@ -131,7 +138,9 @@ const routeDestinations = {
 			const id = routeDestinations.toID(node.systemID);
 			if (!id || seen[id] || !routeDestinations.isKSpace(id)) return;
 			seen[id] = true;
-			exits.push({systemID: id, nodeID: node.v, holeName: last && last.name ? String(last.name) : ""});
+			const exit = {systemID: id, nodeID: node.v, holeName: last && last.name && !row.brokenPath ? String(last.name) : ""};	// not the broken hole's name
+			if (row.brokenPath) exit.brokenPath = true;
+			exits.push(exit);
 		});
 		return exits;
 	},
@@ -257,7 +266,7 @@ const routeDestinations = {
 				exits.forEach(function(e) {
 					const found = start !== null && start !== undefined ? routeHoleFilters.route(connections, start, e.systemID, hf) : null;
 					e.fromRoot = !found;
-					e.holes = found ? found.path : routeHoleFilters.holesHome(result.lines, e.nodeID);
+					e.holes = found ? found.path : e.brokenPath ? [] : routeHoleFilters.holesHome(result.lines, e.nodeID);	// its tree way home crosses a broken hole
 				});
 				routeDestinations.holeFilters = routeHoleFilters.reasonTable(connections, hf);
 			}
