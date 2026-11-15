@@ -98,6 +98,10 @@
     { "id": "sigInline", "title": "Edit life and mass in place", "section": "signatures", "prs": [89], "settingsKey": "sigInline",
       "stage": "core", "audience": "all", "kind": "active", "commands": ["hole.set"], "panels": [], "use": ["edited"],
       "success": "used by >=20% of active users by day 28, opt-out <10%" },
+    { "id": "undoHistory", "title": "Undo and redo any signature or map edit", "section": "signatures", "prs": [], "settingsKey": null,
+      "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["undone", "redone"], "events": ["conflict"],
+      "exposed": "#undo:not(.disabled)",
+      "success": "undo used by >=15% of active users by day 28, refused (conflict) steps <5% of undos" },
     { "id": "lifeStates", "title": "Wormhole life: Stable, <4h, <1h, EOL", "section": "signatures", "prs": [104, 109], "settingsKey": "lifeStates",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
 
