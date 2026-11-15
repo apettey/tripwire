@@ -1,0 +1,6 @@
+28659	Berta's Paladin	Paladin	-
+28659	Paladin	Paladin	12 km
+22430	Dark Sin	Sin	1,234 km
+35832	J164417 - Home	Astrahus	8,514 km
+2203	Acolyte I	Acolyte I	5,000 m
+12005	Ishtar	Ishtar	2.1 AU
