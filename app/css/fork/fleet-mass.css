@@ -1,0 +1,46 @@
+/* "Will my fleet fit?" in the mass dialog (fork feature: fleet-mass-check) */
+#fleet-mass {
+	margin: 4px 0 6px;
+	padding: 4px 6px;
+	border: 1px solid #3a4650;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.03);
+	max-width: 760px;
+}
+
+#fleet-mass summary { cursor: pointer; }
+#fleet-mass .fleet-mass-sub { color: #9aa6ae; }
+#fleet-mass p { margin: 3px 0; }
+
+#fleet-mass textarea.fleet-mass-paste {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 420px;
+	margin: 4px 0 2px;
+	font-size: inherit;
+	resize: vertical;
+}
+
+#fleet-mass .fleet-mass-note { color: #9aa6ae; }
+#fleet-mass .fleet-mass-warning { color: #ff8a70; }
+
+#fleet-mass .fleet-mass-badge {
+	display: inline-block;
+	min-width: 90px;
+	padding: 0 5px;
+	border-radius: 2px;
+	font-weight: bold;
+	text-align: center;
+}
+#fleet-mass .fleet-mass-safe .fleet-mass-badge { color: #0b1a0b; background: #6fcf6f; }
+#fleet-mass .fleet-mass-may .fleet-mass-badge { color: #1e1400; background: #f0b030; }
+#fleet-mass .fleet-mass-collapse .fleet-mass-badge { color: #ffffff; background: #d03a2a; }
+#fleet-mass .fleet-mass-unknown .fleet-mass-badge { color: #c0c8cc; background: #3a4650; }
+
+#fleet-mass table.fleet-mass-table { border-collapse: collapse; margin: 3px 0; }
+#fleet-mass table.fleet-mass-table th { text-align: left; font-weight: normal; color: #9aa6ae; padding: 1px 12px 1px 0; }
+#fleet-mass table.fleet-mass-table td { padding: 1px 12px 1px 0; }
+#fleet-mass .fleet-mass-group { color: #9aa6ae; font-size: 90%; }
+#fleet-mass .fleet-mass-yes { color: #6fcf6f; }
+#fleet-mass .fleet-mass-no { color: #ff8a70; }
