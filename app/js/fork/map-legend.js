@@ -8,17 +8,17 @@ const forkLegend = {
 	// A feature that draws something on the chain map adds its own entry (from its own file, at DOM ready, so this file
 	// has loaded whatever the script order):
 	//   if (typeof forkLegend !== "undefined") { forkLegend.register({
-	//     id: "sizeTags",                  unique id
+	//     id: "myFeature",                 unique id
 	//     group: "connectionMarks",        systems | connections | systemMarks | connectionMarks (GROUPS)
 	//     order: 10,                       position within the group (lower first)
 	//     title: "Hole size tags",         plain text
 	//     text: "Largest ship ...",        one plain-language line (plain text)
 	//     sample: function() { return html; },   markup built from the map's own classes / the feature's own markup
 	//                                      functions (forkLegend.node / line / chips help); called on every open
-	//     settingId: "sizeTags-enabled",   optional: the forkSettings row that turns it off. A checkbox row's get(options)
+	//     settingId: "myFeature-enabled", optional: the forkSettings row that turns it off. A checkbox row's get(options)
 	//                                      decides whether the entry is on; its section and label say where to turn it off
 	//     enabled: function(options) {},   optional: whether it is on (instead of the row's checkbox; custom rows)
-	//     where: "..."                     optional: plain text instead of "Settings > <section> > <row label>"
+	//     where: "..."                     optional: plain text instead of "Settings > <section> > <row label>", shown as written (on or off)
 	//   }); }
 	// Every Map Markers Settings row needs an entry with its settingId, or a line in WAIVERS saying why not
 	// (app/js-test/fork/map-legend.test.js checks it).
@@ -289,7 +289,8 @@ const forkLegend = {
 	rowHtml: function(row, items) {
 		const e = row.entry, esc = forkLegend.escape;
 		const where = forkLegend.where(e, items, forkLegend.sectionTitle);
-		const whereText = !where ? "" : row.on ? (e.where !== undefined ? where : "Turn off: " + where) : "Off. Turn on: " + where;
+		// An entry's own `where` is shown as written (it says what to do either way); the Settings path gets "Turn off" / "Turn on"
+		const whereText = !where ? "" : typeof e.where === "string" ? where : row.on ? "Turn off: " + where : "Off. Turn on: " + where;
 		return "<div class='map-key-row" + (row.on ? "" : " map-key-off") + "' data-key='" + esc(e.id) + "'>"
 			+ "<div class='map-key-sample' aria-hidden='true'>" + forkLegend.sampleHtml(e) + "</div>"
 			+ "<div class='map-key-desc'><div class='map-key-name'>" + esc(e.title) + (row.on ? "" : " <span class='map-key-offtag'>off</span>") + "</div>"
@@ -320,6 +321,11 @@ const forkLegend = {
 		for (let i = 0; i < lines.length; i++) { forkLegend.drawLine(lines[i]); }
 		const all = document.getElementById("map-key-all");
 		if (all) { all.checked = forkLegend.showAll; }
+		const foot = panel.querySelector(".map-key-foot");
+		if (foot) {
+			foot.textContent = (forkLegend.showAll ? "Lists every marker; the dimmed ones are switched off for you." : "Lists what is switched on for you.")
+				+ " Samples use the map's own styles.";
+		}
 	},
 
 	isOpen: function() {

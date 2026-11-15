@@ -20,13 +20,20 @@ describe('Map key (forkLegend)', () => {
 		if (id) { allRows.add(id[1]); }
 		if (section && id && section[1] === 'markers') { markerRows.push(id[1]); }
 	}));
-	// Legend entries' settingId, wherever they are registered (the entries file or a feature's own forkLegend.register)
-	const legendSettingIds = new Set();
-	sources.forEach(s => [...s.text.matchAll(/\bsettingId:\s*"([A-Za-z0-9_-]+)"/g)].forEach(m => legendSettingIds.add(m[1])));
+	// Legend entries' settingId: the built-in entries (mapLegendEntries) and the forkLegend.register calls in the features'
+	// own files, comments stripped (the doc comment's example must not count)
+	const stripComments = text => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'\\])\/\/.*$/gm, '$1');
+	const legendSettingIds = new Set(mapLegendEntries.filter(e => e.settingId).map(e => e.settingId));
+	sources.filter(s => s.file !== 'map-legend-entries.js').forEach(s => stripComments(s.text).split('forkLegend.register(').slice(1).forEach(chunk => {
+		const m = chunk.split('});')[0].match(/\bsettingId:\s*"([A-Za-z0-9_-]+)"/);
+		if (m) { legendSettingIds.add(m[1]); }
+	}));
 
 	it('the scans found the rows (guards the scanning itself)', () => {
 		assert.ok(markerRows.includes('sizeTags-enabled') && markerRows.includes('killReporting-marker'), markerRows.join(','));
 		assert.ok(legendSettingIds.has('sizeTags-enabled'));
+		assert.ok(!legendSettingIds.has('myFeature-enabled'), 'the doc comment example must not count as an entry');
+		assert.strictEqual(stripComments('a // settingId: "x"\nb /* settingId: "y" */ c'), 'a \nb  c');
 	});
 
 	it('every Map Markers Settings row has a legend entry (or a waiver)', () => {
@@ -140,6 +147,23 @@ describe('Map key (forkLegend)', () => {
 			];
 			assert.strictEqual(forkLegend.scopedCss(sheets),
 				'#map-key-map .a { color: red; }\n@media (prefers-reduced-motion: reduce) { #map-key-map .c { animation: none !important; } }');
+		});
+	});
+
+	describe('rowHtml', () => {
+		const items = [{ id: 'a-enabled', section: 'markers', type: 'checkbox', label: 'Thing A:', get: () => true }];
+		const row = (entry, on) => forkLegend.rowHtml({ entry: Object.assign({ id: 'a', title: 'A', text: 'An a.', sample: '' }, entry), on: on }, items);
+		it('the Settings path gets Turn off / Off. Turn on', () => {
+			const sectionTitle = forkLegend.sectionTitle;
+			forkLegend.sectionTitle = () => 'Map Markers';
+			try {
+				assert.ok(row({ settingId: 'a-enabled' }, true).includes('Turn off: Settings &gt; Map Markers &gt; Thing A'));
+				assert.ok(row({ settingId: 'a-enabled' }, false).includes('Off. Turn on: Settings &gt; Map Markers &gt; Thing A'));
+			} finally { forkLegend.sectionTitle = sectionTitle; }
+		});
+		it('an entry\'s own where is shown as written, on or off', () => {
+			const off = row({ where: 'Replaced by Life states when they are on' }, false);
+			assert.ok(off.includes('>Replaced by Life states when they are on<') && !off.includes('Turn on'));
 		});
 	});
 

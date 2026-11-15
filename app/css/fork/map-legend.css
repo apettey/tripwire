@@ -8,7 +8,7 @@
 
 .map-key {
 	position: fixed;
-	z-index: 900;
+	z-index: 9450;	/* above Getting started (9400), below feature tips (9500) */
 	width: 500px;
 	max-width: calc(100vw - 16px);
 	display: flex;
