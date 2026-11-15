@@ -26,6 +26,8 @@
 //                           handled like preserve mass
 //   discord/structure_timers.php type 9: reminders before a structure timer ends (the Structures panel, structures/), polled
 //                           by the worker with the watchlist (24 h / 1 h / 15 m / at the end)
+//   discord/chain_alerts.php types 10-11: a new hole in home / the chain, and the home static reaching <1h or EOL, polled
+//                           by the worker with the watchlist (the in-app pop-ups are app/js/fork/chain-alerts.js)
 //   discord/dispatch.php    the sender: rate limits (429, X-RateLimit-*, global), retries, broken webhooks
 // (The rally point's first version still posts directly to upstream's DISCORD_WEB_HOOK for masks without type 5,
 // see rally_discord.inc.php.)
@@ -52,6 +54,7 @@ require_once(__DIR__ . '/watchlist.php');
 require_once(__DIR__ . '/preserve_mass.php');
 require_once(__DIR__ . '/rolling.php');
 require_once(__DIR__ . '/structure_timers.php');
+require_once(__DIR__ . '/chain_alerts.php');
 require_once(__DIR__ . '/dispatch.php');
 
 /** String setting from a config.php constant or the environment ('' when unset) */

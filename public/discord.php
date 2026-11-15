@@ -137,6 +137,16 @@ function discord_sample_context($kind, $template, $ping, $maskName, $comp = null
 			'owner' => '[HSTL] Hostile Haulers', 'timer' => 'Hull timer', 'timerAt' => time() + 900, 'lead' => 15, 'setBy' => 'Example Pilot',
 			'note' => 'bring dreads', 'map' => discord_map_url(31001880));
 	}
+	if ($kind === 'chainHole') {
+		// A K162 found in AB · J163701, from J152820 (C5)
+		return $base + array('wormholeID' => 1, 'systemID' => 31002012, 'system' => 'J163701', 'class' => 'C5', 'label' => 'AB', 'where' => 'the chain',
+			'sig' => 'ABC-123', 'hole' => 'K162', 'to' => 'J152820 (C5)', 'mapper' => 'Example Pilot', 'map' => discord_map_url(31002012));
+	}
+	if ($kind === 'homeStatic') {
+		// The home static U210 to low-sec, 40 minutes left
+		return $base + array('wormholeID' => 1, 'systemID' => 31002012, 'system' => 'J163701', 'hole' => 'U210', 'sig' => 'XYZ-789',
+			'to' => 'Amamake (LS)', 'stage' => 'lt1h', 'state' => '<1h', 'when' => discord_home_static_when('lt1h', 2400), 'map' => discord_map_url(31002012));
+	}
 	if ($kind === 'watchlist') {
 		return $base + array('filter' => 'C5 with a Wolf-Rayet', 'systemID' => 31001882, 'system' => 'J122515', 'security' => null, 'class' => 'C5',
 			'effect' => 'Wolf-Rayet', 'region' => 'E-R00028', 'map' => discord_map_url(31001882), 'dotlan' => discord_dotlan_url(31001882),

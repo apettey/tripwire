@@ -258,20 +258,28 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		// Undo of a link is the server's unlink (one step: the bare hole and its jumps come back, the signature is unlinked)
 		const previousUndo = tripwire.undo;
+		let unlinking = false;
 		tripwire.undo = function() {
 			const stack = tripwire.signatures.undo[viewingSystemID] || [];
 			const item = stack[stack.length - 1];
 			if (!item || item.action !== "jumpLink") { return previousUndo.apply(this, arguments); }
+			// One unlink at a time (two quick Ctrl+Z would send it twice); the undo history's busy flag when it is loaded
+			const history = typeof undoHistory !== "undefined" && undoHistory.ui && undoHistory.ui.state ? undoHistory.ui : null;
+			if (history ? history.busy : unlinking) { return; }
+			if (history) { history.busy = true; } else { unlinking = true; }
 			$("#undo").addClass("disabled");
+			// Take off this entry only, if it is still on top (the history may have changed meanwhile)
+			const popItem = function() { if (stack[stack.length - 1] === item) { stack.pop(); } };
 			post({ mode: "unlink", linkId: item.linkId }).done(function() {
-				stack.pop();
+				popItem();
 				try { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } catch (e) { /* ignore */ }
 				Notify.trigger("Link undone", "green", 3000);
 			}).fail(function(xhr) {
-				stack.pop();	// the link can't be undone any more (it was edited since): drop the entry rather than offer it again
+				popItem();	// the link can't be undone any more (it was edited since): drop the entry rather than offer it again
 				try { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } catch (e) { /* ignore */ }
 				Notify.trigger("Couldn't undo the link: " + _.escape(errorText(xhr)), "red", 8000);
 			}).always(function() {
+				if (history) { history.busy = false; history.paint(); } else { unlinking = false; }
 				if ((tripwire.signatures.undo[viewingSystemID] || []).length > 0) { $("#undo").removeClass("disabled"); }
 			});
 		};

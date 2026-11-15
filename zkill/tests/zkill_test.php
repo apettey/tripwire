@@ -60,6 +60,29 @@ check('id + hash only', zk_killmail_row(['killmail_id' => 1, 'zkb' => ['hash' =>
 check('bad time', zk_killmail_row(['killmail_time' => 'nope'] + $esi), null);
 check('no victim', zk_killmail_row(array_diff_key($esi, ['victim' => 1])), null);
 
+// --- Kill tag facts (app/js/fork/kill-tags.js) ---
+check('tags: no location, CONCORD (corporation) on the mail', [$row['locationID'], $row['concord'], $row['ganked']], [null, 1, 0]);
+check('tags: distinct attacker hulls, no weapons given', [$row['attackerShips'], $row['attackerWeapons']], ['100,29988,3885', '']);
+$camp = $esi;
+$camp['attackers'] = [
+    ['character_id' => 1, 'corporation_id' => 10, 'ship_type_id' => 22456, 'weapon_type_id' => 2929, 'final_blow' => true],
+    ['character_id' => 2, 'corporation_id' => 10, 'ship_type_id' => 24688, 'weapon_type_id' => 3937],
+    ['character_id' => 3, 'corporation_id' => 10, 'ship_type_id' => 24688, 'weapon_type_id' => 3937],
+    ['faction_id' => 500006, 'ship_type_id' => 0, 'weapon_type_id' => 'x'],
+    'junk',
+];
+$crow = zk_killmail_row($camp + ['zkb' => ['locationID' => 50001248, 'labels' => ['pvp', 'ganked', 'loc:highsec']]]);
+check('tags: location, labels, CONCORD (faction)', [$crow['locationID'], $crow['ganked'], $crow['concord']], [50001248, 1, 1]);
+check('tags: hulls and weapons deduplicated, zero / junk left out', [$crow['attackerShips'], $crow['attackerWeapons']], ['22456,24688', '2929,3937']);
+check('tags: labels not a list', zk_killmail_row($camp + ['zkb' => ['labels' => 'ganked']])['ganked'], 0);
+check('tags: location not a number', zk_killmail_row($camp + ['zkb' => ['locationID' => 'gate']])['locationID'], null);
+$long = zk_type_list(range(10000, 10200));
+check('type list: fits its column', strlen($long) <= ZK_TYPE_LIST_MAX && strlen($long) > ZK_TYPE_LIST_MAX - 6, true);
+check('type list: whole IDs only', substr($long, -1) !== ',' && count(explode(',', $long)) === intdiv(ZK_TYPE_LIST_MAX + 1, 6), true);
+check('type list: empty', zk_type_list([]), '');
+check('type list ids: round trip', zk_type_list_ids('22456,24688'), [22456, 24688]);
+check('type list ids: empty / null / junk', [zk_type_list_ids(''), zk_type_list_ids(null), zk_type_list_ids('0,abc,5')], [[], [], [5]]);
+
 // --- zk_coverage_from ---
 check('coverage: no stream', zk_coverage_from(null, null), null);
 check('coverage: stream only', zk_coverage_from(1000, null), 1000);

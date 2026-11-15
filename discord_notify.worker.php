@@ -4,6 +4,7 @@
 // Long-running CLI process (supervisord [program:discord-notify]); the only process that calls Discord. It
 //   - polls the chain maps for new k-space connections near the ping systems (discord/kspace.php) every 15 s,
 //   - matches the watchlist filters against the chain connected to home of masks with that type on (discord/watchlist.php), every 15 s,
+//   - posts new holes in home / the chain and the home static reaching <1h / EOL (discord/chain_alerts.php), every 15 s,
 //   - posts one notice to the chain kill channel while chain kills are on without a home system (discord/chain_notice.php), every 15 s,
 //   - sends the outbox (discord/dispatch.php): every second, at most 20 messages / 5 s per pass,
 //   - prunes the outbox and dedupe tables every 10 minutes.
@@ -109,6 +110,11 @@ function dn_run() {
                     try { $totals['stimer'] = ($totals['stimer'] ?? 0) + discord_structure_timer_poll($db, dn_type_masks($db, 'structureTimer')); }
                     catch (Throwable $error) { dn_log('structure timer poll failed: ' . $error->getMessage()); }
                 }
+                // New hole in home / the chain, home static <1h / EOL (discord/chain_alerts.php): same leader, same cadence
+                if ($leader) {
+                    try { $totals['chainAlerts'] = ($totals['chainAlerts'] ?? 0) + discord_chain_alerts_poll($db, dn_type_masks($db, 'chainHole') + dn_type_masks($db, 'homeStatic')); }
+                    catch (Throwable $error) { dn_log('chain alerts poll failed: ' . $error->getMessage()); }
+                }
                 // Chain kills on without a home system: one notice to their channel (same leader, same cadence)
                 if ($leader) discord_chain_notice_poll($db, dn_type_masks($db, 'chainKill'));
             }
@@ -139,7 +145,7 @@ function dn_run() {
             if (time() - $lastHeartbeat >= DN_HEARTBEAT_EVERY) {
                 $lastHeartbeat = time();
                 $queued = (int) $db->query("SELECT COUNT(*) FROM discord_outbox WHERE status = 'queued'")->fetchColumn();
-                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']}, watchlist queued {$totals['watchlist']}, structure timers queued ".($totals['stimer'] ?? 0)." since start; $queued queued now");
+                dn_log("heartbeat: sent {$totals['sent']}, failed {$totals['failed']}, k-space queued {$totals['kspace']}, watchlist queued {$totals['watchlist']}, structure timers queued ".($totals['stimer'] ?? 0).", chain alerts queued ".($totals['chainAlerts'] ?? 0)." since start; $queued queued now");
             }
             $backoff = 0;
             usleep(250000);
