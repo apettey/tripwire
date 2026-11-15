@@ -45,11 +45,11 @@ if (isset($mysql) && !isset($mysql_update)) {
 }
 
 // cache/db-update-state.php counts the diffs that ran; it lives in the cache volume, so it outlives a database restore
-// (db-update.php would then skip diffs the restored database never had). It can also lag behind: db-update.php only
-// writes it after running a diff, not after skipping one already in update_history, so a lost file stays at 1 and every
-// map load re-checks the rest. On the map page only (the one page that runs db-update.php; polls pay nothing), set the
-// file to the index of the first diff whose name update_history doesn't have, whenever the two differ. Under the file's
-// lock, which db-update.php also takes. A restored pre-2.0 backup keeps the newer update_history table: see
+// (db-update.php would then skip diffs the database never got). On the map page only (the one page that runs
+// db-update.php; polls pay nothing), lower the file to the index of the first diff whose name update_history doesn't
+// have, when that is below what the file says. Never raised: if the diff list were misread, raising it could skip a
+// diff. (So a file that lags behind, e.g. stuck at 1 after it was lost because db-update.php doesn't count diffs it
+// skips as already applied, stays upstream's: harmless re-checks.) Under the file's lock, which db-update.php also takes. A restored pre-2.0 backup keeps the newer update_history table: see
 // docker/README.md#database-updates.
 if (isset($mysql) && $mysql instanceof PDO && in_array(__DIR__ . '/tripwire.php', get_included_files(), true)) {
     (function (PDO $db, $stateFile) {
@@ -68,8 +68,8 @@ if (isset($mysql) && $mysql instanceof PDO && in_array(__DIR__ . '/tripwire.php'
             $applied = count($names[1]);
             foreach ($names[1] as $i => $name) { if (!isset($done[$name])) { $applied = $i; break; } }
             $claimed = preg_match('/\$version\s*=\s*(\d+)/', (string)stream_get_contents($fp), $m) ? (int)$m[1] : 0;
-            if ($claimed !== $applied) {
-                if ($applied < $claimed) error_log("db-update: next diff by update_history is $applied, the state file claimed $claimed; checking again");
+            if ($applied < $claimed) {   // only ever lowered: a list the regex misread must never skip a diff
+                error_log("db-update: next diff by update_history is $applied, the state file claimed $claimed; checking again");
                 ftruncate($fp, 0);
                 rewind($fp);
                 fwrite($fp, '<?php $version = ' . $applied . ';');

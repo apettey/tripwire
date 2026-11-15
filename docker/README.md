@@ -106,10 +106,11 @@ append-only list of SQL diffs; each one runs once, in order, and is recorded in 
 production `/opt/app/cache` is a named volume (`cache:` in `docker-compose.prod.yml`; check that eve-infrastructure's
 `stacks/tripwire/compose.yaml` mounts it the same way), so the file survives restarts and new images. A request that
 finds diffs to run takes a file lock, so two page loads never run them twice.
-`docker/db.inc.php` adds one guard: on the map page it sets the file to the first diff (in `db-update.php`'s order)
-whose name `update_history` doesn't have, when the two differ. That covers a stale or lost file. (It also fixes an
-upstream quirk: db-update.php doesn't advance the file past diffs it skips as already applied, so after a lost file
-every map load re-checked them.) It trusts `update_history`, so it can't see a schema older than that table says.
+`docker/db.inc.php` adds one guard: on the map page it lowers the file to the first diff (in `db-update.php`'s order)
+whose name `update_history` doesn't have, when the file claims more. It never raises the file, so a misread diff list
+can't skip a diff. It trusts `update_history`, so it can't see a schema older than that table says. (Upstream quirk,
+left as is: after a lost file, db-update.php doesn't count the diffs it skips as already applied, so the file stays at
+1 and each map load re-checks them; a few cheap queries and log lines.)
 
 - Account: `DB_UPDATE_USER` / `DB_UPDATE_PASSWORD`, or the app connection when unset (the default; the app user already
   has all privileges on its database). A separate account needs `ALTER, CREATE, INDEX, EVENT, SELECT, INSERT, UPDATE` on the database (the last three for
@@ -125,8 +126,8 @@ every map load re-checked them.) It trusts `update_history`, so it can't see a s
   the database, then restore, then delete the state file (restarting is not enough: the file is in the volume):
   `DROP TABLE update_history;` then `docker compose exec app rm /opt/app/cache/db-update-state.php`. The next map page
   load runs the diffs. A backup taken after the update carries its own `update_history` and needs neither step.
-  The dev stack bind-mounts the repo, so `cache/` is shared by every stack on that checkout; the guard keeps each
-  stack right on its map page, or delete the file before pointing a stack at a new or older database.
+  The dev stack bind-mounts the repo, so `cache/` is shared by every stack on that checkout: delete the file before
+  pointing a stack at a new or older database (the guard lowers it on the map page, but a lower file is never raised).
 - The 2.0 diffs: `wormholes.life` becomes `varchar(32)`, `flares` gets `lifeLength` and `reason` (flares with an
   expiry), the `flaresClean` event deletes expired flares, `signatures.scan_group` (anomaly / signature from a paste),
   `tracking.online` and `tracking.stationID` as `bigint` (docked in an Upwell structure). All are additive; old rows keep
