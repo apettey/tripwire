@@ -1,0 +1,54 @@
+/* Gas and ore site value (fork feature: site-values).
+   A small chip right after the site name; dashed border for approximate ore figures, grey "?" for sites without a
+   value. An unbreakable inline-block: in a narrow cell it wraps under the name and stays whole. */
+#sigTable .site-value-chip {
+	display: inline-block;
+	margin-left: 5px;
+	padding: 0 4px;
+	border: 1px solid rgba(110, 200, 120, 0.7);
+	border-radius: 3px;
+	background: rgba(60, 150, 70, 0.25);
+	color: #a8e6a0;
+	font-size: 0.85em;
+	font-weight: normal;
+	line-height: 1.3;
+	white-space: nowrap;
+	cursor: help;
+}
+
+#sigTable .site-value-chip.site-value-approx {
+	border-style: dashed;
+}
+
+#sigTable .site-value-chip.site-value-unknown {
+	border-color: rgba(160, 160, 160, 0.6);
+	background: rgba(120, 120, 120, 0.2);
+	color: #bbb;
+}
+
+.site-value-table {
+	margin-top: 4px;
+	border-collapse: collapse;
+}
+
+.site-value-table td {
+	padding: 1px 6px 1px 0;
+}
+
+.site-value-table td.site-value-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.site-value-table tr.site-value-total td {
+	border-top: 1px solid rgba(255, 255, 255, 0.25);
+	padding-top: 3px;
+	font-weight: bold;
+}
+
+.site-value-notes {
+	margin-top: 4px;
+	max-width: 340px;
+	color: #aaa;
+	font-size: 0.9em;
+}

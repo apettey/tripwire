@@ -1,0 +1,9 @@
+Abel Fleetboss	J164417	Damnation	Command Ship	Fleet Commander (Boss)	5 - 5 - 5
+Berta Hauler	J164417	Paladin	Marauder	Squad Commander	0 - 0 - 5	Wing 1 / Squad 1
+Carl Kronos	J164417	Kronos	Marauder	Squad Member	0 - 0 - 0	Wing 1 / Squad 1
+Dora Sin	Jita	Sin	Black Ops	Squad Member	0 - 0 - 0	Wing 1 / Squad 1
+Egon Logi	J164417	Guardian	Logistics	Squad Member	0 - 0 - 0	Wing 1 / Squad 2
+Frida Logi	J164417	Guardian	Logistics	Squad Member	0 - 0 - 0	Wing 1 / Squad 2
+Gus Scout	J164417	Sabre	Interdictor	Squad Member	0 - 0 - 0	Wing 1 / Squad 2
+Hanna Pod	J164417	Capsule	Capsule	Squad Member	0 - 0 - 0	Wing 1 / Squad 2
+Ivo Newship	J164417	Not A Real Hull	Frigate	Squad Member	0 - 0 - 0	Wing 1 / Squad 2
