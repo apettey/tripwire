@@ -51,7 +51,7 @@ and static pop-ups show themselves when they matter, so they need no tip.
   chain change and every 30 s; each (hole, stage) is shown once (remembered in localStorage, last 100). The range check
   reuses the Jump planner's engine and data read-only (`jumpRange`, `jumpPlanner.settings/range`, `public/jumprange/*.json`
   fetched on the first candidate): from your Get home start when set, else from the other k-space exits of the chain
-  (high-sec ones only for a jump freighter or Black Ops, the jump ships allowed there), honouring the planner's
+  (never from high-sec: no jump drive can be activated there), honouring the planner's
   low/null-sec ticks. Off (alert and tip) while the Jump planner itself is turned off. Pop-ups are jBox notices, so they go to the pop-up dock.
 - `discord/chain_alerts.php` (new): types 10-11, polled by `discord_notify.worker.php` with the watchlist (same leader,
   15 s). New holes: baseline on turn-on / home change, then each hole once (`discord_sent` kinds `chole` / `choleBase`,
