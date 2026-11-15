@@ -43,9 +43,10 @@ const forkHints = {
 	//   (panel-host.js); maskAdmin.open (mask-admin-tab.js); mouse.action {command} (command-palette.js);
 	//   chain.exit {systemIDs: exits that just got a jump range ring} (jump-planner.js); tracking.otherJump {id, name,
 	//   fromName, toName, activeName: a character that isn't the active one jumped a wormhole} (multi-track.js);
-	//   history.recorded {action: add | remove | update | ...: a signature or map edit went on the undo history} (undo-history.js)
+	//   history.recorded {action: add | remove | update | ...: a signature or map edit went on the undo history} (undo-history.js);
+	//   alert.shown {type: an alert source raised an in-app pop-up while Tripwire is on screen} (desktop-notify.js)
 	EVENTS: ["session.start", "idle", "jump.done", "paste.sigs", "paste.dscan", "kill.chain", "system.viewed", "panel.open",
-		"dialog.open", "dialog.close", "maskAdmin.open", "mouse.action", "chain.exit", "tracking.otherJump", "history.recorded"],
+		"dialog.open", "dialog.close", "maskAdmin.open", "mouse.action", "chain.exit", "tracking.otherJump", "history.recorded", "alert.shown"],
 	DONE: ["acted", "got_it", "section_off"],	// outcomes after which a tip never comes back
 	DEFAULTS: { kind: "callout", placement: "bottom", priority: 50, maxShows: 2, cooldownHours: 72, ttlSeconds: 600, minCount: 1, audience: "all" },
 	CAPS: {

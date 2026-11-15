@@ -371,13 +371,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			try { window.localStorage.setItem(ca.STATIC_KEY, JSON.stringify(staticShown)); } catch (e) { /* memory only */ }
 		}
 
-		function show(kind, t, systemID) {
+		function show(kind, t, systemID, key) {
 			if (typeof jBox === "undefined") { return; }
 			const name = systems()[systemID] ? systems()[systemID].name : "";
 			new jBox("Notice", {
 				content: ca.noticeHtml(kind, t.title, t.text, systemID, name), color: kind === "homeStatic" ? "yellow" : "blue",
 				autoClose: ca.NOTICE_MS, closeOnClick: false, offset: { y: 35 }, animation: "flip", addClass: "chain-alert-notice"
 			});
+			if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.chainAlertNote(kind, t, key !== undefined ? key : systemID), function() { if (name) { tripwire.systemChange(systemID); } }); }
 			if (typeof forkUsage !== "undefined") {
 				if (kind === "newHole") { forkUsage.track("chainAlerts", "alert_hole"); }
 				else if (kind === "homeStatic") { forkUsage.track("chainAlerts", "alert_static"); }
@@ -450,7 +451,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const ctx = { homeID: home, chain: lastChain, scope: s.scope, meID: meID() };
 			if (s.newHole) {
 				ca.newHoleAlerts(d.fresh, ctx).forEach(function(a) {
-					show("newHole", ca.holeText(a, systems(), generic()), a.hole[a.near]);
+					show("newHole", ca.holeText(a, systems(), generic()), a.hole[a.near], a.hole.id);
 				});
 			}
 			if (s.capRange && typeof jumpPlanner !== "undefined" && jumpPlanner.settings(opts()).enabled) {
@@ -467,14 +468,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!due.length) { return; }
 			due.forEach(function(a) {
 				staticShown[a.key] = true;
-				show("homeStatic", ca.staticText(a, systems(), generic()), home);
+				show("homeStatic", ca.staticText(a, systems(), generic()), home, a.hole.id);
 			});
 			storeStatic();
 		}
 
 		/** Every TICK_MS: the static's life moves on with time, without a chain change */
 		function tick() {
-			if (document.hidden || !current().homeStatic) { return; }
+			if (!current().homeStatic) { return; }
+			if (document.hidden && !(typeof forkDesktopNotify !== "undefined" && forkDesktopNotify.wanted("homeStatic"))) { return; }	// (kept up in the background for desktop notifications)
 			const client = (typeof tripwire !== "undefined" && tripwire.client) || {};
 			if (!client.wormholes) { return; }
 			try { checkStatic(ca.holes(client.wormholes, client.signatures), homeID()); } catch (e) { console.error("Chain alerts: static check failed", e); }
