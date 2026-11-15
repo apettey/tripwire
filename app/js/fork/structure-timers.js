@@ -352,6 +352,7 @@ const structureTimers = {
 			$toast.on("click", function() { structureTimers.showPanel("timers"); $toast.remove(); });
 			$box.append($toast);
 			setTimeout(function() { $toast.fadeOut(400, function() { $toast.remove(); }); }, 20000);
+			if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.timerNote(a, structureTimers.alertText(a, structures.systemName(a.row.systemID), structureTimers.nowSec())), function() { structureTimers.showPanel("timers"); $toast.remove(); }); }
 			if (sound === null || a.lead === 0) { sound = a.lead; }
 		});
 		structureTimers.saveAlerted();

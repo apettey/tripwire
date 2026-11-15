@@ -1,21 +1,89 @@
 {
 	"v": 1,
 	"checked": "2026-11-15",
-	"about": "Contents of wormhole gas and ore sites, by the site name the scanner shows. contents: [typeID, units] per resource (gas: one cloud of each; ore: the site total at spawn). status: verified = contents from the EVE University site page, unit volumes match Fuzzworks' gas table and the SDE, and All-Out's gas guide confirms two clouds per site; approximate = EVE University only, which says ore amounts are approximate and change with the system class; unverified = no reliable figures, so no value is shown. priceAs: the item whose price values a type: ore is priced as its compressed form (1 ore unit compresses to 1 compressed unit: both have portion size 100 in the SDE, and the compressed item is 1/100 of the volume), since raw ore barely trades and miners sell it compressed. Read by app/js/fork/site-values.js.",
+	"about": "Contents of wormhole gas and ore sites (relic and data sites: see relicAbout), by the site name the scanner shows. contents: [typeID, units] per resource (gas: one cloud of each; ore: the site total at spawn). status: verified = contents from the EVE University site page, unit volumes match Fuzzworks' gas table and the SDE, and All-Out's gas guide confirms two clouds per site; approximate = EVE University only, which says ore amounts are approximate and change with the system class; unverified = no reliable figures, so no value is shown. priceAs: the item whose price values a type: ore is priced as its compressed form (1 ore unit compresses to 1 compressed unit: both have portion size 100 in the SDE, and the compressed item is 1/100 of the volume), since raw ore barely trades and miners sell it compressed. Read by app/js/fork/site-values.js.",
 	"sources": {
 		"eveuniGas": "https://wiki.eveuniversity.org/Wormhole_Gas_Sites",
 		"eveuniOre": "https://wiki.eveuniversity.org/Wormhole_Ore_Sites",
 		"fuzzworks": "https://www.fuzzwork.co.uk/ore/gas.php",
 		"allout": "https://all-out.github.io/guides/wormhole-gas",
-		"prices": "https://esi.evetech.net/markets/prices/ (average_price)"
+		"prices": "https://esi.evetech.net/markets/prices/ (average_price)",
+		"eveuniRDS": "https://wiki.eveuniversity.org/Relic_and_data_sites",
+		"eveuniList": "https://wiki.eveuniversity.org/List_of_data_and_relic_sites",
+		"eveuniWhisk": "https://wiki.eveuniversity.org/Template:Whisk",
+		"signalCartel": "https://mov-edx-aex.github.io/sc-wiki-clone/Making_ISK_as_an_Explorer.html",
+		"forum294175": "https://forums.eveonline.com/t/294175",
+		"ccpRework2025": "https://www.eveonline.com/news/view/exploration-and-industry-balance-rework"
 	},
+	"relicAbout": "Relic and data sites (checked 2026-11-15). families: one row per scanner-name family '<prefix> <faction> <layout>'; the faction is one of factions (or the family's own factions). value model = expected salvage of a Ruined site: per container type, every item of the faction's salvage list drops with a chance and a uniform stack (relicModel.perContainer = chance x mean stack, in units per item), value = sum over items of units x ESI average_price, T2 units on the T2 type and T1 units on the T1 type. Leaves out BPCs, carbon and Spatial Attunement Units (no published rates) and assumes every can is hacked. range = static anecdotal ISK range per site, with its source and date. sites with blueLoot = Sleeper rat loot (combat, not hacking) at fixed NPC buy orders, from EVE University Template:Whisk. status unverified = no value shown, reason says why. exclude: names that never get a chip.",
+	"factions": ["Angel", "Blood Raider", "Guristas", "Sansha", "Serpentis"],
+	"exclude": {
+		"prefixes": ["Unsecured "],
+		"reason": "Wormhole Unsecured data sites are left out on purpose (2026-11-15)."
+	},
+	"relicModel": {
+		"source": "eveuniRDS",
+		"sourceNote": "EVE University 'Pirate relic site loot' (page last edited 2026-09-08), based on MacrophageNT's study on r/Eve (af7536, about January 2019)",
+		"chances": {
+			"rubble":  { "t1": [0.25, 3, 20], "t2": [0.055, 1, 3] },
+			"remains": { "t1": [0.5, 5, 40], "t2": [0.125, 1, 5] },
+			"ruins":   { "t1": [0, 0, 0], "t2": [0.25, 1, 15] }
+		},
+		"chancesNote": "[drop chance per item per container, smallest stack, largest stack]; stacks are uniform, so expected units = chance x (min + max) / 2",
+		"universal": [[25616, 25597], [25620, 25601], [25619, 25600], [25618, 25599], [25617, 25598]],
+		"factions": {
+			"Angel": [[25621, 25602], [25614, 25595], [25612, 25593]],
+			"Blood Raider": [[25622, 25603], [25613, 25594]],
+			"Guristas": [[25625, 25606], [25608, 25589], [25607, 25588]],
+			"Sansha": [[25611, 25592], [25624, 25605], [25609, 25590]],
+			"Serpentis": [[25623, 25604], [25615, 25596], [25610, 25591], [null, 25589]]
+		},
+		"pairNote": "[T2 typeID, T1 typeID]; the Serpentis Malfunctioning Shield Emitter is T1 only",
+		"dominantShare": 0.5,
+		"dominantNote": "One item worth half or more of an estimate is named in the tooltip with the estimate without it; it is not capped (there is no sourced ceiling to cap it at)."
+	},
+	"families": [
+		{ "prefix": "Ruined", "kind": "relic", "where": "null-sec, C1-C3 wormholes", "status": "estimate", "value": "model", "source": "eveuniRDS",
+		  "layouts": {
+			"Monument Site": { "rubble": 2, "remains": 3, "ruins": 1 },
+			"Temple Site": { "rubble": 1, "remains": 3, "ruins": 2 },
+			"Science Outpost": { "rubble": 0, "remains": 4, "ruins": 2 },
+			"Crystal Quarry": { "rubble": 1, "remains": 3, "ruins": 3 }
+		  } },
+		{ "prefix": "Ruined", "factions": ["Rogue Drone"], "kind": "relic", "where": "drone regions, C1-C3 wormholes", "status": "unverified", "source": "eveuniRDS",
+		  "names": ["Monument Site", "Temple Site", "Science Outpost", "Crystal Quarry"],
+		  "reason": "EVE University says Rogue Drone relic sites can drop every pirate faction's salvage, but at unknown chances, so the expected-loot model can't be used." },
+		{ "prefix": "Decayed", "kind": "relic", "where": "low-sec", "status": "approximate", "value": "range", "range": [1000000, 10000000],
+		  "source": "signalCartel", "sourceDate": "page of 2024-01-07, prices of 2023", "sourceNote": "Signal Cartel: low-sec relic sites typically yield 1M to 10M ISK",
+		  "names": ["Excavation", "Particle Accelerator", "Collision Site", "Mass Grave", "Lone Vessel", "Rock Formation", "Mining Installation", "Quarry"] },
+		{ "prefix": "Crumbling", "kind": "relic", "where": "high-sec", "status": "approximate", "value": "range", "range": [0, 2000000],
+		  "source": "signalCartel", "sourceDate": "page of 2024-01-07, prices of 2023", "sourceNote": "Signal Cartel: high-sec relic sites rarely exceed 2M ISK",
+		  "names": ["Antiquated Outpost", "Excavation", "Crystal Quarry", "Solar Harvesters", "Explosive Debris", "Stone Formation", "Abandoned Colony", "Mining Installation"] },
+		{ "prefix": "Central", "kind": "data", "where": "null-sec, C1-C3 wormholes", "status": "approximate", "value": "range", "range": [5000000, 15000000], "typical": 8000000,
+		  "source": "signalCartel", "sourceDate": "page of 2024-01-07, and EVE Online forum thread 294175 of 2021-02", "sourceNote": "Signal Cartel: roughly 8M ISK for a wormhole data site; forum (2021): more likely a 5M site than a 15M one",
+		  "names": ["Sparking Transmitter", "Survey Site", "Command Center", "Data Mining Site"] },
+		{ "prefix": "Regional", "kind": "data", "where": "low-sec", "status": "unverified", "source": "signalCartel",
+		  "names": ["Data Fortress", "Mainframe", "Command Center", "Data Processing Center", "Data Mining Site", "Data Terminal", "Backup Server", "Secure Server"],
+		  "reason": "No figure published; Signal Cartel (2024-01) only says low-sec data sites are not much better than many high-sec ones." },
+		{ "prefix": "Local", "kind": "data", "where": "high-sec", "status": "approximate", "value": "range", "range": [2000000, 4000000],
+		  "source": "signalCartel", "sourceDate": "page of 2024-01-07, prices of 2023", "sourceNote": "Signal Cartel: an average high-sec (Gallente) data site is 2M to 4M ISK; it depends on the region",
+		  "names": ["Mainframe", "Virus Test Site", "Data Processing Center", "Shattered Life-Support Unit", "Data Terminal", "Production Installation", "Backup Server", "Minor Shipyard"] },
+		{ "prefixes": ["Lesser", "Standard", "Improved", "Superior"], "suffix": "Covert Research Facility", "kind": "data", "where": "ghost site", "status": "unverified", "source": "ccpRework2025",
+		  "reason": "Ghost sites were rebalanced on 2025-07-17 and no figures have been published since; older ones (Signal Cartel, 2024-01) are out of date. The site explodes after a timer, and rats warp in." }
+	],
 	"fallbackPrices": {
 		"date": "2026-11-15",
 		"source": "ESI /markets/prices/ average_price",
 		"prices": {
 			"30370": 5252.54, "30371": 4412.18, "30372": 8405.65, "30373": 6321.95, "30374": 8746.84,
 			"30375": 12365.74, "30376": 21180.33, "30377": 35403.64, "30378": 56236.6,
-			"62536": 190.9, "62568": 3653.26, "62564": 3334.56, "62524": 25.74, "62532": 112.03, "62552": 2243.68
+			"62536": 190.9, "62568": 3653.26, "62564": 3334.56, "62524": 25.74, "62532": 112.03, "62552": 2243.68,
+			"25588": 2323.66, "25589": 815.63, "25590": 99740.45, "25591": 59622.6, "25592": 9265.39, "25593": 4530.49, "25594": 77058.74, "25595": 2182.16,
+			"25596": 2327.13, "25597": 637.62, "25598": 2970.27, "25599": 715.2, "25600": 40886.24, "25601": 6251.3, "25602": 7331.32, "25603": 3911.99,
+			"25604": 17047.68, "25605": 31855.35, "25606": 9257.09, "25607": 171828.92, "25608": 319803.14, "25609": 1610271.29, "25610": 2252552.05,
+			"25611": 137180.39, "25612": 502689.93, "25613": 313817.48, "25614": 73484.14, "25615": 37842.74, "25616": 1251.22, "25617": 235998.22,
+			"25618": 4689.23, "25619": 1805652.89, "25620": 18370.55, "25621": 90386.59, "25622": 167284.28, "25623": 4837.01, "25624": 1690174.38,
+			"25625": 811397.87
 		}
 	},
 	"types": {
@@ -33,7 +101,45 @@
 		"1229": { "name": "Gneiss", "m3": 5, "priceAs": 62552 },
 		"20": { "name": "Kernite", "m3": 1.2, "priceAs": 62536 },
 		"1227": { "name": "Omber", "m3": 0.6, "priceAs": 62532 },
-		"1224": { "name": "Pyroxeres", "m3": 0.3, "priceAs": 62524 }
+		"1224": { "name": "Pyroxeres", "m3": 0.3, "priceAs": 62524 },
+		"25588": { "name": "Scorched Telemetry Processor", "salvage": "T1" },
+		"25589": { "name": "Malfunctioning Shield Emitter", "salvage": "T1" },
+		"25590": { "name": "Contaminated Nanite Compound", "salvage": "T1" },
+		"25591": { "name": "Contaminated Lorentz Fluid", "salvage": "T1" },
+		"25592": { "name": "Defective Current Pump", "salvage": "T1" },
+		"25593": { "name": "Smashed Trigger Unit", "salvage": "T1" },
+		"25594": { "name": "Tangled Power Conduit", "salvage": "T1" },
+		"25595": { "name": "Alloyed Tritanium Bar", "salvage": "T1" },
+		"25596": { "name": "Broken Drone Transceiver", "salvage": "T1" },
+		"25597": { "name": "Damaged Artificial Neural Network", "salvage": "T1" },
+		"25598": { "name": "Tripped Power Circuit", "salvage": "T1" },
+		"25599": { "name": "Charred Micro Circuit", "salvage": "T1" },
+		"25600": { "name": "Burned Logic Circuit", "salvage": "T1" },
+		"25601": { "name": "Fried Interface Circuit", "salvage": "T1" },
+		"25602": { "name": "Thruster Console", "salvage": "T1" },
+		"25603": { "name": "Melted Capacitor Console", "salvage": "T1" },
+		"25604": { "name": "Conductive Polymer", "salvage": "T1" },
+		"25605": { "name": "Armor Plates", "salvage": "T1" },
+		"25606": { "name": "Ward Console", "salvage": "T1" },
+		"25607": { "name": "Telemetry Processor", "salvage": "T2" },
+		"25608": { "name": "Intact Shield Emitter", "salvage": "T2" },
+		"25609": { "name": "Nanite Compound", "salvage": "T2" },
+		"25610": { "name": "Lorentz Fluid", "salvage": "T2" },
+		"25611": { "name": "Current Pump", "salvage": "T2" },
+		"25612": { "name": "Trigger Unit", "salvage": "T2" },
+		"25613": { "name": "Power Conduit", "salvage": "T2" },
+		"25614": { "name": "Single-crystal Superalloy I-beam", "salvage": "T2" },
+		"25615": { "name": "Drone Transceiver", "salvage": "T2" },
+		"25616": { "name": "Artificial Neural Network", "salvage": "T2" },
+		"25617": { "name": "Power Circuit", "salvage": "T2" },
+		"25618": { "name": "Micro Circuit", "salvage": "T2" },
+		"25619": { "name": "Logic Circuit", "salvage": "T2", "priceNote": "Signal Cartel quoted a Jita buy price of 830k for Logic Circuit in August 2023, well under the ESI average this estimate uses.", "priceNoteSource": "signalCartel" },
+		"25620": { "name": "Interface Circuit", "salvage": "T2" },
+		"25621": { "name": "Impetus Console", "salvage": "T2" },
+		"25622": { "name": "Capacitor Console", "salvage": "T2" },
+		"25623": { "name": "Conductive Thermoplastic", "salvage": "T2" },
+		"25624": { "name": "Intact Armor Plates", "salvage": "T2" },
+		"25625": { "name": "Enhanced Ward Console", "salvage": "T2" }
 	},
 	"sites": [
 		{ "name": "Barren Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Barren_Perimeter_Reservoir", "contents": [[30370, 12000], [30371, 6000]] },
@@ -56,6 +162,24 @@
 		{ "name": "Uncommon Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Uncommon_Core_Deposit", "contents": [[22, 40000], [1223, 60000], [1229, 70000], [20, 590000], [1227, 600000], [1224, 500000]] },
 		{ "name": "Unusual Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Unusual_Core_Deposit", "contents": [[22, 70000], [1223, 100000], [1229, 120000], [20, 800000], [1227, 800000]] },
 		{ "name": "Infrequent Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "unverified", "source": "https://wiki.eveuniversity.org/Infrequent_Core_Deposit", "reason": "The EVE University page says its quantities predate the December 2021 mining changes (Version 19.11)." },
-		{ "name": "Shattered Debris Field", "kind": "ore", "classes": "Shattered", "status": "unverified", "source": "https://wiki.eveuniversity.org/Shattered_Debris_Field", "reason": "The EVE University page lists ore variants by their pre-2024 names (Prime Arkonor, Monoclinic Bistot ...), which can't be matched to today's items with certainty." }
+		{ "name": "Shattered Debris Field", "kind": "ore", "classes": "Shattered", "status": "unverified", "source": "https://wiki.eveuniversity.org/Shattered_Debris_Field", "reason": "The EVE University page lists ore variants by their pre-2024 names (Prime Arkonor, Monoclinic Bistot ...), which can't be matched to today's items with certainty." },
+
+		{ "name": "Forgotten Perimeter Coronation Platform", "kind": "relic", "classes": "C1", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 12800000 },
+		{ "name": "Forgotten Perimeter Power Array", "kind": "relic", "classes": "C1", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 9200000 },
+		{ "name": "Forgotten Perimeter Gateway", "kind": "relic", "classes": "C2", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 19100000 },
+		{ "name": "Forgotten Perimeter Habitation Coils", "kind": "relic", "classes": "C2", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 25400000 },
+		{ "name": "Forgotten Frontier Quarantine Outpost", "kind": "relic", "classes": "C3", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": [49500000, 76500000], "conflict": "EVE University's Template:Whisk (2021-03-18) gives 49.5M; the site's own page gives 76.5M." },
+		{ "name": "Forgotten Frontier Recursive Depot", "kind": "relic", "classes": "C3", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": [65500000, 92500000], "conflict": "EVE University's Template:Whisk (2021-03-18) gives 65.5M; the site's own page gives 92.5M." },
+		{ "name": "Forgotten Frontier Conversion Module", "kind": "relic", "classes": "C4", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 115000000 },
+		{ "name": "Forgotten Frontier Evacuation Center", "kind": "relic", "classes": "C4", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 115000000 },
+		{ "name": "Forgotten Core Data Field", "kind": "relic", "classes": "C5", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 279000000 },
+		{ "name": "Forgotten Core Information Pen", "kind": "relic", "classes": "C5", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 330000000 },
+		{ "name": "Forgotten Core Assembly Hall", "kind": "relic", "classes": "C6", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 642500000 },
+		{ "name": "Forgotten Core Circuitry Disassembler", "kind": "relic", "classes": "C6", "status": "estimate", "value": "combat", "source": "eveuniWhisk", "sourceDate": "template of 2021-03-18", "blueLoot": 657600000 },
+
+		{ "name": "Limited Sleeper Cache", "kind": "data", "classes": "k-space", "status": "unverified", "source": "ccpRework2025", "reason": "No reliable figure: Signal Cartel (2024-01) puts Sleeper caches between about 10M (Limited) and over 200M (a very good Superior), and their loot changed on 2025-07-17." },
+		{ "name": "Standard Sleeper Cache", "kind": "data", "classes": "k-space", "status": "unverified", "source": "ccpRework2025", "reason": "No reliable figure: a 2016 forum post says 40-60M of Sleeper loot, and the loot changed on 2025-07-17." },
+		{ "name": "Superior Sleeper Cache", "kind": "data", "classes": "k-space", "status": "unverified", "source": "ccpRework2025", "reason": "No reliable figure: Signal Cartel (2024-01) says a very good one is over 200M; Capital Control Items were added to the loot on 2025-07-17." },
+		{ "name": "Silent Battleground", "kind": "data", "classes": "Shattered", "status": "unverified", "source": "signalCartel", "reason": "Very rare. Signal Cartel (2024-01) says more than 200M ISK and over 500 m3 of loot, but gives no typical value." }
 	]
 }

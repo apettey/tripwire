@@ -3,12 +3,18 @@ const systemPanel = new function() {
 		// Update dependent controls: Path to chain/home
 		const exits = chain.data.exits;
 		var html = [
+			renderFlare(),
 			renderRoute((exits || []).map(function(x) { return x  - 30000000; }), true, 'chain', 'To chain'), 
 			renderRoute(guidance_profiles.blueLootSystems, false, 'blue-loot', 'Blue loot buyer')
 		].filter(function(x) { return x; }).join('');
 		$("#infoExtra").html(html);
 		Tooltips.attach($("#infoExtra [data-tooltip]"));
 	};
+
+	// Fork (ported from upstream 2.0): the viewed system's flare, its reason and how long it lasts (app/js/fork/flare-details.js)
+	function renderFlare() {
+		return typeof flareDetails !== 'undefined' ? flareDetails.panelHtml(flareDetails.find(chain.data.flares, viewingSystemID), flareDetails.nowSec()) : '';
+	}
 	
 	function renderRoute(targets, addPathHome, cssClass, categoryText) {
 		const path = targets ? guidance.findShortestPath(tripwire.map.shortest, viewingSystemID - 30000000, targets) : null;

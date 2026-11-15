@@ -22,7 +22,7 @@ const commandPalette = {
 		return !!e && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (String(e.key || "").toLowerCase() === "k" || e.code === "KeyK");
 	},
 
-	/** Whether the shortcut may open the palette. state: {enabled, editable (focus in CKEditor / contenteditable), modal (a modal dialog is open)} */
+	/** Whether the shortcut may open the palette. state: {enabled, editable (focus in a note editor / contenteditable), modal (a modal dialog is open)} */
 	canOpen: function(state) {
 		return !!state && state.enabled !== false && !state.editable && !state.modal;
 	},
@@ -371,12 +371,12 @@ const commandPalette = {
 
 	currentOptions: function() { return typeof options !== "undefined" ? options : null; },
 
-	/** Focus is in CKEditor or any contenteditable (Ctrl+K inserts a link there) */
+	/** Focus is in the note editor or any contenteditable */
 	inEditable: function() {
 		const el = document.activeElement;
 		if (!el) { return false; }
 		if (el.isContentEditable) { return true; }
-		return !!(el.closest && el.closest("[contenteditable]:not([contenteditable='false']), .cke_editable, .cke"));
+		return !!(el.closest && el.closest("[contenteditable]:not([contenteditable='false']), .rte"));
 	},
 
 	modalOpen: function() {
@@ -863,7 +863,8 @@ const commandPalette = {
 		const nodeOf = function(ctx) { return $("#chainMap [data-nodeid='" + ctx.viewingSystemID + "']").first(); };
 		const onChain = function(ctx) { return commandPalette.onChain(ctx.viewingSystemID) ? true : "Not on the chain map"; };
 		const flare = function(color) {
-			return function(args, ctx) { $("#chainParent").contextmenu("setFlare", ctx.viewingSystemID, color, {}); };
+			// keeps the flare's lifetime and reason (flare-details.js)
+			return function(args, ctx) { return flareDetails.setColour(ctx.viewingSystemID, color); };
 		};
 		const flareEnabled = function(color) {
 			return function(ctx) {

@@ -1,6 +1,42 @@
 {
   "features": [
     {
+      "pr": 177,
+      "date": "2026-11-15",
+      "title": "Relic and data site value",
+      "description": "Relic and data sites now get a value chip in the signature list too. Ruined relic sites show their expected salvage at today's prices (for example \"~26M exp.\"), Forgotten wormhole relic sites show the Sleeper loot from their rats, and other pirate relic and data sites show a rough range (dashed). Sites without a reliable figure show \"?\". Hover a chip to see the breakdown, where the figure comes from and how far to trust it.\n\nWormhole Unsecured data sites get no chip. Turn it off in Settings > Signatures > Site value.",
+      "images": [
+        { "src": "whats-new/img/pr-177-relic-data-site-values.png", "caption": "A Ruined relic site's expected salvage, broken down into T2 and T1 salvage" }
+      ]
+    },
+    {
+      "pr": 176,
+      "date": "2026-11-15",
+      "title": "Flare reason and lifetime",
+      "description": "Flares can now say why and how long. Right-click a system on the map, pick Flares, then Set flare ... to choose the colour, keep it for 1 day or until removed, and add a reason. Everyone on your mask sees the reason in the system panel and by hovering the (i) icon on the flared system. Battle, Hold and Fleet Op still work as before and keep the flare's reason and lifetime.\n\nThis comes from upstream Tripwire 2.0, thanks to its developers. There is no setting for it: flares without a reason look and work as before.",
+      "images": [
+        { "src": "whats-new/img/pr-176-flare-reason-life.png", "caption": "A flare with a reason: the system panel line and the tooltip on the map" }
+      ]
+    },
+    {
+      "pr": 175,
+      "date": "2026-11-15",
+      "title": "New note editor",
+      "description": "System notes have a new, lighter editor in place of the old one, which no longer gets security updates. Bold, lists, indent, links, text size, text colour and highlight work as before; anything unsafe in pasted text is removed before it reaches the note.\n\nThere is no setting for this: it is a security fix. Existing notes look the same.",
+      "images": [
+        { "src": "whats-new/img/pr-175-note-editor.png", "caption": "The note editor with its text colour menu open" }
+      ]
+    },
+    {
+      "pr": 174,
+      "date": "2026-11-15",
+      "title": "Desktop notifications",
+      "description": "Kills in the chain, structure timers, Watchlist matches, chain alerts and Fight here can now also show as desktop notifications while Tripwire is in a background tab or you are in EVE. Click one to jump back to the system.\n\nOpen Settings > General > Desktop notifications and click \"Enable desktop notifications\" so your browser lets Tripwire show them, then pick which alerts you want, or turn it off there. Kill alerts keep their own switch in Settings > Kill Reporting.",
+      "images": [
+        { "src": "whats-new/img/pr-174-desktop-notifications.png", "caption": "Settings > General: allow desktop notifications and pick which alerts reach your desktop" }
+      ]
+    },
+    {
       "pr": 171,
       "date": "2026-11-15",
       "title": "Chain alerts: new holes, home static, exits in jump range",

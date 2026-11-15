@@ -81,7 +81,7 @@ RUN install-php-extensions pdo_mysql gd intl mbstring \
  && mkdir -m 700 -p /var/lib/php/session \
  && chown www-data /var/lib/php/session
 
-# Reuse upstream's PHP / FPM tuning so their changes flow in on merge
+# Reuse upstream's PHP / FPM tuning (.docker/php-fpm/)
 COPY .docker/php-fpm/php.ini /usr/local/etc/php/php.ini
 COPY .docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/php-fpm-local.conf /usr/local/etc/php-fpm.d/zz-local.conf

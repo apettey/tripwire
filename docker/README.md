@@ -4,7 +4,8 @@ This repo is a fork of [daimian/tripwire](https://bitbucket.org/daimian/tripwire
 that adds a single self-contained Docker image, published as
 [`petdog/tripwire`](https://hub.docker.com/r/petdog/tripwire), plus a local dev stack.
 
-Everything fork-specific lives in new files so upstream syncs stay conflict-free:
+The fork no longer syncs with upstream (decided 2026-11-15); useful upstream changes are ported one at a
+time as ordinary features (see [Upstream](#upstream)). Fork-specific infrastructure lives in its own files:
 
 | Path | Purpose |
 | --- | --- |
@@ -12,10 +13,11 @@ Everything fork-specific lives in new files so upstream syncs stay conflict-free
 | `docker-compose.dev.yml` | Local development stack |
 | `docker-compose.prod.yml` | Example production stack using the published image (port bound to `127.0.0.1`, for a TLS proxy on the same host) |
 | `.env.example` | Settings template for both compose files |
-| `.github/` | Release + Docker Hub publish and weekly upstream sync workflows, `upstream-base`, version and sync scripts |
+| `.github/` | CI, release + Docker Hub publish and infra-deploy workflows, version and infra-PR scripts |
 | `AGENTS.md`, `changes/` | Working rules and the change log |
 
-Avoid editing upstream files unless you mean to diverge; every edit is a potential sync conflict.
+Editing upstream files is fine; new features still go in fork-owned files (`app/js/fork/`, `app/css/fork/`) so
+they stay modular and testable (see [AGENTS.md](../AGENTS.md) §3).
 
 In production use `docker-compose.prod.yml` (or your own stack built on `petdog/tripwire`), never upstream's
 `docker-compose.yml`: that one is upstream's own setup (Traefik with its insecure API dashboard, its own nginx image, public ports) and does not get
@@ -1065,6 +1067,46 @@ staging systems. A small map icon next to each system opens it on the region map
   >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
   outnumber jumps.
 
+### Flares
+
+A flare (right-click a system > Flares) has a colour, a lifetime (1 day or until removed) and an optional reason of at
+most 200 characters, ported from upstream Tripwire 2.0. Code: `flares/flares.inc.php` (storage, validation, schema),
+`public/flares.php` (set / remove, CSRF, the session's mask only), `public/refresh.php` (the list, with the reason and
+lifetime; expired flares are left out) and `app/js/fork/flare-details.js`. Tests: `php flares/tests/flares_test.php`.
+
+Schema: upstream's `flares` table has two more columns, `lifeLength` (seconds, `NULL` = until removed, default 86400) and
+`reason` (`varchar(255)`, `NULL` = none). A fresh install gets them from `.docker/mysql/tripwire.sql`. An existing
+database gets them automatically the first time someone sets a flare after the update: `public/flares.php` runs
+`flares_ensure_schema_once()`, which adds them (`ALTER TABLE ... ADD COLUMN`, needs `ALTER`). Flares from before keep
+their 24 hours. Until then the flare list (`public/refresh.php`, which never changes the schema) reads the old columns,
+and removing a flare never needs the new ones.
+
+The `flaresClean` event (hourly) deletes each flare when its own lifetime is over:
+`DELETE FROM flares WHERE lifeLength IS NOT NULL AND time < NOW() - INTERVAL lifeLength SECOND`. The same call changes an
+older event that deleted every flare after 24 hours with `ALTER EVENT` (in place, so there is never a moment without
+one; it creates the event only when it is missing). That needs the `EVENT` privilege, and the event's definer becomes the
+app user, as for the events the schema import created. The app user has both privileges when it owns its database (the
+usual setup, see above), so nothing needs doing by hand.
+
+The outcome is kept in `cache/flares-schema.json` together with which database it was for (server UUID, schema name and
+when the `flares` table was created). `cache/` is a volume in production, so the file survives redeploys: once done,
+setting a flare only reads that database identity. A restored or moved database (a dump re-creates the table, often
+without its events) has another identity, so the check runs again by itself. Deleting the file is always safe: it only
+makes the next flare set check again; do that after restoring a database in a way that keeps the table (for example a
+copy of the data directory). A failure is logged once as `[flares] could not update the schema` and tried again
+after an hour, not on every request. Then an admin runs this once against the Tripwire database (until the columns
+exist, flares can be removed but not set; until the event is changed, flares still expire on time in the app, but one set
+to last until removed is deleted after 24 hours), and deletes `cache/flares-schema.json`:
+
+```sql
+ALTER TABLE flares ADD COLUMN lifeLength int NULL DEFAULT 86400,
+  ADD COLUMN reason varchar(255) CHARACTER SET utf8mb4 NULL DEFAULT NULL;
+ALTER EVENT flaresClean DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
+```
+
+Re-colouring a flare (Battle / Hold / Fleet Op, the palette) keeps the time it was set, so its lifetime runs on; saving it
+in the Set flare dialog starts the lifetime again (`restart=1`).
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
@@ -1097,9 +1139,9 @@ Only what the running app needs: the PHP sources, `api/`, `public/` (with the bu
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
 files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`, `watchlist/tests/`, `jumprange/tests/`, `jumprange/tools/`, `fight/tests/`) from the build context
-before copying it in; if upstream adds new non-runtime files, add them to that list.
+before copying it in; if a change (or a ported upstream change) adds new non-runtime files, add them to that list.
 
-If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
+If a change (or a ported upstream change) adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
 files) too.
 
 ## Publishing
@@ -1241,25 +1283,20 @@ One-time setup (owner):
 It must not be `GITHUB_TOKEN`: PRs and merges made with it start no workflows, so infra's checks and
 deploy would never run. PRs and auto-merges appear as made by the token's owner.
 
-## Pulling upstream changes
+## Upstream
 
-This repo was started from a snapshot of upstream and does **not** share its git history.
-`.github/upstream-base` records the upstream commit our code matches.
-`.github/scripts/sync-upstream.sh` applies everything upstream changed since then as a 3-way merge
-and bumps that file.
+This repo was started on 2026-10-10 from a snapshot of upstream
+[daimian/tripwire](https://bitbucket.org/daimian/tripwire) (`production` at `6682a89`), without upstream's
+git history. It no longer syncs with upstream: the automatic sync (workflow, script and `upstream-base`
+file) was removed on 2026-11-15 because the fork had drifted too far.
 
-`.github/workflows/upstream-sync.yml` runs it weekly (or on demand from the Actions tab) and opens a
-PR from the `upstream-sync` branch. Any merge style is fine. If upstream's changes conflict with ours,
-the job fails and you sync locally:
+To port a useful upstream change, treat it as an ordinary feature or fix: read the upstream commit, adapt
+it to the fork's code, and credit the upstream commit (hash and link) in the change-log entry. For example:
 
 ```bash
-git checkout main && git pull
-git checkout -b upstream-sync-manual
-.github/scripts/sync-upstream.sh      # exit 2 = conflicts: fix markers, git add
-git commit -m "Sync upstream Tripwire"
+git fetch https://bitbucket.org/daimian/tripwire.git production
+git log FETCH_HEAD          # find the commit, then: git show <sha>
 ```
 
-One-time setup: Settings > Actions > General > Workflow permissions > enable
-**Allow GitHub Actions to create and approve pull requests**, or the PR step fails.
-PRs opened by that workflow don't trigger other workflows, so the Docker build check runs after
-merge. To check it first, close and reopen the PR.
+The release still reports the upstream Tripwire version the code is based on (`VERSION` in `settings.php`,
+the `upstream-<version>` image tag).

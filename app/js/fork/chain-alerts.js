@@ -327,6 +327,28 @@ const chainAlerts = {
 			+ "</div>";
 	},
 
+	// ---- Home static pop-ups raised in a background tab (pure) ----
+	// Its pop-up would close itself after NOTICE_MS before anyone looks, so it waits for the tab to come back (the desktop
+	// notification goes out at once). Only the latest stage per hole waits; new holes and exits in range don't wait.
+
+	/** Remember a home static alert ({hole, stage}) to show when the tab is back: the latest stage per hole. Returns pending. */
+	queueStatic: function(pending, alert) {
+		if (alert && alert.hole) { pending[String(alert.hole.id)] = alert.stage; }
+		return pending;
+	},
+
+	/** The waiting alerts still worth a pop-up when the tab is back: the hole is still home's static and still at the
+	 *  stage it was queued with (gone or moved on: dropped). @return [{key, hole, stage, remaining}] as staticAlerts */
+	staticOnReturn: function(pending, holes, homeID, statics, now) {
+		const out = [];
+		(holes || []).forEach(function(h) {
+			const stage = pending ? pending[String(h.id)] : undefined;
+			if (stage === undefined || !chainAlerts.isHomeStatic(h, homeID, statics) || chainAlerts.lifeState(h, now) !== stage) { return; }
+			out.push({ key: h.id + ":" + stage, hole: h, stage: stage, remaining: chainAlerts.remaining(h, now) });
+		});
+		return out;
+	},
+
 	/** Keys to keep in storage: the last `max` */
 	trim: function(shown, max) {
 		const keys = Object.keys(shown || {});
@@ -371,13 +393,37 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			try { window.localStorage.setItem(ca.STATIC_KEY, JSON.stringify(staticShown)); } catch (e) { /* memory only */ }
 		}
 
-		function show(kind, t, systemID) {
-			if (typeof jBox === "undefined") { return; }
+		let pendingStatic = {};		// home static alerts raised in a background tab: holeID -> stage (queueStatic)
+
+		function notice(kind, t, systemID) {
 			const name = systems()[systemID] ? systems()[systemID].name : "";
 			new jBox("Notice", {
 				content: ca.noticeHtml(kind, t.title, t.text, systemID, name), color: kind === "homeStatic" ? "yellow" : "blue",
 				autoClose: ca.NOTICE_MS, closeOnClick: false, offset: { y: 35 }, animation: "flip", addClass: "chain-alert-notice"
 			});
+		}
+
+		/** The tab is back: the home static pop-ups that waited, if still true (latest stage per hole, from now) */
+		function flushStatic() {
+			if (document.hidden || !Object.keys(pendingStatic).length) { return; }
+			const pending = pendingStatic;
+			pendingStatic = {};
+			if (typeof jBox === "undefined" || !current().homeStatic) { return; }
+			const client = (typeof tripwire !== "undefined" && tripwire.client) || {};
+			const home = homeID();
+			const sys = home ? systems()[home] : null;
+			ca.staticOnReturn(pending, ca.holes(client.wormholes, client.signatures), home, sys && sys.statics, Date.now()).forEach(function(a) {
+				notice("homeStatic", ca.staticText(a, systems(), generic()), home);
+			});
+		}
+
+		/** pending: a home static alert {hole, stage} to queue instead of opening its pop-up now (background tab) */
+		function show(kind, t, systemID, key, pending) {
+			if (typeof jBox === "undefined") { return; }
+			const name = systems()[systemID] ? systems()[systemID].name : "";
+			if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.chainAlertNote(kind, t, key !== undefined ? key : systemID), function() { if (name) { tripwire.systemChange(systemID); } }); }
+			if (pending) { ca.queueStatic(pendingStatic, pending); }
+			else { notice(kind, t, systemID); }
 			if (typeof forkUsage !== "undefined") {
 				if (kind === "newHole") { forkUsage.track("chainAlerts", "alert_hole"); }
 				else if (kind === "homeStatic") { forkUsage.track("chainAlerts", "alert_static"); }
@@ -450,7 +496,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const ctx = { homeID: home, chain: lastChain, scope: s.scope, meID: meID() };
 			if (s.newHole) {
 				ca.newHoleAlerts(d.fresh, ctx).forEach(function(a) {
-					show("newHole", ca.holeText(a, systems(), generic()), a.hole[a.near]);
+					show("newHole", ca.holeText(a, systems(), generic()), a.hole[a.near], a.hole.id);
 				});
 			}
 			if (s.capRange && typeof jumpPlanner !== "undefined" && jumpPlanner.settings(opts()).enabled) {
@@ -467,14 +513,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			if (!due.length) { return; }
 			due.forEach(function(a) {
 				staticShown[a.key] = true;
-				show("homeStatic", ca.staticText(a, systems(), generic()), home);
+				show("homeStatic", ca.staticText(a, systems(), generic()), home, a.hole.id, document.hidden ? a : null);
 			});
 			storeStatic();
 		}
 
 		/** Every TICK_MS: the static's life moves on with time, without a chain change */
 		function tick() {
-			if (document.hidden || !current().homeStatic) { return; }
+			if (!current().homeStatic) { return; }
+			if (document.hidden && !(typeof forkDesktopNotify !== "undefined" && forkDesktopNotify.wanted("homeStatic"))) { return; }	// (kept up in the background for desktop notifications)
 			const client = (typeof tripwire !== "undefined" && tripwire.client) || {};
 			if (!client.wormholes) { return; }
 			try { checkStatic(ca.holes(client.wormholes, client.signatures), homeID()); } catch (e) { console.error("Chain alerts: static check failed", e); }
@@ -504,6 +551,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		$(function() {
 			installHook();
 			setInterval(tick, ca.TICK_MS);
+			document.addEventListener("visibilitychange", flushStatic);	// the one listener for waiting home static pop-ups
 			$(document).on("click", ".chain-alert .chain-alert-open", function() {
 				if (typeof forkUsage !== "undefined") { forkUsage.track("chainAlerts", "clicked"); }
 			});

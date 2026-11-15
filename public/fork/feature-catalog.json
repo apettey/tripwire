@@ -5,7 +5,8 @@
   "generic": ["hint_shown", "hint_acted", "wn_listed"],
   "skip": [
     { "pr": 34, "why": "game data refresh (ship masses, Pochven holes), nothing to use" },
-    { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" }
+    { "pr": 62, "why": "Settings reorganised into sections, not a feature of its own" },
+    { "pr": 175, "why": "security fix: note editor replaced (CKEditor end of life), nothing new to use" }
   ],
   "features": [
     { "id": "whatsNew", "try": "app.whatsNew", "title": "What's New", "section": "general", "prs": [1], "settingsKey": null,
@@ -29,6 +30,10 @@
     { "id": "notifications", "title": "Pop-up corner and closing", "section": "general", "prs": [152], "settingsKey": "notifications",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["closed_all", "moved"],
       "success": "corner moved or Close all used by >=15% of active users by day 28" },
+    { "id": "desktopNotify", "title": "Desktop notifications", "section": "general", "prs": [174], "settingsKey": "desktopNotify",
+      "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["granted", "clicked"],
+      "events": ["denied", "shown"],
+      "success": "allowed by >=15% of active users by day 28; denied or switched off by <30% of those asked" },
     { "id": "soundMute", "title": "Mute button", "section": "general", "prs": [71], "settingsKey": "soundMute",
       "stage": "core", "audience": "all", "kind": "active", "commands": ["sound.toggle"], "panels": [], "use": ["toggled"], "exposed": "#sound-mute" },
     { "id": "apiTokens", "title": "API tokens for scripts and bots", "section": "general", "prs": [96], "settingsKey": null,
@@ -51,6 +56,10 @@
     { "id": "rolling", "title": "Rolling: show which holes we are rolling", "section": "markers", "prs": [63], "settingsKey": "rolling",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rolling.mark", "rolling.stop"], "panels": [], "use": ["marked"],
       "exposed": ".hole-rolling-marker" },
+    { "id": "flareDetails", "title": "Flare reason and lifetime", "section": "markers", "prs": [176], "settingsKey": null,
+      "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["chain.flareSet"], "panels": [], "use": ["saved"],
+      "exposed": ".fork-flare-mark",
+      "success": "a reason or Until removed saved by >=20% of users who flare a system, by day 28" },
     { "id": "fightHere", "title": "Fight here", "section": "markers", "prs": [5, 51], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rally.fightHere", "rally.clear"], "panels": [], "use": ["set"],
       "exposed": ".rally-icon" },
@@ -114,7 +123,7 @@
       "success": "undo used by >=15% of active users by day 28, refused (conflict) steps <5% of undos" },
     { "id": "lifeStates", "title": "Wormhole life: Stable, <4h, <1h, EOL", "section": "signatures", "prs": [104, 109], "settingsKey": "lifeStates",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
-    { "id": "siteValues", "title": "Gas and ore site value", "section": "signatures", "prs": [165], "settingsKey": "siteValues",
+    { "id": "siteValues", "title": "Site value (gas, ore, relic and data)", "section": "signatures", "prs": [165, 177], "settingsKey": "siteValues",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".site-value-chip",
       "success": "shown to >=30% of active users by day 28, opt-out <10%" },
     { "id": "campaignTags", "title": "Campaign and Fabricator tags", "section": "signatures", "prs": [168], "settingsKey": "campaignTags",

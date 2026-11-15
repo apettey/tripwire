@@ -144,9 +144,8 @@ const forkHintsUI = {
 			lastKill: s.lastKill,
 			lastPaste: s.lastPaste,
 			dialogOpen: forkHintsUI.dialogOpen(hint && hint.dialog),
-			// CKEditor (comments, notes) types inside an iframe: focus on an IFRAME, or an editor instance with the focus
-			inputFocused: !!(a && a !== document.body && a.id !== "clipboard" && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT|IFRAME)$/.test(a.tagName)))
-				|| !!(typeof CKEDITOR !== "undefined" && CKEDITOR && CKEDITOR.currentInstance),
+			// The note editor is a contenteditable box; an IFRAME with the focus is typing somewhere else
+			inputFocused: !!(a && a !== document.body && a.id !== "clipboard" && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT|IFRAME)$/.test(a.tagName))),
 			dragging: s.dragging,
 			popupOpen: forkHintsUI.popupOpen(),
 			fightHere: fight

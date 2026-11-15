@@ -18,7 +18,7 @@
 // attributes and rebuilds the markup.
 
 var sanitiseHtml = (function() {
-	// Formatting CKEditor produces, and nothing that can navigate or execute.
+	// Formatting the note editor (and CKEditor before it) produces, and nothing that can navigate or execute.
 	var ALLOWED_TAGS = {
 		b:1, i:1, em:1, strong:1, u:1, s:1, strike:1, sub:1, sup:1, code:1, small:1,
 		font:1, span:1, p:1, br:1, hr:1, div:1, pre:1, blockquote:1,
