@@ -65,7 +65,8 @@ describe('Gas and ore site value', () => {
 		const est = siteValues.estimate(index['rarified core deposit'], d, { 3: 1, 9: 3000 });
 		assert.strictEqual(est.total, 100000 * 3000);
 		assert.strictEqual(est.lines[0].compressed, true);
-		assert.ok(siteValues.tooltip(index['rarified core deposit'], est).indexOf('priced as compressed ore') > 0);
+		assert.ok(siteValues.tooltip(index['rarified core deposit'], est).indexOf('compressed ore price (each mined unit compresses into one compressed unit)') > 0);
+		assert.strictEqual(est.lines[0].price, 3000, 'units x compressed price, no extra division');
 		assert.strictEqual(siteValues.estimate(index['rarified core deposit'], d, null).missing[0], 'Rock');
 	});
 
@@ -111,7 +112,9 @@ describe('Gas and ore site value', () => {
 		assert.ok(tip.indexOf('~1.2B ISK') > 0);
 		assert.ok(tip.indexOf('of 2026-11-15 (live prices unavailable)') > 0);
 		const live = siteValues.tooltip(site, siteValues.estimate(site, data, { 1: 1, 2: 1 }), '2026-11-15');
-		assert.ok(live.indexOf('updated hourly') > 0);
+		assert.ok(live.indexOf('updated hourly.') > 0);
+		const mixed = siteValues.tooltip(site, siteValues.estimate(site, data, { 2: 1 }), '2026-11-15');
+		assert.ok(mixed.indexOf('updated hourly; Gas A at the price of 2026-11-15 (no live price)') > 0, mixed);
 		const ore = index['rarified core deposit'];
 		assert.ok(siteValues.tooltip(ore, siteValues.estimate(ore, data, null)).indexOf('Approximate') > 0);
 		const odd = index['shattered debris field'];

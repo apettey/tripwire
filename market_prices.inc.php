@@ -29,15 +29,16 @@ function market_prices_types(?string $sitesFile = null) {
 	return $ids;
 }
 
-/** {typeID: price} for the wanted types from ESI's body (average_price, else adjusted_price), or null if it isn't the expected shape */
+/** {typeID: price} for the wanted types from ESI's body, or null if it isn't the expected shape. Only average_price (the
+market average) counts: adjusted_price is CCP's industry/tax value, often far off the market (a type without an average
+is left out, and the browser uses the price stored in sites.json for it). */
 function market_prices_parse($body, array $wanted) {
 	$rows = json_decode((string) $body, true);
 	if (!is_array($rows) || ($rows && !isset($rows[0]))) return null;
 	$prices = array();
 	foreach ($rows as $row) {
 		if (!is_array($row) || !isset($row['type_id']) || !isset($wanted[(int) $row['type_id']])) continue;
-		$price = isset($row['average_price']) && is_numeric($row['average_price']) && $row['average_price'] > 0 ? $row['average_price']
-			: (isset($row['adjusted_price']) && is_numeric($row['adjusted_price']) && $row['adjusted_price'] > 0 ? $row['adjusted_price'] : null);
+		$price = isset($row['average_price']) && is_numeric($row['average_price']) && $row['average_price'] > 0 ? $row['average_price'] : null;
 		if ($price !== null) $prices[(string) (int) $row['type_id']] = round((float) $price, 2);
 	}
 	return $prices;
@@ -82,7 +83,14 @@ function market_prices_fetch_esi(array $wanted) {
 	[$status, $body] = esi_request('GET', MARKET_PRICES_URL, array('Accept: application/json'), null, 20);
 	if ($status !== 200) return array(null, $status === -1 ? (string) $body : 'ESI answered ' . $status);
 	$prices = market_prices_parse($body, $wanted);
-	return $prices === null ? array(null, 'ESI answered with an unexpected body') : array($prices, null);
+	if ($prices === null) return array(null, 'ESI answered with an unexpected body');
+	return array($prices, null);
+}
+
+/** Whether a refresh result is complete enough to replace the copy: at least half the wanted types have a price
+(an empty or cut-off answer would otherwise wipe good prices for an hour) */
+function market_prices_enough(array $prices, array $wanted) {
+	return count($wanted) > 0 && count($prices) * 2 >= count($wanted);
 }
 
 /**
@@ -109,6 +117,10 @@ function market_prices_get(?callable $fetch = null, $now = null, ?string $file =
 				if ($due($cache)) {
 					[$prices, $error] = $fetch($wanted);
 					$cache['attempted'] = $now;
+					if ($prices !== null && !market_prices_enough($prices, $wanted)) {
+						$error = 'ESI answered with prices for only ' . count($prices) . ' of ' . count($wanted) . ' items';
+						$prices = null;
+					}
 					if ($prices !== null) {
 						$cache['fetched'] = $now;
 						$cache['prices'] = $prices;

@@ -77,7 +77,7 @@ const siteValues = {
 			if (!p) { out.missing.push(type.name); return; }
 			if (!p.live) { out.live = false; }
 			const isk = units * p.price;
-			out.lines.push({ name: String(type.name), units: units, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk, compressed: !!type.priceAs });
+			out.lines.push({ name: String(type.name), units: units, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk, compressed: !!type.priceAs, live: p.live });
 			out.total += isk;
 		});
 		if (!out.lines.length) { out.status = "unverified"; out.live = false; }
@@ -132,9 +132,15 @@ const siteValues = {
 		const notes = [];
 		if (site.kind === "gas") { notes.push("Two clouds; Sleepers usually arrive 15-20 min after the first ship lands."); }
 		if (est.status === "approximate") { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
-		if (est.lines.some(function(l) { return l.compressed; })) { notes.push("Ore is priced as compressed ore (1 unit compresses to 1 unit)."); }
+		if (est.lines.some(function(l) { return l.compressed; })) { notes.push("Ore is valued at the compressed ore price (each mined unit compresses into one compressed unit)."); }
 		if (est.missing.length) { notes.push("No price for " + e(est.missing.join(", ")) + "."); }
-		notes.push(est.live ? "Prices: ESI average market price, updated hourly." : "Prices: ESI average market price of " + e(pricesDate || "an earlier date") + " (live prices unavailable).");
+		const stored = est.lines.filter(function(l) { return !l.live; });
+		if (!stored.length) { notes.push("Prices: ESI average market price, updated hourly."); }
+		else if (stored.length === est.lines.length) { notes.push("Prices: ESI average market price of " + e(pricesDate || "an earlier date") + " (live prices unavailable)."); }
+		else {
+			notes.push("Prices: ESI average market price, updated hourly; " + e(stored.map(function(l) { return l.name; }).join(", "))
+				+ " at the price of " + e(pricesDate || "an earlier date") + " (no live price).");
+		}
 		notes.push("Contents: EVE University wiki.");
 		return head + "<table class=\"site-value-table\">" + rows + total + "</table>"
 			+ "<div class=\"site-value-notes\">" + notes.join("<br>") + "</div>";
@@ -182,7 +188,8 @@ const siteValues = {
 			const tip = siteValues.tooltip(site, est, siteValues.data.fallbackPrices && siteValues.data.fallbackPrices.date);
 			if ($chip.length && $chip.text() === text && $chip.attr("data-tooltip") === tip) { return; }
 			if (!$chip.length) {
-				$chip = $("<span class=\"site-value-chip\"></span>").appendTo($cell);
+				// first in the cell: it floats right, so in a narrow cell the name wraps beside it instead of pushing it out
+				$chip = $("<span class=\"site-value-chip\"></span>").prependTo($cell);
 			}
 			$chip.text(text).attr("data-tooltip", tip)
 				.toggleClass("site-value-approx", est.status === "approximate")
