@@ -374,7 +374,7 @@ describe('Discord notifications', function() {
 
 	describe('Preserve mass type', function() {
 		it('is a type of its own, after the others', function() {
-			assert.strictEqual(dn.KINDS[dn.KINDS.length - 3], 'preserveMass');
+			assert.strictEqual(dn.KINDS[dn.KINDS.indexOf('structureTimer') - 2], 'preserveMass');
 			assert.strictEqual(dn.LABELS.preserveMass, 'Preserve mass');
 			assert.ok(/strikes through the message/.test(dn.HELP.preserveMass) && /Every member's change is posted/.test(dn.HELP.preserveMass));
 		});
@@ -431,8 +431,8 @@ describe('Discord notifications', function() {
 	});
 
 	describe('Structure timers type', function() {
-		it('is the last type, with its label and help', function() {
-			assert.strictEqual(dn.KINDS[dn.KINDS.length - 1], 'structureTimer');
+		it('comes before the chain alert types, with its label and help', function() {
+			assert.strictEqual(dn.KINDS[dn.KINDS.length - 3], 'structureTimer');
 			assert.strictEqual(dn.LABELS.structureTimer, 'Structure timers');
 			assert.ok(/latest due reminder/.test(dn.HELP.structureTimer));
 		});
@@ -457,6 +457,47 @@ describe('Discord notifications', function() {
 			assert.ok(html.indexOf("<input type='checkbox' class='dn-lead' value='0' checked />") > 0);
 			assert.ok(html.indexOf("<input type='checkbox' class='dn-hostileOnly' />") > 0);
 			assert.ok(html.indexOf("<code title='when &lt;b&gt;'>{endsEve}</code>") > 0);
+		});
+	});
+
+	describe('New hole / home static types', function() {
+		it('are the last two types, with labels and help', function() {
+			assert.deepStrictEqual(dn.KINDS.slice(-2), ['chainHole', 'homeStatic']);
+			assert.strictEqual(dn.LABELS.chainHole, 'New hole in our chain');
+			assert.strictEqual(dn.LABELS.homeStatic, 'Home static <1h / EOL');
+			assert.ok(/one message per hole/.test(dn.HELP.chainHole) && /not announced/.test(dn.HELP.chainHole));
+			assert.ok(/<1h or EOL/.test(dn.HELP.homeStatic));
+		});
+		it('collect "only holes in home" (on unless unticked) and the ticked stages', function() {
+			const v = formValues();
+			v.types.chainHole = Object.assign(v.types.chainHole, { enabled: true, webhookID: '3', homeOnly: false });
+			v.types.homeStatic = Object.assign(v.types.homeStatic, { enabled: true, webhookID: '3', stages: ['expired', 'bogus'] });
+			const r = dn.collectSettings(v);
+			assert.deepStrictEqual(r.errors, []);
+			assert.deepStrictEqual(r.settings.types.chainHole, { enabled: true, webhookID: 3, template: 'T chainHole', ping: '', homeOnly: false });
+			assert.deepStrictEqual(r.settings.types.homeStatic, { enabled: true, webhookID: 3, template: 'T homeStatic', ping: '', stages: ['expired'] });
+			delete v.types.chainHole.homeOnly;
+			v.types.homeStatic.stages = [];
+			const r2 = dn.collectSettings(v);
+			assert.strictEqual(r2.settings.types.chainHole.homeOnly, true);
+			assert.deepStrictEqual(r2.errors, ['Home static <1h / EOL: tick <1h or EOL']);
+		});
+		it('show the home-only box and the stage boxes as saved', function() {
+			const state = { mask: { name: 'Corp' }, encrypted: true, webhooks: [], placeholders: {}, names: {}, outbox: {} };
+			const s = { types: {}, corporations: [], alliances: [], homeSystemID: 1 };
+			dn.KINDS.forEach(k => { s.types[k] = { enabled: false, webhookID: 0, template: 'x', ping: '' }; });
+			s.types.chainHole = { enabled: false, webhookID: 0, template: 'x', ping: '', homeOnly: true };
+			s.types.homeStatic = { enabled: false, webhookID: 0, template: 'x', ping: '', stages: ['lt1h'] };
+			const html = dn.pageHtml(state, s);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-homeOnly' checked /> only holes in the home system") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-stage' value='lt1h' checked /> &lt;1h") > 0);
+			assert.ok(html.indexOf("<input type='checkbox' class='dn-stage' value='expired' /> EOL") > 0);
+		});
+		it('warn without a home system', function() {
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { chainHole: { enabled: true } } }), dn.NO_HOME_ALERTS);
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { homeStatic: { enabled: true } } }), dn.NO_HOME_ALERTS);
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 0, types: { homeStatic: { enabled: true }, chainKill: { enabled: true } } }), dn.NO_HOME);
+			assert.strictEqual(dn.homeWarning({ homeSystemID: 5, types: { homeStatic: { enabled: true } } }), '');
 		});
 	});
 });

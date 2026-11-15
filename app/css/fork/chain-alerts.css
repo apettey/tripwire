@@ -1,0 +1,5 @@
+/* Fork-owned: chain alert pop-ups (app/js/fork/chain-alerts.js), shown as jBox notices in the pop-up dock */
+.chain-alert { max-width: 340px; line-height: 1.35; }
+.chain-alert-title { font-weight: bold; margin-bottom: 2px; }
+.chain-alert-text { word-wrap: break-word; }
+.chain-alert-open { display: inline-block; margin-top: 4px; color: inherit; text-decoration: underline; }
