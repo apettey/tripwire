@@ -9,7 +9,6 @@ const multiTrack = {
 	// changes/2026-10-30-multi-character-jumps/README.md.
 	// Keep `const multiTrack` on the first line: the test helper strips it to define a global.
 
-	CAP: 5,						// opted-in characters used for switching (linking stays unlimited)
 	TICK_MS: 1000,
 	RECENT_MS: 60000,			// a character that jumped is ringed this long
 	FRESH_MS: 10000,			// ...and pulses for the first part of it
@@ -18,12 +17,13 @@ const multiTrack = {
 	NOTICE_MS: 20000,			// the switch notice (longer while a question about that jump is open)
 	AFTER_QUESTION_MS: 6000,	// one sync (5 s): a question's answer, or the active character's own automap, reaches the map
 	PAUSE_MS: 180000,			// no automatic switching for this long after the user picks a character
+	RESUME_MS: 60000,			// back online, no answer count to wait for (debug characters): watched after this
 	NAME_CHARS: 18,				// chip names longer than this keep their start and end ("Bob Sc…r Hauler")
 	PODS: [33328, 670],
 	NO_MAP_SYSTEMS: [30000142, 30002187],	// Jita, Amarr: likely pod-out destinations (as the automapper)
 	SPECIAL_REGION: 12000000,	// abyssal and other special space (as the automapper)
 
-	SETTING_TEXT: "Map jumps of all my tracked characters (up to 5)",	// the Settings row's text; the tip and the catalog title quote it
+	SETTING_TEXT: "Map jumps of all my tracked characters",	// the Settings row's text; the tip and the catalog title quote it
 
 	// ---- Pure logic (tested under mocha) ----
 
@@ -58,19 +58,25 @@ const multiTrack = {
 			.sort(multiTrack.byName(characters));
 	},
 
-	/** The ones used for switching: the first `cap` switched on */
-	optedIn: function(opts, characters, cap) {
-		return multiTrack.switchedOn(opts, characters).slice(0, typeof cap === "number" ? cap : multiTrack.CAP);
+	/** Is the character logged in? Only a known-offline one is not: unknown (first load, failed /online/ request,
+	 *  missing scope) counts as online. Reads esi-offline-skip.js; the page swaps in its own check (debug characters). */
+	isOnline: function(id) {
+		return typeof esiOfflineSkip === "undefined" || !esiOfflineSkip.states || esiOfflineSkip.states[id] !== "offline";
 	},
 
-	/** The tracking list's note when more characters are switched on than are used, or "" */
-	capNote: function(opts, characters) {
-		const n = multiTrack.switchedOn(opts, characters).length;
-		return n > multiTrack.CAP ? "Switching to " + n + " characters on jumps; only " + multiTrack.CAP
-			+ " are used (the first by name). Turn one off with its A icon." : "";
+	/** The switched-on characters that are online, sorted by name. online(id): defaults to multiTrack.isOnline */
+	switchedOnOnline: function(opts, characters, online) {
+		const isOnline = typeof online === "function" ? online : multiTrack.isOnline;
+		return multiTrack.switchedOn(opts, characters).filter(function(id) { return isOnline(id); });
 	},
 
-	/** The strip's characters: the ones used, plus the active one even if it is off or over the cap, sorted by name */
+	/** The ones used for switching: every switched-on character that is online, no limit (an offline one can't jump;
+	 *  it is used again once it logs in) */
+	optedIn: function(opts, characters, online) {
+		return multiTrack.switchedOnOnline(opts, characters, online);
+	},
+
+	/** The strip's characters: the ones used, plus the active one even if it is off or offline, sorted by name */
 	stripIds: function(opts, characters, activeId) {
 		const ids = multiTrack.optedIn(opts, characters);
 		if (ids.length && multiTrack.tracking(activeId) && characters && characters[activeId] && ids.indexOf(String(activeId)) < 0) {
@@ -78,6 +84,32 @@ const multiTrack = {
 			ids.sort(multiTrack.byName(characters));
 		}
 		return ids;
+	},
+
+	/**
+	 * The characters whose moves are watched: the active one and every online one. An offline character's location
+	 * isn't polled (esi-offline-skip.js) and /online/ can say "offline" for ~2 minutes after a login, so it is held
+	 * (its stored system dropped) while offline and, once online, until a location answer arrives after that (stamp(id):
+	 * the page's count of location answers; without a count, RESUME_MS instead). Its first location after a login is
+	 * then a first sighting, not a jump from where it logged off (two jumps in that window would otherwise look like one
+	 * hole that doesn't exist). hold: {id: {stamp, since}}. Returns {ids, hold}.
+	 */
+	watchedIds: function(hold, ids, characters, activeId, online, now, stamp) {
+		const isOnline = typeof online === "function" ? online : multiTrack.isOnline;
+		const stampOf = typeof stamp === "function" ? stamp : function() { return undefined; };
+		const next = {};
+		const out = (ids || []).filter(function(id) {
+			const st = stampOf(id);
+			const held = hold && hold[id];
+			if (String(id) === String(activeId)) { return true; }
+			if (!isOnline(id)) { next[id] = { stamp: st, since: null }; return false; }
+			if (!held) { return true; }
+			const since = typeof held.since === "number" ? held.since : now;
+			if (typeof held.stamp === "number" ? st !== held.stamp : now - since >= multiTrack.RESUME_MS) { return true; }
+			next[id] = { stamp: held.stamp, since: since };
+			return false;
+		});
+		return { ids: out, hold: next };
 	},
 
 	/** A character is being tracked (the user didn't untrack with a click on the active one) */
@@ -343,10 +375,10 @@ const multiTrack = {
 	},
 
 	/** The A switch's tooltip */
-	toggleTitle: function(on, overCap) {
+	toggleTitle: function(on, offline) {
 		if (!on) { return "Switch to this character when it jumps: off (its jumps aren't mapped unless it is active)"; }
-		return overCap ? "Switch to this character when it jumps: on, but over the 5 (turn another one off)"
-			: "Switch to this character when it jumps: on (while switching is paused, its jumps are mapped without switching)";
+		if (offline) { return "Switch to this character when it jumps: on, but it is offline (used once it logs in)"; }
+		return "Switch to this character when it jumps: on (while switching is paused, its jumps are mapped without switching)";
 	},
 
 	/** The active character's name for "Current System (name)", or "" (feature off, fewer than 2 opted in, or the
@@ -415,7 +447,7 @@ const multiTrack = {
 		else if (state.stale) { parts.push("location not updating (" + state.stale + ")"); }
 		if (state.active) {
 			parts.push("Active character (Current System, Follow, destination)");
-			if (!state.mapped) { parts.push("not switched to automatically (its A switch is off or over the 5)"); }
+			if (!state.mapped) { parts.push("not switched to automatically (its A switch is off or it is offline)"); }
 			if (state.paused) { parts.push("Auto-switch paused " + multiTrack.clock(state.pausedMs) + "; other characters' jumps are still mapped · click to resume"); }
 		} else {
 			parts.push("Click to make this the active character");
@@ -480,7 +512,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		const debugCharacters = {};
 		const state = {
-			last: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null, pendingBack: null, cancelled: [],
+			last: {}, hold: {}, jumps: {}, queue: [], silent: [], recent: [], pausedUntil: 0, prevActive: null, prevPicked: null, pendingBack: null, cancelled: [],
 			lastSwitch: null, stripKey: null, labelKey: null, togglesOn: null, fitLevel: 0, noticeUntil: 0
 		};
 		let originalLabel = null;
@@ -505,6 +537,16 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const $bar = $("#tracking .tracking-clone[data-characterid='" + id + "'] .online");
 			return !($bar.length && $bar.hasClass("critical"));
 		}
+		multiTrack.isOnline = onlineOf;	// every optedIn() (and esi-offline-skip.js's keep list) sees the debug characters too
+		// Location answers per character (upstream's 5 s poll; the global event fires after its done() stored the system)
+		const locationAnswers = {};
+		$(document).ajaxSuccess(function(e, xhr, settings) {
+			if (settings && settings.characterID && /\/characters\/\d+\/location\//.test(settings.url || "")) {
+				const id = String(settings.characterID);
+				locationAnswers[id] = (locationAnswers[id] || 0) + 1;
+			}
+		});
+		function answersOf(id) { return debugCharacters[id] ? undefined : locationAnswers[id] || 0; }
 		/** Why a character's location isn't updating ("" if it is): expired token, or ESI paused for it */
 		function staleOf(id) {
 			const c = esiCharacters()[id];
@@ -718,7 +760,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				}
 			}
 
-			const result = multiTrack.detectMoves(state.last, chars, Object.keys(chars), o.tracking.active);
+			const watched = multiTrack.watchedIds(state.hold, Object.keys(chars), chars, o.tracking.active, onlineOf, now, answersOf);
+			state.hold = watched.hold;
+			const result = multiTrack.detectMoves(state.last, chars, watched.ids, o.tracking.active);
 			state.last = result.last;
 			const ctx = { systems: tripwire.systems, shortest: tripwire.map && tripwire.map.shortest };
 			const jumps = result.moves.filter(function(m) { return multiTrack.isMappableJump(m.from, m.to, chars[m.id], ctx); });
@@ -950,35 +994,28 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const o = opts();
 			if (!on) {
 				if (state.togglesOn !== false) {
-					$("#tracking .multi-track-toggle, #tracking .multi-track-cap-note").remove();
+					$("#tracking .multi-track-toggle").remove();
 					$("#tracking .multi-track-has-toggle").removeClass("multi-track-has-toggle");
 					state.togglesOn = false;
 				}
 				return;
 			}
 			state.togglesOn = true;
-			const used = multiTrack.optedIn(o, chars || characters());
 			$("#tracking .tracking-clone").each(function() {
 				const id = $(this).attr("data-characterid");
 				if (!id) { return; }
 				const included = !multiTrack.excluded(o, id);
-				const overCap = included && used.indexOf(id) < 0;
+				const offline = included && !onlineOf(id);
 				let $t = $(this).find(".multi-track-toggle");
 				if (!$t.length) {
 					$t = $("<i class='multi-track-toggle' data-icon='auto' role='switch' tabindex='0'></i>");
 					$(this).find(".control-group").first().addClass("multi-track-has-toggle").append($t);
-					setTip($t, multiTrack.toggleTitle(included, overCap));
+					setTip($t, multiTrack.toggleTitle(included, offline));
 					attachTip($t);
 				}
-				$t.toggleClass("active", included).toggleClass("over-cap", overCap).attr("aria-checked", String(included));
-				setTip($t, multiTrack.toggleTitle(included, overCap));
+				$t.toggleClass("active", included).toggleClass("offline", offline).attr("aria-checked", String(included));
+				setTip($t, multiTrack.toggleTitle(included, offline));
 			});
-			// More switched on than are used: say so above the list
-			const note = multiTrack.capNote(o, chars || characters());
-			let $note = $("#tracking .multi-track-cap-note");
-			if (!note) { $note.remove(); return; }
-			if (!$note.length) { $note = $("<div class='multi-track-cap-note' role='note'></div>").prependTo("#tracking"); }
-			if ($note.text() !== note) { $note.text(note); }
 		}
 
 		function toggle(id) {
@@ -1039,9 +1076,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				text: multiTrack.SETTING_TEXT,
 				hint: "When one of your tracked characters jumps a wormhole, Tripwire makes it your active character (Current "
 					+ "System, Follow and the jump prompts move to it) and maps the jump. Picking a character yourself pauses "
-					+ "the switching for 3 minutes; their jumps are still mapped. Up to 5 characters: choose them with the A "
-					+ "icon (Switch to this character when it jumps) next to the eye and ship icons in the tracking list "
-					+ "(click your name, top right).",
+					+ "the switching for 3 minutes; their jumps are still mapped. Every online character is used; "
+					+ "choose them with the A icon (Switch to this character when it jumps) next to the eye and ship icons "
+					+ "in the tracking list (click your name, top right).",
 				keywords: ["multi", "multibox", "alts", "characters", "tracking", "active character", "switch"],
 				get: function(o) { return multiTrack.enabled(o); },
 				set: function(o, on) {
