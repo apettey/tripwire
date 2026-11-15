@@ -29,11 +29,12 @@ Rules live in [AGENTS.md](../../../AGENTS.md); domain background in the `tripwir
 - [ ] JS in `app/js/fork/<feature>.js`, CSS in `app/css/fork/<feature>.css`. Gulp bundles
       `app/js/**/*.js` and `app/css/**/*.css`, so new files are picked up automatically (fork JS loads
       after upstream JS).
-- [ ] Wrap or extend upstream instead of editing it: hook DOM events, wrap globals
-      (`const orig = chain.redraw; chain.redraw = function() { orig.apply(this, arguments); ... }`),
+- [ ] Prefer wrapping or extending upstream code from your own file (keeps the feature modular and
+      testable): hook DOM events, wrap globals (`const orig = chain.redraw; chain.redraw = function() { orig.apply(this, arguments); ... }`),
       use `systemAnalysis.addMutator`, add jump-cost modifiers to `guidance`, etc.
-- [ ] If an upstream file must change, keep the diff tiny, keep its line endings, and list it in the
-      change-log entry.
+- [ ] Editing an upstream file is fine when that is the right place (the fork no longer syncs with upstream);
+      keep the diff to your change, no reformatting of unrelated code, keep its line endings. Porting an
+      upstream change? Adapt it to fork code and credit the upstream commit in the change-log entry.
 - [ ] Put pure logic (no DOM) in one global object so it can be unit-tested.
 - [ ] Draws something on the chain map? Add its Map key entry with `forkLegend.register({...})` at DOM ready (fields at the
       top of `app/js/fork/map-legend.js`); `app/js-test/fork/map-legend.test.js` fails for a Map Markers row without one.
@@ -110,7 +111,7 @@ Every feature is reviewed until a review comes back with **no findings**. Don't 
   - correctness and edge cases against the spec (unknown/missing data, empty chain, several tracked
     characters, other users' changes arriving via sync);
   - AGENTS.md rules: change-log entry and row, Settings toggle decision (on by default, added with
-    `forkSettings.register` in the right section per the AGENTS.md table, survives Reset), fork-owned files, small upstream edits listed in the entry, no reformatting
+    `forkSettings.register` in the right section per the AGENTS.md table, survives Reset), fork-owned files for new features, upstream commit credited if ported, no reformatting
     or line-ending changes, no committed bundles;
   - security: pasted/user text escaped when rendered, no new CSRF/XSS, no secrets, no new third-party
     hosts unless logged; all zKillboard access only through the pooled worker;
