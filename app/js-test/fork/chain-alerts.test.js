@@ -178,10 +178,10 @@ describe('Chain alerts', () => {
 			assert.deepStrictEqual(ca.capCandidates(fresh, { chain: {}, meID: 42 }, S, planner), [], 'only exits on the chain');
 		});
 		it('jumps from your Get home start when set, else from the other exits of the chain', () => {
-			assert.deepStrictEqual(ca.capRefs(LS, sid('Hek'), {}, S), [{ id: sid('Hek'), start: true }]);
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), {}, S), [{ id: sid('Floseswin'), start: true }]);
 			const chain = { [LS]: true, [C5]: true, [HS]: true, [NS]: true };
 			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S).map(r => r.id), [NS], 'no jump drive starts in high-sec');
-			assert.deepStrictEqual(ca.capRefs(LS, sid('Hek'), chain, S), [{ id: sid('Hek'), start: true }]);
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), chain, S), [{ id: sid('Floseswin'), start: true }]);
 			assert.deepStrictEqual(ca.capRefs(LS, sid('Jita'), chain, S).map(r => r.id), [NS], 'a high-sec start is not used: the chain exits instead');
 		});
 		it('hits are the refs within range, nearest first', () => {
