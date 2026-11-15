@@ -75,13 +75,13 @@ const fleetMass = {
 	 * @param text fleet composition, d-scan (typeID, name, type, distance; or the old 3 columns) or ship names
 	 * @param massTable appData.mass
 	 * @return {format: 'fleet'|'dscan'|'list'|'' (most rows), hulls: [{typeID, name, group, count, hullKg}] (heaviest
-	 *   first), ships: total count, unknown: [{name, count}], skipped: d-scan rows that aren't ships, lines: rows read}
+	 *   first), ships: total count, unknown: [{name, count}] (rows no hull matched), lines: rows read}
 	 */
 	parse: function(text, massTable) {
 		const index = fleetMass.nameIndex(massTable);
 		const table = massTable || {};
 		const byType = {}, unknown = {}, kinds = { fleet: 0, dscan: 0, list: 0 };
-		let skipped = 0, lines = 0;
+		let lines = 0;
 		const add = function(hull, count, group) {
 			const key = String(hull.typeID);
 			const h = byType[key] = byType[key] || { typeID: hull.typeID, name: hull.name, group: fleetMass.groupOf(hull.name, group), count: 0, hullKg: hull.mass };
@@ -105,15 +105,16 @@ const fleetMass = {
 				if (hull) { add(hull, 1, fleet.group); } else { miss(fleet.ship, 1); }
 				return;
 			}
-			// D-scan: typeID, name, type, distance (or the old name, type, distance). Rows that aren't ships (structures,
-			// wrecks, drones, celestials) have no hull mass and are skipped, not reported.
+			// D-scan: typeID, name, type, distance (or the old name, type, distance). By type ID, else by type name; a row
+			// neither finds (a structure, drone or wreck, or a hull newer than mass.json) is listed as not recognised.
 			const typed = fields.length >= 4 && /^\d{1,10}$/.test(fleetMass.clean(fields[0]));
 			if (typed || fields.length === 3) {
 				kinds.dscan++;
+				const typeName = fleetMass.clean(typed ? fields[2] : fields[1]);
 				const t = typed ? table[parseInt(fleetMass.clean(fields[0]), 10)] : null;
-				const hull = typed ? (t && parseFloat(t.mass) > 0 ? { typeID: parseInt(fleetMass.clean(fields[0]), 10), name: String(t.typeName), mass: parseFloat(t.mass) } : null) :
-					index[fleetMass.clean(fields[1]).toLowerCase()];
-				if (hull) { add(hull, 1, ''); } else { skipped++; }
+				const hull = (t && t.typeName && parseFloat(t.mass) > 0 ? { typeID: parseInt(fleetMass.clean(fields[0]), 10), name: String(t.typeName), mass: parseFloat(t.mass) } : null) ||
+					index[typeName.toLowerCase()];
+				if (hull) { add(hull, 1, ''); } else { miss(typeName, 1); }
 				return;
 			}
 			kinds.list++;
@@ -132,25 +133,49 @@ const fleetMass = {
 			format: format, hulls: hulls,
 			ships: hulls.reduce(function(n, h) { return n + h.count; }, 0),
 			unknown: Object.keys(unknown).map(function(k) { return { name: k, count: unknown[k] }; }),
-			skipped: skipped, lines: lines
+			lines: lines
 		};
 	},
 
-	/** Mass the usual prop mod adds to a hull of this mass (kg), from the module masses the fitted jump mass feature
-		uses (fit-mass-data.js): 1MN 500 t for frigates and destroyers, 10/50MN 5,000 t for cruisers and battlecruisers,
-		100/500MN 50,000 t for battleships (Nestor at 20,000 t; heavier barges and haulers are counted on the safe side)
-		and 500,000 t for capitals (the mass log's capital rule). A capsule has none. */
-	propKg: function(hullKg) {
+	// Prop module masses (kg), as in fit-mass-data.js: 1MN 500 t, 10MN/50MN 5,000 t, 100MN/500MN 50,000 t,
+	// capital 500,000 t (the mass log's capital rule)
+	PROP: { small: 500e3, medium: 5e6, large: 50e6, capital: 500e6 },
+	// Hulls whose mass doesn't tell their prop size: by name (d-scans and lists have no group)...
+	PROP_BY_NAME: {
+		medium: ["Porpoise", "Procurer", "Retriever", "Covetor", "Skiff", "Mackinaw", "Hulk", "Bustard", "Impel", "Mastodon", "Occator"],
+		large: ["Nestor"]
+	},
+	// ...and by the ship group a fleet composition paste carries
+	PROP_BY_GROUP: {
+		medium: ["Mining Barge", "Exhumer", "Deep Space Transport", "Blockade Runner", "Industrial", "Hauler"],
+		large: ["Battleship", "Attack Battleship", "Black Ops", "Marauder"]
+	},
+
+	/** Mass the usual prop mod adds to a hull (kg): by name (special editions too: "Mackinaw ORE Development
+		Edition"), else by its pasted group, else by mass: up to 5,000 t a 1MN, below 20,000 t a 10MN/50MN, up to
+		500,000 t a 100MN/500MN, heavier a capital one. A capsule has none. */
+	propKg: function(hullKg, name, group) {
 		const hull = Number(hullKg);
 		if (!(hull > 100e3)) { return 0; }
-		return hull <= 5e6 ? 500e3 : hull < 20e6 ? 5e6 : hull <= 500e6 ? 50e6 : 500e6;
+		const P = fleetMass.PROP;
+		if (hull > 500e6) { return P.capital; }
+		const first = String(name || '').split(' ')[0];
+		const sizes = ['medium', 'large'];
+		for (let i = 0; i < sizes.length; i++) {
+			if (fleetMass.PROP_BY_NAME[sizes[i]].indexOf(name) >= 0 || fleetMass.PROP_BY_NAME[sizes[i]].indexOf(first) >= 0 &&
+				/ Edition$/.test(String(name))) { return P[sizes[i]]; }
+		}
+		for (let i = 0; i < sizes.length; i++) {
+			if (group && fleetMass.PROP_BY_GROUP[sizes[i]].indexOf(group) >= 0) { return P[sizes[i]]; }
+		}
+		return hull <= 5e6 ? P.small : hull < 20e6 ? P.medium : P.large;
 	},
 
 	/** Mass of one pass of a hull through a hole: hot (prop mod on, propKg) when asked and under the jump limit, else
 		cold when that fits. @return {kg, hot, fits: true|false|null (no jump limit known), coldOnly} */
-	hullPass: function(hullKg, jumpKg, hot) {
+	hullPass: function(hullKg, jumpKg, hot, name, group) {
 		const cold = rollingCalc.passMass(hullKg);
-		const warm = rollingCalc.passMass(hullKg, { prop: true, propKg: fleetMass.propKg(hullKg) });
+		const warm = rollingCalc.passMass(hullKg, { prop: true, propKg: fleetMass.propKg(hullKg, name, group) });
 		const limit = Number(jumpKg) > 0 ? Number(jumpKg) : null;
 		if (cold === null) { return { kg: null, hot: false, fits: null, coldOnly: false }; }
 		if (limit === null) { return { kg: hot ? warm : cold, hot: !!hot, fits: null, coldOnly: false }; }
@@ -193,7 +218,7 @@ const fleetMass = {
 		const range = rollingCalc.remaining(hole.totalKg, hole.usedKg, hole.massState);
 		const fresh = fleetMass.freshRange(hole.totalKg);
 		const hulls = (fleet && fleet.hulls || []).map(function(h) {
-			const pass = fleetMass.hullPass(h.hullKg, hole.jumpKg, hot);
+			const pass = fleetMass.hullPass(h.hullKg, hole.jumpKg, hot, h.name, h.group);
 			return Object.assign({}, h, {
 				pass: pass,
 				now: pass.kg ? fleetMass.countIn(range, pass.kg) : null,
@@ -221,7 +246,7 @@ const fleetMass = {
 			}
 		}
 		return {
-			range: range, fresh: fresh, hulls: hulls, passes: passes.length, legShips: leg.length, totalKg: totalKg,
+			range: range, fresh: fresh, hulls: hulls, passes: passes.length, legShips: leg.length, legKg: leg.reduce(function(s, kg) { return s + kg; }, 0), totalKg: totalKg,
 			tooHeavy: tooHeavy, back: !!opts.back, hot: hot,
 			verdict: passes.length ? rollingCalc.classify(range, totalKg) : 'unknown',
 			safePasses: safePasses, closedBy: closedBy
@@ -236,7 +261,7 @@ const fleetMass = {
 			const heaviest = fleetMass.GROUPS[group].map(function(n) { return index[n.toLowerCase()]; }).filter(Boolean)
 				.sort(function(a, b) { return b.mass - a.mass; })[0];
 			if (!heaviest) { return null; }
-			const pass = fleetMass.hullPass(heaviest.mass, hole && hole.jumpKg, hot !== false);
+			const pass = fleetMass.hullPass(heaviest.mass, hole && hole.jumpKg, hot !== false, heaviest.name, group);
 			return { group: group, name: heaviest.name, hullKg: heaviest.mass, pass: pass, count: pass.kg ? fleetMass.countIn(fresh, pass.kg) : null };
 		}).filter(Boolean);
 	},
@@ -279,14 +304,14 @@ const fleetMass = {
 		} else {
 			const coldKg = fleet.hulls.reduce(function(s, h) { return s + h.hullKg * h.count; }, 0);
 			html += "<p><b>" + fleet.ships + " ship" + (fleet.ships === 1 ? "" : "s") + "</b> from the " + e(fleetMass.FORMATS[fleet.format] || 'paste') +
-				", " + t(coldKg) + " cold" + (result.hot ? ", " + t(fleet.hulls.reduce(function(s, h) { return s + (h.hullKg + fleetMass.propKg(h.hullKg)) * h.count; }, 0)) + " hot" : "") + ".</p>";
+				", " + t(coldKg) + " cold; " + t(result.legKg || 0) + " as " + (result.tooHeavy ? "the ships that fit jump" : "they jump") +
+				(result.hot ? " (prop mods on" + (result.hulls.some(function(h) { return h.pass.coldOnly; }) ? ", cold where hot is over the limit" : "") + ")" : "") + ".</p>";
 		}
 		if (fleet.unknown.length) {
 			const shown = fleet.unknown.slice(0, fleetMass.MAX_UNKNOWN_SHOWN).map(function(u) { return e(u.name) + (u.count > 1 ? " (" + u.count + ")" : ""); });
 			html += "<p class='fleet-mass-note'>Not recognised, left out: " + shown.join(", ") +
 				(fleet.unknown.length > shown.length ? " and " + (fleet.unknown.length - shown.length) + " more" : "") + ".</p>";
 		}
-		if (fleet.skipped) { html += "<p class='fleet-mass-note'>" + fleet.skipped + " d-scan row" + (fleet.skipped === 1 ? " that isn't a ship" : "s that aren't ships") + " left out.</p>"; }
 		if (ctx.preserved) { html += "<p class='fleet-mass-warning'>" + e(ctx.preserved) + "</p>"; }
 		if (!fleet.ships) { return html; }
 
@@ -314,7 +339,7 @@ const fleetMass = {
 			if (h.pass.fits === null) { return "?"; }
 			return "<span class='fleet-mass-yes'>✓</span>" + (h.pass.coldOnly ? " cold only" : "");
 		};
-		html += "<table class='fleet-mass-table'><thead><tr><th>Hull</th><th>#</th><th data-tooltip='Mass of one jump: hull, plus the prop mod when hot (500 t frigates and destroyers, 5,000 t cruisers and battlecruisers, 50,000 t battleships, 500,000 t capitals)'>Jump mass</th>" +
+		html += "<table class='fleet-mass-table'><thead><tr><th>Hull</th><th>#</th><th data-tooltip='Mass of one jump: hull, plus the prop mod when hot (500 t frigates and destroyers, 5,000 t cruisers and battlecruisers, 50,000 t battleships, 500,000 t capitals; the mass log and rolling guidance count a flat 50,000 t)'>Jump mass</th>" +
 			"<th data-tooltip='Under the jump limit of this hole type'>Fits</th>" +
 			(known ? "<th data-tooltip='How many of this hull this hole takes now, given its logged mass and mass state'>This hole now</th>" : "") +
 			(result.fresh && result.fresh.known ? "<th data-tooltip='How many of this hull a fresh hole of this type takes (its real mass is ±10%)'>Fresh " + e(ctx.typeName || "hole") + "</th>" : "") +
@@ -370,7 +395,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (!$p.length) {
 				$p = $("<div id='fleet-mass'><details class='fleet-mass-details'><summary><b>Fleet mass check</b> <span class='fleet-mass-sub'>will my fleet fit?</span></summary>" +
 					"<textarea class='fleet-mass-paste' rows='4' spellcheck='false' placeholder='Paste the fleet composition (Fleet window > Fleet Composition, Ctrl+A, Ctrl+C), a d-scan, or ship names (\"3x Paladin\")'></textarea>" +
-					"<p class='fleet-mass-controls'><label data-tooltip='Prop mod on for every jump (by hull size: 500 t to 500,000 t); ships it would put over the jump limit go cold'><input type='checkbox' class='fleet-mass-hot'> Prop mods on</label> " +
+					"<p class='fleet-mass-controls'><label data-tooltip='Prop mod on for every jump, by hull size: 500 t to 500,000 t (the mass log and rolling guidance count a flat 50,000 t); ships it would put over the jump limit go cold'><input type='checkbox' class='fleet-mass-hot'> Prop mods on</label> " +
 					"<label data-tooltip='Everyone goes out, then everyone comes back'><input type='checkbox' class='fleet-mass-back'> And back</label> " +
 					"<button type='button' class='fleet-mass-clear'>Clear</button></p>" +
 					"<div class='fleet-mass-result' aria-live='polite'></div></details></div>");

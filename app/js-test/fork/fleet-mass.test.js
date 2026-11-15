@@ -59,14 +59,18 @@ describe('Fleet mass check', () => {
 			assert.strictEqual(fleet.ships, 4);
 		});
 		it('groups by the known names when the paste has no group', () => assert.strictEqual(byName(fleet, 'Sin').group, 'Black Ops'));
-		it('skips rows that are not ships (structures, drones) without calling them unknown', () => {
-			assert.strictEqual(fleet.skipped, 2);
-			assert.deepStrictEqual(fleet.unknown, []);
+		it('lists rows that match no hull (structures, drones) as not recognised', () => {
+			assert.deepStrictEqual(fleet.unknown, [{ name: 'Astrahus', count: 1 }, { name: 'Acolyte I', count: 1 }]);
+		});
+		it('falls back to the type name when the type id is not in mass.json', () => {
+			const f = fleetMass.parse('99999999\tNew Paladin\tPaladin\t-\n99999998\tSomething\tBrand New Hull\t5 km', MASS);
+			assert.strictEqual(byName(f, 'Paladin').count, 1);
+			assert.deepStrictEqual(f.unknown, [{ name: 'Brand New Hull', count: 1 }]);
 		});
 		it('reads the old three-column d-scan by type name', () => {
 			const f = fleetMass.parse('My Paladin\tPaladin\t-\nTower\tCaldari Control Tower\t5 km', MASS);
 			assert.strictEqual(byName(f, 'Paladin').count, 1);
-			assert.strictEqual(f.skipped, 1);
+			assert.deepStrictEqual(f.unknown, [{ name: 'Caldari Control Tower', count: 1 }]);
 		});
 	});
 
@@ -111,6 +115,27 @@ describe('Fleet mass check', () => {
 			assert.strictEqual(fleetMass.propKg(kt(20)), kt(50));			// Nestor: 100/500MN
 			assert.strictEqual(fleetMass.propKg(kt(500)), kt(50));
 			assert.strictEqual(fleetMass.propKg(kt(800)), kt(500));		// Rorqual
+		});
+		it('hulls whose mass misleads go by name', () => {
+			assert.strictEqual(fleetMass.propKg(kt(4.5), 'Porpoise'), kt(5));		// 10MN/50MN, not a 1MN
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Procurer'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Skiff'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Bustard'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(19.2), 'Mastodon'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Mackinaw ORE Development Edition'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Nestor'), kt(50));
+		});
+		it('or by the pasted ship group', () => {
+			assert.strictEqual(fleetMass.propKg(kt(20), 'Some Barge', 'Mining Barge'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(21), 'Some Hauler', 'Deep Space Transport'), kt(5));
+			assert.strictEqual(fleetMass.propKg(kt(15), 'Some Battleship', 'Battleship'), kt(50));
+			assert.strictEqual(fleetMass.propKg(kt(1200), 'Some Capital', 'Mining Barge'), kt(500));	// capitals stay capital
+		});
+		it('only the full name counts, not a prefix', () => assert.strictEqual(fleetMass.propKg(kt(20), 'Hulking Thing'), kt(50)));
+		it('the hull pass uses the name', () => {
+			const MASS_PORPOISE = fleetMass.parse('Porpoise', MASS);
+			const r = fleetMass.check(MASS_PORPOISE, Object.assign({ usedKg: 0, massState: 'stable' }, B274));
+			assert.strictEqual(byName(r, 'Porpoise').pass.kg, kt(9.5));
 		});
 		it('no jump limit: fits is unknown', () => assert.strictEqual(fleetMass.hullPass(kt(10), null, true).fits, null));
 	});
@@ -206,6 +231,17 @@ describe('Fleet mass check', () => {
 			assert.ok(html.includes('May collapse'));
 			assert.ok(html.includes('the first <b>5</b> of 8 passes are safe'), html);
 			assert.ok(html.includes('Fresh B274'));
+		});
+		it('the jumping total is the sum of the passes (too heavy left out, cold-only cold)', () => {
+			const f = fleetMass.parse('Paladin\nRifter\nNaglfar', MASS);
+			const r = fleetMass.check(f, { totalKg: kt(3300), jumpKg: kt(300), usedKg: 0, massState: 'stable' });
+			// Paladin 178,000 t hot fits 300,000 t; Rifter 1,067 + 500 t; Naglfar too heavy
+			assert.strictEqual(r.legKg, 179567000);
+			const h = fleetMass.resultHtml(f, r, {});
+			assert.ok(h.includes('179,567 t as the ships that fit jump'), h);
+			const g = fleetMass.parse('Paladin', MASS);
+			const cold = fleetMass.check(g, { totalKg: kt(1000), jumpKg: kt(150), usedKg: 0, massState: 'stable' });
+			assert.ok(fleetMass.resultHtml(g, cold, {}).includes('128,000 t as they jump (prop mods on, cold where hot is over the limit)'));
 		});
 		it('leaves out the reference for a group already in the fleet', () => {
 			assert.ok(!/Per fresh B274: .*Marauder/.test(html));

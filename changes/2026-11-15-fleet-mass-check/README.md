@@ -29,12 +29,17 @@ Mass dialog opens (retires once a fleet is checked).
   fixtures in `app/js-test/testdata/fleet-mass/`) and `app/css/fork/fleet-mass.css`.
 - Parsing: the fleet composition copy is tab-separated `Pilot, System, Ship type, Ship group, Position, Skills
   "n - n - n" [, Wing / Squad]` (the format aa-intel-tool's fleetcomp parser reads; the fixture follows it). D-scans are
-  read by type ID (rows that aren't ships are left out), plain lists as "Paladin", "3x Paladin", "Kronos x3",
+  read by type ID, else by type name (rows matching no hull, such as structures, drones or hulls newer than
+  `mass.json`, are listed as not recognised), plain lists as "Paladin", "3x Paladin", "Kronos x3",
   "Guardian 4", "Marshal<TAB>2" or an EFT header. Unknown names are listed, not guessed.
 - Mass: hull masses from `appData.mass` (`tools/mass.json`, which already has the 24.01 Marauder/Black Ops masses).
   "Prop mods on" (default) adds the usual prop module for the hull's size, using the module masses of the fitted jump
-  mass feature (`fit-mass-data.js`): 500 t up to 5,000 t hulls, 5,000 t below 20,000 t, 50,000 t up to 500,000 t,
-  500,000 t for capitals; capsules none. A ship whose hot mass would be over the jump limit goes cold.
+  mass feature (`fit-mass-data.js`): 1MN 500 t, 10MN/50MN 5,000 t, 100MN/500MN 50,000 t, capital 500,000 t. The size
+  goes by name for hulls whose mass misleads (Porpoise, mining barges and exhumers, deep space transports: 5,000 t;
+  Nestor: 50,000 t), else by the pasted ship group, else by mass (up to 5,000 t / below 20,000 t / up to 500,000 t /
+  capital); capsules none. A ship whose hot mass would be over the jump limit goes cold.
+  Note: this section uses that size-based prop mass, while the rolling guidance and the mass log count a flat
+  50,000 t (500,000 t for capitals) per hot jump; the tooltips say so.
 - Maths: the rolling calculator's `rollingCalc.remaining` (logged mass + mass state + the hole's +-10%),
   `classify` and `passMass`. Passes are counted lightest first ("the first N of M passes are safe"), with an
   "And back" option. The preserve mass flag is shown as a warning.
