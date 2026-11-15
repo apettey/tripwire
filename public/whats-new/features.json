@@ -1,6 +1,24 @@
 {
   "features": [
     {
+      "pr": 175,
+      "date": "2026-11-15",
+      "title": "New note editor",
+      "description": "System notes have a new, lighter editor in place of the old one, which no longer gets security updates. Bold, lists, indent, links, text size, text colour and highlight work as before; anything unsafe in pasted text is removed before it reaches the note.\n\nThere is no setting for this: it is a security fix. Existing notes look the same.",
+      "images": [
+        { "src": "whats-new/img/pr-175-note-editor.png", "caption": "The note editor with its text colour menu open" }
+      ]
+    },
+    {
+      "pr": 174,
+      "date": "2026-11-15",
+      "title": "Desktop notifications",
+      "description": "Kills in the chain, structure timers, Watchlist matches, chain alerts and Fight here can now also show as desktop notifications while Tripwire is in a background tab or you are in EVE. Click one to jump back to the system.\n\nOpen Settings > General > Desktop notifications and click \"Enable desktop notifications\" so your browser lets Tripwire show them, then pick which alerts you want, or turn it off there. Kill alerts keep their own switch in Settings > Kill Reporting.",
+      "images": [
+        { "src": "whats-new/img/pr-174-desktop-notifications.png", "caption": "Settings > General: allow desktop notifications and pick which alerts reach your desktop" }
+      ]
+    },
+    {
       "pr": 171,
       "date": "2026-11-15",
       "title": "Chain alerts: new holes, home static, exits in jump range",

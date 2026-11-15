@@ -309,6 +309,7 @@ const rally = {
 		if (changed) {
 			if (fromOthers && next.systemID && typeof Notify !== "undefined") {
 				Notify.trigger(rally.notifyText(fightComps.labelSystem(next.label, rally.systemName(next.systemID)), next), "green");
+				if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.notify(forkDesktopNotify.rallyNote(fightComps.labelSystem(next.label, rally.systemName(next.systemID)), next), function() { tripwire.systemChange(next.systemID); }); }
 			}
 			rally.redraw();
 		} else {

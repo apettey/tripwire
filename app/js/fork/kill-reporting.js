@@ -460,6 +460,7 @@ const killReporting = {
 	/** Ask for desktop notification permission (must run from a click) */
 	requestDesktop: function() {
 		if (typeof Notification === "undefined" || Notification.permission !== "default") { return; }
+		if (typeof forkDesktopNotify !== "undefined") { forkDesktopNotify.request(killReporting.updateDesktopHint); return; }
 		try {
 			const p = Notification.requestPermission();
 			if (p && typeof p.then === "function") { p.then(killReporting.updateDesktopHint); }
@@ -468,23 +469,15 @@ const killReporting = {
 
 	/** Desktop notifications, only while Tripwire isn't the page you're looking at. items: [{ kill, category, place }] */
 	notify: function(items) {
-		if (typeof Notification === "undefined" || Notification.permission !== "granted" || !document.hidden) { return; }
+		// Through the fork's desktop notifications (desktop-notify.js): its master switch, the hidden-tab and permission checks
+		if (typeof forkDesktopNotify === "undefined") { return; }
 		killReporting.notifications(items).forEach(function(note) {
-			try {
-				const shipID = parseInt(note.kill && note.kill.victimShipTypeID, 10) || 0;
-				const n = new Notification(note.title, {
-					body: note.body,
-					tag: note.tag,
-					icon: shipID ? "https://image.eveonline.com/Type/" + shipID + "_64.png" : undefined
-				});
-				n.onclick = function() {
-					window.focus();
-					if (note.kill) { killReporting.focusNode(note.kill.systemID); }
-					n.close();
-				};
-			} catch (e) {
-				console.warn("Kill Reporting: could not show a desktop notification", e);
-			}
+			const shipID = parseInt(note.kill && note.kill.victimShipTypeID, 10) || 0;
+			forkDesktopNotify.notify({
+				type: "kill", title: note.title, body: note.body, tag: note.tag,
+				icon: shipID ? "https://image.eveonline.com/Type/" + shipID + "_64.png" : undefined,
+				onClick: function() { if (note.kill) { killReporting.focusNode(note.kill.systemID); } }
+			});
 		});
 	},
 

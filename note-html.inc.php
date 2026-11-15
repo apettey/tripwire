@@ -12,6 +12,14 @@ function noteHtmlSanitizerAvailable() {
     return class_exists('DOMDocument');
 }
 
+/** fork: whether the HTML5 parser (PHP 8.4+ Dom\HTMLDocument) is there; tests can switch it off to check the fallback */
+function noteHtmlHtml5Parser($set = null) {
+    static $use = null;
+    if ($set !== null) { $use = (bool)$set; }
+    if ($use === null) { $use = class_exists('Dom\HTMLDocument'); }
+    return $use && class_exists('Dom\HTMLDocument');
+}
+
 /**
  * Whether a note contains visible text or an actual image after sanitising.
  * Editor-only wrappers, line breaks, whitespace, and invisible spacing do not
@@ -73,12 +81,26 @@ function sanitizeNoteHtml($html) {
         'padding-left' => '/^\d+px$/'
     ];
 
-    $document = new DOMDocument('1.0', 'UTF-8');
     $previousErrors = libxml_use_internal_errors(true);
-    $loaded = $document->loadHTML(
-        '<!doctype html><html><head><meta charset="utf-8"></head><body>' . (string)$html . '</body></html>',
-        LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING
-    );
+    if (noteHtmlHtml5Parser()) {
+        // fork: PHP 8.4+ parses like a browser (HTML5), so the server and the browsers that show the note see the same
+        // tree; libxml's HTML 4 parser reads some markup differently (a mutation-XSS risk for API clients).
+        try {
+            $document = \Dom\HTMLDocument::createFromString(
+                '<!doctype html><html><head><meta charset="utf-8"></head><body>' . (string)$html . '</body></html>',
+                LIBXML_NOERROR, 'UTF-8'
+            );
+            $loaded = true;
+        } catch (\Throwable $e) {
+            $loaded = false;
+        }
+    } else {
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $loaded = $document->loadHTML(
+            '<!doctype html><html><head><meta charset="utf-8"></head><body>' . (string)$html . '</body></html>',
+            LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING
+        );
+    }
     libxml_clear_errors();
     libxml_use_internal_errors($previousErrors);
 

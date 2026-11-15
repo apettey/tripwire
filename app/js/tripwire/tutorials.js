@@ -122,7 +122,7 @@ $("#notesWidget .tutorial").click(function(e) {
             },
             {
                 element: document.querySelector("#notesWidget"),
-                intro: "<p>The toolbar at the top allows you to customize your notes.</p><br/><p>You can also click on the <b>Maximize/Minimize</b> button (the far right toolbar icon) to edit this comment in full screen mode.</p><br/><p>In full screen mode you will see 1 new button added to the toolbar to view the source code of the comment where you can write HTML, CSS, and even Javascript in your notes!</p>"
+                intro: "<p>The toolbar at the top formats your note: bold, italic, underline, strikethrough, lists, indent, links, text size, text colour and highlight. The <b>&times;</b> button clears formatting.</p><br/><p>Press <b>Alt+S</b> to save or <b>Esc</b> to cancel. Notes keep their formatting only: scripts and other unsafe content are removed when you paste or save.</p>"
             },
             {
                 element: document.querySelector("#notesWidget"),
@@ -143,7 +143,7 @@ $("#notesWidget .tutorial").click(function(e) {
 
                 tutorial.stepFunc = function() {
                     setTimeout(function() {
-                        tutorial._options.steps[2].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
+                        tutorial._options.steps[2].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
                         tutorial.setOption("steps", tutorial._options.steps);
 
                         tutorial.exiting = false;
@@ -181,8 +181,8 @@ $("#notesWidget .tutorial").click(function(e) {
 
                 tutorial.stepFunc = function() {
                     setTimeout(function() {
-                        tutorial._options.steps[7].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
-                        tutorial._options.steps[8].element = $("#notesWidget").find(".comment:has(.cke_toolbar)")[0];
+                        tutorial._options.steps[7].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
+                        tutorial._options.steps[8].element = $("#notesWidget").find(".comment:has(.rte-bar)")[0];
                         tutorial.setOption("steps", tutorial._options.steps);
 
                         tutorial.exiting = false;
@@ -227,7 +227,6 @@ $("#notesWidget .tutorial").click(function(e) {
             $("#notesWidget #add-comment").off("click", tutorial.stepFunc);
             $("#notesWidget").off("click", ".commentSave", tutorial.stepFunc);
             $("#notesWidget").off("click", ".commentEdit", tutorial.stepFunc);
-            $("#notesWidget").off("click", ".cke_toolgroup:has(.cke_button__toolbarswitch)", tutorial.stepFunc);
         }
     });
 
