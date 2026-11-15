@@ -72,31 +72,79 @@ const undoHistory = {
 
 	// ---- Payloads ----
 
-	/** The refresh payload that undoes (direction "undo") or redoes ("redo") a step. Undo: add -> remove, remove -> add the
-	saved copies back, update -> update to the saved copies. Redo: add -> add the saved copies, remove -> remove, update ->
-	update. Returns {signatures: {add, update, remove}} (empty lists left out). */
-	payload: function(direction, entries) {
-		const add = [], update = [], remove = [];
-		(entries || []).forEach(function(entry) {
+	/** The parts of a step the server is asked to do, in the order it does them and answers them in resultSet: every
+	add, then every update, then every remove (signatures.php). Each: {entry, el (index in entry.signatures), kind, value}.
+	Undo: add -> remove, remove -> add the saved copies back, update -> update to the saved copies. Redo: add -> add the
+	saved copies, remove -> remove, update -> update. */
+	parts: function(direction, entries) {
+		const by = { add: [], update: [], remove: [] };
+		(entries || []).forEach(function(entry, i) {
 			if (!undoHistory.isStandard(entry)) { return; }
 			const kind = undoHistory.effect(direction, entry.action);
-			entry.signatures.forEach(function(el) {
+			entry.signatures.forEach(function(el, j) {
 				if (!el) { return; }
+				let value;
 				if (kind === "remove") {
-					if (undoHistory.isHole(el)) { if (undoHistory.present(el.wormhole.id)) { remove.push({ id: el.wormhole.id }); } }
-					else if (undoHistory.present(el.id)) { remove.push(el.id); }
+					if (undoHistory.isHole(el)) { value = undoHistory.present(el.wormhole.id) ? { id: el.wormhole.id } : undefined; }
+					else { value = undoHistory.present(el.id) ? el.id : undefined; }
+					if (value === undefined) { return; }
 				} else if (kind === "add") {
-					add.push(undoHistory.forAdd(el));
+					value = undoHistory.forAdd(el);
 				} else {
-					update.push(undoHistory.copy(el));
+					value = undoHistory.copy(el);
 				}
+				by[kind].push({ entry: i, el: j, kind: kind, value: value });
 			});
 		});
+		return by.add.concat(by.update, by.remove);
+	},
+
+	/** The refresh payload that undoes (direction "undo") or redoes ("redo") a step: {signatures: {add, update, remove}}
+	(empty lists left out) */
+	payload: function(direction, entries) {
 		const signatures = {};
-		if (add.length) { signatures.add = add; }
-		if (update.length) { signatures.update = update; }
-		if (remove.length) { signatures.remove = remove; }
+		undoHistory.parts(direction, entries).forEach(function(p) {
+			(signatures[p.kind] = signatures[p.kind] || []).push(p.value);
+		});
 		return { signatures: signatures };
+	},
+
+	/** Which parts of a step the server applied: per entry, per element index, true / false (missing = not sent).
+	null when the answer doesn't line up with the request (one result per part, in order). */
+	outcome: function(direction, entries, data) {
+		const parts = undoHistory.parts(direction, entries);
+		const rs = data && Array.isArray(data.resultSet) ? data.resultSet : null;
+		if (!rs || rs.length !== parts.length) { return null; }
+		const out = (entries || []).map(function() { return {}; });
+		parts.forEach(function(p, k) { out[p.entry][p.el] = !!(rs[k] && rs[k].result == true); });	// eslint-disable-line eqeqeq
+		return out;
+	},
+
+	/** The applied part of a step (outcome() true) with its snapshots: {entries, snapshots, applied, sent} */
+	appliedPart: function(entries, snapshots, outcome) {
+		let applied = 0, sent = 0;
+		const keep = [], snaps = [];
+		(entries || []).forEach(function(entry, i) {
+			const els = [], sn = [];
+			entry.signatures.forEach(function(el, j) {
+				if (!outcome[i] || outcome[i][j] === undefined) { return; }
+				sent++;
+				if (!outcome[i][j]) { return; }
+				applied++;
+				els.push(el);
+				sn.push(snapshots && snapshots[i] ? snapshots[i][j] : undoHistory.copy(el));
+			});
+			if (els.length) {
+				keep.push(Object.assign({}, entry, { signatures: els }));
+				snaps.push(sn);
+			}
+		});
+		return { entries: keep, snapshots: snaps, applied: applied, sent: sent };
+	},
+
+	/** The mask a history belongs to: options.masks.active ("" when unknown) */
+	maskKey: function(opts) {
+		return opts && opts.masks && opts.masks.active !== undefined && opts.masks.active !== null ? String(opts.masks.active) : "";
 	},
 
 	/** What the server is asked to do with an entry's elements: "add", "remove" or "update" */
@@ -401,14 +449,22 @@ const undoHistory = {
 
 	// ---- Storage ----
 
-	/** The saved history, checked (anything odd is dropped) */
+	/** The saved history, checked (anything odd is dropped): {byMask: {mask: {undo, redo}}, group}. One history per
+	mask: a step is only ever undone in the mask it was made in (the server saves into the session's mask). */
 	load: function(text) {
 		let o = null;
 		try { o = JSON.parse(text); } catch (e) { o = null; }
 		const ok = function(list) {
 			return Array.isArray(list) ? list.filter(function(e) { return e && typeof e === "object" && typeof e.action === "string" && Array.isArray(e.signatures); }) : [];
 		};
-		return { undo: ok(o && o.undo), redo: ok(o && o.redo), group: o && Number.isInteger(o.group) ? o.group : 0 };
+		const byMask = {};
+		if (o && o.byMask && typeof o.byMask === "object") {
+			Object.keys(o.byMask).forEach(function(m) {
+				const h = o.byMask[m];
+				if (h && typeof h === "object") { byMask[m] = { undo: ok(h.undo), redo: ok(h.redo) }; }
+			});
+		}
+		return { byMask: byMask, group: o && Number.isInteger(o.group) ? o.group : 0 };
 	},
 
 	/** Keep the newest MAX steps of a stack (in place); whole steps only */
@@ -429,10 +485,43 @@ const undoHistory = {
 // ---- DOM ----
 
 undoHistory.ui = {
-	state: null,			// {undo: [], redo: [], group}
-	busy: false,
+	state: null,			// {byMask: {mask: {undo: [], redo: []}}, group}
+	busy: false,			// a step (or jump-sig-prompt's link undo) is in flight
 	openGroup: null,		// the group id of entries pushed in the current task
 	lastParse: 0,
+	lastChange: 0,			// last parse of a "change" answer (another system's list) ...
+	lastChangeSystem: null,	// ... and the system it was for
+
+	/** The active mask (the server saves into it) */
+	mask: function() {
+		return undoHistory.maskKey(typeof options !== "undefined" ? options : null);
+	},
+
+	/** The history of a mask (the active one by default), made on first use */
+	hist: function(mask) {
+		const ui = undoHistory.ui;
+		const m = mask === undefined ? ui.mask() : String(mask);
+		let h = ui.state.byMask[m];
+		if (!h || !h.undo || !h.undo.isHistoryStack) {
+			const saved = h || {};
+			h = ui.state.byMask[m] = {};
+			h.undo = ui.makeStack("undo", saved.undo, m);
+			h.redo = ui.makeStack("redo", saved.redo, m);
+		}
+		return h;
+	},
+
+	stack: function(which, mask) {
+		return undoHistory.ui.hist(mask)[which];
+	},
+
+	/** A fresh, empty history (tests; state is normally loaded by install) */
+	reset: function(saved) {
+		const s = undoHistory.load(saved || null);
+		undoHistory.ui.state = { byMask: s.byMask, group: s.group };
+		undoHistory.ui.busy = false;
+		undoHistory.ui.openGroup = null;
+	},
 
 	ctx: function() {
 		const me = typeof init !== "undefined" && init ? init.characterID : (typeof options !== "undefined" && options.character ? options.character.id : null);
@@ -458,15 +547,16 @@ undoHistory.ui = {
 	},
 
 	/** One stack array whose push / pop keep the history's bookkeeping (labels, groups, redo cleared by a new edit) */
-	makeStack: function(which, items) {
+	makeStack: function(which, items, mask) {
 		const ui = undoHistory.ui;
 		const stack = Array.isArray(items) ? items : [];
+		Object.defineProperty(stack, "isHistoryStack", { enumerable: false, value: true });
 		Object.defineProperty(stack, "push", { enumerable: false, configurable: true, writable: true, value: function() {
 			const added = Array.prototype.slice.call(arguments);
-			added.forEach(function(entry) { ui.annotate(entry); });
+			added.forEach(function(entry) { ui.annotate(entry, mask); });
 			const n = Array.prototype.push.apply(stack, added);
 			if (which === "undo" && !ui.internal) {
-				ui.state.redo.length = 0;	// a new edit: what was undone can't be redone over it
+				ui.stack("redo", mask).length = 0;	// a new edit: what was undone can't be redone over it
 				undoHistory.trim(stack);
 				added.forEach(function(entry) {
 					if (typeof forkHints !== "undefined" && forkHints.emit) { forkHints.emit("history.recorded", { action: entry && entry.action }); }
@@ -485,12 +575,13 @@ undoHistory.ui = {
 
 	/** Label and group a pushed entry. Entries pushed in the same task (a paste's adds and updates, an automap's add
 	and update) are one step. */
-	annotate: function(entry) {
+	annotate: function(entry, mask) {
 		const ui = undoHistory.ui;
 		if (!entry || typeof entry !== "object") { return; }
 		if (ui.internal) { return; }	// moved between the stacks by undo / redo: keeps its meta
 		const meta = entry.meta = entry.meta || {};
 		meta.at = Date.now();
+		meta.mask = mask;
 		if (undoHistory.isStandard(entry)) {
 			// Pushers hand over the client's own objects; a later list could change them: keep a copy
 			entry.signatures = undoHistory.copy(entry.signatures);
@@ -503,15 +594,16 @@ undoHistory.ui = {
 		try { meta.label = undoHistory.label(entry, ui.ctx()); } catch (e) { meta.label = undoHistory.label(entry, null); }
 	},
 
-	/** Proxy for tripwire.signatures.undo / .redo: every system id is the one stack */
+	/** Proxy for tripwire.signatures.undo / .redo: every system id is the one stack of the active mask */
 	proxy: function(which) {
 		const ui = undoHistory.ui;
 		const isKey = function(k) { return typeof k === "string" && /^-?\d+$|^undefined$|^null$/.test(k); };
 		return new Proxy({}, {
-			get: function(t, k) { return isKey(k) ? ui.state[which] : undefined; },
+			get: function(t, k) { return isKey(k) ? ui.stack(which) : undefined; },
 			has: function(t, k) { return isKey(k); },
 			set: function(t, k, v) {
-				if (isKey(k) && Array.isArray(v) && v !== ui.state[which]) { ui.state[which].push.apply(ui.state[which], v); }
+				const stack = ui.stack(which);
+				if (isKey(k) && Array.isArray(v) && v !== stack) { stack.push.apply(stack, v); }
 				return true;
 			},
 			deleteProperty: function() { return true; },
@@ -524,21 +616,20 @@ undoHistory.ui = {
 		const ui = undoHistory.ui;
 		let saved = null;
 		try { saved = sessionStorage.getItem(undoHistory.STORAGE_KEY); } catch (e) { saved = null; }
-		const s = undoHistory.load(saved);
-		ui.state = { undo: [], redo: [], group: s.group };
-		ui.state.undo = ui.makeStack("undo", s.undo);
-		ui.state.redo = ui.makeStack("redo", s.redo);
+		ui.reset(saved);
 		tripwire.signatures.undo = ui.proxy("undo");
 		tripwire.signatures.redo = ui.proxy("redo");
 		try { sessionStorage.removeItem("tripwire_undo"); sessionStorage.removeItem("tripwire_redo"); } catch (e) { /* ignore */ }
 		tripwire.undo = function() { return ui.run("undo"); };
 		tripwire.redo = function() { return ui.run("redo"); };
-		// When the new list arrives (a step's answer may come without it)
+		// When the new list arrives (a step's answer may come without it), and when another system's list arrives
+		// (a "change" answer: a regular refresh in flight for the old system must not count)
 		const parse = tripwire.parse;
 		if (typeof parse === "function") {
-			tripwire.parse = function() {
+			tripwire.parse = function(server, mode) {
 				const ret = parse.apply(this, arguments);
 				ui.lastParse = Date.now();
+				if (mode === "change") { ui.lastChange = ui.lastParse; ui.lastChangeSystem = typeof viewingSystemID !== "undefined" ? viewingSystemID : null; }
 				return ret;
 			};
 		}
@@ -551,8 +642,8 @@ undoHistory.ui = {
 		ui.paintTimer = setTimeout(ui.paint, 0);
 	},
 
-	top: function(which) {
-		const stack = undoHistory.ui.state[which];
+	top: function(which, mask) {
+		const stack = undoHistory.ui.stack(which, mask);
 		const n = undoHistory.stepSize(stack);
 		return n ? stack.slice(stack.length - n) : [];
 	},
@@ -566,9 +657,10 @@ undoHistory.ui = {
 
 	paint: function() {
 		const ui = undoHistory.ui;
+		if (typeof $ === "undefined" || typeof document === "undefined") { return; }
 		["undo", "redo"].forEach(function(which) {
 			const $b = $("#" + which);
-			const has = ui.state[which].length > 0;
+			const has = ui.stack(which).length > 0;
 			$b.toggleClass("disabled", !has || ui.busy);
 			const keys = which === "undo" ? "Ctrl+Z" : "Ctrl+Shift+Z";
 			$b.attr("data-tooltip", has ? _.escape(ui.describe(which)) + " - " + keys : (which === "undo" ? "Nothing to undo" : "Nothing to redo"));
@@ -583,8 +675,9 @@ undoHistory.ui = {
 	run: function(which) {
 		const ui = undoHistory.ui;
 		if (ui.busy) { return false; }
-		const stack = ui.state[which];
-		const step = ui.top(which);
+		const mask = ui.mask();
+		const stack = ui.stack(which, mask);
+		const step = ui.top(which, mask);
 		if (!step.length) { ui.notify(which === "undo" ? "Nothing to undo" : "Nothing to redo"); return false; }
 		if (!undoHistory.isStandard(step[0])) {
 			// A feature's own entry (it wraps tripwire.undo and handles it; reaching here means it isn't loaded)
@@ -596,13 +689,14 @@ undoHistory.ui = {
 		const sys = undoHistory.systemNeeded(step, viewingSystemID);
 		ui.busy = true;
 		ui.paint();
-		const go = function() { ui.perform(which, step, label); };
+		const go = function() { ui.perform(which, step, label, mask); };
 		if (sys !== null && typeof tripwire.systemChange === "function") {
-			// The change was made in another system: show it, and check it against that system's list
+			// The change was made in another system: show it, and check it against that system's list (only the
+			// "change" answer for that system counts: a regular refresh still in flight brings the old system's list)
 			const asked = Date.now();
 			tripwire.systemChange(sys);
 			const wait = function() {
-				if (ui.lastParse > asked && viewingSystemID == sys && !tripwire.xhr) { go(); return; }	// eslint-disable-line eqeqeq
+				if (ui.lastChange > asked && ui.lastChangeSystem == sys && viewingSystemID == sys && !tripwire.xhr) { go(); return; }	// eslint-disable-line eqeqeq
 				if (Date.now() - asked > undoHistory.SWITCH_WAIT_MS) {
 					ui.busy = false;
 					ui.paint();
@@ -618,19 +712,62 @@ undoHistory.ui = {
 		return true;
 	},
 
-	perform: function(which, step, label) {
+	/** Take a step off its stack (it is the top `step.length` entries of the mask's `which` stack) */
+	drop: function(which, step, mask) {
+		const ui = undoHistory.ui;
+		const stack = ui.stack(which, mask);
+		ui.internal = true;
+		try { stack.splice(stack.length - step.length, step.length); } finally { ui.internal = false; }
+		ui.changed();
+	},
+
+	/** Book a step's answer: the step leaves its stack and what was applied of it goes on the other stack (all of it,
+	or the applied part when the server did only some of it: it has no rollback, adds then updates then removes).
+	Returns {status: "done" | "partial" | "failed" | "unknown", applied, sent, why}. */
+	settle: function(which, step, snapshots, data, mask) {
+		const ui = undoHistory.ui;
+		const other = which === "undo" ? "redo" : "undo";
+		let part, status;
+		if (undoHistory.succeeded(data)) {
+			part = { entries: step, snapshots: snapshots, applied: 0, sent: 0 };
+			status = "done";
+		} else {
+			const outcome = undoHistory.outcome(which, step, data);
+			if (!outcome) {
+				ui.drop(which, step, mask);
+				return { status: "unknown", applied: 0, sent: 0, why: undoHistory.failure(data) };
+			}
+			part = undoHistory.appliedPart(step, snapshots, outcome);
+			status = part.applied ? "partial" : "failed";
+		}
+		// Only the successful adds are in data.results, in order: the applied part's adds line up with them
+		const opp = undoHistory.opposite(which, part.entries, part.snapshots, data && data.results);
+		ui.internal = true;
+		try {
+			const stack = ui.stack(which, mask);
+			stack.splice(stack.length - step.length, step.length);
+			if (opp.map) { undoHistory.remap(ui.stack("undo", mask), opp.map); undoHistory.remap(ui.stack("redo", mask), opp.map); }
+			opp.entries.forEach(function(e) { ui.stack(other, mask).push(e); });
+			undoHistory.trim(ui.stack(other, mask));
+		} finally { ui.internal = false; }
+		ui.changed();
+		return { status: status, applied: part.applied, sent: part.sent, why: undoHistory.failure(data) };
+	},
+
+	perform: function(which, step, label, mask) {
 		const ui = undoHistory.ui;
 		const ctx = ui.ctx();
 		const verb = which === "undo" ? "undo" : "redo";
+		if (mask !== undefined && ui.mask() !== mask) {
+			// The mask changed while the view was switching: the server would save into the other mask
+			ui.busy = false;
+			ui.paint();
+			ui.notify("Can't " + verb + " \"" + label + "\": the active mask changed. Nothing was changed.", "red", 8000);
+			return;
+		}
 		const conflict = undoHistory.conflict(which, step, ctx);
-		const stack = ui.state[which];
-		const drop = function() {
-			ui.internal = true;
-			try { stack.splice(stack.length - step.length, step.length); } finally { ui.internal = false; }
-			ui.changed();
-		};
 		if (conflict) {
-			drop();
+			ui.drop(which, step, mask);
 			ui.busy = false;
 			ui.paint();
 			if (typeof forkUsage !== "undefined") { forkUsage.track("undoHistory", "conflict"); }
@@ -645,27 +782,22 @@ undoHistory.ui = {
 		let answered = false;
 		const success = function(data) {
 			answered = true;
-			if (!undoHistory.succeeded(data)) {
-				drop();
-				const why = undoHistory.failure(data);
-				ui.notify("Couldn't " + verb + " \"" + label + "\"" + (why ? ": " + why : "") + ". That step is skipped.", "red", 10000);
-				return;
+			const r = ui.settle(which, step, snapshots, data, mask);
+			const why = r.why ? " (" + r.why + ")" : "";
+			if (r.status === "done") {
+				if (typeof forkUsage !== "undefined") {
+					if (which === "undo") { forkUsage.track("undoHistory", "undone"); } else { forkUsage.track("undoHistory", "redone"); }
+				}
+				ui.notify((which === "undo" ? "Undone: " : "Redone: ") + label, "green", 4000);
+			} else if (r.status === "partial") {
+				ui.notify((which === "undo" ? "Partly undone: " : "Partly redone: ") + label + ": " + r.applied + " of " + r.sent +
+					" items" + why + ". What was done can be " + (which === "undo" ? "redone" : "undone") + "; the rest is skipped.", "yellow", 12000);
+			} else if (r.status === "failed") {
+				ui.notify("Couldn't " + verb + " \"" + label + "\"" + why + ". Nothing was changed; that step is skipped.", "red", 10000);
+			} else {
+				ui.notify("Couldn't " + verb + " \"" + label + "\"" + why + ". Part of it may have been saved: check the list. That step is skipped.", "red", 12000);
 			}
-			const other = which === "undo" ? "redo" : "undo";
-			const opp = undoHistory.opposite(which, step, snapshots, data.results);
-			ui.internal = true;
-			try {
-				stack.splice(stack.length - step.length, step.length);
-				if (opp.map) { undoHistory.remap(ui.state.undo, opp.map); undoHistory.remap(ui.state.redo, opp.map); }
-				opp.entries.forEach(function(e) { ui.state[other].push(e); });
-				undoHistory.trim(ui.state[other]);
-			} finally { ui.internal = false; }
-			ui.changed();
-			if (typeof forkUsage !== "undefined") {
-				if (which === "undo") { forkUsage.track("undoHistory", "undone"); } else { forkUsage.track("undoHistory", "redone"); }
-			}
-			ui.notify((which === "undo" ? "Undone: " : "Redone: ") + label, "green", 4000);
-			if (!data.signatures) { ui.waitForList = Date.now(); }
+			if (!data || !data.signatures) { ui.waitForList = Date.now(); }
 		};
 		const always = function() {
 			const release = function() { ui.busy = false; ui.paint(); };
@@ -710,7 +842,7 @@ undoHistory.ui = {
 		e.stopImmediatePropagation();	// upstream's own Ctrl+Z / Ctrl+Y handler (global-hooks.js) would run it again
 		if (e.repeat) { return; }
 		if (ui.busy) { return; }
-		if (!ui.state[action].length) { ui.notify(action === "undo" ? "Nothing to undo" : "Nothing to redo"); return; }
+		if (!ui.stack(action).length) { ui.notify(action === "undo" ? "Nothing to undo" : "Nothing to redo"); return; }
 		// Through the button's handler, so a feature wrapping tripwire.undo (jump-sig-prompt's link entries) sees it
 		if (action === "undo") { tripwire.undo(); } else { tripwire.redo(); }
 	},

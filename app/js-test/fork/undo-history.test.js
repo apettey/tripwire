@@ -270,12 +270,126 @@ describe('undoHistory: keys and storage', () => {
 		assert.strictEqual(undoHistory.keyAction(null), null);
 	});
 
-	it('load keeps well-formed entries only', () => {
-		const s = undoHistory.load(JSON.stringify({ undo: [{ action: 'add', signatures: [] }, { nope: 1 }, null], redo: 'x', group: 7 }));
-		assert.strictEqual(s.undo.length, 1);
-		assert.deepStrictEqual(s.redo, []);
+	it('load keeps well-formed entries only, per mask', () => {
+		const s = undoHistory.load(JSON.stringify({ byMask: { '1.0': { undo: [{ action: 'add', signatures: [] }, { nope: 1 }, null], redo: 'x' }, '2.0': null }, group: 7 }));
+		assert.strictEqual(s.byMask['1.0'].undo.length, 1);
+		assert.deepStrictEqual(s.byMask['1.0'].redo, []);
+		assert.strictEqual(s.byMask['2.0'], undefined);
 		assert.strictEqual(s.group, 7);
-		assert.deepStrictEqual(undoHistory.load('not json'), { undo: [], redo: [], group: 0 });
-		assert.deepStrictEqual(undoHistory.load(null), { undo: [], redo: [], group: 0 });
+		assert.deepStrictEqual(undoHistory.load('not json'), { byMask: {}, group: 0 });
+		assert.deepStrictEqual(undoHistory.load(null), { byMask: {}, group: 0 });
+		assert.deepStrictEqual(undoHistory.load(JSON.stringify({ undo: [{ action: 'add', signatures: [] }] })).byMask, {}, 'the old one-mask shape is dropped');
+	});
+
+	it('maskKey: the active mask as text', () => {
+		assert.strictEqual(undoHistory.maskKey({ masks: { active: '196379789.1' } }), '196379789.1');
+		assert.strictEqual(undoHistory.maskKey({ masks: { active: 273 } }), '273');
+		assert.strictEqual(undoHistory.maskKey(null), '');
+	});
+});
+
+describe('undoHistory: a step the server applied only in part', () => {
+	const a = sig(11, JITA, 'abc123'), b = sig(12, JITA, 'def456'), c = sig(13, JITA, 'ghi789');
+	// A paste step: adds a, b (undo: remove them) and updated c (undo: update it back)
+	const step = () => [
+		{ action: 'add', signatures: [Object.assign({}, a), Object.assign({}, b)], meta: { group: 9, label: 'add 2 sigs' } },
+		{ action: 'update', signatures: [Object.assign({}, c, { name: 'before' })], meta: { group: 9 } }
+	];
+
+	it('parts are in the order the server answers: adds, updates, removes', () => {
+		const p = undoHistory.parts('undo', step());
+		assert.deepStrictEqual(p.map(x => x.kind + ':' + x.entry + '.' + x.el), ['update:1.0', 'remove:0.0', 'remove:0.1']);
+		const r = undoHistory.parts('undo', [{ action: 'remove', signatures: [a] }, { action: 'add', signatures: [b] }]);
+		assert.deepStrictEqual(r.map(x => x.kind), ['add', 'remove']);
+	});
+
+	it('outcome maps the resultSet back to the elements; null when it does not line up', () => {
+		const data = { resultSet: [{ result: false, value: 'Signature ID not found' }, { result: true }, { result: true }] };
+		assert.deepStrictEqual(undoHistory.outcome('undo', step(), data), [{ 0: true, 1: true }, { 0: false }]);
+		assert.strictEqual(undoHistory.outcome('undo', step(), { resultSet: [{ result: true }] }), null);
+		assert.strictEqual(undoHistory.outcome('undo', step(), {}), null);
+	});
+
+	it('appliedPart keeps the applied elements and their snapshots', () => {
+		const s = step();
+		const part = undoHistory.appliedPart(s, [[a, b], [c]], [{ 0: true, 1: false }, { 0: true }]);
+		assert.strictEqual(part.applied, 2);
+		assert.strictEqual(part.sent, 3);
+		assert.deepStrictEqual(part.entries.map(e => e.signatures.map(x => x.id)), [[11], [13]]);
+		assert.deepStrictEqual(part.snapshots, [[a], [c]]);
+		assert.strictEqual(part.entries[0].meta.group, 9);
+	});
+
+	it('settle: the applied part goes on the redo stack, the step leaves the undo stack, nothing is lost', () => {
+		global.options = { masks: { active: '1.0' } };
+		undoHistory.ui.reset();
+		const undo = undoHistory.ui.stack('undo');
+		step().forEach(e => undo.push(e));
+		assert.strictEqual(undoHistory.ui.top('undo').length, 2, 'one step');
+		const s = undoHistory.ui.top('undo');
+		const snaps = [[a, b], [Object.assign({}, c, { name: 'after' })]];
+		// the update failed, both removes went through
+		const r = undoHistory.ui.settle('undo', s, snaps, { resultSet: [{ result: false, value: 'Signature ID not found' }, { result: true }, { result: true }] }, '1.0');
+		assert.deepStrictEqual([r.status, r.applied, r.sent, r.why], ['partial', 2, 3, 'Signature ID not found']);
+		assert.strictEqual(undoHistory.ui.stack('undo').length, 0);
+		const redo = undoHistory.ui.stack('redo');
+		assert.strictEqual(redo.length, 1);
+		assert.strictEqual(redo[0].action, 'add');
+		assert.deepStrictEqual(redo[0].signatures.map(x => x.signatureID), ['abc123', 'def456'], 'redo deletes them again');
+		// all failed: dropped, nothing to redo
+		undoHistory.ui.reset();
+		step().forEach(e => undoHistory.ui.stack('undo').push(e));
+		const f = undoHistory.ui.settle('undo', undoHistory.ui.top('undo'), snaps, { resultSet: [{ result: false }, { result: false }, { result: false }] }, '1.0');
+		assert.strictEqual(f.status, 'failed');
+		assert.strictEqual(undoHistory.ui.stack('undo').length + undoHistory.ui.stack('redo').length, 0);
+		// all done: the whole step is redoable, re-added ids remapped
+		undoHistory.ui.reset();
+		undoHistory.ui.stack('undo').push({ action: 'update', signatures: [Object.assign({}, a)] });
+		undoHistory.ui.stack('undo').push({ action: 'remove', signatures: [Object.assign({}, b)] });
+		const d = undoHistory.ui.settle('undo', undoHistory.ui.top('undo'), [[a], [b]], { resultSet: [{ result: true }, { result: true }], results: [Object.assign({}, b, { id: 112 })] }, '1.0');
+		assert.strictEqual(d.status, 'done');
+		assert.deepStrictEqual(undoHistory.ui.stack('redo').map(e => e.action + ':' + e.signatures[0].id), ['update:11', 'remove:112'], 're-added b has its new id');
+	});
+});
+
+describe('undoHistory: one history per mask', () => {
+	afterEach(() => { delete global.options; });
+
+	it('a step made in one mask is never offered in another (the server saves into the active mask)', () => {
+		global.options = { masks: { active: 'private.1' } };
+		undoHistory.ui.reset();
+		undoHistory.ui.stack('undo').push({ action: 'remove', signatures: [sig(1, JITA, 'abc123')] });
+		assert.strictEqual(undoHistory.ui.top('undo').length, 1);
+		assert.strictEqual(undoHistory.ui.top('undo')[0].meta.mask, 'private.1');
+		global.options.masks.active = 'corp.2';
+		assert.strictEqual(undoHistory.ui.top('undo').length, 0, 'nothing to undo in the corp mask');
+		assert.strictEqual(undoHistory.ui.run('undo'), false);
+		undoHistory.ui.stack('undo').push({ action: 'add', signatures: [sig(2, JITA, 'zzz999')] });
+		global.options.masks.active = 'private.1';
+		assert.deepStrictEqual(undoHistory.ui.top('undo')[0].signatures[0].signatureID, 'abc123', 'back in the private mask, its own step');
+		assert.strictEqual(undoHistory.ui.stack('redo', 'private.1').length, 0);
+	});
+
+	it('a new edit clears the redo stack of its own mask only', () => {
+		global.options = { masks: { active: 'a' } };
+		undoHistory.ui.reset();
+		undoHistory.ui.internal = true;
+		undoHistory.ui.stack('redo', 'a').push({ action: 'add', signatures: [] });
+		undoHistory.ui.stack('redo', 'b').push({ action: 'add', signatures: [] });
+		undoHistory.ui.internal = false;
+		undoHistory.ui.stack('undo', 'a').push({ action: 'add', signatures: [] });
+		assert.strictEqual(undoHistory.ui.stack('redo', 'a').length, 0);
+		assert.strictEqual(undoHistory.ui.stack('redo', 'b').length, 1);
+	});
+
+	it('saved state survives a reload per mask', () => {
+		global.options = { masks: { active: 'a' } };
+		undoHistory.ui.reset();
+		undoHistory.ui.stack('undo').push({ action: 'remove', signatures: [sig(1, JITA, 'abc123')] });
+		const text = JSON.stringify(undoHistory.ui.state);
+		undoHistory.ui.reset(text);
+		assert.strictEqual(undoHistory.ui.stack('undo', 'a').length, 1);
+		assert.strictEqual(undoHistory.ui.stack('undo', 'a').isHistoryStack, true);
+		assert.strictEqual(undoHistory.ui.stack('undo', 'b').length, 0);
 	});
 });

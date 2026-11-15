@@ -30,13 +30,20 @@ Refused step (someone else changed the hole since): ![conflict](after-conflict.p
   (which take a system off / put it on the map), automapped holes.
 - Entries pushed by one action (a paste's adds and updates, an automap's add and update) are one step and are undone in
   one request. A new edit clears the redo stack. 100 steps kept, in `sessionStorage` (`tripwire_history`).
+- One history per mask (`options.masks.active`): the server saves into the session's mask, so a step made in a
+  private mask is never undone into the corp mask after a mask switch. A step whose mask changes while it waits is refused.
+- The server has no rollback (adds, then updates, then removes). When only part of a step is saved, the applied part
+  goes on the redo (or undo) stack and a yellow notice says how many of how many items were done; the rest is skipped.
+- `jump-sig-prompt.js` (fork): its link undo sets the history's busy flag (two quick Ctrl+Z no longer send two
+  unlinks) and only takes its own entry off the stack.
 - `tripwire.undo` / `tripwire.redo` are replaced. Undo and redo go through the normal save (`refresh.php` ->
   `signatures.php`), so other clients see them and the audit log records them. Before sending, the step is checked: an
   item it changes must still be there and be last changed by you (the server always stamps the editor from the session),
   and an item it adds back must not be on the list again (same ID, same system). Otherwise it is refused with a red
   notice naming who changed what, and skipped. A server refusal also skips the step (it no longer blocks undo for the
   session). Re-added items get new ids; the rest of the history is remapped to them.
-- A step made in another system: the view goes to that system first (its signatures are only loaded there), then the
+- A step made in another system: the view goes to that system first (its signatures are only loaded there; only the
+  "change" answer for that system counts as loaded, not a regular refresh still in flight), then the
   step runs.
 - Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y are caught before upstream's handler (which now never runs for them); in inputs,
   text areas, selects and editors they are left to the field. The Undo / Redo arrows' tooltips and the palette's Undo /
