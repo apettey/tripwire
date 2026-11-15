@@ -184,7 +184,7 @@
       "stage": "first", "audience": "all", "kind": "active", "commands": ["mapKey.open"], "panels": [], "use": ["opened"],
       "events": ["show_all"], "exposed": "#map-key-button",
       "success": "opened by >=25% of active users by day 28; button turned off by <5%" },
-    { "id": "esiTokenAlert", "title": "Warning when ESI rejects a character's token", "section": "general", "prs": [], "settingsKey": null,
+    { "id": "esiTokenAlert", "title": "Warning when ESI rejects a character's token", "section": "general", "prs": [170], "settingsKey": null,
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".esi-token-failing" }
   ]
 }

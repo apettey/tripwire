@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 170,
+      "date": "2026-11-15",
+      "title": "Clear warning when ESI rejects a character's token",
+      "description": "When EVE keeps rejecting a tracked character's login token, Tripwire stops asking ESI over and over and puts a small amber warning next to the character in the Tracking panel (click your name). Hover it to see what is affected; it clears by itself once the token works again. If it stays, remove the character and add it again.",
+      "images": [
+        { "src": "whats-new/img/pr-170-esi-token-alert.png", "caption": "The warning on a character's Tracking card and its tooltip" }
+      ]
+    },
+    {
       "pr": 168,
       "date": "2026-11-15",
       "title": "Campaign and Fabricator tags",
