@@ -122,10 +122,10 @@ $saved = json_decode((string) file_get_contents($state), true);
 check('denied: recorded', [$saved['columns'], $saved['event'], $saved['failedAt']], [false, false, $now]);
 check('denied: old event still there (not dropped)', stripos(eventDefinition($db), '24 HOUR') !== false, true);
 $tdb->statements = 0;
-check('denied, within the cooldown: not tried', [flares_ensure_schema_once($tdb, false, $state, $now + 60), flares_ensure_schema_once($tdb, true, $state, $now + 60), $tdb->statements], [false, false, 0]);
-check('denied, after the cooldown: tried again', [flares_ensure_schema_once($tdb, false, $state, $now + FLARES_SCHEMA_COOLDOWN + 1), $tdb->statements > 0], [false, true]);
+check('denied, within the cooldown: not tried', [flares_ensure_schema_once($tdb, false, $state, $now + 60), flares_ensure_schema_once($tdb, true, $state, $now + 60), $tdb->statements], [false, false, 2]);	// only the identity query each time
+check('denied, after the cooldown: tried again', [flares_ensure_schema_once($tdb, false, $state, $now + FLARES_SCHEMA_COOLDOWN + 1), $tdb->statements > 3], [false, true]);
 
-// With them: columns added, the event changed in place, recorded as done; then no queries at all
+// With them: columns added, the event changed in place, recorded as done; then only the identity query
 $tdb->deny = false;
 check('allowed after the cooldown: columns added', flares_ensure_schema_once($tdb, false, $state, $now + 2 * FLARES_SCHEMA_COOLDOWN + 2), true);
 check('old table: columns added', array_values(array_intersect(['lifelength', 'reason'], columns($db))), ['lifelength', 'reason']);
@@ -134,7 +134,25 @@ check('event is enabled', $db->query("SELECT STATUS FROM information_schema.EVEN
 $saved = json_decode((string) file_get_contents($state), true);
 check('done: recorded', [$saved['version'], $saved['columns'], $saved['event'], $saved['failedAt']], [FLARES_SCHEMA_VERSION, true, true, null]);
 $tdb->statements = 0;
-check('done: no queries afterwards', [flares_ensure_schema_once($tdb, false, $state), $tdb->statements], [true, 0]);
+check('done: only the identity query afterwards', [flares_ensure_schema_once($tdb, false, $state), $tdb->statements], [true, 1]);
+$identity = flares_db_identity($db);
+check('identity: recorded, names this database', [$saved['db'] === $identity, strpos($identity, '|' . getenv('DB_NAME') . '|') !== false], [true, true]);
+// A restore / move (the state file survives redeploys): the dump re-creates the table, its events are often lost or old.
+// Simulated by re-creating `flares` (a new CREATE_TIME) and putting the 24 hour event back: ensure runs again.
+$db->exec("ALTER EVENT `flaresClean` DO DELETE FROM flares WHERE time < NOW() - INTERVAL 24 HOUR");
+sleep(1);	// CREATE_TIME has a resolution of a second
+$db->exec('DROP TABLE IF EXISTS flares_test_old');
+$db->exec('CREATE TABLE flares_test_new LIKE flares');
+$db->exec('INSERT INTO flares_test_new SELECT * FROM flares');
+$db->exec('RENAME TABLE flares TO flares_test_old, flares_test_new TO flares');
+$db->exec('DROP TABLE flares_test_old');
+check('restore: another identity', flares_db_identity($db) !== $identity, true);
+check('restore: runs again and fixes the event', [flares_ensure_schema_once($db, false, $state), stripos(eventDefinition($db), 'lifeLength') !== false], [true, true]);
+check('restore: new identity recorded', json_decode((string) file_get_contents($state), true)['db'], flares_db_identity($db));
+// A state file from another database (or none readable) never counts as done
+file_put_contents($state, json_encode(['version' => FLARES_SCHEMA_VERSION, 'db' => 'another|database|2020-01-01', 'columns' => true, 'event' => true, 'failedAt' => null]));
+$db->exec("ALTER EVENT `flaresClean` DO DELETE FROM flares WHERE time < NOW() - INTERVAL 24 HOUR");
+check('state of another database: runs again', [flares_ensure_schema_once($db, false, $state), stripos(eventDefinition($db), 'lifeLength') !== false], [true, true]);
 $list = flares_list($db, $maskA);
 check('old table: a flare from before keeps 1 day', [count($list), $list[0]->lifeLength, property_exists($list[0], 'reason') ? $list[0]->reason : 'none'], [1, 86400, null]);
 check('ensure again: columns once, no error', [flares_ensure_schema($db)['errors'], count(array_keys(columns($db), 'reason'))], [[], 1]);

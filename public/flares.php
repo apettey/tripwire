@@ -43,9 +43,10 @@ if (isset($_POST['flare']) && !empty($_POST['flare'])) {
 	try {
 		$output['result'] = flares_set_with_schema($mysql, $mask, $flare);
 	} catch (PDOException $error) {
-		if ($error->getCode() !== '42S22') throw $error;
+		error_log('[flares] could not set a flare: ' . $error->getMessage());
 		http_response_code(500);
-		echo json_encode(array('result' => false, 'error' => 'Flares need a database update: ask your Tripwire admin'));
+		echo json_encode(array('result' => false, 'error' => $error->getCode() === '42S22'
+			? 'Flares need a database update: ask your Tripwire admin' : 'Could not save the flare: try again'));
 		exit();
 	}
 } else {
@@ -56,7 +57,14 @@ if (isset($_POST['flare']) && !empty($_POST['flare'])) {
 		exit();
 	}
 
-	$output['result'] = flares_remove($mysql, $mask, $systemID);
+	try {
+		$output['result'] = flares_remove($mysql, $mask, $systemID);
+	} catch (PDOException $error) {
+		error_log('[flares] could not remove a flare: ' . $error->getMessage());
+		http_response_code(500);
+		echo json_encode(array('result' => false, 'error' => 'Could not remove the flare: try again'));
+		exit();
+	}
 }
 
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);

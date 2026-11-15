@@ -1086,14 +1086,19 @@ one; it creates the event only when it is missing). That needs the `EVENT` privi
 app user, as for the events the schema import created. The app user has both privileges when it owns its database (the
 usual setup, see above), so nothing needs doing by hand.
 
-The outcome is kept in `cache/flares-schema.json`: once done, nothing is checked again until the container is replaced
-(the image has an empty `cache/`). A failure is logged once as `[flares] could not update the schema` and tried again
+The outcome is kept in `cache/flares-schema.json` together with which database it was for (server UUID, schema name and
+when the `flares` table was created). `cache/` is a volume in production, so the file survives redeploys: once done,
+setting a flare only reads that database identity. A restored or moved database (a dump re-creates the table, often
+without its events) has another identity, so the check runs again by itself. Deleting the file is always safe: it only
+makes the next flare set check again; do that after restoring a database in a way that keeps the table (for example a
+copy of the data directory). A failure is logged once as `[flares] could not update the schema` and tried again
 after an hour, not on every request. Then an admin runs this once against the Tripwire database (until the columns
 exist, flares can be removed but not set; until the event is changed, flares still expire on time in the app, but one set
-to last until removed is deleted after 24 hours):
+to last until removed is deleted after 24 hours), and deletes `cache/flares-schema.json`:
 
 ```sql
-ALTER TABLE flares ADD COLUMN lifeLength int NULL DEFAULT 86400, ADD COLUMN reason varchar(255) NULL;
+ALTER TABLE flares ADD COLUMN lifeLength int NULL DEFAULT 86400,
+  ADD COLUMN reason varchar(255) CHARACTER SET utf8mb4 NULL DEFAULT NULL;
 ALTER EVENT flaresClean DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
 ```
 

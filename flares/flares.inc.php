@@ -6,7 +6,7 @@
 //
 // Schema: upstream's `flares` table gets two columns, `lifeLength` (seconds; NULL = until removed) and `reason`. A fresh
 // install has them from .docker/mysql/tripwire.sql; an older database gets them from flares_ensure_schema() the first
-// time a flare is set (public/flares.php; at most once per container, or per cooldown after a failure; no migration
+// time a flare is set (public/flares.php; at most once per database, or per cooldown after a failure; no migration
 // step), which also rewrites the flaresClean event so it deletes each flare when its own lifetime is over instead of
 // after a fixed 24 hours. Until then the list (public/refresh.php) reads the old columns.
 
@@ -116,22 +116,40 @@ function flares_schema_state_file() {
 }
 
 /**
- * flares_ensure_schema() at most once: when the state file (in cache/, so once per container) says it is done, nothing is
- * queried; after a failure (no ALTER / EVENT privilege) it is tried again only after FLARES_SCHEMA_COOLDOWN, logged once
- * per attempt. $force: run it although the state says done (a query found a column missing: the database was
- * replaced), but still not within the cooldown of a failure. Returns whether the columns are there.
+ * Which database this is: server UUID (MySQL; MariaDB has none), schema name and when the `flares` table was created. A
+ * restore or a move (a dump re-creates the table, often without its events) changes it. '' when it cannot be read.
+ */
+function flares_db_identity(PDO $db) {
+	$created = "(SELECT CREATE_TIME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'flares')";
+	foreach (["SELECT @@server_uuid, DATABASE(), $created", "SELECT @@hostname, DATABASE(), $created"] as $sql) {
+		try {
+			$row = $db->query($sql)->fetch(PDO::FETCH_NUM);
+			if ($row) return implode('|', array_map('strval', $row));
+		} catch (PDOException $error) { /* no @@server_uuid: try the next */ }
+	}
+	return '';
+}
+
+/**
+ * flares_ensure_schema() at most once per database: the state file (cache/, a volume in production, so it survives
+ * redeploys) records the outcome with flares_db_identity(); while it says done for this database, only that one query
+ * runs. Another database (restored, moved) runs it again. After a failure (no ALTER / EVENT privilege) it is tried again
+ * only after FLARES_SCHEMA_COOLDOWN, logged once per attempt. $force: run it although the state says done (a query found
+ * a column missing), but still not within the cooldown of a failure. Returns whether the columns are there.
  */
 function flares_ensure_schema_once(PDO $db, $force = false, $file = null, $now = null) {
 	$file = $file ?: flares_schema_state_file();
 	$now = $now ?? time();
+	$identity = flares_db_identity($db);
 	$state = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
-	$state = is_array($state) && ($state['version'] ?? null) === FLARES_SCHEMA_VERSION ? $state : null;
+	$state = is_array($state) && ($state['version'] ?? null) === FLARES_SCHEMA_VERSION && $identity !== '' && ($state['db'] ?? null) === $identity ? $state : null;
 	if ($state && !empty($state['columns']) && !empty($state['event']) && !$force) return true;
 	if ($state && !empty($state['failedAt']) && $now - (int) $state['failedAt'] < FLARES_SCHEMA_COOLDOWN) return !empty($state['columns']) && !$force;
 	$result = flares_ensure_schema($db);
 	$ok = $result['columns'] && $result['event'];
-	@file_put_contents($file, json_encode(['version' => FLARES_SCHEMA_VERSION, 'columns' => $result['columns'], 'event' => $result['event'],
-		'failedAt' => $ok ? null : $now]), LOCK_EX);
+	// read again: adding the columns may rebuild the table (a new CREATE_TIME)
+	@file_put_contents($file, json_encode(['version' => FLARES_SCHEMA_VERSION, 'db' => flares_db_identity($db), 'columns' => $result['columns'],
+		'event' => $result['event'], 'failedAt' => $ok ? null : $now]), LOCK_EX);
 	foreach ($result['errors'] as $message) {
 		error_log('[flares] could not update the schema (see docker/README.md#flares), next try in ' . FLARES_SCHEMA_COOLDOWN . ' s: ' . $message);
 	}

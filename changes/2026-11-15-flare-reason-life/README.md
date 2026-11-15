@@ -37,7 +37,7 @@ dialog is reached only by right-click. The palette also gets "Flare: set colour,
   is 1 day, reason cleaned to one line and at most 200 characters, else 400), set/remove/list per mask, and
   `flares_ensure_schema()`: adds `lifeLength` (seconds, `NULL` = until removed, default 86400) and `reason` to an older
   `flares` table and changes the `flaresClean` event in place (`ALTER EVENT`) to delete each flare when its own lifetime
-  is over. Only setting a flare runs it (`public/flares.php`), at most once per container (`cache/flares-schema.json`)
+  is over. Only setting a flare runs it (`public/flares.php`), at most once per database (`cache/flares-schema.json` records it with the database identity)
   and, after a failure (no `ALTER` / `EVENT` privilege), once an hour, logged once per try; so existing databases need no
   migration. `public/refresh.php` never changes the schema: on an old table it reads the old list. Removing a flare
   works either way. Not ported: upstream's `db-update.php` mechanism (`update_history` table, update DB connection).
