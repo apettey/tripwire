@@ -104,6 +104,9 @@
       "success": "undo used by >=15% of active users by day 28, refused (conflict) steps <5% of undos" },
     { "id": "lifeStates", "title": "Wormhole life: Stable, <4h, <1h, EOL", "section": "signatures", "prs": [104, 109], "settingsKey": "lifeStates",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
+    { "id": "siteValues", "title": "Gas and ore site value", "section": "signatures", "prs": [165], "settingsKey": "siteValues",
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".site-value-chip",
+      "success": "shown to >=30% of active users by day 28, opt-out <10%" },
 
     { "id": "destinations", "try": "destinations.open", "title": "Saved destinations", "section": "routes", "prs": [7], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["destinations.open", "destinations.add"], "panels": [], "use": ["opened"] },
@@ -166,6 +169,10 @@
     { "id": "usageStats", "title": "Usage statistics", "section": "general", "prs": [120], "settingsKey": "usageStats",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "analyticsDashboard", "try": "analytics.open", "title": "Usage analytics dashboard", "section": "general", "prs": [], "settingsKey": null,
-      "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] }
+      "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] },
+    { "id": "mapLegend", "title": "Map key", "section": "chain", "prs": [164], "settingsKey": "mapLegend", "settingsRow": "mapLegend-enabled",
+      "stage": "first", "audience": "all", "kind": "active", "commands": ["mapKey.open"], "panels": [], "use": ["opened"],
+      "events": ["show_all"], "exposed": "#map-key-button",
+      "success": "opened by >=25% of active users by day 28; button turned off by <5%" }
   ]
 }
