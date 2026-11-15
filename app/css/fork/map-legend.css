@@ -1,0 +1,66 @@
+/* Map key (fork feature, see app/js/fork/map-legend.js): the header button and the panel. The samples inside
+   #map-key-map get the map's own #chainMap rules copied for them (forkLegend.scopedCss); the rules here only lay
+   the panel out and hold each sample in its box, never colour a sample. */
+#map-key-button { padding: 0 3px; cursor: pointer; vertical-align: -1px; }
+#map-key-button svg { display: inline-block; vertical-align: baseline; }
+#map-key-button:hover, #map-key-button.active { color: orange; }
+#map-key-button.hidden { display: none; }
+
+.map-key {
+	position: fixed;
+	z-index: 900;
+	width: 500px;
+	max-width: calc(100vw - 16px);
+	display: flex;
+	flex-direction: column;
+	background: rgba(14, 18, 22, 0.97);
+	border: 1px solid #3a4650;
+	border-radius: 4px;
+	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+	color: #ccc;
+	font-size: 11px;
+	line-height: 14px;
+	text-align: left;
+}
+.map-key.hidden { display: none; }
+.map-key-head { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-bottom: 1px solid #2a333a; }
+.map-key-title { flex: 1; font-weight: bold; color: #eee; font-size: 12px; }
+.map-key-all { cursor: pointer; white-space: nowrap; }
+.map-key-all input { vertical-align: -2px; margin: 0 2px 0 0; }
+.map-key-close { background: none; border: 0; color: #aaa; font-size: 16px; line-height: 14px; cursor: pointer; padding: 0 2px; }
+.map-key-close:hover { color: #fff; }
+.map-key-body { overflow-y: auto; padding: 2px 8px 6px; min-height: 0; }
+.map-key-foot { padding: 4px 8px; border-top: 1px solid #2a333a; color: #8a959d; font-size: 10px; }
+.map-key-empty { padding: 12px 0; color: #9aa5ad; }
+
+.map-key-gtitle { margin: 8px 0 2px; color: #8fb8d8; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px; }
+.map-key-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.map-key-row:first-of-type { border-top: 0; }
+.map-key-row.map-key-off .map-key-sample, .map-key-row.map-key-off .map-key-text { opacity: 0.45; }
+.map-key-sample {
+	flex: 0 0 210px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 14px 6px;
+	padding: 8px 4px 13px 8px;
+	pointer-events: none;	/* samples are pictures: no tooltips, links or menus */
+	overflow: hidden;
+}
+.map-key-desc { flex: 1; min-width: 0; }
+.map-key-name { color: #eee; font-weight: bold; }
+.map-key-text { margin-top: 1px; }
+.map-key-where { margin-top: 2px; color: #8a959d; font-size: 10px; }
+.map-key-offtag { margin-left: 4px; padding: 0 3px; border: 1px solid #555; border-radius: 3px; color: #999; font-size: 9px; font-weight: normal; }
+
+/* A sample node: the size and box of a map node; its look comes from the map's rules */
+.map-key-node { display: inline-block; position: relative; line-height: normal; font-size: var(--map-key-font, 11.5px); }
+/* A connection: the canvas the radial map's drawing rules paint, and a caption */
+.map-key-conn { display: inline-flex; flex-direction: column; align-items: center; position: relative; }
+.map-key-line { display: block; width: 66px; height: 22px; }
+.map-key-mark { position: absolute; left: 50%; top: 11px; transform: translate(-50%, -50%); line-height: 0; }
+.map-key-cap { display: block; color: #9aa5ad; font-size: 9px; line-height: 10px; white-space: nowrap; text-align: center; }
+/* Marks side by side (a scale): taken out of their corner positions */
+.map-key-chips { display: inline-flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 5px; }
+.map-key-chip { display: inline-flex; flex-direction: column; align-items: center; position: relative; }
+.map-key-chip > :first-child { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; transform: none !important; margin: 0 !important; }
