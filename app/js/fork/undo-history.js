@@ -16,6 +16,10 @@ const undoHistory = {
 	// Keep `const undoHistory` on the first line: the test helper strips it to define a global.
 
 	MAX: 100,							// steps kept per stack
+	// Extra parts a step may carry besides signatures (meta.extra = {key: value}), saved in the same request, e.g. the
+	// paste preview's broken holes (broken-holes.js). key -> {payload(direction, value) -> the request's `key` part or
+	// null, ok(data) -> whether the answer says it was saved, label(value) -> "mark 1 hole broken"}. registerExtra().
+	extras: {},
 	STORAGE_KEY: "tripwire_history",
 	WAIT_LIST_MS: 3000,					// after a step, wait this long at most for the new list before the next one
 	SWITCH_WAIT_MS: 8000,				// loading another system's list to undo a step made there
@@ -100,13 +104,43 @@ const undoHistory = {
 	},
 
 	/** The refresh payload that undoes (direction "undo") or redoes ("redo") a step: {signatures: {add, update, remove}}
-	(empty lists left out) */
+	(empty lists left out), plus the registered extras' parts (see extras) */
 	payload: function(direction, entries) {
 		const signatures = {};
 		undoHistory.parts(direction, entries).forEach(function(p) {
 			(signatures[p.kind] = signatures[p.kind] || []).push(p.value);
 		});
-		return { signatures: signatures };
+		const out = { signatures: signatures };
+		undoHistory.extraKeys(entries).forEach(function(key) {
+			(entries || []).forEach(function(entry) {
+				const value = entry && entry.meta && entry.meta.extra ? entry.meta.extra[key] : undefined;
+				const part = value === undefined ? null : undoHistory.extras[key].payload(direction, value);
+				if (part) { out[key] = undoHistory.extras[key].merge ? undoHistory.extras[key].merge(out[key], part) : part; }
+			});
+		});
+		return out;
+	},
+
+	/** Register an extra part a step may carry (see extras). spec: {payload, ok, label, merge(a, b)?} */
+	registerExtra: function(key, spec) {
+		if (!key || !spec || typeof spec.payload !== "function" || typeof spec.ok !== "function") { throw new Error("undoHistory.registerExtra: key, payload and ok are required"); }
+		undoHistory.extras[key] = spec;
+	},
+
+	/** The registered extra keys a step's entries carry */
+	extraKeys: function(entries) {
+		const keys = [];
+		(entries || []).forEach(function(entry) {
+			const extra = entry && entry.meta && entry.meta.extra;
+			if (!extra || typeof extra !== "object") { return; }
+			Object.keys(extra).forEach(function(k) { if (undoHistory.extras[k] && keys.indexOf(k) < 0) { keys.push(k); } });
+		});
+		return keys;
+	},
+
+	/** Whether the answer saved every extra part of the step */
+	extrasOk: function(entries, data) {
+		return undoHistory.extraKeys(entries).every(function(k) { return !!undoHistory.extras[k].ok(data); });
 	},
 
 	/** Which parts of a step the server applied: per entry, per element index, true / false (missing = not sent).
@@ -416,6 +450,11 @@ const undoHistory = {
 		if (!undoHistory.isStandard(entry)) { return String(entry.action || "change"); }
 		const verb = { add: "add", remove: "delete", update: "edit" }[entry.action];
 		const els = entry.signatures.filter(Boolean);
+		const extra = undoHistory.extraKeys([entry]).map(function(k) {
+			const spec = undoHistory.extras[k];
+			return spec.label ? spec.label(entry.meta.extra[k]) : "";
+		}).filter(Boolean).join(", ");
+		if (extra) { return els.length ? undoHistory.label(Object.assign({}, entry, { meta: {} }), ctx) + ", " + extra : extra; }
 		if (!els.length) { return verb; }
 		if (els.length === 1) {
 			let text = verb + " " + undoHistory.elementName(els[0], ctx);
@@ -728,7 +767,13 @@ undoHistory.ui = {
 		const ui = undoHistory.ui;
 		const other = which === "undo" ? "redo" : "undo";
 		let part, status;
-		if (undoHistory.succeeded(data)) {
+		const sigParts = undoHistory.parts(which, step).length;
+		if (!sigParts && undoHistory.extraKeys(step).length) {
+			// Only extra parts (e.g. a restore of a broken hole): their own answer decides
+			const ok = !!data && undoHistory.extrasOk(step, data);
+			part = { entries: ok ? step : [], snapshots: ok ? snapshots : [], applied: 0, sent: 0 };
+			status = ok ? "done" : "failed";
+		} else if (undoHistory.succeeded(data)) {
 			part = { entries: step, snapshots: snapshots, applied: 0, sent: 0 };
 			status = "done";
 		} else {

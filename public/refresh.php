@@ -237,6 +237,8 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 if (isset($_POST['signatures']) || isset($_POST['wormholes'])) {
 	require('../signatures.php');
 }
+require_once('../broken_wormholes.inc.php'); // fork: paste preview's broken holes (this request's marks, the mask's list)
+broken_wormholes_refresh($mysql, $maskID, isset($_POST['brokenHoles']) ? $_POST['brokenHoles'] : null, fork_csrf_valid(), array('id' => isset($_SESSION['characterID']) ? (int) $_SESSION['characterID'] : 0, 'name' => isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : ''), $output); // fork
 
 /**
 // *********************
