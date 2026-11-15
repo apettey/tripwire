@@ -231,18 +231,23 @@ const chainAlerts = {
 
 	/**
 	 * Where a jump ship would jump from: [{id, start}] - your Get home start (the Jump planner's origin) when one is set,
-	 * else every other k-space system of the chain a jump drive works in. Never high-sec, for any ship: no jump drive can
-	 * be activated there (jump freighters and Black Ops may fly in high-sec but jump from low / null). jumpRange.canJumpFrom
-	 * lets high-sec through, so it is left out here.
+	 * else every other k-space system of the chain a jump drive works in (jumpRange.canJumpFrom: only the destination is
+	 * restricted, no cyno in high-sec; a jump may start anywhere in k-space). Your start is your own pick and is used as it
+	 * is. The fallback only uses high-sec exits for ships that can be in high-sec (HS_SHIPS: jump freighters and Black Ops
+	 * battleships); other capitals can't enter it.
+	 * @param shipKey the Jump planner's ship (jumpPlanner.settings().ship, e.g. "group-547" or a hull "group-902-12.5")
 	 */
-	capRefs: function(exitID, origin, chain, systems) {
+	capRefs: function(exitID, origin, chain, systems, shipKey) {
 		if (typeof jumpRange === "undefined") { return []; }
-		const ok = function(id) { return jumpRange.canJumpFrom(id, systems[id]) && jumpRange.kind(id, systems[id]) !== "hs"; };
-		if (origin && ok(origin)) { return Number(origin) === Number(exitID) ? [] : [{ id: Number(origin), start: true }]; }
+		if (origin && jumpRange.canJumpFrom(origin, systems[origin])) { return Number(origin) === Number(exitID) ? [] : [{ id: Number(origin), start: true }]; }
+		const hsOk = chainAlerts.HS_SHIPS.indexOf(String(shipKey || "").split("-").slice(0, 2).join("-")) >= 0;
 		return Object.keys(chain || {}).map(Number).filter(function(id) {
-			return id !== Number(exitID) && chainAlerts.isReal(id) && ok(id);
+			if (id === Number(exitID) || !chainAlerts.isReal(id) || !jumpRange.canJumpFrom(id, systems[id])) { return false; }
+			return hsOk || jumpRange.kind(id, systems[id]) !== "hs";
 		}).map(function(id) { return { id: id, start: false }; });
 	},
+
+	HS_SHIPS: ["group-902", "group-898"],	// Jump Freighter, Black Ops: the jump ships that can be in high-sec
 
 	/** refs within rangeLy of the exit, nearest first: [{id, start, ly}]. pos: {systemID: {x, y, z}} (jumpRange.decode) */
 	capHits: function(exitID, refs, pos, rangeLy) {
@@ -412,7 +417,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				const r = jumpPlanner.range(planner, data.presets);
 				if (!r.preset || !(r.range > 0)) { return; }
 				list.forEach(function(c) {
-					const hits = ca.capHits(c.exitID, ca.capRefs(c.exitID, planner.origin, lastChain, systems()), data.pos, r.range);
+					const hits = ca.capHits(c.exitID, ca.capRefs(c.exitID, planner.origin, lastChain, systems(), planner.ship), data.pos, r.range);
 					if (hits.length) { show("capRange", ca.capText(c.exitID, hits, r.preset.label, planner.jdc, r.range, systems()), c.exitID); }
 				});
 			}).fail(function() { pendingCap = []; });

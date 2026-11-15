@@ -178,11 +178,20 @@ describe('Chain alerts', () => {
 			assert.deepStrictEqual(ca.capCandidates(fresh, { chain: {}, meID: 42 }, S, planner), [], 'only exits on the chain');
 		});
 		it('jumps from your Get home start when set, else from the other exits of the chain', () => {
-			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), {}, S), [{ id: sid('Floseswin'), start: true }]);
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), {}, S, 'group-547'), [{ id: sid('Floseswin'), start: true }]);
 			const chain = { [LS]: true, [C5]: true, [HS]: true, [NS]: true };
-			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S).map(r => r.id), [NS], 'no jump drive starts in high-sec');
-			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), chain, S), [{ id: sid('Floseswin'), start: true }]);
-			assert.deepStrictEqual(ca.capRefs(LS, sid('Jita'), chain, S).map(r => r.id), [NS], 'a high-sec start is not used: the chain exits instead');
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Floseswin'), chain, S, 'group-547'), [{ id: sid('Floseswin'), start: true }], 'the start wins over the chain');
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Jita'), chain, S, 'group-902'), [{ id: sid('Jita'), start: true }], 'a JF with a high-sec start: honoured');
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Jita'), chain, S, 'group-547'), [{ id: sid('Jita'), start: true }], 'any explicit start canJumpFrom accepts');
+			assert.deepStrictEqual(ca.capRefs(LS, sid('Thera'), chain, S, 'group-547').map(r => r.id), [NS], 'a start no jump drive works in: the chain instead');
+		});
+		it('the fallback uses high-sec exits only for ships that can be in high-sec', () => {
+			const chain = { [LS]: true, [C5]: true, [HS]: true, [NS]: true };
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-547').map(r => r.id), [NS], 'a Carrier gets no high-sec fallback start');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-485').map(r => r.id), [NS], 'nor a Dreadnought');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-902').map(r => r.id).sort(), [HS, NS].sort(), 'a Jump Freighter does');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-898').map(r => r.id).sort(), [HS, NS].sort(), 'so do Black Ops');
+			assert.deepStrictEqual(ca.capRefs(LS, null, chain, S, 'group-902-12.5').map(r => r.id).sort(), [HS, NS].sort(), 'a hull of the group');
 		});
 		it('hits are the refs within range, nearest first', () => {
 			const hek = sid('Hek'), rens = sid('Rens'), jita = sid('Jita');
