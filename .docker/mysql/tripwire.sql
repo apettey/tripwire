@@ -233,6 +233,8 @@ CREATE TABLE `flares` (
   `systemID` int NOT NULL,
   `flare` enum('red','yellow','green') NOT NULL,
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `lifeLength` int DEFAULT 86400,
+  `reason` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`maskID`,`systemID`),
   KEY `time` (`time`) USING BTREE,
   KEY `maskID` (`maskID`) USING BTREE
@@ -560,7 +562,7 @@ STARTS CURRENT_TIMESTAMP
 ON COMPLETION NOT PRESERVE
 ENABLE
 DO
-  DELETE FROM flares WHERE time < NOW() - INTERVAL 24 HOUR;
+  DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
 ;;
 DELIMITER ;
 

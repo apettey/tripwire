@@ -45,9 +45,9 @@ const mapLegendEntries = [
 	},
 	{
 		id: "flares", group: "systems", order: 70, title: "Flares",
-		text: "Red, yellow or green flare your mask put on a system (right-click a system).",
+		text: "Red, yellow or green flare your mask put on a system (right-click a system, Flares). The (i) icon: the flare has a reason; hover it to read it and see how long it lasts.",
 		sample: function() {
-			return forkLegend.node({ cls: "redNode", type: "&nbsp;", name: "J1" }) + forkLegend.node({ cls: "yellowNode", type: "&nbsp;", name: "J2" })
+			return forkLegend.node({ cls: "redNode", type: "&nbsp;", name: "J1", left: "<i data-icon='info' class='fork-flare-mark'></i>" }) + forkLegend.node({ cls: "yellowNode", type: "&nbsp;", name: "J2" })
 				+ forkLegend.node({ cls: "greenNode", type: "&nbsp;", name: "J3" });
 		}
 	},

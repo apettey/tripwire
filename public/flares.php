@@ -22,31 +22,41 @@ if(!isset($_SESSION['userID'])) {
 require_once('../config.php');
 require_once('../db.inc.php');
 require_once('../csrf.inc.php'); fork_csrf_require(); // fork: flares change only by the app's own POST
+require_once('../flares/flares.inc.php'); // fork: reason and lifetime (ported from upstream 2.0)
 
 header('Content-Type: application/json');
 
 $mask = $_SESSION['mask'];
 
-if (isset($_REQUEST['flare']) && !empty($_REQUEST['flare'])) {
-	$systemID = $_REQUEST['systemID'];
-	$flare = $_REQUEST['flare'];
+// Fork: an older flares table gets its reason / lifetime columns (and the flaresClean event its per-flare lifetime) here
+try {
+	flares_ensure_schema($mysql);
+} catch (PDOException $error) {
+	error_log('[flares] could not add the reason / lifetime columns (see docker/README.md#flares): ' . $error->getMessage());
+	http_response_code(500);
+	echo json_encode(array('result' => false, 'error' => 'Flares need a database update: ask your Tripwire admin'));
+	exit();
+}
 
-	$query = 'INSERT INTO flares (maskID, systemID, flare) VALUES (:mask, :systemID, :flare) ON DUPLICATE KEY UPDATE flare = :flare';
-	$stmt = $mysql->prepare($query);
-	$stmt->bindValue(':mask', $mask);
-	$stmt->bindValue(':systemID', $systemID);
-	$stmt->bindValue(':flare', $flare);
+if (isset($_POST['flare']) && !empty($_POST['flare'])) {
+	// systemID, flare (red | yellow | green), lifeLength (86400 | forever; missing = 86400), reason (optional, at most 200 characters)
+	[$flare, $error] = flares_parse_set($_POST);
+	if ($error !== null) {
+		http_response_code(400);
+		echo json_encode(array('result' => false, 'error' => $error));
+		exit();
+	}
 
-	$output['result'] = $stmt->execute()?true:$stmt->errorInfo();
+	$output['result'] = flares_set($mysql, $mask, $flare);
 } else {
-	$systemID = $_REQUEST['systemID'];
+	$systemID = flares_system_id($_POST['systemID'] ?? null);
+	if ($systemID === false) {
+		http_response_code(400);
+		echo json_encode(array('result' => false, 'error' => 'Invalid system'));
+		exit();
+	}
 
-	$query = "DELETE FROM flares WHERE maskID = :mask AND systemID = :systemID";
-	$stmt = $mysql->prepare($query);
-	$stmt->bindValue(':mask', $mask);
-	$stmt->bindValue(':systemID', $systemID);
-
-	$output['result'] = $stmt->execute()?true:$stmt->errorInfo();
+	$output['result'] = flares_remove($mysql, $mask, $systemID);
 }
 
 $output['proccessTime'] = sprintf('%.4f', microtime(true) - $startTime);

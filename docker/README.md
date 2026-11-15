@@ -1065,6 +1065,32 @@ staging systems. A small map icon next to each system opens it on the region map
   >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
   outnumber jumps.
 
+### Flares
+
+A flare (right-click a system > Flares) has a colour, a lifetime (1 day or until removed) and an optional reason of at
+most 200 characters, ported from upstream Tripwire 2.0. Code: `flares/flares.inc.php` (storage, validation, schema),
+`public/flares.php` (set / remove, CSRF, the session's mask only), `public/refresh.php` (the list, with the reason and
+lifetime; expired flares are left out) and `app/js/fork/flare-details.js`. Tests: `php flares/tests/flares_test.php`.
+
+Schema: upstream's `flares` table has two more columns, `lifeLength` (seconds, `NULL` = until removed, default 86400) and
+`reason` (`varchar(255)`, `NULL` = none). A fresh install gets them from `.docker/mysql/tripwire.sql`. An existing
+database gets them automatically: `flares_ensure_schema()` adds them (`ALTER TABLE ... ADD COLUMN`, needs `ALTER`) the
+first time a page reads the flare list or someone sets a flare. Flares from before keep their 24 hours.
+
+The `flaresClean` event (hourly) deletes each flare when its own lifetime is over:
+`DELETE FROM flares WHERE lifeLength IS NOT NULL AND time < NOW() - INTERVAL lifeLength SECOND`. The same call replaces an
+older event that deleted every flare after 24 hours (`DROP EVENT` + `CREATE EVENT`, which needs the `EVENT` privilege;
+the event's definer becomes the app user, as for the events the schema import created). The app user has both
+privileges when it owns its database (the usual setup, see above), so nothing needs doing by hand. If the log says
+`[flares] could not update the flaresClean event`, an admin runs this once against the Tripwire database (until then
+flares still expire on time in the app, but one set to last until removed is deleted after 24 hours):
+
+```sql
+DROP EVENT IF EXISTS flaresClean;
+CREATE EVENT flaresClean ON SCHEDULE EVERY 1 HOUR STARTS CURRENT_TIMESTAMP ON COMPLETION NOT PRESERVE ENABLE
+  DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
+```
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.
