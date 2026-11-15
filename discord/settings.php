@@ -11,6 +11,8 @@
 //     preserveMass: {enabled, webhookID, template (marked / changed), templateClear (cleared), ping, chainOnly}   (discord/preserve_mass.php)
 //     rolling:   {enabled, webhookID, template (marked / changed), templateClear (done / hole gone), ping, chainOnly}   (discord/rolling.php)
 //     structureTimer: {enabled, webhookID, template, ping, leads: [1440, 60, 15, 0] (minutes before the end, 0 = at the end), hostileOnly}   (discord/structure_timers.php)
+//     chainHole: {enabled, webhookID, template, ping, homeOnly}   (discord/chain_alerts.php)
+//     homeStatic: {enabled, webhookID, template, ping, stages: ['lt1h', 'expired']}   (discord/chain_alerts.php)
 //   },
 //   corporations: [corporationID...], alliances: [allianceID...]   ("our" side for corpKill / corpLoss)
 //   homeSystemID: systemID or 0   (where the chain starts: chainKill and watchlist count only systems connected to it, discord/chain.php)
@@ -45,6 +47,9 @@ function discord_settings_defaults($corporationID = 0, $allianceID = 0) {
                 'ping' => '', 'enabledAt' => 0, 'chainOnly' => true],
             'structureTimer' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['structureTimer'], 'ping' => '', 'enabledAt' => 0,
                 'leads' => DISCORD_STIMER_LEADS, 'hostileOnly' => false],
+            'chainHole' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['chainHole'], 'ping' => '', 'enabledAt' => 0, 'homeOnly' => true],
+            'homeStatic' => ['enabled' => false, 'webhookID' => 0, 'template' => $templates['homeStatic'], 'ping' => '', 'enabledAt' => 0,
+                'stages' => DISCORD_HSTATIC_STAGES],
         ],
         'corporations' => $corporationID > 0 ? [(int) $corporationID] : [],
         'alliances' => $allianceID > 0 ? [(int) $allianceID] : [],
@@ -157,6 +162,16 @@ function discord_settings_normalise($input, array $defaults, ?array $webhookIDs 
             }
             if (array_key_exists('hostileOnly', $in)) $type['hostileOnly'] = $in['hostileOnly'] === true || $in['hostileOnly'] === 1 || $in['hostileOnly'] === '1' || $in['hostileOnly'] === 'true';
             if ($type['enabled'] && !$type['leads']) { $errors[] = 'structureTimer: tick at least one reminder'; $type['enabled'] = false; }
+        } elseif ($kind === 'chainHole') {
+            // Only holes in the home system (on by default), or anywhere in the chain connected to it (discord/chain_alerts.php)
+            if (array_key_exists('homeOnly', $in)) $type['homeOnly'] = $in['homeOnly'] === true || $in['homeOnly'] === 1 || $in['homeOnly'] === '1' || $in['homeOnly'] === 'true';
+        } elseif ($kind === 'homeStatic') {
+            // Which stages: <1h and / or EOL
+            if (array_key_exists('stages', $in)) {
+                $stages = is_array($in['stages']) ? $in['stages'] : [];
+                $type['stages'] = array_values(array_filter(DISCORD_HSTATIC_STAGES, function ($s) use ($stages) { return in_array($s, $stages, true); }));
+            }
+            if ($type['enabled'] && !$type['stages']) { $errors[] = 'homeStatic: tick <1h or EOL'; $type['enabled'] = false; }
         } elseif ($kind === 'rally' || $kind === 'watchlist') {
             // Nothing else: on/off, webhook, ping and the template(s); the watchlist's filters are in Mask Admin > Watchlist
         } else {

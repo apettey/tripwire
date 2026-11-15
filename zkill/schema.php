@@ -5,6 +5,8 @@
 const ZK_DDL = [
     // Every kill the instance knows about (stream: all of New Eden; back-fill: requested systems), pruned after
     // ZKILL_RETENTION_HOURS. attackerCount = attackers with a character (pilots), attackerTotal = all attackers.
+    // Kill tags: locationID = zKillboard's nearest celestial, attackerShips / attackerWeapons = distinct type IDs (CSV),
+    // concord = CONCORD on the mail, ganked = zKillboard's "ganked" label.
     // `id` is the since-cursor handed to readers (monotonic, single writer: the worker); killID dedupes.
     "CREATE TABLE IF NOT EXISTS `zkill_killmails` (
       `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -28,6 +30,11 @@ const ZK_DDL = [
       `npc` tinyint(1) NOT NULL DEFAULT 0,
       `solo` tinyint(1) NOT NULL DEFAULT 0,
       `awox` tinyint(1) NOT NULL DEFAULT 0,
+      `locationID` bigint unsigned DEFAULT NULL,
+      `attackerShips` varchar(400) NOT NULL DEFAULT '',
+      `attackerWeapons` varchar(400) NOT NULL DEFAULT '',
+      `concord` tinyint(1) NOT NULL DEFAULT 0,
+      `ganked` tinyint(1) NOT NULL DEFAULT 0,
       PRIMARY KEY (`id`),
       UNIQUE KEY `killID` (`killID`),
       KEY `system_time` (`systemID`, `killTime`),
@@ -129,16 +136,35 @@ const ZK_DDL = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 ];
 
+// Columns added to zkill_killmails after it first shipped (kill tags): name => definition. A table from before gets them
+// from zk_ensure_schema (ADD COLUMN at the end is instant in MySQL 8); rows stored before have no tag facts.
+const ZK_KILLMAIL_ADDED_COLUMNS = [
+    'locationID'      => 'bigint unsigned DEFAULT NULL',
+    'attackerShips'   => "varchar(400) NOT NULL DEFAULT ''",
+    'attackerWeapons' => "varchar(400) NOT NULL DEFAULT ''",
+    'concord'         => 'tinyint(1) NOT NULL DEFAULT 0',
+    'ganked'          => 'tinyint(1) NOT NULL DEFAULT 0',
+];
+
 function zk_ensure_schema(PDO $db) {
     foreach (ZK_DDL as $ddl) $db->exec($ddl);
+    $have = array_flip(array_map('strtolower', $db->query('SHOW COLUMNS FROM zkill_killmails')->fetchAll(PDO::FETCH_COLUMN)));
+    foreach (ZK_KILLMAIL_ADDED_COLUMNS as $column => $definition) {
+        if (isset($have[strtolower($column)])) continue;
+        try {
+            $db->exec("ALTER TABLE zkill_killmails ADD COLUMN `$column` $definition");
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '42S21') throw $error;   // duplicate column: another process just added it
+        }
+    }
 }
 
-/** Run $fn($db); if a zkill_* table is missing (42S02), create the tables and run it once more */
+/** Run $fn($db); if a zkill_* table (42S02) or a column added since (42S22) is missing, create them and run it once more */
 function zk_with_schema(PDO $db, callable $fn) {
     try {
         return $fn($db);
     } catch (PDOException $error) {
-        if ($error->getCode() !== '42S02') throw $error;
+        if ($error->getCode() !== '42S02' && $error->getCode() !== '42S22') throw $error;
         zk_ensure_schema($db);
         return $fn($db);
     }

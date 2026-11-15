@@ -85,8 +85,17 @@ describe('esiLimits', () => {
 		});
 		it('does not pause polling for other 429s or normal answers', () => {
 			assert.deepStrictEqual(esiLimits.decide('https://esi.evetech.net/v2/ui/autopilot/waypoint/', 429, headers({ 'Retry-After': '30' }), true, NOW), {});
-			assert.deepStrictEqual(esiLimits.decide(LOCATION, 200, headers({ 'X-Ratelimit-Remaining': '3', 'X-Ratelimit-Limit': '1200/15m' }), true, NOW), {});
+			assert.deepStrictEqual(esiLimits.decide(LOCATION, 200, headers({ 'X-Ratelimit-Remaining': '500', 'X-Ratelimit-Limit': '1200/15m' }), true, NOW), {});
 			assert.deepStrictEqual(esiLimits.decide(LOCATION, 0, headers({}), true, NOW), {});
+		});
+		it('slows a character down when its bucket is nearly used up (under 5%)', () => {
+			const low = n => headers({ 'X-Ratelimit-Group': 'char-location', 'X-Ratelimit-Remaining': String(n), 'X-Ratelimit-Limit': '1200/15m' });
+			assert.deepStrictEqual(esiLimits.decide(LOCATION, 200, low(59), true, NOW), { 'char:90000001': 60 });
+			assert.deepStrictEqual(esiLimits.decide(LOCATION, 200, low(60), true, NOW), {});
+			assert.deepStrictEqual(esiLimits.decide('https://esi.evetech.net/status/?user_agent=x', 200,
+				headers({ 'X-Ratelimit-Remaining': '4', 'X-Ratelimit-Limit': '600/15m' }), false, NOW), { status: 60 });
+			assert.deepStrictEqual(esiLimits.decide('https://esi.evetech.net/v2/ui/autopilot/waypoint/', 200,
+				headers({ 'X-Ratelimit-Remaining': '1', 'X-Ratelimit-Limit': '900/15m' }), true, NOW), {}, 'user actions are not held back');
 		});
 	});
 
