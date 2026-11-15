@@ -1074,22 +1074,31 @@ lifetime; expired flares are left out) and `app/js/fork/flare-details.js`. Tests
 
 Schema: upstream's `flares` table has two more columns, `lifeLength` (seconds, `NULL` = until removed, default 86400) and
 `reason` (`varchar(255)`, `NULL` = none). A fresh install gets them from `.docker/mysql/tripwire.sql`. An existing
-database gets them automatically: `flares_ensure_schema()` adds them (`ALTER TABLE ... ADD COLUMN`, needs `ALTER`) the
-first time a page reads the flare list or someone sets a flare. Flares from before keep their 24 hours.
+database gets them automatically the first time someone sets a flare after the update: `public/flares.php` runs
+`flares_ensure_schema_once()`, which adds them (`ALTER TABLE ... ADD COLUMN`, needs `ALTER`). Flares from before keep
+their 24 hours. Until then the flare list (`public/refresh.php`, which never changes the schema) reads the old columns,
+and removing a flare never needs the new ones.
 
 The `flaresClean` event (hourly) deletes each flare when its own lifetime is over:
-`DELETE FROM flares WHERE lifeLength IS NOT NULL AND time < NOW() - INTERVAL lifeLength SECOND`. The same call replaces an
-older event that deleted every flare after 24 hours (`DROP EVENT` + `CREATE EVENT`, which needs the `EVENT` privilege;
-the event's definer becomes the app user, as for the events the schema import created). The app user has both
-privileges when it owns its database (the usual setup, see above), so nothing needs doing by hand. If the log says
-`[flares] could not update the flaresClean event`, an admin runs this once against the Tripwire database (until then
-flares still expire on time in the app, but one set to last until removed is deleted after 24 hours):
+`DELETE FROM flares WHERE lifeLength IS NOT NULL AND time < NOW() - INTERVAL lifeLength SECOND`. The same call changes an
+older event that deleted every flare after 24 hours with `ALTER EVENT` (in place, so there is never a moment without
+one; it creates the event only when it is missing). That needs the `EVENT` privilege, and the event's definer becomes the
+app user, as for the events the schema import created. The app user has both privileges when it owns its database (the
+usual setup, see above), so nothing needs doing by hand.
+
+The outcome is kept in `cache/flares-schema.json`: once done, nothing is checked again until the container is replaced
+(the image has an empty `cache/`). A failure is logged once as `[flares] could not update the schema` and tried again
+after an hour, not on every request. Then an admin runs this once against the Tripwire database (until the columns
+exist, flares can be removed but not set; until the event is changed, flares still expire on time in the app, but one set
+to last until removed is deleted after 24 hours):
 
 ```sql
-DROP EVENT IF EXISTS flaresClean;
-CREATE EVENT flaresClean ON SCHEDULE EVERY 1 HOUR STARTS CURRENT_TIMESTAMP ON COMPLETION NOT PRESERVE ENABLE
-  DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
+ALTER TABLE flares ADD COLUMN lifeLength int NULL DEFAULT 86400, ADD COLUMN reason varchar(255) NULL;
+ALTER EVENT flaresClean DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
 ```
+
+Re-colouring a flare (Battle / Hold / Fleet Op, the palette) keeps the time it was set, so its lifetime runs on; saving it
+in the Set flare dialog starts the lifetime again (`restart=1`).
 
 ### Versions
 

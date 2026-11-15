@@ -68,15 +68,18 @@ const flareDetails = {
 	},
 
 	/** chain.data.flares after a successful set (payload) or remove (payload null) of systemID, without waiting for the next
-		refresh. Returns a new object; the newest flare first, as the server sends them. */
+		refresh. Returns a new object; the newest flare first, as the server sends them. As on the server (flares_set): a
+		re-colour keeps the time the flare was set; the dialog (payload.restart) or a flare whose lifetime is over starts it again. */
 	applyLocal: function(data, systemID, payload, nowSec) {
 		const id = String(systemID);
+		const old = flareDetails.find(data, systemID);
 		const rest = flareDetails.list(data).filter(function(f) { return f && String(f.systemID) !== id; });
 		const out = {};
 		for (const k in (data || {})) { if (k !== "flares") { out[k] = data[k]; } }
 		if (payload) {
+			const keep = !!old && !payload.restart && Number(old.setAt) > 0 && flareDetails.remaining(old, nowSec) !== 0;
 			rest.unshift({
-				systemID: Number(systemID), flare: payload.flare, time: null, setAt: Math.floor(nowSec),
+				systemID: Number(systemID), flare: payload.flare, time: keep ? old.time : null, setAt: keep ? Number(old.setAt) : Math.floor(nowSec),
 				lifeLength: payload.lifeLength === flareDetails.FOREVER ? null : Number(payload.lifeLength),
 				reason: payload.reason || null
 			});
@@ -220,6 +223,7 @@ const flareDetails = {
 		const colour = $d.find("input[name='fork-flare-colour']:checked").val();
 		const life = $d.find("input[name='fork-flare-life']:checked").val();
 		const payload = flareDetails.payload(systemID, colour, life, $d.find(".fork-flare-reason").val());
+		payload.restart = "1";	// set again by the user: its lifetime starts again (a quick re-colour keeps it)
 		flareDetails.send(systemID, payload).then(function() {
 			if (typeof forkUsage !== "undefined" && (payload.reason || payload.lifeLength === flareDetails.FOREVER)) { forkUsage.track("flareDetails", "saved"); }
 			$d.dialog("close");
@@ -290,16 +294,24 @@ const flareDetails = {
 		});
 	},
 
+	/** Wrap chainObj.flares (upstream: colours the nodes): the data it is given becomes chainObj.data.flares BEFORE
+		after(data) runs, so the system panel (systemPanel.update reads chain.data.flares) shows this refresh's flares, not
+		the previous one's (chain.draw assigns the return value only afterwards). */
+	hook: function(chainObj, after) {
+		const orig = chainObj.flares;
+		chainObj.flares = function(data) {
+			if (data && chainObj.data) { chainObj.data.flares = data; }
+			const out = orig.apply(this, arguments);
+			try { after(data); } catch (e) { if (typeof console !== "undefined") { console.error("flare details", e); } }
+			return out;
+		};
+	},
+
 	init: function() {
 		if (typeof chain === "undefined" || !chain || typeof chain.flares !== "function") { return; }
 		// Upstream 2.0 crashed on the first map draw when flares weren't loaded yet: start with an empty list
 		if (!chain.data.flares) { chain.data.flares = { flares: [] }; }
-		const orig = chain.flares;
-		chain.flares = function(data) {
-			const out = orig.apply(this, arguments);
-			try { flareDetails.decorate(data); } catch (e) { if (window.console) { console.error("flare details", e); } }
-			return out;
-		};
+		flareDetails.hook(chain, function(data) { flareDetails.decorate(data); });
 		flareDetails.registerCommands();
 		flareDetails.registerHint();
 		flareDetails.decorate(chain.data.flares);

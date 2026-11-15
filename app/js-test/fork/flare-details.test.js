@@ -72,14 +72,61 @@ describe('Flare details', () => {
 			assert.deepStrictEqual(out.flares.map(f => [f.systemID, f.flare]), [[5, 'yellow'], [1, 'green']]);
 			assert.strictEqual(out.flares[0].lifeLength, null);
 			assert.strictEqual(out.flares[0].reason, 'r');
-			assert.strictEqual(out.flares[0].setAt, T + 10);
+			assert.strictEqual(out.flares[0].setAt, T);	// no restart: keeps the time it was set
 			assert.strictEqual(out.last_modified, d.last_modified);
 			assert.strictEqual(d.flares.length, 2);	// the input is not changed
+		});
+		it('a re-colour keeps the time it was set; the dialog (restart) starts it again', () => {
+			const d = data([flare(5, 'red', { setAt: T - 3600, time: 'old' })]);
+			const kept = flareDetails.applyLocal(d, 5, flareDetails.recolour(d, 5, 'green'), T).flares[0];
+			assert.deepStrictEqual([kept.flare, kept.setAt, kept.time], ['green', T - 3600, 'old']);
+			assert.strictEqual(flareDetails.remaining(kept, T), 82800);
+			const restarted = flareDetails.applyLocal(d, 5, Object.assign(flareDetails.payload(5, 'green', '86400'), { restart: '1' }), T).flares[0];
+			assert.deepStrictEqual([restarted.setAt, restarted.time], [T, null]);
+		});
+		it('a re-colour of a flare whose lifetime is over starts a new one', () => {
+			const d = data([flare(5, 'red', { setAt: T - 90000 })]);
+			assert.strictEqual(flareDetails.applyLocal(d, 5, flareDetails.recolour(d, 5, 'green'), T).flares[0].setAt, T);
 		});
 		it('removes on a null payload and starts from nothing', () => {
 			assert.deepStrictEqual(flareDetails.applyLocal(data([flare(5, 'red')]), '5', null, T).flares, []);
 			const out = flareDetails.applyLocal(undefined, 7, { systemID: 7, flare: 'red', lifeLength: '86400' }, T);
 			assert.deepStrictEqual(out.flares.map(f => [f.systemID, f.lifeLength, f.reason]), [[7, 86400, null]]);
+		});
+	});
+
+	describe('hook (chain.flares)', () => {
+		const fakeChain = () => {
+			const c = { data: { flares: data([flare(5, 'red', { reason: 'old' })]) }, coloured: null };
+			c.flares = function(d) { c.coloured = d; return d; };
+			return c;
+		};
+		it('the new flares are chain.data.flares before the panel is drawn (not one refresh behind)', () => {
+			const c = fakeChain();
+			let seen = null;
+			flareDetails.hook(c, function() { seen = flareDetails.panelHtml(flareDetails.find(c.data.flares, 5), T); });
+			const next = data([flare(5, 'green', { reason: 'new' })]);
+			assert.strictEqual(c.flares(next), next);
+			assert.strictEqual(c.coloured, next);
+			assert.ok(seen.includes('Fleet op flare') && seen.includes('new'), seen);
+		});
+		it('a removed flare is gone from the panel at once', () => {
+			const c = fakeChain();
+			let seen = null;
+			flareDetails.hook(c, function() { seen = flareDetails.panelHtml(flareDetails.find(c.data.flares, 5), T); });
+			c.flares(data([]));
+			assert.strictEqual(seen, '');
+		});
+		it('a redraw without data keeps the current flares, and an error after drawing does not break the map', () => {
+			const c = fakeChain();
+			const before = c.data.flares;
+			const errors = console.error;
+			console.error = function() {};
+			try {
+				flareDetails.hook(c, function() { throw new Error('x'); });
+				c.flares(undefined);
+			} finally { console.error = errors; }
+			assert.strictEqual(c.data.flares, before);
 		});
 	});
 

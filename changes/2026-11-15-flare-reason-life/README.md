@@ -36,14 +36,16 @@ dialog is reached only by right-click. The palette also gets "Flare: set colour,
 - `flares/flares.inc.php` (new): validation (colour red/yellow/green, lifetime `86400` or `forever`, a missing lifetime
   is 1 day, reason cleaned to one line and at most 200 characters, else 400), set/remove/list per mask, and
   `flares_ensure_schema()`: adds `lifeLength` (seconds, `NULL` = until removed, default 86400) and `reason` to an older
-  `flares` table and rewrites the `flaresClean` event to delete each flare when its own lifetime is over. Runs from
-  `public/flares.php` on every set/remove and from `public/refresh.php` when the list query finds a column missing, so
-  existing databases need no migration; refresh falls back to the old list if the columns cannot be added. Not ported:
-  upstream's `db-update.php` mechanism (state file, `update_history` table, update DB connection).
+  `flares` table and changes the `flaresClean` event in place (`ALTER EVENT`) to delete each flare when its own lifetime
+  is over. Only setting a flare runs it (`public/flares.php`), at most once per container (`cache/flares-schema.json`)
+  and, after a failure (no `ALTER` / `EVENT` privilege), once an hour, logged once per try; so existing databases need no
+  migration. `public/refresh.php` never changes the schema: on an old table it reads the old list. Removing a flare
+  works either way. Not ported: upstream's `db-update.php` mechanism (`update_history` table, update DB connection).
 - Expired flares are left out of the list at once, not only when the hourly event runs.
-- Setting a flare again (any colour) restarts its lifetime. The quick Battle / Hold / Fleet Op items and the palette's
-  flare commands keep the flare's lifetime and reason; a missing reason is sent as no field. Fixes the old quick items
-  adding a second entry when re-colouring.
+- Saving a flare in the dialog starts its lifetime again; the quick Battle / Hold / Fleet Op items and the palette's
+  flare commands keep its lifetime, reason and the time it was set (a flare whose lifetime was already over starts
+  again). A missing reason is sent as no field. Fixes the old quick items adding a second entry when re-colouring.
+- The system panel shows the flares of the refresh being drawn (`chain.data.flares` is set before the panel is drawn).
 - `app/js/fork/flare-details.js` / `app/css/fork/flare-details.css` (new): the dialog, the (i) icon and its tooltip, the
   panel line, the palette command, the tip, and an empty flare list before the first refresh (upstream 2.0 crashed on
   the first map draw without it). Everything the user typed is escaped where shown.
@@ -54,4 +56,5 @@ dialog is reached only by right-click. The palette also gets "Flare: set colour,
   `app/js/fork/command-palette.js`, `app/js/fork/map-legend-entries.js`, `public/fork/feature-catalog.json`,
   `docker/README.md` (Flares: schema, event, what an admin runs if the app user lacks `ALTER`/`EVENT`).
 - Tests: `app/js-test/fork/flare-details.test.js` (mocha), `flares/tests/flares_test.php` (PHP: cleaning, length cap,
-  lifetimes, old-table upgrade and event, expiry, per-mask storage, `public/flares.php` over HTTP with CSRF).
+  lifetimes, old-table upgrade and event, missing privileges and the retry cooldown, expiry, re-colour keeping the time,
+  per-mask storage, `public/flares.php` and `public/refresh.php` over HTTP with CSRF, on an old and a new table).

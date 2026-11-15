@@ -6,8 +6,9 @@
 //
 // Schema: upstream's `flares` table gets two columns, `lifeLength` (seconds; NULL = until removed) and `reason`. A fresh
 // install has them from .docker/mysql/tripwire.sql; an older database gets them from flares_ensure_schema() the first
-// time a flare is set or the list is read (no migration step), which also rewrites the flaresClean event so it deletes
-// each flare when its own lifetime is over instead of after a fixed 24 hours.
+// time a flare is set (public/flares.php; at most once per container, or per cooldown after a failure; no migration
+// step), which also rewrites the flaresClean event so it deletes each flare when its own lifetime is over instead of
+// after a fixed 24 hours. Until then the list (public/refresh.php) reads the old columns.
 
 const FLARES_COLOURS = ['red', 'yellow', 'green'];
 const FLARES_REASON_MAX = 200;			// characters, after cleaning (the column is varchar(255))
@@ -61,61 +62,92 @@ function flares_parse_set(array $in) {
 	if (!array_key_exists($life, FLARES_LIFETIMES)) return [null, 'Invalid flare lifetime'];
 	$reason = flares_clean_reason($in['reason'] ?? '');
 	if (mb_strlen($reason, 'UTF-8') > FLARES_REASON_MAX) return [null, 'The reason can be at most ' . FLARES_REASON_MAX . ' characters'];
-	return [['systemID' => $systemID, 'flare' => $colour, 'lifeLength' => FLARES_LIFETIMES[$life], 'reason' => $reason === '' ? null : $reason], null];
+	$restart = ($in['restart'] ?? '') === '1';	// sent by the dialog: the user set the flare again, its lifetime starts again
+	return [['systemID' => $systemID, 'flare' => $colour, 'lifeLength' => FLARES_LIFETIMES[$life], 'reason' => $reason === '' ? null : $reason,
+		'restart' => $restart], null];
 }
 
 /**
- * Add the columns an older `flares` table lacks and make the flaresClean event use each flare's lifetime. Cheap when
- * nothing is missing (SHOW COLUMNS + one information_schema read). The event needs the EVENT privilege on the database
- * (the app user has it: it imported the schema, events included); without it the error is logged and flares still
- * expire on time for everyone, because the flare list leaves expired ones out (flares_list), but a flare set to last
- * until removed would be deleted after 24 hours by the old event. docker/README.md#flares says what to run by hand.
+ * Add the columns an older `flares` table lacks and make the flaresClean event use each flare's lifetime. Returns
+ * ['columns' => bool, 'event' => bool, 'errors' => [messages]]; never throws for a missing privilege (ALTER for the
+ * columns, EVENT for the event). Use flares_ensure_schema_once(), which runs this at most once per cooldown.
+ * The event is changed with ALTER EVENT (atomic: no moment without it) when it exists, created only when it is missing.
+ * Without the EVENT privilege flares still expire on time in the app (the list leaves expired ones out), but a flare set
+ * to last until removed is deleted after 24 hours by the old event. docker/README.md#flares says what to run by hand.
  */
 function flares_ensure_schema(PDO $db) {
-	$have = array_flip(array_map('strtolower', $db->query('SHOW COLUMNS FROM flares')->fetchAll(PDO::FETCH_COLUMN)));
-	foreach (FLARES_ADDED_COLUMNS as $column => $definition) {
-		if (isset($have[strtolower($column)])) continue;
-		try {
-			$db->exec("ALTER TABLE flares ADD COLUMN `$column` $definition");
-		} catch (PDOException $error) {
-			if ($error->getCode() !== '42S21') throw $error;   // duplicate column: another request just added it
+	$out = ['columns' => true, 'event' => true, 'errors' => []];
+	try {
+		$have = array_flip(array_map('strtolower', $db->query('SHOW COLUMNS FROM flares')->fetchAll(PDO::FETCH_COLUMN)));
+		foreach (FLARES_ADDED_COLUMNS as $column => $definition) {
+			if (isset($have[strtolower($column)])) continue;
+			try {
+				$db->exec("ALTER TABLE flares ADD COLUMN `$column` $definition");
+			} catch (PDOException $error) {
+				if ($error->getCode() !== '42S21') throw $error;   // duplicate column: another request just added it
+			}
 		}
+	} catch (PDOException $error) {
+		$out['columns'] = false;
+		$out['errors'][] = 'reason / lifetime columns: ' . $error->getMessage();
 	}
 	try {
 		$stmt = $db->query("SELECT EVENT_DEFINITION FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE() AND EVENT_NAME = 'flaresClean'");
 		$definition = $stmt ? $stmt->fetchColumn() : false;
-		if ($definition === false || stripos((string) $definition, 'lifeLength') === false) {
-			// DROP + CREATE (not ALTER): it may be missing; the app user becomes its definer, as for the imported events
-			$db->exec('DROP EVENT IF EXISTS `flaresClean`');
-			$db->exec('CREATE EVENT `flaresClean` ON SCHEDULE EVERY 1 HOUR STARTS CURRENT_TIMESTAMP ON COMPLETION NOT PRESERVE ENABLE DO ' . FLARES_CLEAN_SQL);
+		if ($definition === false) {
+			// missing (or not visible without the EVENT privilege: then this fails, and nothing was dropped)
+			$db->exec('CREATE EVENT IF NOT EXISTS `flaresClean` ON SCHEDULE EVERY 1 HOUR STARTS CURRENT_TIMESTAMP ON COMPLETION NOT PRESERVE ENABLE DO ' . FLARES_CLEAN_SQL);
+		} elseif (stripos((string) $definition, 'lifeLength') === false) {
+			// in place; the app user becomes its definer, as for the events the schema import created
+			$db->exec('ALTER EVENT `flaresClean` DO ' . FLARES_CLEAN_SQL);
 		}
 	} catch (PDOException $error) {
-		error_log('[flares] could not update the flaresClean event (see docker/README.md#flares): ' . $error->getMessage());
+		$out['event'] = false;
+		$out['errors'][] = 'flaresClean event: ' . $error->getMessage();
 	}
+	return $out;
 }
 
-/** Run $fn($db); if a column added since (42S22) is missing, add it and run it once more */
-function flares_with_schema(PDO $db, callable $fn) {
-	try {
-		return $fn($db);
-	} catch (PDOException $error) {
-		if ($error->getCode() !== '42S22') throw $error;
-		flares_ensure_schema($db);
-		return $fn($db);
-	}
+const FLARES_SCHEMA_VERSION = 1;		// bump when flares_ensure_schema() has something new to do
+const FLARES_SCHEMA_COOLDOWN = 3600;	// seconds before a failed attempt is tried again
+
+function flares_schema_state_file() {
+	return dirname(__DIR__) . '/cache/flares-schema.json';
 }
 
 /**
- * The list for public/refresh.php, which every open page calls every few seconds: never fails because of the schema. When
- * the columns are missing and cannot be added (no ALTER privilege), it logs that and reads the flares as upstream 1.x
+ * flares_ensure_schema() at most once: when the state file (in cache/, so once per container) says it is done, nothing is
+ * queried; after a failure (no ALTER / EVENT privilege) it is tried again only after FLARES_SCHEMA_COOLDOWN, logged once
+ * per attempt. $force: run it although the state says done (a query found a column missing: the database was
+ * replaced), but still not within the cooldown of a failure. Returns whether the columns are there.
+ */
+function flares_ensure_schema_once(PDO $db, $force = false, $file = null, $now = null) {
+	$file = $file ?: flares_schema_state_file();
+	$now = $now ?? time();
+	$state = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
+	$state = is_array($state) && ($state['version'] ?? null) === FLARES_SCHEMA_VERSION ? $state : null;
+	if ($state && !empty($state['columns']) && !empty($state['event']) && !$force) return true;
+	if ($state && !empty($state['failedAt']) && $now - (int) $state['failedAt'] < FLARES_SCHEMA_COOLDOWN) return !empty($state['columns']) && !$force;
+	$result = flares_ensure_schema($db);
+	$ok = $result['columns'] && $result['event'];
+	@file_put_contents($file, json_encode(['version' => FLARES_SCHEMA_VERSION, 'columns' => $result['columns'], 'event' => $result['event'],
+		'failedAt' => $ok ? null : $now]), LOCK_EX);
+	foreach ($result['errors'] as $message) {
+		error_log('[flares] could not update the schema (see docker/README.md#flares), next try in ' . FLARES_SCHEMA_COOLDOWN . ' s: ' . $message);
+	}
+	return $result['columns'];
+}
+
+/**
+ * The list for public/refresh.php, which every open page calls every few seconds. It never changes the schema (that is
+ * public/flares.php's job when a flare is set): on a table without the added columns it reads the flares as upstream 1.x
  * did (1 day each, no reason).
  */
 function flares_list_for_refresh(PDO $db, $mask) {
 	try {
-		return flares_with_schema($db, function($db) use ($mask) { return flares_list($db, $mask); });
+		return flares_list($db, $mask);
 	} catch (PDOException $error) {
-		if ($error->getCode() !== '42S22' && $error->getCode() !== '42000') throw $error;
-		error_log('[flares] reason / lifetime columns missing and could not be added (see docker/README.md#flares): ' . $error->getMessage());
+		if ($error->getCode() !== '42S22') throw $error;
 		return flares_list_legacy($db, $mask);
 	}
 }
@@ -136,16 +168,34 @@ function flares_list_legacy(PDO $db, $mask) {
 	return $rows;
 }
 
-/** Set (or replace) a flare on the mask. Setting it again starts its lifetime again. */
+/**
+ * Set (or replace) a flare on the mask. $flare['restart'] (the dialog: the user set it again) starts its lifetime again;
+ * a re-colour keeps the time it was set, unless that flare's lifetime was already over (then it is a new flare).
+ * `time` is assigned first: ON DUPLICATE KEY UPDATE sees the old lifeLength only before it is replaced.
+ */
 function flares_set(PDO $db, $mask, array $flare) {
 	$stmt = $db->prepare('INSERT INTO flares (maskID, systemID, flare, lifeLength, reason, `time`) VALUES (:mask, :systemID, :flare, :lifeLength, :reason, CURRENT_TIMESTAMP)
-		ON DUPLICATE KEY UPDATE flare = VALUES(flare), lifeLength = VALUES(lifeLength), reason = VALUES(reason), `time` = CURRENT_TIMESTAMP');
+		ON DUPLICATE KEY UPDATE `time` = IF(:restart = 1 OR (lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND), CURRENT_TIMESTAMP, `time`),
+		flare = VALUES(flare), lifeLength = VALUES(lifeLength), reason = VALUES(reason)');
 	$stmt->bindValue(':mask', $mask);
 	$stmt->bindValue(':systemID', $flare['systemID'], PDO::PARAM_INT);
 	$stmt->bindValue(':flare', $flare['flare']);
 	$stmt->bindValue(':lifeLength', $flare['lifeLength'], $flare['lifeLength'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
 	$stmt->bindValue(':reason', $flare['reason'], $flare['reason'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+	$stmt->bindValue(':restart', empty($flare['restart']) ? 0 : 1, PDO::PARAM_INT);
 	return $stmt->execute();
+}
+
+/** flares_set() for public/flares.php: makes sure of the schema first (once), and again if a column turns out missing */
+function flares_set_with_schema(PDO $db, $mask, array $flare) {
+	flares_ensure_schema_once($db);
+	try {
+		return flares_set($db, $mask, $flare);
+	} catch (PDOException $error) {
+		if ($error->getCode() !== '42S22') throw $error;
+		if (!flares_ensure_schema_once($db, true)) throw $error;
+		return flares_set($db, $mask, $flare);
+	}
 }
 
 function flares_remove(PDO $db, $mask, $systemID) {

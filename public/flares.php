@@ -28,18 +28,9 @@ header('Content-Type: application/json');
 
 $mask = $_SESSION['mask'];
 
-// Fork: an older flares table gets its reason / lifetime columns (and the flaresClean event its per-flare lifetime) here
-try {
-	flares_ensure_schema($mysql);
-} catch (PDOException $error) {
-	error_log('[flares] could not add the reason / lifetime columns (see docker/README.md#flares): ' . $error->getMessage());
-	http_response_code(500);
-	echo json_encode(array('result' => false, 'error' => 'Flares need a database update: ask your Tripwire admin'));
-	exit();
-}
-
 if (isset($_POST['flare']) && !empty($_POST['flare'])) {
-	// systemID, flare (red | yellow | green), lifeLength (86400 | forever; missing = 86400), reason (optional, at most 200 characters)
+	// systemID, flare (red | yellow | green), lifeLength (86400 | forever; missing = 86400), reason (optional, at most
+	// 200 characters), restart (1: set again in the dialog, its lifetime starts again; else a re-colour keeps the time)
 	[$flare, $error] = flares_parse_set($_POST);
 	if ($error !== null) {
 		http_response_code(400);
@@ -47,7 +38,16 @@ if (isset($_POST['flare']) && !empty($_POST['flare'])) {
 		exit();
 	}
 
-	$output['result'] = flares_set($mysql, $mask, $flare);
+	// Fork: an older flares table gets its reason / lifetime columns (and the flaresClean event its per-flare lifetime)
+	// here, once (flares/flares.inc.php); removing a flare never needs them
+	try {
+		$output['result'] = flares_set_with_schema($mysql, $mask, $flare);
+	} catch (PDOException $error) {
+		if ($error->getCode() !== '42S22') throw $error;
+		http_response_code(500);
+		echo json_encode(array('result' => false, 'error' => 'Flares need a database update: ask your Tripwire admin'));
+		exit();
+	}
 } else {
 	$systemID = flares_system_id($_POST['systemID'] ?? null);
 	if ($systemID === false) {

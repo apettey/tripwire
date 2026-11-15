@@ -31,9 +31,9 @@ check('reason not a string', flares_clean_reason(['x']), '');
 
 $ok = function($in) { return flares_parse_set($in); };
 check('set: defaults to 1 day, no reason', $ok(['systemID' => '31000880', 'flare' => 'red']),
-	[['systemID' => 31000880, 'flare' => 'red', 'lifeLength' => 86400, 'reason' => null], null]);
+	[['systemID' => 31000880, 'flare' => 'red', 'lifeLength' => 86400, 'reason' => null, 'restart' => false], null]);
 check('set: forever + reason', $ok(['systemID' => '31000880', 'flare' => 'green', 'lifeLength' => 'forever', 'reason' => ' op  here ']),
-	[['systemID' => 31000880, 'flare' => 'green', 'lifeLength' => null, 'reason' => 'op here'], null]);
+	[['systemID' => 31000880, 'flare' => 'green', 'lifeLength' => null, 'reason' => 'op here', 'restart' => false], null]);
 check('set: 86400 explicit', $ok(['systemID' => '1', 'flare' => 'yellow', 'lifeLength' => '86400'])[0]['lifeLength'], 86400);
 check('set: empty reason is no reason', $ok(['systemID' => '1', 'flare' => 'red', 'reason' => "  \n "])[0]['reason'], null);
 check('set: reason of 200 characters', mb_strlen($ok(['systemID' => '1', 'flare' => 'red', 'reason' => str_repeat('é', 200)])[0]['reason']), 200);
@@ -86,14 +86,65 @@ $db->prepare("INSERT INTO flares (maskID, systemID, flare, `time`) VALUES (?, 31
 $legacy = flares_list_legacy($db, $maskA);
 check('legacy list on the old table', [count($legacy), $legacy[0]->systemID, $legacy[0]->lifeLength, $legacy[0]->reason, is_int($legacy[0]->setAt)], [1, 31000001, 86400, null, true]);
 
-// Reading the list on the old table adds the columns (42S22 -> ensure -> retry)
-$list = flares_with_schema($db, function($db) use ($maskA) { return flares_list($db, $maskA); });
+// The refresh list on the old table: the legacy list, and it never changes the schema
+$list = flares_list_for_refresh($db, $maskA);
+check('refresh on the old table: legacy list', [count($list), $list[0]->lifeLength, $list[0]->reason], [1, 86400, null]);
+check('refresh on the old table: no columns added', array_values(array_intersect(['lifelength', 'reason'], columns($db))), []);
+
+// A PDO whose ALTER / CREATE EVENT / ALTER EVENT / DROP EVENT are refused (an app user without ALTER and EVENT), and
+// that counts the statements it is given
+class DeniedException extends PDOException {
+	public function __construct($sql) { parent::__construct('SQLSTATE[42000]: command denied: ' . $sql); $this->code = '42000'; }
+}
+class TestPDO extends PDO {
+	public $deny = false;
+	public $statements = 0;
+	public function exec(string $statement): int|false {
+		$this->statements++;
+		if ($this->deny && preg_match('/^\s*(ALTER|CREATE EVENT|DROP EVENT)/i', $statement)) throw new DeniedException($statement);
+		return parent::exec($statement);
+	}
+	public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+		$this->statements++;
+		return $fetchMode === null ? parent::query($query) : parent::query($query, $fetchMode, ...$fetchModeArgs);
+	}
+}
+$tdb = new TestPDO('mysql:host=' . getenv('DB_HOST') . ';dbname=' . getenv('DB_NAME') . ';charset=utf8mb4', getenv('DB_USER'), getenv('DB_PASSWORD'));
+$tdb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$state = sys_get_temp_dir() . '/flares-schema-test.json';
+@unlink($state);
+$now = time();
+
+// Without the privileges: nothing changes, the failure is recorded, nothing is dropped, and no retry within the cooldown
+$tdb->deny = true;
+check('denied: columns not there', flares_ensure_schema_once($tdb, false, $state, $now), false);
+$saved = json_decode((string) file_get_contents($state), true);
+check('denied: recorded', [$saved['columns'], $saved['event'], $saved['failedAt']], [false, false, $now]);
+check('denied: old event still there (not dropped)', stripos(eventDefinition($db), '24 HOUR') !== false, true);
+$tdb->statements = 0;
+check('denied, within the cooldown: not tried', [flares_ensure_schema_once($tdb, false, $state, $now + 60), flares_ensure_schema_once($tdb, true, $state, $now + 60), $tdb->statements], [false, false, 0]);
+check('denied, after the cooldown: tried again', [flares_ensure_schema_once($tdb, false, $state, $now + FLARES_SCHEMA_COOLDOWN + 1), $tdb->statements > 0], [false, true]);
+
+// With them: columns added, the event changed in place, recorded as done; then no queries at all
+$tdb->deny = false;
+check('allowed after the cooldown: columns added', flares_ensure_schema_once($tdb, false, $state, $now + 2 * FLARES_SCHEMA_COOLDOWN + 2), true);
 check('old table: columns added', array_values(array_intersect(['lifelength', 'reason'], columns($db))), ['lifelength', 'reason']);
-check('old table: a flare from before keeps 1 day', [count($list), $list[0]->lifeLength, property_exists($list[0], 'reason') ? $list[0]->reason : 'none'], [1, 86400, null]);
 check('old table: event uses the lifetime', stripos(eventDefinition($db), 'lifeLength') !== false, true);
 check('event is enabled', $db->query("SELECT STATUS FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE() AND EVENT_NAME = 'flaresClean'")->fetchColumn(), 'ENABLED');
-flares_ensure_schema($db);	// again: nothing to do, no error
-check('ensure twice: columns once', count(array_keys(columns($db), 'reason')), 1);
+$saved = json_decode((string) file_get_contents($state), true);
+check('done: recorded', [$saved['version'], $saved['columns'], $saved['event'], $saved['failedAt']], [FLARES_SCHEMA_VERSION, true, true, null]);
+$tdb->statements = 0;
+check('done: no queries afterwards', [flares_ensure_schema_once($tdb, false, $state), $tdb->statements], [true, 0]);
+$list = flares_list($db, $maskA);
+check('old table: a flare from before keeps 1 day', [count($list), $list[0]->lifeLength, property_exists($list[0], 'reason') ? $list[0]->reason : 'none'], [1, 86400, null]);
+check('ensure again: columns once, no error', [flares_ensure_schema($db)['errors'], count(array_keys(columns($db), 'reason'))], [[], 1]);
+// A missing event is created
+$db->exec('DROP EVENT IF EXISTS `flaresClean`');
+check('missing event: created', [flares_ensure_schema($db)['event'], stripos(eventDefinition($db), 'lifeLength') !== false], [true, true]);
+// A database replaced after the state said done: forced once a query finds a column missing (flares_set_with_schema)
+$db->exec('ALTER TABLE flares DROP COLUMN `reason`');
+check('forced: columns back', [flares_ensure_schema_once($db, true, $state), in_array('reason', columns($db), true)], [true, true]);
+@unlink($state);
 
 // The event's DELETE: only flares whose own lifetime is over
 $db->exec('DELETE FROM flares WHERE maskID IN (' . $db->quote($maskA) . ', ' . $db->quote($maskB) . ')');
@@ -111,10 +162,23 @@ $left = $db->query('SELECT systemID FROM flares WHERE maskID = ' . $db->quote($m
 check('clean event: deletes the expired flare only', array_map('intval', $left), [31000002, 31000003]);
 
 // --- 3. Storage per mask ---
-flares_set($db, $maskA, ['systemID' => 31000002, 'flare' => 'green', 'lifeLength' => null, 'reason' => 'staging']);
+function setAtOf($db, $mask, $systemID) {
+	foreach (flares_list($db, $mask) as $f) if ($f->systemID === $systemID) return $f->setAt;
+	return null;
+}
+// 31000002 was set an hour ago: a re-colour (no restart) keeps that time
+flares_set($db, $maskA, ['systemID' => 31000002, 'flare' => 'yellow', 'lifeLength' => 86400, 'reason' => 'fresh day']);
+check('re-colour keeps the time it was set', [abs(setAtOf($db, $maskA, 31000002) - (time() - 3600)) <= 5, flares_list($db, $maskA)[0]->flare ?? null], [true, 'yellow']);
+// the dialog (restart) starts it again
+flares_set($db, $maskA, ['systemID' => 31000002, 'flare' => 'green', 'lifeLength' => null, 'reason' => 'staging', 'restart' => true]);
 $list = flares_list($db, $maskA);
-check('set replaces (one row) and restarts the clock', [count($list), $list[0]->systemID, $list[0]->flare, $list[0]->lifeLength, $list[0]->reason, abs($list[0]->setAt - time()) <= 5],
+check('set again in the dialog replaces (one row) and restarts the clock', [count($list), $list[0]->systemID, $list[0]->flare, $list[0]->lifeLength, $list[0]->reason, abs($list[0]->setAt - time()) <= 5],
 	[2, 31000002, 'green', null, 'staging', true]);
+// a re-colour of a flare whose lifetime is over (not deleted yet) is a new flare
+$ins->execute([$maskA, 31000009, 'red', 2 * 86400, 86400, null]);
+flares_set($db, $maskA, ['systemID' => 31000009, 'flare' => 'green', 'lifeLength' => 86400, 'reason' => null]);
+check('re-colour of an expired flare starts it again', abs((int) setAtOf($db, $maskA, 31000009) - time()) <= 5, true);
+flares_remove($db, $maskA, 31000009);
 check('other mask untouched by a set', flares_list($db, $maskB)[0]->reason, 'other mask');
 flares_remove($db, $maskB, 31000002);
 check('remove on another mask leaves this one', count(flares_list($db, $maskA)), 2);
@@ -166,6 +230,21 @@ function mine($db, $mask, $sys) {
 	return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
+// On an old table (and no state file): refresh and remove work without touching the schema, the first set migrates it
+$appState = flares_schema_state_file();
+@unlink($appState);
+$db->exec('ALTER TABLE flares DROP COLUMN `reason`, DROP COLUMN `lifeLength`');
+$db->prepare("INSERT INTO flares (maskID, systemID, flare) VALUES (?, ?, 'red')")->execute([$myMask, $sys]);
+[$status, $out] = http('POST', 'refresh.php', $jar, http_build_query(['mode' => 'refresh', 'systemID' => 30000142]), ['X-CSRF-Token: ' . $csrf]);
+$sent = array_values(array_filter($out['flares']['flares'] ?? [], function($f) use ($sys) { return (int) $f['systemID'] === $sys; }));
+check('old table: refresh sends the legacy list', [$status, count($sent), $sent[0]['lifeLength'] ?? null], [200, 1, 86400]);
+[$status, $out] = post(['systemID' => $sys], $csrf);
+check('old table: remove works and migrates nothing', [$status, $out['result'] ?? null, in_array('reason', columns($db), true), is_file($appState)], [200, true, false, false]);
+[$status, $out] = post(['systemID' => $sys, 'flare' => 'red', 'reason' => 'first'], $csrf);
+check('old table: the first set migrates it and is stored', [$status, $out['result'] ?? null, mine($db, $myMask, $sys)], [200, true, ['flare' => 'red', 'lifeLength' => 86400, 'reason' => 'first']]);
+$db->prepare('DELETE FROM flares WHERE maskID = ? AND systemID = ?')->execute([$myMask, $sys]);
+$db->prepare("UPDATE flares SET reason = 'other mask' WHERE maskID = ? AND systemID = ?")->execute([$maskB, $sys]);	// lost with the column
+
 check('no CSRF token: 403', post(['systemID' => $sys, 'flare' => 'red'], null)[0], 403);
 check('wrong CSRF token: 403', post(['systemID' => $sys, 'flare' => 'red'], str_repeat('0', 64))[0], 403);
 check('no CSRF: nothing stored', mine($db, $myMask, $sys), null);
@@ -177,6 +256,11 @@ check('other mask untouched', mine($db, $maskB, $sys)['reason'], 'other mask');
 check('re-colour keeping lifetime and reason', [$status, mine($db, $myMask, $sys)], [200, ['flare' => 'yellow', 'lifeLength' => null, 'reason' => '<script>x</script> camp']]);
 [$status] = post(['systemID' => $sys, 'flare' => 'green'], $csrf);
 check('no lifetime / reason fields: 1 day, no reason', [$status, mine($db, $myMask, $sys)], [200, ['flare' => 'green', 'lifeLength' => 86400, 'reason' => null]]);
+$db->prepare('UPDATE flares SET `time` = NOW() - INTERVAL 2 HOUR WHERE maskID = ? AND systemID = ?')->execute([$myMask, $sys]);
+post(['systemID' => $sys, 'flare' => 'yellow'], $csrf);
+check('re-colour over HTTP keeps the time', abs((int) setAtOf($db, $myMask, $sys) - (time() - 7200)) <= 5, true);
+post(['systemID' => $sys, 'flare' => 'green', 'restart' => '1'], $csrf);
+check('restart=1 (the dialog) starts it again', abs((int) setAtOf($db, $myMask, $sys) - time()) <= 5, true);
 [$status, $out] = post(['systemID' => $sys, 'flare' => 'red', 'reason' => str_repeat('a', 201)], $csrf);
 check('reason over 200 characters: 400', [$status, $out['error'] ?? null], [400, 'The reason can be at most 200 characters']);
 check('refused set changes nothing', mine($db, $myMask, $sys)['flare'], 'green');
