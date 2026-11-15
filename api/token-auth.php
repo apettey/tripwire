@@ -67,11 +67,9 @@ if ($twBearer === null) {
         api_fail(404, 'Not found');
     }
     if ($twPath[1] === 'comments') {
-        // the old comments endpoint prints the stored HTML as is; for a token it is sanitised again on the way out, as /api/v1/notes
-        require_once(__DIR__ . '/../note-html.inc.php');
+        // api/comments/get.php sanitises every note it hands out, as /api/v1/notes does
         $output = null;
         include(__DIR__ . '/comments/get.php');
-        if (is_array($output)) foreach ($output as $row) $row->comment = sanitizeNoteHtml($row->comment);
         header('Content-Type: application/json');
         echo json_encode($output);
         exit();

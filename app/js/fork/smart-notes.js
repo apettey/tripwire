@@ -699,7 +699,7 @@ const smartNotes = {
 		return Array.prototype.filter.call(document.querySelectorAll("#comment-container .comment .commentBody"), function(body) {
 			const comment = body.closest(".comment");
 			if (!comment || comment.classList.contains("hidden")) { return false; }
-			return !(body.id && typeof CKEDITOR !== "undefined" && CKEDITOR.instances && CKEDITOR.instances[body.id]);
+			return !(body.id && typeof noteEditor !== "undefined" && noteEditor.get(body.id));
 		});
 	},
 
@@ -726,7 +726,7 @@ const smartNotes = {
 
 	/**
 	 * Hooks without editing upstream: a MutationObserver on the notes list enhances notes whenever upstream renders or
-	 * replaces them; CKEditor's instanceCreated (fires before the editor reads the element) puts the original note
+	 * replaces them; the note editor's onOpen (runs before the editor reads the element) puts the original note
 	 * back, so the editor and the saved note only ever see the stored HTML.
 	 */
 	install: function() {
@@ -734,12 +734,11 @@ const smartNotes = {
 		if (!container || typeof MutationObserver === "undefined" || smartNotes.installed) { return; }
 		smartNotes.installed = true;
 		new MutationObserver(smartNotes.scheduleScan).observe(container, { childList: true, subtree: true });
-		if (typeof CKEDITOR !== "undefined" && CKEDITOR.on) {
-			CKEDITOR.on("instanceCreated", function(e) {
-				const element = e && e.editor && e.editor.element ? e.editor.element.$ : null;
+		if (typeof noteEditor !== "undefined" && noteEditor.onOpen) {
+			noteEditor.onOpen(function(element) {
 				if (element && element.classList && element.classList.contains("commentBody")) { smartNotes.restore(element); }
 			});
-			CKEDITOR.on("instanceDestroyed", smartNotes.scheduleScan);
+			noteEditor.onClose(smartNotes.scheduleScan);
 		}
 		// A zKillboard system chip whose system is on the chain map views it in Tripwire instead of opening zKillboard
 		$(document).on("click", "a.sn-system[target]", function(e) {
