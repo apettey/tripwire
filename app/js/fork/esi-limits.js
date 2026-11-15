@@ -8,11 +8,14 @@ const esiLimits = {
 	// - ESI's rate-limit headers are read centrally from every response. A 429 on a character's route pauses
 	//   that character's location / ship / online polling until Retry-After; a 420 (legacy error limit) or an
 	//   almost used-up error budget pauses all polling (and the TQ status poll) until X-ESI-Error-Limit-Reset.
-	//   Each pause is logged once to the console. Otherwise upstream's polling is unchanged.
+	//   A character route (or /status) with less than 5% of its rate-limit bucket left pauses for 60 s, as on the server.
+	//   Each pause is logged once to the console. Per-character backoff on other errors: esi-backoff.js.
 	COMPATIBILITY_DATE: "2025-12-16",
 	ERROR_LIMIT_FLOOR: 10,  // pause when fewer errors than this are left in the error window
 	DEFAULT_PAUSE: 60,      // seconds, when ESI doesn't say how long
 	MAX_PAUSE: 900,         // seconds; ESI's rate-limit window is 15 minutes
+	LOW_TOKENS_SHARE: 0.05, // pause a character (or the status poll) when less than this share of its bucket is left
+	LOW_TOKENS_PAUSE: 60,   // seconds; tokens come back over the 15-minute floating window (as esi/esi.inc.php)
 	ALL: "*",               // pause key for everything (error limit)
 
 	pauses: {},             // key ("*", "char:<id>", "status") => paused until (ms)
@@ -81,6 +84,14 @@ const esiLimits = {
 			add(esiLimits.ALL, retryAfter !== null ? retryAfter : (errorReset !== null ? errorReset + 1 : esiLimits.DEFAULT_PAUSE));
 		} else if (status == 429) {
 			const seconds = retryAfter !== null ? retryAfter : esiLimits.DEFAULT_PAUSE;
+			if (characterID) add("char:" + characterID, seconds);
+			else if (/^https:\/\/[^\/]+\/(v\d+\/|latest\/)?status\/?([?#]|$)/i.test(url)) add("status", seconds);
+		}
+		// Slow down before ESI has to say no: a bucket that is nearly used up (X-Ratelimit-Limit "1200/15m")
+		const remaining = number("X-Ratelimit-Remaining");
+		const limit = parseInt(String(header("X-Ratelimit-Limit") || ""), 10);
+		if (remaining !== null && limit > 0 && remaining < Math.max(5, Math.floor(limit * esiLimits.LOW_TOKENS_SHARE))) {
+			const seconds = retryAfter !== null ? retryAfter : esiLimits.LOW_TOKENS_PAUSE;
 			if (characterID) add("char:" + characterID, seconds);
 			else if (/^https:\/\/[^\/]+\/(v\d+\/|latest\/)?status\/?([?#]|$)/i.test(url)) add("status", seconds);
 		}
