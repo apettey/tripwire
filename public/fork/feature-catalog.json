@@ -163,7 +163,7 @@
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
     { "id": "analyticsDashboard", "try": "analytics.open", "title": "Usage analytics dashboard", "section": "general", "prs": [], "settingsKey": null,
       "stage": "admin", "audience": "operator", "kind": "active", "commands": ["analytics.open"], "panels": [], "use": ["opened"] },
-    { "id": "mapLegend", "title": "Map key", "section": "chain", "prs": [], "settingsKey": "mapLegend", "settingsRow": "mapLegend-enabled",
+    { "id": "mapLegend", "title": "Map key", "section": "chain", "prs": [164], "settingsKey": "mapLegend", "settingsRow": "mapLegend-enabled",
       "stage": "first", "audience": "all", "kind": "active", "commands": ["mapKey.open"], "panels": [], "use": ["opened"],
       "events": ["show_all"], "exposed": "#map-key-button",
       "success": "opened by >=25% of active users by day 28; button turned off by <5%" }

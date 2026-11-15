@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 164,
+      "date": "2026-11-15",
+      "title": "Map key",
+      "description": "The new Map key button in the chain map header (next to the ≡ icon) explains what the map's colours, lines and markers mean: system classes, mass and life lines, hole size tags, threat badges, Fight here and more. Each comes with a sample and where to switch it off. It lists only what you have switched on; tick Show all to see every marker.\n\nYou can also open it from the command palette (Ctrl+K, \"Map key\"), and hide the button in Settings > Chain Map > Map key button.",
+      "images": [
+        { "src": "whats-new/img/pr-164-map-key.png", "caption": "The Map key, opened from the chain map header" }
+      ]
+    },
+    {
       "pr": 162,
       "date": "2026-11-15",
       "title": "Map jumps of every online character",
