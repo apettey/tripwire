@@ -4,7 +4,7 @@
 
 const ZK_KILL_COLUMNS = 'id, killID, systemID, killTime, victimCharacterID, victimCorporationID, victimAllianceID, victimShipTypeID,
     finalBlowCharacterID, finalBlowCorporationID, finalBlowAllianceID, finalBlowShipTypeID,
-    attackerCount, attackerTotal, totalValue, npc, solo, awox';
+    attackerCount, attackerTotal, totalValue, npc, solo, awox, locationID, attackerShips, attackerWeapons, concord, ganked';
 
 /** Kills in the given systems since $fromUnix, newest first (by kill time), at most $limit */
 function zk_query_kills(PDO $db, array $systemIDs, $fromUnix, $limit) {
@@ -54,7 +54,33 @@ function zk_kill_json(array $row) {
         'npc'           => (bool) $row['npc'],
         'solo'          => (bool) $row['solo'],
         'awox'          => (bool) $row['awox'],
+        // Kill tags (app/js/fork/kill-tags.js); a row stored before these columns has none of them
+        'locationID'    => $int($row['locationID'] ?? null),
+        'attackerShips' => zk_type_list_ids($row['attackerShips'] ?? ''),
+        'attackerWeapons' => zk_type_list_ids($row['attackerWeapons'] ?? ''),
+        'concord'       => !empty($row['concord']),
+        'ganked'        => !empty($row['ganked']),
     ];
+}
+
+/**
+ * Fight now (app/js/fork/fight-now.js): player kills (NPC kills left out) per system in the last $windowSeconds.
+ * Reads the stream's store only (the stream has every kill when it is live; no back-fill is queued).
+ * @return array systemID => ['kills' => n, 'lastKill' => ISO time] for systems with at least one kill
+ */
+function zk_fight_now(PDO $db, array $systemIDs, $windowSeconds, $now) {
+    if (!$systemIDs) return [];
+    return zk_with_schema($db, function (PDO $db) use ($systemIDs, $windowSeconds, $now) {
+        $stmt = $db->prepare('SELECT systemID, COUNT(*) AS kills, MAX(killTime) AS lastKill FROM zkill_killmails
+            WHERE systemID IN (' . implode(',', array_fill(0, count($systemIDs), '?')) . ') AND killTime >= ? AND npc = 0
+            GROUP BY systemID');
+        $stmt->execute(array_merge(array_values($systemIDs), [gmdate('Y-m-d H:i:s', $now - $windowSeconds)]));
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['systemID']] = ['kills' => (int) $row['kills'], 'lastKill' => zk_iso($row['lastKill'])];
+        }
+        return $out;
+    });
 }
 
 /**

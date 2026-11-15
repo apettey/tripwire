@@ -1,0 +1,10 @@
+/* Fork: a tracked character whose EVE token ESI keeps rejecting (app/js/fork/esi-backoff.js). Small alert after its name. */
+#tracking .tracking-clone .esi-token-failing {
+	display: inline-block;
+	margin-left: 4px;
+	color: #e0a030;
+	font-size: 0.9em;
+	font-style: normal;
+	cursor: help;
+	vertical-align: baseline;
+}

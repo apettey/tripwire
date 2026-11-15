@@ -1,6 +1,10 @@
 <?php
 // Fork-owned: killmail storage of the zKillboard integration (see zkill/zkill.inc.php).
 
+const ZK_CONCORD_CORPORATION = 1000125;   // CONCORD on a killmail: typically the ganker's loss in a high-sec gank
+const ZK_CONCORD_FACTION     = 500006;
+const ZK_TYPE_LIST_MAX       = 400;       // width of zkill_killmails.attackerShips / attackerWeapons
+
 /**
  * Row for zkill_killmails from a killmail as R2Z2 / the zKillboard API deliver it:
  * R2Z2: {killmail_id, hash, zkb, esi: {ESI killmail}}; API: {ESI killmail fields..., zkb: {hash, ...}}.
@@ -18,10 +22,19 @@ function zk_killmail_row(array $kill) {
     $attackers = is_array($esi['attackers'] ?? null) ? $esi['attackers'] : [];
     $pilots = 0;
     $finalBlow = null;
+    $ships = [];
+    $weapons = [];
+    $concord = 0;
     foreach ($attackers as $attacker) {
         if (!is_array($attacker)) continue;
         if (!empty($attacker['character_id'])) $pilots++;
         if (!empty($attacker['final_blow'])) $finalBlow = $attacker;
+        // Kill tags (app/js/fork/kill-tags.js): the attackers' hulls and weapons, and whether CONCORD is on the mail
+        $ship = (int) ($attacker['ship_type_id'] ?? 0);
+        if ($ship > 0) $ships[$ship] = true;
+        $weapon = (int) ($attacker['weapon_type_id'] ?? 0);
+        if ($weapon > 0) $weapons[$weapon] = true;
+        if ((int) ($attacker['corporation_id'] ?? 0) === ZK_CONCORD_CORPORATION || (int) ($attacker['faction_id'] ?? 0) === ZK_CONCORD_FACTION) $concord = 1;
     }
     $id = function ($source, $key) {
         return is_array($source) && isset($source[$key]) && is_numeric($source[$key]) && (int) $source[$key] > 0 ? (int) $source[$key] : null;
@@ -45,7 +58,29 @@ function zk_killmail_row(array $kill) {
         'npc'                    => !empty($zkb['npc']) ? 1 : 0,
         'solo'                   => !empty($zkb['solo']) ? 1 : 0,
         'awox'                   => !empty($zkb['awox']) ? 1 : 0,
+        'locationID'             => $id($zkb, 'locationID'),
+        'attackerShips'          => zk_type_list(array_keys($ships)),
+        'attackerWeapons'        => zk_type_list(array_keys($weapons)),
+        'concord'                => $concord,
+        'ganked'                 => is_array($zkb['labels'] ?? null) && in_array('ganked', $zkb['labels'], true) ? 1 : 0,
     ];
+}
+
+/** Distinct type IDs as a comma-separated list that fits its column (ZK_TYPE_LIST_MAX characters; the rest is left out) */
+function zk_type_list(array $ids) {
+    $out = '';
+    foreach ($ids as $id) {
+        $next = $out === '' ? (string) (int) $id : $out . ',' . (int) $id;
+        if (strlen($next) > ZK_TYPE_LIST_MAX) break;
+        $out = $next;
+    }
+    return $out;
+}
+
+/** A stored type list (zk_type_list) as integers */
+function zk_type_list_ids($list) {
+    if ($list === null || $list === '') return [];
+    return array_values(array_filter(array_map('intval', explode(',', (string) $list)), function ($id) { return $id > 0; }));
 }
 
 /** Store a killmail row; an already stored kill is left as it is. Returns true when inserted. */

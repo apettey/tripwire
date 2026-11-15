@@ -87,6 +87,9 @@ function esi_limit_decision($url, $status, array $headers, $authenticated, $now 
         $add('*', $retryAfter ?? ($errorReset !== null ? $errorReset + 1 : ESI_DEFAULT_PAUSE));
     } elseif ($status === 429) {
         $add($routeKey, $retryAfter ?? ESI_DEFAULT_PAUSE);
+    } elseif ($status >= 500 && $retryAfter !== null) {
+        // A 5xx that says when to come back (a 503 during downtime, say): this route or group waits that long
+        $add($routeKey, $retryAfter);
     }
     if (isset($headers['x-esi-error-limit-remain']) && is_numeric($headers['x-esi-error-limit-remain'])
         && (int) $headers['x-esi-error-limit-remain'] < ESI_ERROR_LIMIT_FLOOR) {
