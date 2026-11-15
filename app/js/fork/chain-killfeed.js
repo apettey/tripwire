@@ -642,8 +642,13 @@ const chainKillFeed = {
 		if (state === "list") {
 			const byID = {};
 			chainKillFeed.kills.forEach(function(k) { byID[k.killID] = k; });
-			const rows = systemKillFeed.buildRows({ kills: chainKillFeed.kills, names: chainKillFeed.names, namesPending: chainKillFeed.namesPending });
-			html = "<div class='skf-list'>" + rows.map(function(r) {
+			const all = systemKillFeed.buildRows({ kills: chainKillFeed.kills, names: chainKillFeed.names, namesPending: chainKillFeed.namesPending });
+			// Kill tags (kill-tags.js): the filter bar over the list, the rows of the selected tag
+			const tagFilter = typeof killTags !== "undefined" && killTags.isOn() ? killTags.selected(chainKillFeed.WIDGET_ID) : null;
+			const rows = tagFilter ? killTags.filter(all, tagFilter) : all;
+			html = (tagFilter !== null ? killTags.filterHtml(killTags.counts(all), all.length, tagFilter) : "")
+				+ (rows.length ? "" : "<div class='skf-state'>No " + esc((killTags.tag(tagFilter) || {}).label || tagFilter) + " kills among these.</div>")
+				+ "<div class='skf-list'>" + rows.map(function(r) {
 				const kill = byID[r.killID];
 				return systemKillFeed.rowHtml(r, now, {
 					className: chainKillFeed.fresh[r.killID] > now ? "ckf-new" : "",
