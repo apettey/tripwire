@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 168,
+      "date": "2026-11-15",
+      "title": "Campaign and Fabricator tags",
+      "description": "Military Campaign caches (Collapsed Drifter Cache, Fabricated Rogue Cache) and the Rampant Drone Fabricator now get a tag in the signature list. Hover it to see what the site is and why it is worth running. Click the Fabricator tag to add up your fleet's Rampancy and see which escalation (12, 36 or 72) it triggers.\n\nTurn it off in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-168-campaign-fabricator-tags.png", "caption": "The Fabricator tag and its tooltip in the signature list" }
+      ]
+    },
+    {
       "pr": 167,
       "date": "2026-11-15",
       "title": "Kill tags and Fight now",
