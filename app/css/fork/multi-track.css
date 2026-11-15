@@ -208,7 +208,7 @@
 /* A jump waiting while a jump question is open: a yellow dot bottom left */
 .multi-track-chip.is-queued > .multi-track-avatar { box-shadow: 0 0 0 2px #e5c100; }
 
-/* The active character with its A switch off (or over the 5): not auto-mapped */
+/* The active character with its A switch off (or offline): not auto-mapped */
 .multi-track-chip.is-active.is-unmapped { box-shadow: none; border-style: dotted; }
 
 /* "Now on Alt (jumped A → B) · Back to Main" after an automatic switch: one at a time, top left under the header */
@@ -239,22 +239,12 @@
 #multi-track-notice .multi-track-notice-close { color: #999; margin-left: 6px; }
 #multi-track-notice button:focus-visible { outline: 1px dotted #ccc; }
 
-/* Tracking list: more characters switched on than are used */
-#tracking .multi-track-cap-note {
-	max-width: 220px;
-	margin: 0 0 4px;
-	padding: 3px 5px;
-	border: 1px solid #806000;
-	background: rgba(229, 193, 0, .1);
-	color: #e5c100;
-	white-space: normal;
-}
 #jump-return-panel .jump-return-label.jump-return-label-who { overflow: visible; white-space: normal; max-width: 260px; }
 /* "Which signature did <a long name> jump through?": the title wraps instead of being cut */
 .ui-dialog[aria-describedby="dialog-select-signature"] .ui-dialog-title { white-space: normal; overflow: visible; }
 
-/* An A switch that is on but over the 5: dimmed */
-#tracking .multi-track-toggle.active.over-cap { opacity: .45; }
+/* An A switch that is on but its character is offline: dimmed */
+#tracking .multi-track-toggle.active.offline { opacity: .45; }
 
 /* Collapsed header: the pause shows as a small glyph on the active portrait */
 .multi-track-pause-glyph {

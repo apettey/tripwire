@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-15 | [Multi-character jumps: every online character](2026-11-15-multi-track-online-characters/README.md) | Map jumps of all my tracked characters uses every online character with its A switch on; offline ones no longer take a slot, no limit of 5 |
 | 2026-11-13 | [Favourites: one-line rows with every route](2026-11-13-favourites-compact-routes/README.md) | Wanderer-style one-line Favourites rows; every favourite routed, Thera/Turnur through EVE-Scout, from the tracked or viewed system |
 | 2026-11-08 | [Watchlist: several systems per filter](2026-11-08-watchlist-several-systems/README.md) | The Watchlist's System field takes a comma-separated list (up to 50); any of them matches |
 | 2026-11-05 | [Return hole on paste](2026-11-05-return-hole-on-paste/README.md) | Opt-in: a paste right after a wormhole jump links the one new wormhole sig within 100 km to the jump and opens it |

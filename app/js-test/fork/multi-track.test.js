@@ -23,6 +23,54 @@ const chars = (o) => Object.assign({
 const on = (exclude) => ({ multiTrack: { enabled: true, exclude: exclude || {} } });
 
 describe('multiTrack', () => {
+	// The default online check reads esi-offline-skip's states; another test file may leave some there
+	let savedSkip;
+	beforeEach(() => { savedSkip = global.esiOfflineSkip; delete global.esiOfflineSkip; });
+	afterEach(() => { if (savedSkip === undefined) { delete global.esiOfflineSkip; } else { global.esiOfflineSkip = savedSkip; } });
+
+	it('watchedIds + detectMoves: after a login, the first place from a fresh poll is a first sighting, not a jump', () => {
+		const online = { 1: true, 2: true, 3: true };
+		const isOn = (id) => online[id] !== false;
+		const answers = { 1: 0, 2: 0, 3: 0 };
+		const stamp = (id) => answers[id];
+		const ids = ['1', '2', '3'];
+		const at = (sys) => chars({ 2: { characterID: 2, characterName: 'Alt Two', systemID: sys } });
+		let w = multiTrack.watchedIds({}, ids, at(J1), '1', isOn, 0, stamp);
+		assert.deepStrictEqual(w.ids, ids, 'all online');
+		let r = multiTrack.detectMoves({}, at(J1), w.ids, '1');
+
+		online[2] = false;	// logs off in J1
+		w = multiTrack.watchedIds(w.hold, ids, at(J1), '1', isOn, 1000, stamp);
+		assert.deepStrictEqual(w.ids, ['1', '3'], 'offline: not watched');
+		r = multiTrack.detectMoves(r.last, at(J1), w.ids, '1');
+		assert.strictEqual(r.last['2'], undefined, 'its last system is dropped');
+		assert.deepStrictEqual(multiTrack.watchedIds(w.hold, ids, at(J1), '2', isOn, 1000, stamp).ids, ids, 'the active one is always watched');
+
+		online[2] = true;	// /online/ says online; the resume poll hasn't answered (still J1)
+		w = multiTrack.watchedIds(w.hold, ids, at(J1), '1', isOn, 5000, stamp);
+		assert.deepStrictEqual(w.ids, ['1', '3'], 'held until a location answer');
+		w = multiTrack.watchedIds(w.hold, ids, at(J1), '1', isOn, 5000 + multiTrack.RESUME_MS * 10, stamp);
+		assert.deepStrictEqual(w.ids, ['1', '3'], 'with an answer count it waits for an answer, however long');
+		r = multiTrack.detectMoves(r.last, at(J1), w.ids, '1');
+		answers[2]++;	// the poll answers: it is in J2 now
+		w = multiTrack.watchedIds(w.hold, ids, at(J2), '1', isOn, 6000, stamp);
+		assert.deepStrictEqual(w.ids, ids);
+		assert.deepStrictEqual(w.hold, {});
+		r = multiTrack.detectMoves(r.last, at(J2), w.ids, '1');
+		assert.deepStrictEqual(r.moves, [], 'J1 -> J2 is not reported');
+		assert.strictEqual(r.last['2'].systemID, J2);
+
+		online[2] = false;	// logs off and back on where it was: any answer releases it, even with the same content
+		w = multiTrack.watchedIds(w.hold, ids, at(J2), '1', isOn, 7000, stamp);
+		online[2] = true;
+		answers[2]++;
+		assert.deepStrictEqual(multiTrack.watchedIds(w.hold, ids, at(J2), '1', isOn, 8000, stamp).ids, ids);
+
+		const uncounted = { 2: { stamp: undefined, since: 0 } };
+		assert.deepStrictEqual(multiTrack.watchedIds(uncounted, ids, at(J1), '1', isOn, multiTrack.RESUME_MS - 1).ids, ['1', '3']);
+		assert.deepStrictEqual(multiTrack.watchedIds(uncounted, ids, at(J1), '1', isOn, multiTrack.RESUME_MS).ids, ids, 'no answer count: watched after RESUME_MS');
+	});
+
 	it('enabled: only when switched on (missing = off)', () => {
 		assert.strictEqual(multiTrack.enabled(undefined), false);
 		assert.strictEqual(multiTrack.enabled({}), false);
@@ -40,15 +88,13 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.included({ multiTrack: { enabled: true } }, 2), true, 'no exclude list');
 	});
 
-	it('optedIn: included characters sorted by name, capped', () => {
+	it('optedIn: included characters sorted by name, no limit', () => {
 		assert.deepStrictEqual(multiTrack.optedIn(on(), chars()), ['3', '2', '1']);
 		assert.deepStrictEqual(multiTrack.optedIn(on({ 2: true }), chars()), ['3', '1']);
 		assert.deepStrictEqual(multiTrack.optedIn({}, chars()), [], 'off');
-		assert.deepStrictEqual(multiTrack.optedIn(on(), chars(), 2), ['3', '2']);
 		const many = {};
-		for (let i = 1; i <= 7; i++) { many[i] = { characterID: i, characterName: 'Pilot ' + i }; }
-		assert.strictEqual(multiTrack.optedIn(on(), many).length, 5, 'cap of 5');
-		assert.deepStrictEqual(multiTrack.optedIn(on(), many), ['1', '2', '3', '4', '5']);
+		for (let i = 1; i <= 9; i++) { many[i] = { characterID: i, characterName: 'Pilot ' + i }; }
+		assert.deepStrictEqual(multiTrack.optedIn(on(), many), ['1', '2', '3', '4', '5', '6', '7', '8', '9'], 'no cap');
 		assert.deepStrictEqual(multiTrack.optedIn(on(), null), []);
 	});
 
@@ -147,7 +193,7 @@ describe('multiTrack', () => {
 			'X · offline · Click to make this the active character');
 		assert.strictEqual(multiTrack.chipTitle(Object.assign({}, base, { recent: false, mapped: false, paused: true, pausedMs: 161000, stale: 'token expired' })),
 			'Alt <b> · J100002, Cheetah · location not updating (token expired) · Active character (Current System, Follow, destination) · '
-			+ 'not switched to automatically (its A switch is off or over the 5) · Auto-switch paused 2:41; other characters\' jumps are still mapped · click to resume');
+			+ 'not switched to automatically (its A switch is off or it is offline) · Auto-switch paused 2:41; other characters\' jumps are still mapped · click to resume');
 		assert.ok(/switches to it when you close the open jump question/.test(multiTrack.chipTitle(Object.assign({}, base, { active: false, queued: true }))));
 	});
 
@@ -197,19 +243,34 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.tracking('new'), false);
 	});
 
-	it('switchedOn / optedIn / capNote: the A switches choose; only 5 are used, with a note', () => {
+	it('optedIn: every online character with its A switch on; offline ones are left out', () => {
 		const many = {};
 		for (let i = 1; i <= 7; i++) { many[i] = { characterID: i, characterName: 'Pilot ' + i }; }
 		const o = { multiTrack: { enabled: true, exclude: { 7: true } } };
+		const offline = (ids) => (id) => ids.indexOf(String(id)) < 0;
 		assert.deepStrictEqual(multiTrack.switchedOn(o, many), ['1', '2', '3', '4', '5', '6']);
-		assert.deepStrictEqual(multiTrack.optedIn(o, many), ['1', '2', '3', '4', '5']);
-		assert.strictEqual(multiTrack.capNote(o, many), 'Switching to 6 characters on jumps; only 5 are used (the first by name). Turn one off with its A icon.');
-		o.multiTrack.exclude[6] = true;
-		assert.strictEqual(multiTrack.capNote(o, many), '');
-		assert.strictEqual(multiTrack.capNote({}, many), '', 'feature off');
+		assert.deepStrictEqual(multiTrack.optedIn(o, many, offline(['2', '4'])), ['1', '3', '5', '6'], 'skips the offline ones');
+		assert.deepStrictEqual(multiTrack.optedIn(o, many, offline(['1', '2', '3', '4', '5', '6'])), [], 'all offline');
+		assert.deepStrictEqual(multiTrack.optedIn(o, many, () => true), ['1', '2', '3', '4', '5', '6'], 'all online');
 	});
 
-	it('stripIds: the used characters plus the active one even if it is off or over the cap', () => {
+	it('isOnline: only a known-offline character is offline (esi-offline-skip states)', () => {
+		const had = global.esiOfflineSkip;
+		try {
+			delete global.esiOfflineSkip;
+			assert.strictEqual(multiTrack.isOnline('1'), true, 'no state source: online');
+			global.esiOfflineSkip = { states: { 1: 'offline', 2: 'online' } };
+			assert.strictEqual(multiTrack.isOnline('1'), false);
+			assert.strictEqual(multiTrack.isOnline('2'), true);
+			assert.strictEqual(multiTrack.isOnline('3'), true, 'unknown counts as online');
+			const many = { 1: { characterName: 'A' }, 2: { characterName: 'B' }, 3: { characterName: 'C' } };
+			assert.deepStrictEqual(multiTrack.optedIn(on(), many), ['2', '3'], 'the default check is used');
+		} finally {
+			if (had === undefined) { delete global.esiOfflineSkip; } else { global.esiOfflineSkip = had; }
+		}
+	});
+
+	it('stripIds: the used characters plus the active one even if it is off or offline', () => {
 		assert.deepStrictEqual(multiTrack.stripIds(on({ 2: true }), chars(), '2'), ['3', '2', '1'], 'excluded active shown, by name');
 		assert.deepStrictEqual(multiTrack.stripIds(on({ 2: true }), chars(), '1'), ['3', '1']);
 		assert.deepStrictEqual(multiTrack.stripIds(on(), chars(), null), ['3', '2', '1'], 'nothing tracked: still shown (a click resumes)');
@@ -347,7 +408,8 @@ describe('multiTrack', () => {
 		assert.strictEqual(multiTrack.minutes(5000), '1m');
 		assert.strictEqual(multiTrack.toggleTitle(false), "Switch to this character when it jumps: off (its jumps aren't mapped unless it is active)");
 		assert.ok(/^Switch to this character when it jumps: on \(while switching is paused/.test(multiTrack.toggleTitle(true)));
-		assert.ok(/over the 5/.test(multiTrack.toggleTitle(true, true)));
+		assert.strictEqual(multiTrack.toggleTitle(true, true), 'Switch to this character when it jumps: on, but it is offline (used once it logs in)');
+		assert.ok(/off \(/.test(multiTrack.toggleTitle(false, true)), 'off wins over offline');
 	});
 
 	describe('round 4: holds, replays, fleet mapping', () => {
