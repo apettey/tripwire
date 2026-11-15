@@ -30,8 +30,10 @@ Tip: none. The chip is visible on the row itself, and its tooltip explains it.
   `unverified` and get a grey "?" chip with the reason instead of a value: Infrequent Core Deposit (its page says its
   quantities predate the 19.11 mining changes) and Shattered Debris Field (ore variants listed by pre-2024 names).
 - Prices: ESI's public `/markets/prices/` average price (no key, no new host), fetched by the server at most hourly
-  for everyone and cut to the 15 items we need (`market_prices.inc.php`, `public/market_prices.php`, cache file
-  `cache/market-prices.json`). Until it answers, or if ESI is down, the prices stored in `sites.json` (2026-11-15) are
+  for everyone and cut to the items we need (`market_prices.inc.php`, `public/market_prices.php`, cache file
+  `cache/market-prices.json`; refetched early when `sites.json` asks for other items). Ore is priced as its compressed
+  form (`priceAs`), 1 unit for 1 unit (both have portion size 100 in the SDE; compressed is 1/100 of the volume), because
+  raw ore barely trades and miners sell it compressed. Until it answers, or if ESI is down, the prices stored in `sites.json` (2026-11-15) are
   used and the tooltip says so.
 - Code: `app/js/fork/site-values.js` (pure logic in `siteValues`, mocha tests in `app/js-test/fork/site-values.test.js`,
   which also checks the data file), `app/css/fork/site-values.css`; PHP test `tests/market_prices_test.php`.

@@ -26,11 +26,12 @@ check('parse keeps wanted types with a price', market_prices_parse($body, $wante
 check('parse: not json', market_prices_parse('<html>', $wanted), null);
 check('parse: not a list', market_prices_parse('{"x":1}', $wanted), null);
 check('parse: empty list', market_prices_parse('[]', $wanted), array());
-check('normalise damaged', market_prices_normalise('x'), array('fetched' => 0, 'attempted' => 0, 'prices' => array()));
+check('normalise damaged', market_prices_normalise('x'), array('fetched' => 0, 'attempted' => 0, 'prices' => array(), 'types' => ''));
 check('normalise drops bad rows', market_prices_normalise(array('prices' => array('22' => 5, 'x' => 1, '20' => 'abc')))['prices'], array('22' => 5.0));
 
 $types = market_prices_types();
 check('types come from sites.json', isset($types[30378]) && isset($types[22]) && count($types) >= 10, true);
+check('types include the compressed ore the ore is priced as', isset($types[62568]), true);
 
 $file = tempnam(sys_get_temp_dir(), 'market-prices-test-');
 unlink($file);
@@ -57,6 +58,14 @@ check('within the retry wait: no ESI call', $calls, 2);
 $r = market_prices_get($ok, $t + MARKET_PRICES_TTL + MARKET_PRICES_RETRY, $file, $wanted);
 check('after the retry wait: asks again', $calls, 3);
 check('new time', $r['fetched'], $t + MARKET_PRICES_TTL + MARKET_PRICES_RETRY);
+
+$more = $wanted + array(62568 => true);
+$r = market_prices_get($ok, $t + MARKET_PRICES_TTL + MARKET_PRICES_RETRY + 1, $file, $more);
+check('other wanted items: within the retry wait, no call', $calls, 3);
+market_prices_get($ok, $t + MARKET_PRICES_TTL + 2 * MARKET_PRICES_RETRY, $file, $more);
+check('other wanted items: asks at once after the retry wait, before the TTL', $calls, 4);
+market_prices_get($ok, $t + MARKET_PRICES_TTL + 2 * MARKET_PRICES_RETRY + 10, $file, array(62568 => true) + $wanted);
+check('same items in another order: no call', $calls, 4);
 
 $empty = tempnam(sys_get_temp_dir(), 'market-prices-test-');
 unlink($empty);

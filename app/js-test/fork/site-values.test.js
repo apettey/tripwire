@@ -60,6 +60,15 @@ describe('Gas and ore site value', () => {
 		assert.strictEqual(mixed.live, false);
 	});
 
+	it('prices ore as its compressed form when the type says so', () => {
+		const d = Object.assign({}, data, { types: Object.assign({}, data.types, { 3: { name: 'Rock', m3: 16, priceAs: 9 } }) });
+		const est = siteValues.estimate(index['rarified core deposit'], d, { 3: 1, 9: 3000 });
+		assert.strictEqual(est.total, 100000 * 3000);
+		assert.strictEqual(est.lines[0].compressed, true);
+		assert.ok(siteValues.tooltip(index['rarified core deposit'], est).indexOf('priced as compressed ore') > 0);
+		assert.strictEqual(siteValues.estimate(index['rarified core deposit'], d, null).missing[0], 'Rock');
+	});
+
 	it('lists items without any price and leaves them out of the total', () => {
 		const d = Object.assign({}, data, { fallbackPrices: { prices: { 2: 50000 } } });
 		const est = siteValues.estimate(index['vital core reservoir'], d, null);
@@ -146,8 +155,10 @@ describe('Gas and ore site data (public/site-values/sites.json)', () => {
 		});
 		Object.keys(data.types).forEach(id => {
 			assert.ok(data.types[id].m3 > 0, id);
-			assert.ok(data.fallbackPrices.prices[id] > 0, 'price of ' + id);
+			assert.ok(data.fallbackPrices.prices[data.types[id].priceAs || id] > 0, 'price of ' + id);
 		});
+		// every ore is priced as its compressed form
+		data.sites.filter(s => s.kind === 'ore' && s.contents).forEach(s => s.contents.forEach(([id]) => assert.ok(data.types[id].priceAs, s.name + ': ' + id)));
 	});
 
 	it('gives every verified gas site a value with the stored prices', () => {

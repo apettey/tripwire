@@ -1,7 +1,7 @@
 {
 	"v": 1,
 	"checked": "2026-11-15",
-	"about": "Contents of wormhole gas and ore sites, by the site name the scanner shows. contents: [typeID, units] per resource (gas: one cloud of each; ore: the site total at spawn). status: verified = contents from the EVE University site page, unit volumes match Fuzzworks' gas table and the SDE, and All-Out's gas guide confirms two clouds per site; approximate = EVE University only, which says ore amounts are approximate and change with the system class; unverified = no reliable figures, so no value is shown. Read by app/js/fork/site-values.js.",
+	"about": "Contents of wormhole gas and ore sites, by the site name the scanner shows. contents: [typeID, units] per resource (gas: one cloud of each; ore: the site total at spawn). status: verified = contents from the EVE University site page, unit volumes match Fuzzworks' gas table and the SDE, and All-Out's gas guide confirms two clouds per site; approximate = EVE University only, which says ore amounts are approximate and change with the system class; unverified = no reliable figures, so no value is shown. priceAs: the item whose price values a type: ore is priced as its compressed form (1 ore unit compresses to 1 compressed unit: both have portion size 100 in the SDE, and the compressed item is 1/100 of the volume), since raw ore barely trades and miners sell it compressed. Read by app/js/fork/site-values.js.",
 	"sources": {
 		"eveuniGas": "https://wiki.eveuniversity.org/Wormhole_Gas_Sites",
 		"eveuniOre": "https://wiki.eveuniversity.org/Wormhole_Ore_Sites",
@@ -15,7 +15,7 @@
 		"prices": {
 			"30370": 5252.54, "30371": 4412.18, "30372": 8405.65, "30373": 6321.95, "30374": 8746.84,
 			"30375": 12365.74, "30376": 21180.33, "30377": 35403.64, "30378": 56236.6,
-			"22": 2520.43, "1223": 2087.41, "1229": 1894.29, "20": 529.05, "1227": 99.9, "1224": 22.18
+			"62536": 190.9, "62568": 3653.26, "62564": 3334.56, "62524": 25.74, "62532": 112.03, "62552": 2243.68
 		}
 	},
 	"types": {
@@ -28,12 +28,12 @@
 		"30376": { "name": "Fullerite-C32", "m3": 5 },
 		"30377": { "name": "Fullerite-C320", "m3": 5 },
 		"30378": { "name": "Fullerite-C540", "m3": 10 },
-		"22": { "name": "Arkonor", "m3": 16 },
-		"1223": { "name": "Bistot", "m3": 16 },
-		"1229": { "name": "Gneiss", "m3": 5 },
-		"20": { "name": "Kernite", "m3": 1.2 },
-		"1227": { "name": "Omber", "m3": 0.6 },
-		"1224": { "name": "Pyroxeres", "m3": 0.3 }
+		"22": { "name": "Arkonor", "m3": 16, "priceAs": 62568 },
+		"1223": { "name": "Bistot", "m3": 16, "priceAs": 62564 },
+		"1229": { "name": "Gneiss", "m3": 5, "priceAs": 62552 },
+		"20": { "name": "Kernite", "m3": 1.2, "priceAs": 62536 },
+		"1227": { "name": "Omber", "m3": 0.6, "priceAs": 62532 },
+		"1224": { "name": "Pyroxeres", "m3": 0.3, "priceAs": 62524 }
 	},
 	"sites": [
 		{ "name": "Barren Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Barren_Perimeter_Reservoir", "contents": [[30370, 12000], [30371, 6000]] },

@@ -20,7 +20,11 @@ function market_prices_types(?string $sitesFile = null) {
 	$data = json_decode((string) @file_get_contents($sitesFile), true);
 	$ids = array();
 	if (is_array($data) && isset($data['types']) && is_array($data['types'])) {
-		foreach (array_keys($data['types']) as $id) if (ctype_digit((string) $id)) $ids[(int) $id] = true;
+		foreach ($data['types'] as $id => $type) {
+			if (ctype_digit((string) $id)) $ids[(int) $id] = true;
+			// ore is priced as its compressed form
+			if (is_array($type) && isset($type['priceAs']) && ctype_digit((string) $type['priceAs'])) $ids[(int) $type['priceAs']] = true;
+		}
 	}
 	return $ids;
 }
@@ -50,6 +54,7 @@ function market_prices_normalise($cache) {
 		'fetched'   => isset($cache['fetched']) && is_numeric($cache['fetched']) ? (int) $cache['fetched'] : 0,
 		'attempted' => isset($cache['attempted']) && is_numeric($cache['attempted']) ? (int) $cache['attempted'] : 0,
 		'prices'    => $prices,
+		'types'     => isset($cache['types']) && is_string($cache['types']) ? $cache['types'] : '',
 	);
 }
 
@@ -90,7 +95,11 @@ function market_prices_get(?callable $fetch = null, $now = null, ?string $file =
 	$now = $now ?? time();
 	$file = $file ?? market_prices_cache_file();
 	$cache = market_prices_read($file);
-	$due = function($c) use ($now) { return $now - $c['fetched'] >= MARKET_PRICES_TTL && $now - $c['attempted'] >= MARKET_PRICES_RETRY; };
+	$wanted = $wanted ?? market_prices_types();
+	ksort($wanted);
+	$types = implode(',', array_keys($wanted));
+	// due after the TTL, or at once when sites.json now wants other items than the copy has; never within the retry wait
+	$due = function($c) use ($now, $types) { return ($now - $c['fetched'] >= MARKET_PRICES_TTL || $c['types'] !== $types) && $now - $c['attempted'] >= MARKET_PRICES_RETRY; };
 
 	if ($due($cache)) {
 		$lock = @fopen(preg_replace('/(\.json)?$/', '.lock.json', $file, 1), 'c');
@@ -98,11 +107,12 @@ function market_prices_get(?callable $fetch = null, $now = null, ?string $file =
 			try {
 				$cache = market_prices_read($file);   // another request may have refreshed meanwhile
 				if ($due($cache)) {
-					[$prices, $error] = $fetch($wanted ?? market_prices_types());
+					[$prices, $error] = $fetch($wanted);
 					$cache['attempted'] = $now;
 					if ($prices !== null) {
 						$cache['fetched'] = $now;
 						$cache['prices'] = $prices;
+						$cache['types'] = $types;
 					} else {
 						esi_log('market prices refresh failed: ' . $error);
 					}

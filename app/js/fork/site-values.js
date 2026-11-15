@@ -72,11 +72,12 @@ const siteValues = {
 			const type = data.types && data.types[String(row[0])];
 			const units = Number(row[1]);
 			if (!type || !(units > 0)) { return; }
-			const p = siteValues.priceOf(row[0], live, fallback);
+			// Ore is priced as its compressed form (priceAs), 1 unit for 1 unit: raw ore hardly trades
+			const p = siteValues.priceOf(type.priceAs || row[0], live, fallback);
 			if (!p) { out.missing.push(type.name); return; }
 			if (!p.live) { out.live = false; }
 			const isk = units * p.price;
-			out.lines.push({ name: String(type.name), units: units, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk });
+			out.lines.push({ name: String(type.name), units: units, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk, compressed: !!type.priceAs });
 			out.total += isk;
 		});
 		if (!out.lines.length) { out.status = "unverified"; out.live = false; }
@@ -131,6 +132,7 @@ const siteValues = {
 		const notes = [];
 		if (site.kind === "gas") { notes.push("Two clouds; Sleepers usually arrive 15-20 min after the first ship lands."); }
 		if (est.status === "approximate") { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
+		if (est.lines.some(function(l) { return l.compressed; })) { notes.push("Ore is priced as compressed ore (1 unit compresses to 1 unit)."); }
 		if (est.missing.length) { notes.push("No price for " + e(est.missing.join(", ")) + "."); }
 		notes.push(est.live ? "Prices: ESI average market price, updated hourly." : "Prices: ESI average market price of " + e(pricesDate || "an earlier date") + " (live prices unavailable).");
 		notes.push("Contents: EVE University wiki.");
