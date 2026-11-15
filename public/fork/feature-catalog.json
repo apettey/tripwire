@@ -29,7 +29,7 @@
     { "id": "notifications", "title": "Pop-up corner and closing", "section": "general", "prs": [152], "settingsKey": "notifications",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["closed_all", "moved"],
       "success": "corner moved or Close all used by >=15% of active users by day 28" },
-    { "id": "desktopNotify", "title": "Desktop notifications", "section": "general", "prs": [], "settingsKey": "desktopNotify",
+    { "id": "desktopNotify", "title": "Desktop notifications", "section": "general", "prs": [174], "settingsKey": "desktopNotify",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["granted", "clicked"],
       "events": ["denied", "shown"],
       "success": "allowed by >=15% of active users by day 28; denied or switched off by <30% of those asked" },
