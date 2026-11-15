@@ -1,6 +1,12 @@
 {
   "features": [
     {
+      "pr": 162,
+      "date": "2026-11-15",
+      "title": "Map jumps of every online character",
+      "description": "Map jumps of all my tracked characters now uses every character that is online and has its A icon on, instead of the first 5 by name, so a logged-off alt no longer takes the place of one you are flying. Offline characters are left out until they log in; their A icon is dimmed.\n\nTurn it on or off in Settings > Wormhole Jumps & Mass."
+    },
+    {
       "pr": 161,
       "date": "2026-11-14",
       "title": "Favourites on one line, with every route",
