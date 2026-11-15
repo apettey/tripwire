@@ -1,0 +1,61 @@
+{
+	"v": 1,
+	"checked": "2026-11-15",
+	"about": "Contents of wormhole gas and ore sites, by the site name the scanner shows. contents: [typeID, units] per resource (gas: one cloud of each; ore: the site total at spawn). status: verified = contents from the EVE University site page, unit volumes match Fuzzworks' gas table and the SDE, and All-Out's gas guide confirms two clouds per site; approximate = EVE University only, which says ore amounts are approximate and change with the system class; unverified = no reliable figures, so no value is shown. Read by app/js/fork/site-values.js.",
+	"sources": {
+		"eveuniGas": "https://wiki.eveuniversity.org/Wormhole_Gas_Sites",
+		"eveuniOre": "https://wiki.eveuniversity.org/Wormhole_Ore_Sites",
+		"fuzzworks": "https://www.fuzzwork.co.uk/ore/gas.php",
+		"allout": "https://all-out.github.io/guides/wormhole-gas",
+		"prices": "https://esi.evetech.net/markets/prices/ (average_price)"
+	},
+	"fallbackPrices": {
+		"date": "2026-11-15",
+		"source": "ESI /markets/prices/ average_price",
+		"prices": {
+			"30370": 5252.54, "30371": 4412.18, "30372": 8405.65, "30373": 6321.95, "30374": 8746.84,
+			"30375": 12365.74, "30376": 21180.33, "30377": 35403.64, "30378": 56236.6,
+			"22": 2520.43, "1223": 2087.41, "1229": 1894.29, "20": 529.05, "1227": 99.9, "1224": 22.18
+		}
+	},
+	"types": {
+		"30370": { "name": "Fullerite-C50", "m3": 1 },
+		"30371": { "name": "Fullerite-C60", "m3": 1 },
+		"30372": { "name": "Fullerite-C70", "m3": 1 },
+		"30373": { "name": "Fullerite-C72", "m3": 2 },
+		"30374": { "name": "Fullerite-C84", "m3": 2 },
+		"30375": { "name": "Fullerite-C28", "m3": 2 },
+		"30376": { "name": "Fullerite-C32", "m3": 5 },
+		"30377": { "name": "Fullerite-C320", "m3": 5 },
+		"30378": { "name": "Fullerite-C540", "m3": 10 },
+		"22": { "name": "Arkonor", "m3": 16 },
+		"1223": { "name": "Bistot", "m3": 16 },
+		"1229": { "name": "Gneiss", "m3": 5 },
+		"20": { "name": "Kernite", "m3": 1.2 },
+		"1227": { "name": "Omber", "m3": 0.6 },
+		"1224": { "name": "Pyroxeres", "m3": 0.3 }
+	},
+	"sites": [
+		{ "name": "Barren Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Barren_Perimeter_Reservoir", "contents": [[30370, 12000], [30371, 6000]] },
+		{ "name": "Token Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Token_Perimeter_Reservoir", "contents": [[30371, 12000], [30372, 6000]] },
+		{ "name": "Minor Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Minor_Perimeter_Reservoir", "contents": [[30372, 12000], [30373, 6000]] },
+		{ "name": "Ordinary Perimeter Reservoir", "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Ordinary_Perimeter_Reservoir", "contents": [[30373, 12000], [30374, 6000]] },
+		{ "name": "Sizeable Perimeter Reservoir", "aliases": ["Sizable Perimeter Reservoir"], "kind": "gas", "classes": "C1-C4", "status": "verified", "source": "https://wiki.eveuniversity.org/Sizeable_Perimeter_Reservoir", "contents": [[30374, 12000], [30370, 6000]] },
+		{ "name": "Bountiful Frontier Reservoir", "kind": "gas", "classes": "C3-C6", "status": "verified", "source": "https://wiki.eveuniversity.org/Bountiful_Frontier_Reservoir", "contents": [[30375, 20000], [30376, 4000]] },
+		{ "name": "Vast Frontier Reservoir", "kind": "gas", "classes": "C3-C6", "status": "verified", "source": "https://wiki.eveuniversity.org/Vast_Frontier_Reservoir", "contents": [[30376, 20000], [30375, 4000]] },
+		{ "name": "Instrumental Core Reservoir", "kind": "gas", "classes": "C5-C6", "status": "verified", "source": "https://wiki.eveuniversity.org/Instrumental_Core_Reservoir", "contents": [[30377, 24000], [30378, 2000]] },
+		{ "name": "Vital Core Reservoir", "kind": "gas", "classes": "C5-C6", "status": "verified", "source": "https://wiki.eveuniversity.org/Vital_Core_Reservoir", "contents": [[30378, 24000], [30377, 2000]] },
+
+		{ "name": "Common Perimeter Deposit", "kind": "ore", "classes": "C1-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Common_Perimeter_Deposit", "contents": [[22, 20000], [1223, 30000], [1229, 40000], [20, 300000], [1227, 300000], [1224, 520000]] },
+		{ "name": "Ordinary Perimeter Deposit", "aliases": ["Ordinary Permiter Deposit"], "kind": "ore", "classes": "C1-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Ordinary_Perimeter_Deposit", "contents": [[22, 10000], [1223, 20000], [1229, 20000], [20, 200000], [1227, 200000], [1224, 1620000]] },
+		{ "name": "Average Frontier Deposit", "kind": "ore", "classes": "C1-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Average_Frontier_Deposit", "contents": [[22, 30000], [1223, 39999], [1229, 450000], [20, 300000], [1227, 300000], [1224, 700000]] },
+		{ "name": "Unexceptional Frontier Deposit", "kind": "ore", "classes": "C1-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Unexceptional_Frontier_Deposit", "contents": [[22, 30000], [1223, 50000], [1229, 60000], [20, 400000], [1227, 400000]] },
+		{ "name": "Exceptional Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Exceptional_Core_Deposit", "contents": [[22, 80000], [1223, 120000], [1229, 160000], [20, 1000000], [1227, 1000000], [1224, 1530000]] },
+		{ "name": "Isolated Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Isolated_Core_Deposit", "contents": [[22, 36000], [1223, 48000], [1229, 72000], [20, 720000], [1227, 720000]] },
+		{ "name": "Rarified Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Rarified_Core_Deposit", "contents": [[22, 100000], [1223, 160000], [1229, 200000], [20, 1200000], [1227, 1000000], [1224, 960000]] },
+		{ "name": "Uncommon Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Uncommon_Core_Deposit", "contents": [[22, 40000], [1223, 60000], [1229, 70000], [20, 590000], [1227, 600000], [1224, 500000]] },
+		{ "name": "Unusual Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "approximate", "source": "https://wiki.eveuniversity.org/Unusual_Core_Deposit", "contents": [[22, 70000], [1223, 100000], [1229, 120000], [20, 800000], [1227, 800000]] },
+		{ "name": "Infrequent Core Deposit", "kind": "ore", "classes": "C5-C6", "status": "unverified", "source": "https://wiki.eveuniversity.org/Infrequent_Core_Deposit", "reason": "The EVE University page says its quantities predate the December 2021 mining changes (Version 19.11)." },
+		{ "name": "Shattered Debris Field", "kind": "ore", "classes": "Shattered", "status": "unverified", "source": "https://wiki.eveuniversity.org/Shattered_Debris_Field", "reason": "The EVE University page lists ore variants by their pre-2024 names (Prime Arkonor, Monoclinic Bistot ...), which can't be matched to today's items with certainty." }
+	]
+}

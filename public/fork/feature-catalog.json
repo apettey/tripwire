@@ -100,6 +100,9 @@
       "success": "used by >=20% of active users by day 28, opt-out <10%" },
     { "id": "lifeStates", "title": "Wormhole life: Stable, <4h, <1h, EOL", "section": "signatures", "prs": [104, 109], "settingsKey": "lifeStates",
       "stage": "first", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
+    { "id": "siteValues", "title": "Gas and ore site value", "section": "signatures", "prs": [], "settingsKey": "siteValues",
+      "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".site-value-chip",
+      "success": "shown to >=30% of active users by day 28, opt-out <10%" },
 
     { "id": "destinations", "try": "destinations.open", "title": "Saved destinations", "section": "routes", "prs": [7], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["destinations.open", "destinations.add"], "panels": [], "use": ["opened"] },
