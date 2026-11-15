@@ -140,7 +140,13 @@ const noteEditor = (function() {
 			const html = transferHtml(data);
 			if (html) { exec("insertHTML", html); }
 		});
+		// A drag that starts in the note moves text within it: the browser does that itself (the content is already the
+		// sanitised note), and inserting here as well would leave a copy behind
+		let draggingInside = false;
+		$area.on("dragstart", function() { draggingInside = true; });
+		$area.on("dragend", function() { draggingInside = false; });
 		$area.on("drop", function(e) {
+			if (draggingInside) { draggingInside = false; return; }
 			e.preventDefault();
 			const data = e.originalEvent && e.originalEvent.dataTransfer;
 			const html = transferHtml(data);

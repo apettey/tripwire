@@ -80,6 +80,10 @@
 .rte-area a { color: darkorange; }
 .rte-area ul, .rte-area ol { padding: 0 0 0 1.6em; margin: .3em 0; }
 
+/* Increase indent wraps the text in a <blockquote> (the browser's margin style is not kept by the sanitiser): indent it
+   the same in the editor and in the saved note */
+.rte-area blockquote, .commentBody blockquote { margin: 0 0 0 40px; padding: 0; border: none; }
+
 .rte-menu { position: relative; display: inline-flex; }
 .rte-colour { color: #ff4d4d; font-weight: bold; text-decoration: underline; }
 .rte-highlight { background: #6b5200; color: #fff; font-weight: bold; }

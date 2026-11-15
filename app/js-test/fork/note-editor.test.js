@@ -108,6 +108,22 @@ describe('Note editor', () => {
 			noteEditor.destroy('comment0', true);
 		});
 
+		it('a drag within the note is left to the browser (moves the text, no copy)', () => {
+			const inst = noteEditor.replace('comment0');
+			inst.area[0].dispatchEvent(new win.Event('dragstart', { bubbles: true }));
+			const ev = new win.Event('drop', { bubbles: true, cancelable: true });
+			ev.dataTransfer = { getData: type => type === 'text/html' ? '<b>moved</b>' : '' };
+			inst.area[0].dispatchEvent(ev);
+			assert.ok(!ev.defaultPrevented);
+			assert.deepStrictEqual(commands.filter(c => c[0] === 'insertHTML'), []);
+			// the next drop from outside is handled again
+			const ev2 = new win.Event('drop', { bubbles: true, cancelable: true });
+			ev2.dataTransfer = { getData: type => type === 'text/html' ? '<b>x</b>' : '' };
+			inst.area[0].dispatchEvent(ev2);
+			assert.ok(ev2.defaultPrevented);
+			noteEditor.destroy('comment0', true);
+		});
+
 		it('onOpen runs before the editor reads the note; onClose after it is gone', () => {
 			const seen = [];
 			noteEditor.onOpen(el => { seen.push('open'); el.innerHTML = 'stored'; });
