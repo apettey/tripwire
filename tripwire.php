@@ -1247,7 +1247,6 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-0.4.9.min.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.jbox-notice-0.4.9.min.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/jquery.duration-picker.js"></script>
-	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/ckeditor/ckeditor.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/dragscroll.js"></script>
 	<script type="text/javascript" src="//<?= CDN_DOMAIN ?>/js/lodash.js"></script>
 	<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>

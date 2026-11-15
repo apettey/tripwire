@@ -4,7 +4,8 @@ This repo is a fork of [daimian/tripwire](https://bitbucket.org/daimian/tripwire
 that adds a single self-contained Docker image, published as
 [`petdog/tripwire`](https://hub.docker.com/r/petdog/tripwire), plus a local dev stack.
 
-Everything fork-specific lives in new files so upstream syncs stay conflict-free:
+The fork no longer syncs with upstream (decided 2026-11-15); useful upstream changes are ported one at a
+time as ordinary features (see [Upstream](#upstream)). Fork-specific infrastructure lives in its own files:
 
 | Path | Purpose |
 | --- | --- |
@@ -12,10 +13,11 @@ Everything fork-specific lives in new files so upstream syncs stay conflict-free
 | `docker-compose.dev.yml` | Local development stack |
 | `docker-compose.prod.yml` | Example production stack using the published image (port bound to `127.0.0.1`, for a TLS proxy on the same host) |
 | `.env.example` | Settings template for both compose files |
-| `.github/` | Release + Docker Hub publish and weekly upstream sync workflows, `upstream-base`, version and sync scripts |
+| `.github/` | CI, release + Docker Hub publish and infra-deploy workflows, version and infra-PR scripts |
 | `AGENTS.md`, `changes/` | Working rules and the change log |
 
-Avoid editing upstream files unless you mean to diverge; every edit is a potential sync conflict.
+Editing upstream files is fine; new features still go in fork-owned files (`app/js/fork/`, `app/css/fork/`) so
+they stay modular and testable (see [AGENTS.md](../AGENTS.md) §3).
 
 In production use `docker-compose.prod.yml` (or your own stack built on `petdog/tripwire`), never upstream's
 `docker-compose.yml`: that one is upstream's own setup (Traefik with its insecure API dashboard, its own nginx image, public ports) and does not get
@@ -1137,9 +1139,9 @@ Only what the running app needs: the PHP sources, `api/`, `public/` (with the bu
 `assets` stage), `vendor/`, `cache/`, `settings.php` (`docker/settings.php`), `settings.upstream.php`
 and `.docker/mysql/tripwire.sql` (imported by the entrypoint). The `src` stage of `docker/Dockerfile` deletes repo and dev files (docs, change log, compose
 files, CI, example configs, `app/` sources, node tooling, upstream's `tools/`, `zkill/tests/`, `zkill/tools/`, `discord/tests/`, `discord/tools/`, `esi/tests/`, `intel/tests/`, `intel/tools/`, `watchlist/tests/`, `jumprange/tests/`, `jumprange/tools/`, `fight/tests/`) from the build context
-before copying it in; if upstream adds new non-runtime files, add them to that list.
+before copying it in; if a change (or a ported upstream change) adds new non-runtime files, add them to that list.
 
-If upstream adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
+If a change (or a ported upstream change) adds a setting to `config.example.php`, add it to `docker/config.php` (and the compose
 files) too.
 
 ## Publishing
@@ -1281,25 +1283,20 @@ One-time setup (owner):
 It must not be `GITHUB_TOKEN`: PRs and merges made with it start no workflows, so infra's checks and
 deploy would never run. PRs and auto-merges appear as made by the token's owner.
 
-## Pulling upstream changes
+## Upstream
 
-This repo was started from a snapshot of upstream and does **not** share its git history.
-`.github/upstream-base` records the upstream commit our code matches.
-`.github/scripts/sync-upstream.sh` applies everything upstream changed since then as a 3-way merge
-and bumps that file.
+This repo was started on 2026-10-10 from a snapshot of upstream
+[daimian/tripwire](https://bitbucket.org/daimian/tripwire) (`production` at `6682a89`), without upstream's
+git history. It no longer syncs with upstream: the automatic sync (workflow, script and `upstream-base`
+file) was removed on 2026-11-15 because the fork had drifted too far.
 
-`.github/workflows/upstream-sync.yml` runs it weekly (or on demand from the Actions tab) and opens a
-PR from the `upstream-sync` branch. Any merge style is fine. If upstream's changes conflict with ours,
-the job fails and you sync locally:
+To port a useful upstream change, treat it as an ordinary feature or fix: read the upstream commit, adapt
+it to the fork's code, and credit the upstream commit (hash and link) in the change-log entry. For example:
 
 ```bash
-git checkout main && git pull
-git checkout -b upstream-sync-manual
-.github/scripts/sync-upstream.sh      # exit 2 = conflicts: fix markers, git add
-git commit -m "Sync upstream Tripwire"
+git fetch https://bitbucket.org/daimian/tripwire.git production
+git log FETCH_HEAD          # find the commit, then: git show <sha>
 ```
 
-One-time setup: Settings > Actions > General > Workflow permissions > enable
-**Allow GitHub Actions to create and approve pull requests**, or the PR step fails.
-PRs opened by that workflow don't trigger other workflows, so the Docker build check runs after
-merge. To check it first, close and reopen the PR.
+The release still reports the upstream Tripwire version the code is based on (`VERSION` in `settings.php`,
+the `upstream-<version>` image tag).

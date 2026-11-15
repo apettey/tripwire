@@ -43,9 +43,10 @@ const forkHints = {
 	//   (panel-host.js); maskAdmin.open (mask-admin-tab.js); mouse.action {command} (command-palette.js);
 	//   chain.exit {systemIDs: exits that just got a jump range ring} (jump-planner.js); tracking.otherJump {id, name,
 	//   fromName, toName, activeName: a character that isn't the active one jumped a wormhole} (multi-track.js);
-	//   history.recorded {action: add | remove | update | ...: a signature or map edit went on the undo history} (undo-history.js)
+	//   history.recorded {action: add | remove | update | ...: a signature or map edit went on the undo history} (undo-history.js);
+	//   alert.shown {type: an alert source raised an in-app pop-up while Tripwire is on screen} (desktop-notify.js)
 	EVENTS: ["session.start", "idle", "jump.done", "paste.sigs", "paste.dscan", "kill.chain", "system.viewed", "panel.open",
-		"dialog.open", "dialog.close", "maskAdmin.open", "mouse.action", "chain.exit", "tracking.otherJump", "history.recorded"],
+		"dialog.open", "dialog.close", "maskAdmin.open", "mouse.action", "chain.exit", "tracking.otherJump", "history.recorded", "alert.shown"],
 	DONE: ["acted", "got_it", "section_off"],	// outcomes after which a tip never comes back
 	DEFAULTS: { kind: "callout", placement: "bottom", priority: 50, maxShows: 2, cooldownHours: 72, ttlSeconds: 600, minCount: 1, audience: "all" },
 	CAPS: {
@@ -652,13 +653,6 @@ const forkHints = {
 			document.addEventListener(type, function() { forkHints.signals.dragging = false; }, { capture: true, passive: true });
 		});
 		window.addEventListener("blur", function() { forkHints.signals.dragging = false; });
-		// CKEditor's iframe keeps its keystrokes from the page's listeners: count them as input too
-		if (typeof CKEDITOR !== "undefined" && CKEDITOR && typeof CKEDITOR.on === "function") {
-			const typed = function() { forkHints.signals.lastInput = Date.now(); };
-			const watch = function(editor) { if (editor && !editor.forkHintsWatched) { editor.forkHintsWatched = true; editor.on("key", typed); editor.on("change", typed); } };
-			Object.keys(CKEDITOR.instances || {}).forEach(function(k) { watch(CKEDITOR.instances[k]); });
-			CKEDITOR.on("instanceReady", function(e) { watch(e.editor); });
-		}
 		$(document).on("dialogopen", "#dialog-whatsNew", function() { forkHints.session.whatsNew = true; });
 		$(document).on("dialogopen", function(e) { forkHints.emit("dialog.open", { id: e.target && e.target.id || "" }); });
 		$(document).on("dialogclose", function(e) { forkHints.emit("dialog.close", { id: e.target && e.target.id || "" }); });

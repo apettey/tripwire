@@ -16,7 +16,7 @@ tripwire.active = function(data) {
                 .animate({backgroundColor: "#001b47"}, 1000); //35240A - Yellow
         }
 
-        if (activity.editComment && $("#commentWrapper .comment[data-id='"+activity.editComment+"'] .cke").length > 0) {
+        if (activity.editComment && $("#commentWrapper .comment[data-id='"+activity.editComment+"'] .rte").length > 0) {
             $("#commentWrapper .comment[data-id='"+activity.editComment+"']")
                 .addClass("editing")
                 .find(".commentStatus").text(data[x].characterName + " is editing").fadeIn();

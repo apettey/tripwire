@@ -1,8 +1,8 @@
 > **About this repository:** the code here comes from the original Tripwire project at
 > [bitbucket.org/daimian/tripwire](https://bitbucket.org/daimian/tripwire) (`production` branch),
 > by Josh Glassmaker (Daimian Mercer), Astriania and contributors, MIT licensed.
-> It was imported as a snapshot without upstream's git history; `.github/upstream-base` records
-> the upstream commit it matches. This fork adds a Docker image
+> It was imported as a snapshot of upstream commit `6682a89` without upstream's git history and no
+> longer syncs with upstream; useful upstream changes are ported one at a time. This fork adds a Docker image
 > ([`petdog/tripwire`](https://hub.docker.com/r/petdog/tripwire)) and a local dev stack:
 > see [docker/README.md](docker/README.md). Fork changes are logged in [changes/](changes/).
 

@@ -1,6 +1,6 @@
 <?php
 // Docker config: every setting comes from an environment variable.
-// Mirrors config.example.php - keep in sync when upstream adds settings.
+// Mirrors config.example.php - keep in sync when a change (or a ported upstream change) adds settings.
 
 if (!function_exists('tw_env')) {
     function tw_env($name, $default = null) {

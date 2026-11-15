@@ -1,0 +1,12 @@
+/* Settings > General > Desktop notifications (fork-owned, see app/js/fork/desktop-notify.js) */
+#desktopNotify-section, #dialog-options .dn-types { text-align: left; }
+#desktopNotify-section .dn-state {
+	margin: 2px 0 2px 22px;
+	color: #aaa;
+}
+#desktopNotify-section .dn-state.dn-ok { color: #8fc78f; }
+#desktopNotify-section .dn-state.dn-warn { color: #e0b050; }
+#desktopNotify-section .dn-enable { display: block; margin: 4px 0 2px; }
+#dialog-options .dn-type { display: block; }
+#dialog-options .dn-type-note { color: #aaa; padding-left: 22px; }
+#desktopNotify-section .dn-kill-note { color: #aaa; margin-left: 22px; }

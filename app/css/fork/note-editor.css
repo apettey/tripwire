@@ -1,0 +1,101 @@
+/* Fork-owned: the system note editor (app/js/fork/note-editor.js), in place of CKEditor 4 */
+.rte {
+	margin: 2px 0;
+	border: 1px solid #555;
+	background: rgba(0, 0, 0, .6);
+}
+
+.rte-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 1px;
+	padding: 2px 3px;
+	border-bottom: 1px solid #444;
+	background: #1c1c1c;
+}
+
+.rte-btn {
+	min-width: 20px;
+	height: 22px;
+	padding: 0 3px;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	background: transparent;
+	color: #ddd;
+	font: inherit;
+	font-size: 12px;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.rte-btn:hover, .rte-btn:focus-visible {
+	border-color: #666;
+	background: #333;
+	color: #fff;
+	outline: none;
+}
+
+.rte-btn svg { display: block; margin: auto; }
+.rte-b { font-weight: bold; }
+.rte-i { font-style: italic; }
+.rte-u { text-decoration: underline; }
+.rte-s { text-decoration: line-through; }
+.rte-size-s { font-size: 10px; }
+.rte-size-m { font-size: 12px; }
+.rte-size-l { font-size: 16px; }
+
+.rte-sep {
+	width: 1px;
+	align-self: stretch;
+	margin: 2px 2px;
+	background: #444;
+}
+
+.rte-swatch {
+	min-width: 0;
+	width: 13px;
+	height: 13px;
+	margin: 0 1px;
+	padding: 0;
+	border: 1px solid #777;
+	line-height: 12px;
+	font-size: 10px;
+}
+
+.rte-swatch:hover { transform: scale(1.15); border-color: #fff; }
+
+.rte-area {
+	min-height: 80px;
+	max-height: 400px;
+	overflow: auto;
+	padding: 6px 8px;
+	color: #e6e6e6;
+	word-wrap: break-word;
+	outline: none;
+	cursor: text;
+}
+
+.rte-area:focus { background: rgba(0, 0, 0, .35); }
+.rte-area a { color: darkorange; }
+.rte-area ul, .rte-area ol { padding: 0 0 0 1.6em; margin: .3em 0; }
+
+/* Increase indent wraps the text in a <blockquote> (the browser's margin style is not kept by the sanitiser): indent it
+   the same in the editor and in the saved note */
+.rte-area blockquote, .commentBody blockquote { margin: 0 0 0 40px; padding: 0; border: none; }
+
+.rte-menu { position: relative; display: inline-flex; }
+.rte-colour { color: #ff4d4d; font-weight: bold; text-decoration: underline; }
+.rte-highlight { background: #6b5200; color: #fff; font-weight: bold; }
+.rte-pop {
+	position: absolute;
+	top: 100%;
+	right: 0;	/* opens to the left: the menus are at the end of the toolbar */
+	z-index: 10;
+	display: flex;
+	gap: 3px;
+	padding: 4px;
+	border: 1px solid #555;
+	background: #1c1c1c;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, .6);
+}
