@@ -365,7 +365,7 @@ const lifeStates = {
 		Array.prototype.forEach.call(document.querySelectorAll("#sigTable tbody tr[data-id]"), function(tr) {
 			const wh = bySig[tr.getAttribute("data-id")];
 			const cell = tr.children[4];
-			if (!wh || !cell || cell.classList.contains("sig-inline-saving") || cell.getAttribute("colspan")) { return; }
+			if (!wh || !cell || cell.classList.contains("sig-inline-saving") || cell.classList.contains("broken-hole-cell") || cell.getAttribute("colspan")) { return; }	// broken: broken-holes.js shows "Broken" there
 			const key = on ? lifeStates.current(wh) : null;
 			const text = key ? lifeStates.label(key) : ({ critical: "EOL", stable: "Stable" }[wh.life] || wh.life);
 			if (cell.textContent !== text) { cell.textContent = text; changed = true; }

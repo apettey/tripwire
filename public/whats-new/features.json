@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 178,
+      "date": "2026-11-15",
+      "title": "Paste preview, with gone holes marked broken",
+      "description": "When a probe scanner paste would remove signatures, Tripwire now shows you what will change first: new, updated and gone signatures. Untick a row to leave that signature alone, then press Enter to apply or Esc to cancel. One Undo puts it all back.\n\nA wormhole missing from your paste is marked broken instead of deleted: it stays on the map, red and dashed, and routes leave it out. Click Restore on the map or in the signature list if it is still there. Turn the preview off, or show it for every paste, in Settings > Signatures.",
+      "images": [
+        { "src": "whats-new/img/pr-178-paste-preview.png", "caption": "The paste preview: a gone wormhole is marked broken, a gone site deleted" }
+      ]
+    },
+    {
       "pr": 177,
       "date": "2026-11-15",
       "title": "Relic and data site value",

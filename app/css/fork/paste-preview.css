@@ -1,0 +1,58 @@
+/* Paste preview and broken holes (fork features: app/js/fork/paste-preview.js, broken-holes.js).
+   Colours: upstream's status colours (#50D25A new, #4399F0 updated, #FF4747 gone / broken). */
+
+/* ---- The preview dialog ---- */
+.pp-dialog { font-size: 11px; color: #aaa; }
+.pp-summary { margin-bottom: 6px; color: #bbb; }
+.pp-summary .pp-n, .pp-head.pp-n { color: #50D25A; }
+.pp-summary .pp-u, .pp-head.pp-u { color: #4399F0; }
+.pp-summary .pp-g, .pp-head.pp-g { color: #FF4747; }
+.pp-group { margin-top: 6px; }
+.pp-head { display: flex; justify-content: space-between; font-weight: bold; padding: 2px 4px; background: rgba(51, 51, 51, .7); border: 1px solid #000; }
+.pp-head a { font-weight: normal; font-size: 10px; }
+.pp-head.pp-s { color: #777; cursor: pointer; }
+.pp-head.pp-s:focus-visible { outline: 1px solid #980; }
+.pp-row { display: grid; grid-template-columns: 18px 64px 70px minmax(0, 1fr) 128px; gap: 6px; align-items: center; padding: 2px 4px;
+	background: rgba(17, 17, 17, .7); border: 1px solid #000; border-top: 0; }
+.pp-row.pp-off { opacity: .45; }
+.pp-row:focus-within { outline: 1px solid #980; }
+.pp-row input[type=checkbox] { margin: 0; }
+.pp-id { font-family: lucida, monospace; letter-spacing: 1px; color: #ccc; text-transform: uppercase; }
+.pp-what { overflow: hidden; text-overflow: ellipsis; color: #bbb; }
+.pp-lead { color: #fff; font-weight: bold; }
+.pp-old { color: #777; text-decoration: line-through; }
+.pp-arrow, .pp-dim { color: #777; }
+.pp-act { text-align: right; white-space: nowrap; }
+.pp-del { color: #c66; }
+.pp-row select { background: #222; color: #ccc; border: 1px solid #444; font-size: 10px; font-family: Verdana, sans-serif; }
+.pp-pill { display: inline-block; border-radius: 3px; padding: 0 4px; font-size: 9px; font-weight: bold; }
+.pp-pill.pp-ret { background: #0f2d4a; color: #8cc4ff; border: 1px solid #245; margin-top: 2px; }
+.pp-pill.pp-wh { background: #30101a; color: #f68; border: 1px solid #522; }
+.pp-empty { margin: 8px 0; color: #888; }
+.pp-keys { margin-top: 8px; color: #666; font-size: 10px; }
+.pp-keys kbd { font-family: Verdana, sans-serif; font-size: 10px; border: 1px solid #555; border-bottom-width: 2px; border-radius: 3px; padding: 0 3px; color: #ccc; background: #1a1a1a; }
+.pp-ui-dialog .pp-apply { border-color: darkorange; }
+@media (max-width: 640px) {
+	.pp-row { grid-template-columns: 18px 60px minmax(0, 1fr) auto; }
+	.pp-row > .pp-type { display: none; }
+}
+
+/* ---- Broken holes: chain map ---- */
+/* the plain selectors are for the canvas renderers, which read the style of an off-map element (chain-map-renderer-base.js) */
+.broken-hole, #chainMap .broken-hole, #guide .broken-hole, #map-key .broken-hole { border-color: #FF4747; border-style: dashed; }
+/* dimmed without transparency (the line under the node must stay hidden) */
+#chainMap .node.broken-hole-far, #chainMap .node.broken-hole-beyond, #map-key .node.broken-hole-far { filter: brightness(.55) saturate(.4); }
+#chainMap .node.broken-hole-far:hover, #chainMap .node.broken-hole-beyond:hover { filter: none; }
+#chainMap .node.broken-hole-far, #map-key .node.broken-hole-far { border: 1px dashed #FF4747; }
+.broken-hole-tag { font-size: 9px; font-weight: bold; color: #FF4747; white-space: nowrap; }
+.broken-hole-tag a { color: #8cc4ff; text-transform: none; }
+
+/* ---- Broken holes: signature list ---- */
+#sigTable tr.sig-broken td { color: #a33; }
+#sigTable tr.sig-broken td:nth-child(4), #sigTable tr.sig-broken td:nth-child(4) * { text-decoration: line-through; color: #c66; }
+#sigTable td.broken-hole-cell { white-space: nowrap; }
+#sigTable .broken-hole-label { color: #FF4747; font-weight: bold; }
+#sigTable .broken-hole-restore { color: #4399F0; margin-left: 2px; }
+
+/* the Undo link in the notices */
+.jBox-Notice a.pp-undo { color: #fff; text-decoration: underline; font-weight: bold; }

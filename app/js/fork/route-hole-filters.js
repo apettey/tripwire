@@ -222,10 +222,12 @@ const routeHoleFilters = {
 			const d = hf.describe((r.exit && r.exit.holes) || [], byLine || {});
 			// No route from your location (not on the map): the exit was judged by its way to the chain's root
 			const note = d.note && r.exit && r.exit.fromRoot ? d.note + " (judged from the chain root: your location isn't on the map)" : d.note;
+			// No way to it on the map at all (its only way home crosses a broken hole, broken-holes.js): bad, and last
+			if (r.exit && r.exit.unreachable) { return Object.assign({}, r, { marks: d.marks, bad: d.bad + 1, fallback: true, note: "no route to it on the map", unreachable: true }); }
 			return Object.assign({}, r, { marks: d.marks, bad: d.bad, fallback: d.fallback, note: note });
 		});
 		const clean = rated.filter(function(r) { return !r.bad; });
-		return (clean.length ? clean : rated).sort(function(a, b) { return a.jumps - b.jumps || a.index - b.index; });
+		return (clean.length ? clean : rated).sort(function(a, b) { return (a.unreachable ? 1 : 0) - (b.unreachable ? 1 : 0) || a.jumps - b.jumps || a.index - b.index; });
 	},
 
 	/** Reasons for every connection: {lineIndex: {all, avoid}} (see route; shares the context's memo) */

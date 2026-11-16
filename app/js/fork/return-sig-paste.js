@@ -290,7 +290,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				return previousRefresh.call(this, mode, data, success, alwaysCallback);
 			};
 			tripwire.refresh = intercept;
-			try { return parsePaste.apply(this, arguments); } finally { if (tripwire.refresh === intercept) { tripwire.refresh = previousRefresh; } }
+			returnSigPaste.current = hit;	// the paste preview (paste-preview.js) tags this hole's row during this call
+			try { return parsePaste.apply(this, arguments); } finally { returnSigPaste.current = null; if (tripwire.refresh === intercept) { tripwire.refresh = previousRefresh; } }
 		};
 		tripwire.pasteSignatures.parsePaste = wrapped;
 
