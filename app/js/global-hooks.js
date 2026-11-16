@@ -710,6 +710,9 @@ $("#chainParent").contextmenu({
 			case "green":
 				nodeElem.hasClass("greenNode") ? $(this).contextmenu("removeFlare", id, ui) : $(this).contextmenu("setFlare", id, ui.cmd, ui);
 				break;
+			case "flare":	// fork: colour, lifetime and reason (app/js/fork/flare-details.js)
+				flareDetails.openDialog(id);
+				break;
 			case "mass":
 				$("#dialog-mass").data("id", nodeElem.data("sigid")).data("systemID", id).dialog("open");
 				break;
@@ -778,40 +781,13 @@ $("#chainParent").contextmenu({
 		$(menuElem).find(".ui-front").css("width", "auto");
 		$(menuElem).find(".ui-front").css("position", "");
 
+		// Fork: a re-colour keeps the flare's lifetime and reason (app/js/fork/flare-details.js)
 		$.moogle.contextmenu.prototype.setFlare = function(systemID, flare, ui) {
-			var data = {"systemID": systemID, "flare": flare};
-
-			$.ajax({
-				url: "flares.php",
-				type: "POST",
-				data: data,
-				dataType: "JSON"
-			}).done(function(data) {
-				if (data && data.result) {
-					// $(ui.target[0]).closest("td").removeClass("redNode yellowNode greenNode").addClass(flare+"Node");
-
-					chain.data.flares.flares.push({systemID: systemID, flare: flare, time: null});
-					chain.flares(chain.data.flares);
-				}
-			});
+			flareDetails.setColour(systemID, flare);
 		}
 
 		$.moogle.contextmenu.prototype.removeFlare = function(systemID, ui) {
-			var data = {"systemID": systemID};
-
-			$.ajax({
-				url: "flares.php",
-				type: "POST",
-				data: data,
-				dataType: "JSON"
-			}).done(function(data) {
-				if (data && data.result) {
-					// $(ui.target[0]).closest("td").removeClass("redNode yellowNode greenNode");
-
-					chain.data.flares.flares.splice(Object.index(chain.data.flares.flares, "systemID", systemID), 1);
-					chain.flares(chain.data.flares);
-				}
-			});
+			flareDetails.remove(systemID);
 		}
 	}
 });

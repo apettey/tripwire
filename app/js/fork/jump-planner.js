@@ -275,7 +275,7 @@ const jumpPlanner = {
 	/** A synthetic or calculated chain row (route destinations, favourites' gate routes): not a system on the chain */
 	isExtraRow: function(row) {
 		const node = row && row.c && row.c[0];
-		if (!node) { return true; }
+		if (!node || row.brokenHole) { return true; }	// brokenHole: behind a broken hole, no way home (broken-holes.js)
 		const html = typeof node.f === "string" ? node.f : "";
 		const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
 		const last = pathHome[pathHome.length - 1];
@@ -863,6 +863,7 @@ const jumpPlanner = {
 				const pathHome = Array.isArray(cur.pathHome) ? cur.pathHome : [];
 				const child = pathHome[pathHome.length - 1] || {};
 				const l = line[cur.c[0].v] || [];
+				if (typeof brokenHoles !== "undefined" && brokenHoles.isBrokenLine(l)) { return; }	// this way home crosses a broken hole: a loop's other row may not
 				const mods = Array.isArray(l[2]) ? l[2] : [];
 				holes.push({
 					wormholeID: l[3] === undefined ? null : l[3], from: parseInt(parent.c[0].systemID, 10) || null, to: parseInt(cur.c[0].systemID, 10) || null,

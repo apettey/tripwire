@@ -343,6 +343,7 @@ require_once(__DIR__ . '/csrf.inc.php'); // fork
 									<li data-command="red"><a>Battle (red)</a></li>
 									<li data-command="yellow"><a>Hold (yellow)</a></li>
 									<li data-command="green"><a>Fleet Op (green)</a></li>
+									<li data-command="flare"><a>Set flare ...</a></li>
 								</ul>
 							</li>
 							<li data-command="mass"><a>Mass</a></li>

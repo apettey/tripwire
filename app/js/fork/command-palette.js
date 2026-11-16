@@ -863,7 +863,8 @@ const commandPalette = {
 		const nodeOf = function(ctx) { return $("#chainMap [data-nodeid='" + ctx.viewingSystemID + "']").first(); };
 		const onChain = function(ctx) { return commandPalette.onChain(ctx.viewingSystemID) ? true : "Not on the chain map"; };
 		const flare = function(color) {
-			return function(args, ctx) { $("#chainParent").contextmenu("setFlare", ctx.viewingSystemID, color, {}); };
+			// keeps the flare's lifetime and reason (flare-details.js)
+			return function(args, ctx) { return flareDetails.setColour(ctx.viewingSystemID, color); };
 		};
 		const flareEnabled = function(color) {
 			return function(ctx) {

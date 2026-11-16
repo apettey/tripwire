@@ -1,6 +1,6 @@
-/* Gas and ore site value (fork feature: site-values).
-   A small chip right after the site name; dashed border for approximate ore figures, grey "?" for sites without a
-   value. An unbreakable inline-block: in a narrow cell it wraps under the name and stays whole. */
+/* Site value (fork feature: site-values): gas, ore, relic and data sites.
+   A small chip right after the site name; dashed border for approximate figures (ore, relic/data ranges), grey "?"
+   for sites without a value. An unbreakable inline-block: in a narrow cell it wraps under the name and stays whole. */
 #sigTable .site-value-chip {
 	display: inline-block;
 	margin-left: 5px;
@@ -44,6 +44,13 @@
 	border-top: 1px solid rgba(255, 255, 255, 0.25);
 	padding-top: 3px;
 	font-weight: bold;
+}
+
+/* Relic and data sites: the T2 / T1 subtotal rows of a Ruined site's expected-salvage breakdown */
+.site-value-table tr.site-value-group td {
+	padding-top: 3px;
+	font-weight: bold;
+	color: #ddd;
 }
 
 .site-value-notes {

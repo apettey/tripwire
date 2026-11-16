@@ -237,6 +237,8 @@ if ($_REQUEST['mode'] == 'init' || isset($_REQUEST['esi']) || isset($_REQUEST['e
 if (isset($_POST['signatures']) || isset($_POST['wormholes'])) {
 	require('../signatures.php');
 }
+require_once('../broken_wormholes.inc.php'); // fork: paste preview's broken holes (this request's marks, the mask's list)
+broken_wormholes_refresh($mysql, $maskID, isset($_POST['brokenHoles']) ? $_POST['brokenHoles'] : null, fork_csrf_valid(), array('id' => isset($_SESSION['characterID']) ? (int) $_SESSION['characterID'] : 0, 'name' => isset($_SESSION['characterName']) ? (string) $_SESSION['characterName'] : ''), $output); // fork
 
 /**
 // *********************
@@ -389,11 +391,9 @@ if ($result = $stmt->fetchAll(PDO::FETCH_CLASS)) {
 }
 
 // Get flares
-$query = 'SELECT systemID, flare, time FROM flares WHERE maskID = :maskID';
-$stmt = $mysql->prepare($query);
-$stmt->bindValue(':maskID', $maskID);
-$stmt->execute();
-$result = $stmt->fetchAll(PDO::FETCH_CLASS);
+// Fork: with their lifetime and reason, expired ones left out; an older table gets its columns here (flares/flares.inc.php)
+require_once(__DIR__ . '/../flares/flares.inc.php');
+$result = flares_list_for_refresh($mysql, $maskID);
 $output['flares']['flares'] = $result;
 $output['flares']['last_modified'] = date('m/d/Y H:i:s e', $result ? strtotime($result[0]->time) : time());
 

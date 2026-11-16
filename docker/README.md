@@ -1067,6 +1067,46 @@ staging systems. A small map icon next to each system opens it on the region map
   >= 20 jumps). Default order (staging score): 24 h jumps x share of the 24 hours with traffic, halved when NPC kills
   outnumber jumps.
 
+### Flares
+
+A flare (right-click a system > Flares) has a colour, a lifetime (1 day or until removed) and an optional reason of at
+most 200 characters, ported from upstream Tripwire 2.0. Code: `flares/flares.inc.php` (storage, validation, schema),
+`public/flares.php` (set / remove, CSRF, the session's mask only), `public/refresh.php` (the list, with the reason and
+lifetime; expired flares are left out) and `app/js/fork/flare-details.js`. Tests: `php flares/tests/flares_test.php`.
+
+Schema: upstream's `flares` table has two more columns, `lifeLength` (seconds, `NULL` = until removed, default 86400) and
+`reason` (`varchar(255)`, `NULL` = none). A fresh install gets them from `.docker/mysql/tripwire.sql`. An existing
+database gets them automatically the first time someone sets a flare after the update: `public/flares.php` runs
+`flares_ensure_schema_once()`, which adds them (`ALTER TABLE ... ADD COLUMN`, needs `ALTER`). Flares from before keep
+their 24 hours. Until then the flare list (`public/refresh.php`, which never changes the schema) reads the old columns,
+and removing a flare never needs the new ones.
+
+The `flaresClean` event (hourly) deletes each flare when its own lifetime is over:
+`DELETE FROM flares WHERE lifeLength IS NOT NULL AND time < NOW() - INTERVAL lifeLength SECOND`. The same call changes an
+older event that deleted every flare after 24 hours with `ALTER EVENT` (in place, so there is never a moment without
+one; it creates the event only when it is missing). That needs the `EVENT` privilege, and the event's definer becomes the
+app user, as for the events the schema import created. The app user has both privileges when it owns its database (the
+usual setup, see above), so nothing needs doing by hand.
+
+The outcome is kept in `cache/flares-schema.json` together with which database it was for (server UUID, schema name and
+when the `flares` table was created). `cache/` is a volume in production, so the file survives redeploys: once done,
+setting a flare only reads that database identity. A restored or moved database (a dump re-creates the table, often
+without its events) has another identity, so the check runs again by itself. Deleting the file is always safe: it only
+makes the next flare set check again; do that after restoring a database in a way that keeps the table (for example a
+copy of the data directory). A failure is logged once as `[flares] could not update the schema` and tried again
+after an hour, not on every request. Then an admin runs this once against the Tripwire database (until the columns
+exist, flares can be removed but not set; until the event is changed, flares still expire on time in the app, but one set
+to last until removed is deleted after 24 hours), and deletes `cache/flares-schema.json`:
+
+```sql
+ALTER TABLE flares ADD COLUMN lifeLength int NULL DEFAULT 86400,
+  ADD COLUMN reason varchar(255) CHARACTER SET utf8mb4 NULL DEFAULT NULL;
+ALTER EVENT flaresClean DO DELETE FROM flares WHERE lifeLength IS NOT NULL AND `time` < NOW() - INTERVAL lifeLength SECOND;
+```
+
+Re-colouring a flare (Battle / Hold / Fleet Op, the palette) keeps the time it was set, so its lifetime runs on; saving it
+in the Set flare dialog starts the lifetime again (`restart=1`).
+
 ### Versions
 
 The fork's release version (`X.Y.Z`, `TRIPWIRE_FORK_VERSION`) is the app's version.

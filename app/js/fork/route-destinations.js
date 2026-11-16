@@ -121,17 +121,30 @@ const routeDestinations = {
 	chainExits: function(rows, lines) {
 		const seen = {}, exits = [];
 		const scout = routeDestinations.scoutNodes(lines);
-		(Array.isArray(rows) ? rows : []).forEach(function(row) {
-			if (!row || !row.c || !row.c[0] || row.destination) return;
-			const node = row.c[0];
-			if (scout[node.v]) return;
+		// Broken holes (broken-holes.js): a cut-off row (brokenHole) is no exit; a row whose way home crosses a broken hole
+		// (brokenPath) is used only when its system has no other row, flagged e.brokenPath (routes avoid the broken line)
+		const usable = function(row) {	// a row that can be an exit at all
+			if (!row || !row.c || !row.c[0] || row.destination || row.brokenHole || scout[row.c[0].v]) return false;
 			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
 			const last = pathHome[pathHome.length - 1];
-			if (last && last.path) return;	// calculated route node (show viewing / favorites)
+			return !(last && last.path);	// calculated route node (show viewing / favorites)
+		};
+		const cleanRow = {};
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			if (usable(row) && !row.brokenPath) { cleanRow[routeDestinations.toID(row.c[0].systemID)] = true; }
+		});
+		(Array.isArray(rows) ? rows : []).forEach(function(row) {
+			if (!usable(row)) return;
+			if (row.brokenPath && cleanRow[routeDestinations.toID(row.c[0].systemID)]) return;
+			const node = row.c[0];
+			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
+			const last = pathHome[pathHome.length - 1];
 			const id = routeDestinations.toID(node.systemID);
 			if (!id || seen[id] || !routeDestinations.isKSpace(id)) return;
 			seen[id] = true;
-			exits.push({systemID: id, nodeID: node.v, holeName: last && last.name ? String(last.name) : ""});
+			const exit = {systemID: id, nodeID: node.v, holeName: last && last.name && !row.brokenPath ? String(last.name) : ""};	// not the broken hole's name
+			if (row.brokenPath) exit.brokenPath = true;
+			exits.push(exit);
 		});
 		return exits;
 	},
@@ -150,7 +163,7 @@ const routeDestinations = {
 		const seen = {}, result = [];
 		const scout = routeDestinations.scoutNodes(lines);
 		(Array.isArray(rows) ? rows : []).forEach(function(row) {
-			if (!row || !row.c || !row.c[0] || row.destination || scout[row.c[0].v]) return;
+			if (!row || !row.c || !row.c[0] || row.destination || row.brokenHole || scout[row.c[0].v]) return;
 			const pathHome = Array.isArray(row.pathHome) ? row.pathHome : [];
 			const last = pathHome[pathHome.length - 1];
 			if (last && last.path) return;
@@ -257,7 +270,13 @@ const routeDestinations = {
 				exits.forEach(function(e) {
 					const found = start !== null && start !== undefined ? routeHoleFilters.route(connections, start, e.systemID, hf) : null;
 					e.fromRoot = !found;
-					e.holes = found ? found.path : routeHoleFilters.holesHome(result.lines, e.nodeID);
+					if (found || !e.brokenPath) { e.holes = found ? found.path : routeHoleFilters.holesHome(result.lines, e.nodeID); return; }
+					// Its tree way home crosses a broken hole: judge it by a route from the chain's root over the hole graph
+					// (which leaves broken holes out); with none, it is unreachable and ranks last (routeHoleFilters.pickRoutes)
+					const root = rally.rootSystem(result.map.rows);
+					const fromRoot = root !== null && root !== undefined ? routeHoleFilters.route(connections, root, e.systemID, hf) : null;
+					e.holes = fromRoot ? fromRoot.path : [];
+					if (!fromRoot) { e.unreachable = true; }
 				});
 				routeDestinations.holeFilters = routeHoleFilters.reasonTable(connections, hf);
 			}

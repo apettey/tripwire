@@ -1,0 +1,22 @@
+/* Fork-owned: flares with a reason and a lifetime (app/js/fork/flare-details.js). Colours as upstream 2.0's .flare-* */
+.flare-red { color: #FF4747; }
+.flare-yellow { color: #F58504; }
+.flare-green { color: #50D25A; }
+
+/* System panel line */
+#infoExtra .fork-flare-panel { margin: 2px 0; word-break: break-word; }
+.fork-flare-life { color: #999; }
+
+/* The (i) icon on a flared node that has a reason: white on the flare's own background, the tooltip says why */
+.node .fork-flare-mark { color: #fff; cursor: help; margin-left: 2px; font-size: 0.95em; }
+.node .fork-flare-mark:focus { outline: 1px dotted #fff; }
+.fork-flare-tip { max-width: 260px; word-break: break-word; line-height: 1.35; }
+
+/* Dialog */
+#dialog-fork-flare .fork-flare-colours label { display: block; margin: 2px 0; }
+#dialog-fork-flare .fork-flare-hint { color: #999; }
+#dialog-fork-flare .fork-flare-lifetime { margin: 8px 0; }
+#dialog-fork-flare .fork-flare-lifetime label { margin-right: 10px; }
+#dialog-fork-flare .fork-flare-reason-row { margin: 8px 0 4px; }
+#dialog-fork-flare .fork-flare-reason { width: 100%; box-sizing: border-box; margin-top: 4px; }
+#dialog-fork-flare .fork-flare-error { color: #FF4747; min-height: 1em; margin: 0; }
