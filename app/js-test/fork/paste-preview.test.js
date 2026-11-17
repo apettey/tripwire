@@ -97,9 +97,9 @@ describe('pastePreview: classify', () => {
 		assert.strictEqual(u.type, 'Gas');
 		assert.strictEqual(u.name, 'Barren Perimeter Reservoir');
 	});
-	it('a gone wormhole defaults to Mark broken, a gone site to Delete', () => {
+	it('a gone wormhole and a gone site both default to Delete', () => {
 		const { g } = classify();
-		assert.deepStrictEqual(g.gone[0], { id: 'DEF456', sigId: 3, hole: true, wormholeID: 12, type: 'K162', name: 'C5 static', farSystemID: THERA, act: 'broken', on: true });
+		assert.deepStrictEqual(g.gone[0], { id: 'DEF456', sigId: 3, hole: true, wormholeID: 12, type: 'K162', name: 'C5 static', farSystemID: THERA, act: 'delete', on: true });
 		assert.strictEqual(g.gone[1].act, 'delete');
 		assert.strictEqual(g.gone[1].hole, false);
 	});
@@ -147,8 +147,27 @@ describe('pastePreview: classify', () => {
 });
 
 describe('pastePreview: plan (Apply)', () => {
-	it('everything ticked: one request with adds, the update, the site delete and the broken mark', () => {
+	it('everything ticked by default: one request with adds, the update and both deletes', () => {
 		const { g, c } = classify();
+		const p = pastePreview.plan(g, upstreamPayload(), c.signatures, c.wormholes);
+		assert.deepStrictEqual(p.payload.signatures.remove, [{ id: 12 }, 9]);
+		assert.strictEqual(p.payload.brokenHoles, undefined);
+		assert.strictEqual(pastePreview.summary(p.counts), '2 added, 1 updated, 2 deleted');
+	});
+	it('the countdown (keepGone): new and updated only, nothing deleted or marked broken, groups not changed', () => {
+		const { g, c } = classify();
+		g.gone[0].act = 'broken';
+		const k = pastePreview.keepGone(g);
+		assert.ok(k.gone.length && k.gone.every(r => r.on === false));
+		assert.ok(g.gone.every(r => r.on === true), 'a copy');
+		const p = pastePreview.plan(k, upstreamPayload(), c.signatures, c.wormholes);
+		assert.deepStrictEqual(Object.keys(p.payload.signatures).sort(), ['add', 'update']);
+		assert.strictEqual(p.payload.brokenHoles, undefined);
+		assert.deepStrictEqual(p.counts, { added: 2, updated: 1, restored: 0, marked: 0, deleted: 0 });
+	});
+	it('everything ticked, hole set to Mark broken: one request with adds, the update, the site delete and the broken mark', () => {
+		const { g, c } = classify();
+		g.gone[0].act = 'broken';
 		const p = pastePreview.plan(g, upstreamPayload(), c.signatures, c.wormholes);
 		assert.strictEqual(p.payload.signatures.add.length, 2);
 		assert.strictEqual(p.payload.signatures.update.length, 1);
@@ -157,8 +176,9 @@ describe('pastePreview: plan (Apply)', () => {
 		assert.deepStrictEqual(p.counts, { added: 2, updated: 1, restored: 0, marked: 1, deleted: 1 });
 		assert.strictEqual(pastePreview.summary(p.counts), '2 added, 1 updated, 1 hole marked broken, 1 deleted');
 	});
-	it('undo copies: the updated sig and the deleted sig as they are now', () => {
+	it('undo copies: the updated sig and the deleted site as they are now', () => {
 		const { g, c } = classify();
+		g.gone[0].on = false;
 		const p = pastePreview.plan(g, upstreamPayload(), c.signatures, c.wormholes);
 		assert.deepStrictEqual(p.undo.update, [c.signatures[8]]);
 		assert.deepStrictEqual(p.undo.remove, [c.signatures[9]]);
@@ -203,7 +223,7 @@ describe('pastePreview: plan (Apply)', () => {
 	it('counts the dialog\'s summary line', () => {
 		const { g } = classify();
 		g.gone[1].on = false;
-		assert.deepStrictEqual(pastePreview.countChoices(g), { neu: 2, upd: 1, same: 3, gone: 2, marked: 1, deleted: 0, kept: 1 });
+		assert.deepStrictEqual(pastePreview.countChoices(g), { neu: 2, upd: 1, same: 3, gone: 2, marked: 0, deleted: 1, kept: 1 });
 	});
 });
 

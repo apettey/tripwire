@@ -105,7 +105,7 @@
       "success": "turned on by >=15% of users who paste signatures after jumps by day 28; >=60% of them see it fire at least once a week; turned off again by <10%" },
     { "id": "pastePreview", "title": "Paste preview, with gone holes marked broken", "section": "signatures", "prs": [178], "settingsKey": "pastePreview",
       "stage": "core", "audience": "all", "kind": "active", "commands": [], "panels": [], "use": ["applied", "restored"],
-      "events": ["previewed"], "exposed": "#paste-preview-dialog",
+      "events": ["previewed", "auto_saved"], "exposed": "#paste-preview-dialog",
       "success": "a preview applied by >=40% of users who paste signatures by day 28; previews applied (not cancelled) >=70% of the time; Preview pastes turned off by <10%" },
     { "id": "sigAge", "title": "Signature age colouring", "section": "signatures", "prs": [26], "settingsKey": "sigAge",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [], "exposed": ".sig-age-aging, .sig-age-stale" },
