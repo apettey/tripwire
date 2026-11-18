@@ -56,6 +56,16 @@ describe('pastePreview: settings', () => {
 		assert.strictEqual(pastePreview.always({ pastePreview: { always: true } }), true);
 		assert.strictEqual(pastePreview.always({ pastePreview: { always: true, enabled: false } }), false, 'off wins');
 	});
+	it('auto-save: 10 s unless set to Never, 3 or 5 s; anything else is the default', () => {
+		assert.strictEqual(pastePreview.autoSeconds(undefined), 10);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: {} }), 10);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: { autoSeconds: 0 } }), 0);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: { autoSeconds: 3 } }), 3);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: { autoSeconds: '5' } }), 5);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: { autoSeconds: 7 } }), 10);
+		assert.strictEqual(pastePreview.autoSeconds({ pastePreview: { autoSeconds: null } }), 10);
+		assert.deepStrictEqual(pastePreview.AUTO_CHOICES.map(c => c[0]), [0, 3, 5, 10]);
+	});
 });
 
 describe('pastePreview: parseRows', () => {

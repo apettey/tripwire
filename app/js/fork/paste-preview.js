@@ -4,7 +4,8 @@ const pastePreview = {
 	// and Gone (in Tripwire but missing from the paste). Only when something would be Gone (or with "Always preview")
 	// a preview dialog lists the groups: untick a row to leave that sig alone, choose Delete or Mark broken for a gone
 	// wormhole (Delete by default; Mark broken: broken-holes.js), "keep all" for the Gone group. Apply (Enter) saves it
-	// all in one request and as one Undo step; Esc cancels and saves nothing. The dialog counts down AUTO_SECONDS: with
+	// all in one request and as one Undo step; Esc cancels and saves nothing. The dialog counts down autoSeconds() (a
+	// drop-down in its title bar: Never, 3, 5 or 10 s, saved in options.pastePreview.autoSeconds, missing = 10): with
 	// no input from the user by then (a click, key, scroll or touch anywhere stops the countdown) the paste is saved without
 	// the Gone group (keepGone: new and updated sigs only, nothing deleted or marked broken). Without anything Gone the
 	// paste saves straight away, as before, and a notice sums it up ("3 added, 1 updated") with an Undo link.
@@ -23,8 +24,18 @@ const pastePreview = {
 
 	DIALOG_ID: "paste-preview-dialog",
 
-	/** Seconds the preview waits for input before it saves the paste without the Gone group */
+	/** Seconds the preview waits for input before it saves the paste without the Gone group (the default) */
 	AUTO_SECONDS: 10,
+
+	/** The auto-save choices: [seconds, label]; 0 = never (the preview waits) */
+	AUTO_CHOICES: [[0, "Never"], [3, "3 s"], [5, "5 s"], [10, "10 s"]],
+
+	/** Auto-save after: options.pastePreview.autoSeconds when it is one of AUTO_CHOICES, else AUTO_SECONDS (0 = never) */
+	autoSeconds: function(opts) {
+		const raw = opts && opts.pastePreview ? opts.pastePreview.autoSeconds : undefined;
+		const v = raw === undefined || raw === null || raw === "" ? NaN : Number(raw);
+		return pastePreview.AUTO_CHOICES.some(function(c) { return c[0] === v; }) ? v : pastePreview.AUTO_SECONDS;
+	},
 
 	/** Preview pastes: on unless options.pastePreview.enabled is false */
 	enabled: function(opts) {
@@ -469,7 +480,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (el) { el.focus(); }
 		}
 
-		// ---- The countdown: no input for AUTO_SECONDS saves the paste without the Gone group ----
+		// ---- The countdown: no input for autoSeconds() saves the paste without the Gone group (0: no countdown) ----
 		function countdownText(left) {
 			const c = pp.countChoices(state.groups);
 			const what = c.neu || c.upd ? "Saving " + [c.neu ? c.neu + " new" : "", c.upd ? c.upd + " updated" : ""].filter(Boolean).join(" and ") : "Closing without changes";
@@ -478,7 +489,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function startCountdown() {
 			stopCountdown();
 			const $a = $("#" + pp.DIALOG_ID + " .pp-auto");
-			const total = pp.AUTO_SECONDS * 1000, end = Date.now() + total;
+			const secs = pp.autoSeconds(opts());
+			if (!secs) { $a.hide(); return; }
+			const total = secs * 1000, end = Date.now() + total;
 			let shown = null;
 			$a.show().removeClass("pp-auto-stopped").find(".pp-auto-bar > span").css("width", "100%");
 			const tick = function() {
@@ -516,9 +529,32 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 		}
 
+		// The auto-save drop-down in the title bar (top right). Choosing stops this paste's countdown (any input does) and
+		// is saved for the next paste.
+		function autoSelect($d) {
+			const $bar = $d.parent().find(".ui-dialog-titlebar");
+			let $s = $bar.find(".pp-auto-select");
+			if (!$s.length) {
+				$s = $("<label class='pp-auto-select' title='Save the paste without removing anything when you make no choice in time'>Auto-save: <select aria-label='Auto-save after'>"
+					+ pp.AUTO_CHOICES.map(function(c) { return "<option value='" + c[0] + "'>" + pp.escape(c[1]) + "</option>"; }).join("") + "</select></label>");
+				$bar.find(".ui-dialog-titlebar-close").before($s);
+				$s.on("change", "select", function() {
+					const v = Number(this.value);
+					stopCountdown(false);
+					if (typeof options === "undefined") { return; }
+					options.pastePreview = Object.assign({}, options.pastePreview || {}, { autoSeconds: v });
+					try { if (typeof options.save === "function") { options.save(); } } catch (e) { console.warn("paste-preview: save", e); }
+					$("#" + pp.DIALOG_ID + " .pp-auto").show().addClass("pp-auto-stopped").find(".pp-auto-text")
+						.text("Auto-save " + (v ? "after " + v + " s" : "off") + " from the next paste. Choose, then Apply (Enter) or Cancel (Esc).");
+				});
+			}
+			$s.find("select").val(String(pp.autoSeconds(opts())));
+		}
+
 		function open() {
 			const $d = dialog();
 			$d.dialog("option", "title", "Paste preview: " + (systemName(state.systemID) || "this system"));
+			autoSelect($d);
 			render();
 			$d.dialog("open");
 			$d.parent().find(".pp-apply").trigger("focus");
@@ -574,7 +610,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if ($d.length && $d.dialog("isOpen")) { $d.dialog("close"); }
 			state = null;
 			if (pp.isEmpty(plan)) {
-				Notify.trigger("Paste: nothing to save" + (s.groups.same.length ? " (" + s.groups.same.length + " unchanged)" : "") + keptText + ".", "blue", 4000);
+				const why = [s.groups.same.length ? s.groups.same.length + " unchanged" : "", kept ? kept + " gone left alone: no choice made" : ""].filter(Boolean).join(", ");
+				Notify.trigger("Paste: nothing to save" + (why ? " (" + why + ")" : "") + ".", "blue", 4000);
 				return;
 			}
 			const payload = plan.payload;
@@ -649,11 +686,20 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			forkSettings.register({
 				section: "signatures", order: 21, id: "pastePreview-enabled", type: "checkbox", key: "pastePreview",
 				label: "Preview pastes:",
-				text: "When a paste would remove signatures, show what changes first (gone signatures are deleted when you apply; with no input for " + pp.AUTO_SECONDS + " s only new and updated ones are saved)",
+				text: "When a paste would remove signatures, show what changes first (gone signatures are deleted when you apply)",
 				hint: "Off: a paste adds and updates straight away, with the old \"Click to delete missing sigs\" link.",
 				keywords: ["paste", "preview", "missing", "delete", "broken", "gone", "probe scanner"],
 				get: function(o) { return pp.enabled(o); },
 				set: function(o, on) { o.pastePreview = Object.assign({}, o.pastePreview || {}, { enabled: !!on }); }
+			});
+			forkSettings.register({
+				section: "signatures", order: 21.3, id: "pastePreview-auto", type: "select", key: "pastePreview",
+				label: "Paste preview auto-save:",
+				choices: pp.AUTO_CHOICES.map(function(c) { return [String(c[0]), c[0] ? "After " + c[1] : "Never (wait for me)"]; }),
+				hint: "With no input in time, the preview saves only new and updated signatures: nothing is deleted or marked broken. Also in the preview's top right.",
+				keywords: ["paste", "preview", "auto", "timer", "countdown", "seconds"],
+				get: function(o) { return String(pp.autoSeconds(o)); },
+				set: function(o, v) { o.pastePreview = Object.assign({}, o.pastePreview || {}, { autoSeconds: Number(v) }); }
 			});
 			forkSettings.register({
 				section: "signatures", order: 21.5, id: "pastePreview-always", type: "checkbox", key: "pastePreview",
