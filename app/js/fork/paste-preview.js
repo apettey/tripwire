@@ -2,10 +2,13 @@ const pastePreview = {
 	// Fork-owned: "Paste preview". A probe scanner paste (Ctrl+V, tripwire/paste.js) is classified against the viewed
 	// system's signatures first: New, Updated (type or site name now known, or a broken hole that is back), Unchanged,
 	// and Gone (in Tripwire but missing from the paste). Only when something would be Gone (or with "Always preview")
-	// a preview dialog lists the groups: untick a row to leave that sig alone, choose Mark broken or Delete for a gone
-	// wormhole (Mark broken by default: broken-holes.js), "keep all" for the Gone group. Apply (Enter) saves it all in
-	// one request and as one Undo step; Esc cancels and saves nothing. Without anything Gone the paste saves straight
-	// away, as before, and a notice sums it up ("3 added, 1 updated") with an Undo link.
+	// a preview dialog lists the groups: untick a row to leave that sig alone, choose Delete or Mark broken for a gone
+	// wormhole (Delete by default; Mark broken: broken-holes.js), "keep all" for the Gone group. Apply (Enter) saves it
+	// all in one request and as one Undo step; Esc cancels and saves nothing. The dialog counts down autoSeconds() (a
+	// drop-down in its title bar: Never, 3, 5 or 10 s, saved in options.pastePreview.autoSeconds, missing = 10): with
+	// no input from the user by then (a click, key, scroll or touch anywhere stops the countdown) the paste is saved without
+	// the Gone group (keepGone: new and updated sigs only, nothing deleted or marked broken). Without anything Gone the
+	// paste saves straight away, as before, and a notice sums it up ("3 added, 1 updated") with an Undo link.
 	//
 	// How: tripwire.pasteSignatures.parsePaste is wrapped (paste.js itself is unchanged). The wrapper lets upstream's
 	// parser build its add / update payload but catches its tripwire.refresh call (nothing is sent), adds the Gone
@@ -20,6 +23,19 @@ const pastePreview = {
 	// Keep `const pastePreview` on the first line: the test helper strips it to define a global.
 
 	DIALOG_ID: "paste-preview-dialog",
+
+	/** Seconds the preview waits for input before it saves the paste without the Gone group (the default) */
+	AUTO_SECONDS: 10,
+
+	/** The auto-save choices: [seconds, label]; 0 = never (the preview waits) */
+	AUTO_CHOICES: [[0, "Never"], [3, "3 s"], [5, "5 s"], [10, "10 s"]],
+
+	/** Auto-save after: options.pastePreview.autoSeconds when it is one of AUTO_CHOICES, else AUTO_SECONDS (0 = never) */
+	autoSeconds: function(opts) {
+		const raw = opts && opts.pastePreview ? opts.pastePreview.autoSeconds : undefined;
+		const v = raw === undefined || raw === null || raw === "" ? NaN : Number(raw);
+		return pastePreview.AUTO_CHOICES.some(function(c) { return c[0] === v; }) ? v : pastePreview.AUTO_SECONDS;
+	},
 
 	/** Preview pastes: on unless options.pastePreview.enabled is false */
 	enabled: function(opts) {
@@ -168,7 +184,7 @@ const pastePreview = {
 				if (w && (w.type === "GATE" || broken[w.id])) { return; }	// gates never; broken holes are already handled
 				const far = w ? pastePreview.otherSide(w, s.id, sigs) : null;
 				out.gone.push({ id: id, sigId: s.id, hole: !!w, wormholeID: w ? w.id : null, type: w ? pastePreview.typeFrom(w, s.id) : "Wormhole",
-					name: String(s.name || ""), farSystemID: far ? far.systemID : null, act: w ? "broken" : "delete", on: true });
+					name: String(s.name || ""), farSystemID: far ? far.systemID : null, act: "delete", on: true });
 				return;
 			}
 			out.gone.push({ id: id, sigId: s.id, hole: false, wormholeID: null, type: String(s.type || "unknown"), name: String(s.name || ""),
@@ -176,6 +192,13 @@ const pastePreview = {
 		});
 		const byKey = function(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; };
 		out.neu.sort(byKey); out.upd.sort(byKey); out.same.sort(byKey); out.gone.sort(byKey);
+		return out;
+	},
+
+	/** The groups with every Gone row unticked (what the countdown saves: nothing deleted or marked broken) */
+	keepGone: function(groups) {
+		const out = Object.assign({}, groups);
+		out.gone = (groups.gone || []).map(function(r) { return Object.assign({}, r, { on: false }); });
 		return out;
 	},
 
@@ -386,8 +409,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				g.gone.forEach(function(r, i) {
 					const what = r.hole ? holeLead(r.farSystemID, r.name) + " <span class='pp-dim'>via " + esc(r.type) + "</span>" : esc(r.name);
 					const act = r.hole
-						? "<select aria-label='What to do with " + esc(pp.idText(r.id)) + "'><option value='broken'" + (r.act === "broken" ? " selected" : "") + ">Mark broken</option>"
-							+ "<option value='delete'" + (r.act === "delete" ? " selected" : "") + ">Delete</option></select>"
+						? "<select aria-label='What to do with " + esc(pp.idText(r.id)) + "'><option value='delete'" + (r.act === "delete" ? " selected" : "") + ">Delete</option>"
+							+ "<option value='broken'" + (r.act === "broken" ? " selected" : "") + ">Mark broken</option></select>"
 						: "<span class='pp-del'>Delete</span>";
 					h += rowHtml("gone", i, r, r.hole || r.type === "wormhole" ? "Wormhole" : typeWord(r.type), what, act);
 				});
@@ -412,7 +435,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function dialog() {
 			let $d = $("#" + pp.DIALOG_ID);
 			if ($d.length) { return $d; }
-			$d = $("<div id='" + pp.DIALOG_ID + "' class='pp-dialog'><div class='pp-body'></div>"
+			$d = $("<div id='" + pp.DIALOG_ID + "' class='pp-dialog'><div class='pp-auto' role='status'><span class='pp-auto-text'></span>"
+				+ "<span class='pp-auto-bar'><span></span></span></div><div class='pp-body'></div>"
 				+ "<div class='pp-keys'><kbd>Enter</kbd> apply · <kbd>Esc</kbd> cancel · untick a row to leave it alone</div></div>").appendTo("body");
 			$d.dialog({
 				autoOpen: false, modal: true, width: 600, resizable: false, dialogClass: "pp-ui-dialog",
@@ -420,7 +444,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					{ text: "Apply", class: "pp-apply", click: function() { apply(); } },
 					{ text: "Cancel", click: function() { $(this).dialog("close"); } }
 				],
-				close: function() { if (state && !state.applying) { state = null; } }
+				close: function() { stopCountdown(true); if (state && !state.applying) { state = null; } }
 			});
 			$d.on("change", "input[type=checkbox]", function() {
 				const $row = $(this).closest(".pp-row");
@@ -456,12 +480,85 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			if (el) { el.focus(); }
 		}
 
+		// ---- The countdown: no input for autoSeconds() saves the paste without the Gone group (0: no countdown) ----
+		function countdownText(left) {
+			const c = pp.countChoices(state.groups);
+			const what = c.neu || c.upd ? "Saving " + [c.neu ? c.neu + " new" : "", c.upd ? c.upd + " updated" : ""].filter(Boolean).join(" and ") : "Closing without changes";
+			return what + (c.gone ? ", gone signatures left alone," : "") + " in <b>" + left + " s</b>. Click or press a key to choose yourself.";
+		}
+		function startCountdown() {
+			stopCountdown();
+			const $a = $("#" + pp.DIALOG_ID + " .pp-auto");
+			const secs = pp.autoSeconds(opts());
+			if (!secs) { $a.hide(); return; }
+			const total = secs * 1000, end = Date.now() + total;
+			let shown = null;
+			$a.show().removeClass("pp-auto-stopped").find(".pp-auto-bar > span").css("width", "100%");
+			const tick = function() {
+				if (!state) { stopCountdown(true); return; }
+				const ms = Math.max(0, end - Date.now());
+				const left = Math.ceil(ms / 1000);
+				if (left !== shown) { shown = left; $a.find(".pp-auto-text").html(countdownText(left)); }	// the live region: once a second
+				$a.find(".pp-auto-bar > span").css("width", (100 * ms / total) + "%");
+				if (ms <= 0) {
+					stopCountdown(true);
+					state.groups = pp.keepGone(state.groups);
+					state.auto = true;
+					apply();
+				}
+			};
+			state.timer = setInterval(tick, 200);
+			tick();
+			// Any input means the user is choosing (in the dialog or not): the countdown stops. Bound after this event, so
+			// the paste that opened the preview doesn't count.
+			setTimeout(function() {
+				if (state && state.timer) { $(document).on("mousedown.ppAuto keydown.ppAuto wheel.ppAuto touchstart.ppAuto", function() { stopCountdown(false); }); }
+			}, 0);
+		}
+		/** Stop the countdown. On input the line stays (same height, so the button under the mouse doesn't move away);
+		on apply / close it is hidden. */
+		function stopCountdown(hide) {
+			$(document).off(".ppAuto");
+			const wasRunning = !!(state && state.timer);
+			if (wasRunning) { clearInterval(state.timer); state.timer = null; }
+			const $a = $("#" + pp.DIALOG_ID + " .pp-auto");
+			if (hide) { $a.hide(); }
+			else if (wasRunning) {
+				$a.addClass("pp-auto-stopped").find(".pp-auto-text").text("Countdown stopped: choose, then Apply (Enter) or Cancel (Esc).");
+				$a.find(".pp-auto-bar > span").css("width", "0");
+			}
+		}
+
+		// The auto-save drop-down in the title bar (top right). Choosing stops this paste's countdown (any input does) and
+		// is saved for the next paste.
+		function autoSelect($d) {
+			const $bar = $d.parent().find(".ui-dialog-titlebar");
+			let $s = $bar.find(".pp-auto-select");
+			if (!$s.length) {
+				$s = $("<label class='pp-auto-select' title='Save the paste without removing anything when you make no choice in time'>Auto-save: <select aria-label='Auto-save after'>"
+					+ pp.AUTO_CHOICES.map(function(c) { return "<option value='" + c[0] + "'>" + pp.escape(c[1]) + "</option>"; }).join("") + "</select></label>");
+				$bar.find(".ui-dialog-titlebar-close").before($s);
+				$s.on("change", "select", function() {
+					const v = Number(this.value);
+					stopCountdown(false);
+					if (typeof options === "undefined") { return; }
+					options.pastePreview = Object.assign({}, options.pastePreview || {}, { autoSeconds: v });
+					try { if (typeof options.save === "function") { options.save(); } } catch (e) { console.warn("paste-preview: save", e); }
+					$("#" + pp.DIALOG_ID + " .pp-auto").show().addClass("pp-auto-stopped").find(".pp-auto-text")
+						.text("Auto-save " + (v ? "after " + v + " s" : "off") + " from the next paste. Choose, then Apply (Enter) or Cancel (Esc).");
+				});
+			}
+			$s.find("select").val(String(pp.autoSeconds(opts())));
+		}
+
 		function open() {
 			const $d = dialog();
 			$d.dialog("option", "title", "Paste preview: " + (systemName(state.systemID) || "this system"));
+			autoSelect($d);
 			render();
 			$d.dialog("open");
 			$d.parent().find(".pp-apply").trigger("focus");
+			startCountdown();
 			if (typeof forkUsage !== "undefined") { forkUsage.track("pastePreview", "previewed"); }
 		}
 
@@ -504,13 +601,17 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function apply() {
 			if (!state || state.applying) { return; }
 			const s = state;
+			stopCountdown(true);
 			const plan = pp.plan(s.groups, s.payload, tripwire.client.signatures, tripwire.client.wormholes);
+			const kept = s.auto ? s.groups.gone.length : 0;
+			const keptText = kept ? " (" + kept + " gone left alone: no choice made)" : "";
 			s.applying = true;
 			const $d = $("#" + pp.DIALOG_ID);
 			if ($d.length && $d.dialog("isOpen")) { $d.dialog("close"); }
 			state = null;
 			if (pp.isEmpty(plan)) {
-				Notify.trigger("Paste: nothing to save" + (s.groups.same.length ? " (" + s.groups.same.length + " unchanged)" : "") + ".", "blue", 4000);
+				const why = [s.groups.same.length ? s.groups.same.length + " unchanged" : "", kept ? kept + " gone left alone: no choice made" : ""].filter(Boolean).join(", ");
+				Notify.trigger("Paste: nothing to save" + (why ? " (" + why + ")" : "") + ".", "blue", 4000);
 				return;
 			}
 			const payload = plan.payload;
@@ -527,8 +628,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					Notify.trigger("Paste: not everything was saved (" + pp.escape(why) + "). Check the list." + undoLink(entry), "red", 10000);
 					return;
 				}
-				Notify.trigger("Paste saved: " + pp.escape(pp.summary(pp.savedCounts(plan.counts, data)) || "nothing changed") + "." + undoLink(entry), "blue", 8000);
-				if (typeof forkUsage !== "undefined") { forkUsage.track("pastePreview", "applied"); }
+				Notify.trigger("Paste saved: " + pp.escape(pp.summary(pp.savedCounts(plan.counts, data)) || "nothing changed") + keptText + "." + undoLink(entry), "blue", 8000);
+				if (typeof forkUsage !== "undefined") { if (s.auto) { forkUsage.track("pastePreview", "auto_saved"); } else { forkUsage.track("pastePreview", "applied"); } }
 			};
 			const send = typeof s.next === "function" ? s.next : tripwire.refresh;
 			send.call(tripwire, "refresh", payload, success);
@@ -585,11 +686,20 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			forkSettings.register({
 				section: "signatures", order: 21, id: "pastePreview-enabled", type: "checkbox", key: "pastePreview",
 				label: "Preview pastes:",
-				text: "When a paste would remove signatures, show what changes first (gone wormholes are marked broken, not deleted)",
+				text: "When a paste would remove signatures, show what changes first (gone signatures are deleted when you apply)",
 				hint: "Off: a paste adds and updates straight away, with the old \"Click to delete missing sigs\" link.",
 				keywords: ["paste", "preview", "missing", "delete", "broken", "gone", "probe scanner"],
 				get: function(o) { return pp.enabled(o); },
 				set: function(o, on) { o.pastePreview = Object.assign({}, o.pastePreview || {}, { enabled: !!on }); }
+			});
+			forkSettings.register({
+				section: "signatures", order: 21.3, id: "pastePreview-auto", type: "select", key: "pastePreview",
+				label: "Paste preview auto-save:",
+				choices: pp.AUTO_CHOICES.map(function(c) { return [String(c[0]), c[0] ? "After " + c[1] : "Never (wait for me)"]; }),
+				hint: "With no input in time, the preview saves only new and updated signatures: nothing is deleted or marked broken. Also in the preview's top right.",
+				keywords: ["paste", "preview", "auto", "timer", "countdown", "seconds"],
+				get: function(o) { return String(pp.autoSeconds(o)); },
+				set: function(o, v) { o.pastePreview = Object.assign({}, o.pastePreview || {}, { autoSeconds: Number(v) }); }
 			});
 			forkSettings.register({
 				section: "signatures", order: 21.5, id: "pastePreview-always", type: "checkbox", key: "pastePreview",
@@ -601,6 +711,6 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			});
 		}
 
-		pastePreview.debug = { state: function() { return state; }, apply: apply };
+		pastePreview.debug = { state: function() { return state; }, apply: apply, stopCountdown: function() { stopCountdown(false); } };
 	});
 }

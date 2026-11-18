@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 180,
+      "date": "2026-11-18",
+      "title": "Paste preview: Delete by default, auto-save timer",
+      "description": "Gone signatures in the paste preview, wormholes included, are now set to Delete; choose Mark broken in a row's dropdown to keep a hole on the map instead.\n\nThe preview also counts down, 10 seconds by default. Click or press a key to choose yourself; with no input, only the new and updated signatures are saved and nothing is deleted or marked broken. Change the time (Never, 3, 5 or 10 seconds) in the preview's top right or in Settings > Signatures > Paste preview auto-save.",
+      "images": [
+        { "src": "whats-new/img/pr-180-paste-preview-countdown.jpg", "caption": "The countdown, with the auto-save time in the top right" }
+      ]
+    },
+    {
       "pr": 178,
       "date": "2026-11-15",
       "title": "Paste preview, with gone holes marked broken",
