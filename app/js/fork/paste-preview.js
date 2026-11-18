@@ -538,6 +538,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				$s = $("<label class='pp-auto-select' title='Save the paste without removing anything when you make no choice in time'>Auto-save: <select aria-label='Auto-save after'>"
 					+ pp.AUTO_CHOICES.map(function(c) { return "<option value='" + c[0] + "'>" + pp.escape(c[1]) + "</option>"; }).join("") + "</select></label>");
 				$bar.find(".ui-dialog-titlebar-close").before($s);
+				// The title bar is jQuery UI's drag handle and focuses the dialog on mousedown, which keeps the select from
+				// opening: keep its mousedown to itself (and stop the countdown here, as the document handler won't see it).
+				$s.on("mousedown touchstart", function(e) { e.stopPropagation(); stopCountdown(false); });
 				$s.on("change", "select", function() {
 					const v = Number(this.value);
 					stopCountdown(false);
