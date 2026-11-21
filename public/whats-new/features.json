@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 184,
+      "date": "2026-11-21",
+      "title": "Site value for k-space gas and ore",
+      "description": "The value chip in the signature list now also covers k-space gas sites (every Mykoserocin and Cytoserocin nebula, such as Bright Nebula or Calabash Nebula) and k-space ore sites, including pasted ore anomalies. Hover the chip to see what the site holds and where the figures come from.\n\nA dashed chip means the value is approximate, a range means the sources disagree, and \"?\" means no reliable figures exist. Turn it off in Settings > Signatures > Site value.",
+      "images": [
+        { "src": "whats-new/img/pr-184-kspace-site-values.png", "caption": "Nebula and ore anomaly values in a low-sec system, with the tooltip" }
+      ]
+    },
+    {
       "pr": 180,
       "date": "2026-11-18",
       "title": "Paste preview: Delete by default, auto-save timer",
