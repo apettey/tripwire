@@ -132,9 +132,10 @@ describe('Gas and ore site data (public/site-values/sites.json)', () => {
 		['eveuniGas', 'eveuniOre', 'fuzzworks', 'allout', 'prices'].forEach(k => assert.ok(data.sources[k], k));
 	});
 
-	it('has the 9 wormhole gas sites and 11 ore sites, each with a status and a source page', () => {
-		assert.strictEqual(data.sites.filter(s => s.kind === 'gas').length, 9);
-		assert.strictEqual(data.sites.filter(s => s.kind === 'ore').length, 11);
+	it('has the 9 wormhole gas sites and 11 wormhole ore sites, each with a status and a source page', () => {
+		// wormhole sites name their classes; k-space ones (and the W-Space Blue A0 anomaly) say where they spawn
+		assert.strictEqual(data.sites.filter(s => s.kind === 'gas' && s.classes).length, 9);
+		assert.strictEqual(data.sites.filter(s => s.kind === 'ore' && s.classes).length, 11);
 		const names = {};
 		data.sites.filter(s => s.kind === 'gas' || s.kind === 'ore').forEach(s => {
 			assert.ok(siteValues.STATUSES.indexOf(s.status) >= 0, s.name);
@@ -142,17 +143,21 @@ describe('Gas and ore site data (public/site-values/sites.json)', () => {
 			[s.name].concat(s.aliases || []).forEach(n => { assert.ok(!names[n.toLowerCase()], 'duplicate ' + n); names[n.toLowerCase()] = true; });
 			if (s.status === 'unverified') { assert.ok(s.reason, s.name + ' says why it is unverified'); }
 			else {
-				assert.ok(Array.isArray(s.contents) && s.contents.length >= 2, s.name);
+				// k-space gas sites hold one gas (several clouds of it) and Mercoxit sites one ore; wormhole sites at least two items
+				assert.ok(Array.isArray(s.contents) && s.contents.length >= (s.classes ? 2 : 1), s.name);
 				s.contents.forEach(([id, units]) => {
 					assert.ok(data.types[id], s.name + ': type ' + id);
-					assert.ok(Number.isInteger(units) && units > 0, s.name + ': units');
+					// [low, high] when the sources disagree
+					const u = Array.isArray(units) ? units : [units, units];
+					assert.ok(u.length === 2 && u.every(n => Number.isInteger(n) && n > 0) && u[0] <= u[1], s.name + ': units');
+					if (Array.isArray(units)) { assert.ok(u[0] < u[1] && s.status === 'approximate' && s.note, s.name + ': a range is approximate and says why'); }
 				});
 			}
 		});
 	});
 
-	it('gas sites are two clouds of different gas; every type has a volume and a fallback price', () => {
-		data.sites.filter(s => s.kind === 'gas').forEach(s => {
+	it('wormhole gas sites are two clouds of different gas; every type has a volume and a fallback price', () => {
+		data.sites.filter(s => s.kind === 'gas' && s.classes).forEach(s => {
 			assert.strictEqual(s.contents.length, 2, s.name);
 			assert.notStrictEqual(s.contents[0][0], s.contents[1][0], s.name);
 		});
@@ -214,9 +219,10 @@ describe('Relic and data site value', () => {
 		data.relicModel.universal.concat(data.relicModel.factions.Sansha).forEach(([t2, t1]) => { want += 3.345 * p[t2] + 39.5 * p[t1]; });
 		assert.ok(Math.abs(est.total - want) < 1, est.total + ' vs ' + want);
 		close(est.t1Total + est.t2Total, est.total, 'T1 + T2 = total');
-		// research table with ESI prices of 2026-11-15 (the stored prices): Sansha Monument 26.0M, Angel Crystal Quarry 22.2M
-		assert.strictEqual(siteValues.shortIsk(est.total), '26M');
-		assert.strictEqual(siteValues.chipText(est), '~26M exp.');
+		// research table with the stored prices (ESI of 2026-11-21; 26.0M and 22.2M with those of 2026-11-15): Sansha
+		// Monument 26.8M, Angel Crystal Quarry 22.2M
+		assert.strictEqual(siteValues.shortIsk(est.total), '27M');
+		assert.strictEqual(siteValues.chipText(est), '~27M exp.');
 		assert.strictEqual((siteValues.estimate(site('Ruined Angel Crystal Quarry'), data, null).total / 1e6).toFixed(1), '22.2');
 		assert.strictEqual(est.lines.length, 16, '8 T2 + 8 T1 types');
 	});
@@ -360,5 +366,130 @@ describe('Relic and data site value', () => {
 		const s = { name: 'X <b>', kind: 'data', status: 'unverified', reason: '<i>why</i>' };
 		const tip = siteValues.tooltip(s, siteValues.estimate(s, data, null));
 		assert.ok(tip.indexOf('<i>') < 0 && tip.indexOf('X &lt;b&gt;') > 0);
+	});
+});
+
+describe('K-space gas and ore site value', () => {
+	const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../public/site-values/sites.json'), 'utf8'));
+	const index = siteValues.index(data);
+	const kspace = data.sites.filter(s => (s.kind === 'gas' || s.kind === 'ore') && !s.classes);
+	const MYKO = ['Sister', 'Helix', 'Wild', 'Blackeye', 'Sunspark', 'Diablo', 'Smoking', 'Ring', 'Calabash', 'Glass', 'Bright', 'Sparking', 'Ghost', 'Eagle', 'Flame', 'Pipe'];
+	const CYTO = ['Emerald', 'Cheetah', 'Duo', 'Leopard', 'Rimy', 'Crimson', 'Cobra', 'Crab Spider', 'Hazy', 'Hidden', 'Whirling', 'Bandit', 'Fluttering',
+		'Rocky', 'Dewy', 'Foggy', 'Shimmering', 'Spacious', 'Profiteer', 'Moth', 'Swarm', 'Lion', 'Shiny', 'Gaseous', 'Phoenix', 'Flowing', 'Thick', 'Diamond',
+		'Massive', 'Peacock', 'Forgotten', 'Frosty', 'Goose', 'Icy', 'Pale', 'Polar Bear', 'Rapture', 'Crystal', 'Snowy Owl', 'Arctic Fox', 'Glistening',
+		'Murky', 'Saintly', 'Boisterous', 'Cardinal', 'Red Dragonfly', 'Wispy'];
+	const gasName = id => data.types[id].name;
+
+	it('values the two nebulae of the request (low-sec Essence): Bright Nebula and Calabash Nebula', () => {
+		[['Bright Nebula', 28701, 'Viridian Mykoserocin'], ['Calabash Nebula', 28696, 'Celadon Mykoserocin']].forEach(([name, id, gas]) => {
+			const site = siteValues.siteFor({ type: 'gas', name: name }, index);
+			assert.ok(site, name);
+			const est = siteValues.estimate(site, data, null);
+			assert.strictEqual(est.status, 'verified');
+			assert.strictEqual(est.total, 2000 * data.fallbackPrices.prices[id], name + ': 2 clouds of 1,000 units');
+			assert.strictEqual(est.lines[0].name, gas);
+			assert.ok(/^~\d/.test(siteValues.chipText(est)), siteValues.chipText(est));
+			assert.strictEqual(siteValues.estimate(site, data, { [id]: 100000 }).total, 2000 * 100000, 'live price');
+		});
+	});
+
+	it('covers every Mykoserocin and Cytoserocin nebula, each with one booster gas and a value', () => {
+		MYKO.concat(CYTO).forEach(w => {
+			const site = siteValues.siteFor({ type: 'gas', name: w + ' Nebula' }, index);
+			assert.ok(site, w + ' Nebula');
+			assert.strictEqual(site.contents.length, 1, w);
+			assert.ok(/(Myko|Cyto)serocin$/.test(gasName(site.contents[0][0])), w);
+			assert.ok(siteValues.estimate(site, data, null).total > 0, w + ' has a value');
+			assert.ok(site.where && site.note && site.sourceDate, w + ' says where, what and when');
+		});
+		assert.strictEqual(kspace.filter(s => s.kind === 'gas').length, MYKO.length + CYTO.length);
+		MYKO.forEach(w => assert.strictEqual(index[siteValues.key(w + ' Nebula')].status, 'verified', w));
+		CYTO.forEach(w => assert.strictEqual(index[siteValues.key(w + ' Nebula')].status, 'approximate', w));
+		MYKO.forEach(w => assert.ok(/Mykoserocin$/.test(gasName(index[siteValues.key(w + ' Nebula')].contents[0][0])), w));
+	});
+
+	it('shows both figures when the sources disagree, as a range', () => {
+		const site = index['gaseous nebula'];
+		const est = siteValues.estimate(site, data, { 25273: 30000 });
+		assert.strictEqual(est.range, true);
+		assert.strictEqual(est.low, 9000 * 30000);
+		assert.strictEqual(est.total, 18000 * 30000);
+		assert.strictEqual(siteValues.chipText(est), '~270-540M');
+		const tip = siteValues.tooltip(site, est, '2026-11-21');
+		assert.ok(tip.indexOf('9,000-18,000 u') > 0, tip);
+		assert.ok(tip.indexOf('~270-540M ISK') > 0, tip);
+		assert.ok(tip.indexOf('disagrees') > 0 && tip.indexOf('December 2021') > 0, tip);
+	});
+
+	it('k-space gas tooltips: their own notes, no wormhole Sleeper note, raw gas price', () => {
+		const site = index['bright nebula'];
+		const tip = siteValues.tooltip(site, siteValues.estimate(site, data, null), data.fallbackPrices.date);
+		assert.ok(tip.indexOf('(gas, high, low and null-sec)') > 0, tip);
+		assert.ok(tip.indexOf('2 clouds of 1,000 units') > 0 && tip.indexOf('Essence') > 0, tip);
+		assert.ok(tip.indexOf('Sleepers') < 0, 'no Sleepers in k-space');
+		assert.ok(tip.indexOf('raw gas price') > 0);
+		assert.ok(tip.indexOf('Contents: EVE University wiki (gas table of 2026-11-08') > 0, tip);
+		const wh = index['vital core reservoir'];
+		const whTip = siteValues.tooltip(wh, siteValues.estimate(wh, data, null), data.fallbackPrices.date);
+		assert.ok(whTip.indexOf('Sleepers usually arrive') > 0 && whTip.indexOf('raw gas price') < 0, 'wormhole gas tooltip unchanged');
+	});
+
+	it('pasted ore anomalies (bookmark "anomaly") and ore signatures get the chip', () => {
+		const anomaly = siteValues.siteFor({ type: 'ore', bookmark: 'anomaly', name: 'Small Kernite and Omber Deposit' }, index);
+		assert.ok(anomaly);
+		const est = siteValues.estimate(anomaly, data, null);
+		assert.strictEqual(est.status, 'approximate');
+		assert.ok(est.total > 0 && !est.missing.length);
+		const tip = siteValues.tooltip(anomaly, est, data.fallbackPrices.date);
+		assert.ok(tip.indexOf('one player survey') > 0 && tip.indexOf('compressed ore price') > 0, tip);
+		assert.ok(siteValues.siteFor({ type: 'ore', name: 'Hidden Gneiss Deposit' }, index), 'signature');
+		assert.ok(siteValues.siteFor({ type: 'unknown', bookmark: 'anomaly', name: 'Large Hezorime Deposit' }, index), 'any type');
+	});
+
+	it('every k-space ore site says where it spawns; ore variants are priced as their own compressed grade', () => {
+		kspace.filter(s => s.kind === 'ore').forEach(s => {
+			assert.ok(s.where && s.status, s.name);
+			if (s.status !== 'unverified') { assert.ok(/^page of \d{4}-\d{2}-\d{2}$/.test(s.sourceDate), s.name); }
+		});
+		Object.keys(data.types).filter(id => / (II|III|IV)-Grade$/.test(data.types[id].name)).forEach(id => {
+			const t = data.types[id];
+			assert.ok(t.priceAs && t.priceAs !== Number(id), t.name);
+		});
+		// Arkonor III-Grade (formerly Prime Arkonor) -> Compressed Arkonor III-Grade
+		assert.strictEqual(data.types['17426'].name, 'Arkonor III-Grade');
+		assert.strictEqual(data.types['17426'].priceAs, 62570);
+	});
+
+	it('fills the Shattered Debris Field now its old ore names map to today\'s grades; Infrequent Core Deposit stays unverified', () => {
+		const sdf = index['shattered debris field'];
+		assert.strictEqual(sdf.status, 'approximate');
+		const est = siteValues.estimate(sdf, data, null);
+		assert.ok(est.total > 0 && est.lines.length === 9 && !est.missing.length);
+		assert.ok(est.lines.some(l => l.name === 'Arkonor III-Grade' && l.units === 250000));
+		assert.strictEqual(index['infrequent core deposit'].status, 'unverified');
+	});
+
+	it('gives "?" with the reason to known sites without usable figures', () => {
+		['Enormous Mercoxit Deposit', 'Large Griemeer Deposit', 'Small Omber Deposit'].forEach(n => {
+			const s = index[siteValues.key(n)];
+			assert.strictEqual(s.status, 'unverified', n);
+			assert.ok(s.reason, n);
+			assert.strictEqual(siteValues.chipText(siteValues.estimate(s, data, null)), '?');
+		});
+	});
+});
+
+describe('Site value ranges (contents [typeID, [low, high]])', () => {
+	const data = { types: { 1: { name: 'Gas', m3: 10 } }, fallbackPrices: { prices: { 1: 1000 } }, sites: [] };
+
+	it('adds up low and high, and ignores a reversed or broken range', () => {
+		const est = siteValues.estimate({ name: 'N', kind: 'gas', status: 'approximate', contents: [[1, [500, 1000]]] }, data, null);
+		assert.deepStrictEqual([est.low, est.total, est.range], [500000, 1000000, true]);
+		assert.strictEqual(siteValues.chipText(est), '~500k-1M');
+		const one = siteValues.estimate({ name: 'N', kind: 'gas', status: 'approximate', contents: [[1, 700]] }, data, null);
+		assert.deepStrictEqual([one.low, one.total, one.range], [700000, 700000, false]);
+		assert.strictEqual(siteValues.chipText(one), '~700k');
+		assert.strictEqual(siteValues.estimate({ name: 'N', status: 'approximate', contents: [[1, [1000, 500]]] }, data, null).status, 'unverified');
+		assert.strictEqual(siteValues.estimate({ name: 'N', status: 'approximate', contents: [[1, [0, 500]]] }, data, null).status, 'unverified');
 	});
 });
