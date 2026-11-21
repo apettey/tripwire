@@ -421,6 +421,21 @@ describe('K-space gas and ore site value', () => {
 		assert.ok(tip.indexOf('disagrees') > 0 && tip.indexOf('December 2021') > 0, tip);
 	});
 
+	it('gas notes say only what the sources say', () => {
+		// Red Dragonfly: table 18,000; the page's walkthrough one cloud of 9,000 (before the 19.11 doubling)
+		assert.deepStrictEqual(index['red dragonfly nebula'].contents[0][1], [9000, 18000]);
+		// Moth Nebula has no page: the gas table is its source
+		assert.strictEqual(index['moth nebula'].source, 'https://wiki.eveuniversity.org/Gas_cloud_harvesting#Cytoserocin');
+		assert.strictEqual(index['moth nebula'].sourceDate, 'gas table of 2026-11-08');
+		// deadspace only where the page says so; regions from the table and the page
+		assert.ok(index['bright nebula'].note.indexOf('deadspace') < 0, 'Bright: page says "?"');
+		assert.ok(index['calabash nebula'].note.indexOf('Not in deadspace') >= 0);
+		['Essence', 'Syndicate', 'Outer Ring'].forEach(r => assert.ok(index['calabash nebula'].note.indexOf(r) > 0, 'Calabash in ' + r));
+		// cloud damage: a figure only where the gas table and the page agree
+		assert.ok(index['leopard nebula'].note.indexOf('1400 explosive damage in its gas table and 700 thermal on the site page') > 0, index['leopard nebula'].note);
+		assert.ok(index['duo nebula'].note.indexOf('for 1000 EM + 1000 thermal damage') > 0, index['duo nebula'].note);
+	});
+
 	it('k-space gas tooltips: their own notes, no wormhole Sleeper note, raw gas price', () => {
 		const site = index['bright nebula'];
 		const tip = siteValues.tooltip(site, siteValues.estimate(site, data, null), data.fallbackPrices.date);
@@ -435,7 +450,7 @@ describe('K-space gas and ore site value', () => {
 	});
 
 	it('pasted ore anomalies (bookmark "anomaly") and ore signatures get the chip', () => {
-		const anomaly = siteValues.siteFor({ type: 'ore', bookmark: 'anomaly', name: 'Small Kernite and Omber Deposit' }, index);
+		const anomaly = siteValues.siteFor({ type: 'ore', bookmark: 'anomaly', name: 'Average Jaspet Deposit' }, index);
 		assert.ok(anomaly);
 		const est = siteValues.estimate(anomaly, data, null);
 		assert.strictEqual(est.status, 'approximate');
@@ -470,7 +485,8 @@ describe('K-space gas and ore site value', () => {
 	});
 
 	it('gives "?" with the reason to known sites without usable figures', () => {
-		['Enormous Mercoxit Deposit', 'Large Griemeer Deposit', 'Small Omber Deposit'].forEach(n => {
+		// Small Kernite and Omber / Average Omber: back with Catalyst, and their pages say the numbers still need checking
+		['Enormous Mercoxit Deposit', 'Large Griemeer Deposit', 'Small Omber Deposit', 'Small Kernite and Omber Deposit', 'Average Omber Deposit'].forEach(n => {
 			const s = index[siteValues.key(n)];
 			assert.strictEqual(s.status, 'unverified', n);
 			assert.ok(s.reason, n);

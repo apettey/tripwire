@@ -27,32 +27,42 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
   table (revision of 2026-11-08) and each nebula's own page; gas type IDs and volumes (10 m3) from the SDE (ESI
   `/universe/types`).
   - 16 Mykoserocin nebulae (small: 2 x 1,000 units; large: 3 x 2,000 units): `verified`. The table and every site
-    page agree, and players re-checked them in 2025-2026. Tooltip: clouds, no rats and not in deadspace (as the wiki
-    says), the regions players have reported.
-  - 47 Cytoserocin nebulae: `approximate` (dashed chip). Tooltip: clouds, cloud damage, rats, deadspace, and the
-    location (one region/constellation per gas). CCP doubled all cytoserocin and mykoserocin in Version 19.11
+    page agree, and players re-checked them in 2025-2026. Tooltip: clouds, "No rats" and "Not in deadspace" only where
+    the site page says so (several pages say "?" for deadspace), and the regions of the gas table and the site page
+    merged (Calabash: Domain, Genesis, Placid, Solitude, Fountain, Essence, Syndicate, Outer Ring, Venal).
+  - 47 Cytoserocin nebulae: `approximate` (dashed chip). Tooltip: clouds, rats, deadspace and the location (one
+    region/constellation per gas). Cloud damage is given as a figure only where the gas table and the site page agree;
+    where they differ (Leopard 1400 explosive / 700 thermal, Hazy, Hidden, Whirling, Massive, Glistening, Red Dragonfly)
+    the tooltip gives both, and where the page only says "thermal" or "Yes" (Goose, Icy, Pale, Polar Bear, Murky) it
+    says the cloud is unstable without a figure. CCP doubled all cytoserocin and mykoserocin in Version 19.11
     (2021-12-07, [patch notes](https://www.eveonline.com/news/view/patch-notes-version-19-11)), and many cytoserocin
     pages still carry the wiki's "review quantities due to 19.11" banner. Where the table and the page disagree (Emerald,
-    Bandit, Rocky, Dewy, Foggy, Shimmering, Swarm, Lion, Shiny, Gaseous, Red Dragonfly, Wispy), the data keeps both,
-    `[typeID, [low, high]]`, and the chip shows a range ("~120-240M") with the reason. Pale Nebula: page only (the
-    table has an unknown cloud). Moth Nebula: table only (no page). Glistening Nebula: 6,000 (the table's total of
-    3,000 contradicts its own 3,000 + 3,000 clouds and the page).
+    Bandit, Rocky, Dewy, Foggy, Shimmering, Swarm, Lion, Shiny, Gaseous, Wispy), the data keeps both,
+    `[typeID, [low, high]]`, and the chip shows a range ("~120-240M") with the reason; each page's walkthrough text was
+    checked against its summary box. Red Dragonfly Nebula: 9,000-18,000 (the table says 18,000; the page's walkthrough
+    one cloud of 9,000, from before the 19.11 doubling; its summary box 1,000 + 2,000, which contradicts the
+    walkthrough). Pale Nebula: page only (the table has an unknown cloud). Moth Nebula: table only (no page; its source
+    is the gas table). Glistening Nebula: 6,000 (the table's total of 3,000 contradicts its own 3,000 + 3,000 clouds and
+    the page).
   - Priced as **raw** gas: it trades well (Jita 2026-11-21: Viridian Mykoserocin ~41k units a day raw vs ~30k
     compressed), and compressed gas (1 unit per unit, 1/10 of the volume) loses some on decompression (EVE University,
     Compression). The tooltip says so.
   - Not covered: the career-agent "Gas Training Sites" (unlimited Azure Mykoserocin, no clear scanner name), and
     Gamboge/Chartreuse Cytoserocin (in no listed site, no market price). No Pochven gas sites are documented.
-- **K-space ore (54 sites, 35 with a value, counting the wormhole W-Space Blue A0 anomaly that belongs with them).** Contents from each site's EVE University page, read by a script that
+- **K-space ore (54 sites, 33 with a value, counting the wormhole W-Space Blue A0 anomaly that belongs with them).** Contents from each site's EVE University page, read by a script that
   keeps a page only when every ore row adds up (units x the SDE volume = the m3 the page lists, within 2%).
   - With a value (`approximate`, dashed; tooltip: "one player survey of the site; amounts and ore grades differ"):
-    high-sec Small Kernite and Omber, Average Omber, Hidden Omber, Empire Border Rare Asteroids; low-sec Average Jaspet,
+    high-sec Hidden Omber, Empire Border Rare Asteroids; low-sec Average Jaspet,
     Small/Average/Large/Hidden Gneiss, Small/Average/Hidden Dark Ochre and Gneiss, Small Crokite and Dark Ochre,
     Large/Hidden Crokite, Dark Ochre and Gneiss, Small/Average/Large Hedbergite, Hemorphite and Jaspet, Mordunium
     Deposit, Veiled Asteroid Field; null-sec Griemeer, Kylixium and Large Kylixium, Ueganite and Large Ueganite,
     Nocxite, Large Veldspar, Hezorime and Large Hezorime, Small/Average/Large Mercoxit, Interstitial Ore Deposit,
     Nullsec Blue A0 Rare Asteroids; wormhole W-Space Blue A0 Rare Asteroids. Each names its page date (2024-04 to 2026-06).
-  - "?" with the reason (sites miners look for, but no usable figures): Small/Large Omber and Average/Large Kernite and
-    Omber (figures from before Catalyst brought them back in November 2025), Small Mordunium, Enormous Mercoxit and the
+    Where a page marks single amounts with `{{verify}}` (Average Dark Ochre and Gneiss, Large Crokite, Dark Ochre and
+    Gneiss, Large Gneiss), the tooltip says which ones. Every ore page was checked for a page-wide "update" banner.
+  - "?" with the reason (sites miners look for, but no usable figures): Small Kernite and Omber and Average Omber (their
+    pages, edited after Catalyst brought the sites back in November 2025, carry the banner "Numbers need to be
+    verified"), Small/Large Omber and Average/Large Kernite and Omber (figures from before Catalyst), Small Mordunium, Enormous Mercoxit and the
     pages EVE University doesn't have (amounts TBD or no page), Large Dark Ochre and Gneiss (rock counts only), and
     pages whose figures don't add up (Average Crokite and Dark Ochre, Small Crokite, Dark Ochre and Gneiss, Average
     Omber, Dark Ochre and Gneiss, Large Griemeer, Large Mordunium, Veldspar Deposit, Small Hezorime), Small Ueganite
