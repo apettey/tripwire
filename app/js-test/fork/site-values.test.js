@@ -456,7 +456,7 @@ describe('K-space gas and ore site value', () => {
 		assert.strictEqual(est.status, 'approximate');
 		assert.ok(est.total > 0 && !est.missing.length);
 		const tip = siteValues.tooltip(anomaly, est, data.fallbackPrices.date);
-		assert.ok(tip.indexOf('one player survey') > 0 && tip.indexOf('compressed ore price') > 0, tip);
+		assert.ok(tip.indexOf('from one EVE University page (usually one player') > 0 && tip.indexOf('compressed ore price') > 0, tip);
 		assert.ok(siteValues.siteFor({ type: 'ore', name: 'Hidden Gneiss Deposit' }, index), 'signature');
 		assert.ok(siteValues.siteFor({ type: 'unknown', bookmark: 'anomaly', name: 'Large Hezorime Deposit' }, index), 'any type');
 	});

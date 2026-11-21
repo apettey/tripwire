@@ -362,7 +362,7 @@ const siteValues = {
 		if (est.status === "approximate") {
 			if (site.kind === "gas") { notes.push("Approximate: EVE University only, and some of its cytoserocin pages weren't re-checked after CCP doubled cytoserocin in December 2021."); }
 			else if (wormhole) { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
-			else { notes.push("Approximate: one player survey of the site; amounts and ore grades differ from site to site."); }
+			else { notes.push("Approximate: from one EVE University page (usually one player's scan of the site)."); }
 		}
 		if (est.lines.some(function(l) { return l.compressed; })) { notes.push("Ore is valued at the compressed ore price (each mined unit compresses into one compressed unit)."); }
 		if (site.kind === "gas" && !wormhole) { notes.push("Gas is valued at the raw gas price (it trades well; compressed gas loses some when decompressed)."); }

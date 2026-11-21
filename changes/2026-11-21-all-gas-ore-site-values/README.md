@@ -27,7 +27,7 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
   table (revision of 2026-11-08) and each nebula's own page; gas type IDs and volumes (10 m3) from the SDE (ESI
   `/universe/types`).
   - 16 Mykoserocin nebulae (small: 2 x 1,000 units; large: 3 x 2,000 units): `verified`. The table and every site
-    page agree, and players re-checked them in 2025-2026. Tooltip: clouds, "No rats" and "Not in deadspace" only where
+    page agree, and every page was edited after CCP doubled the gas in December 2021 (2022-2026). Tooltip: clouds, "No rats" and "Not in deadspace" only where
     the site page says so (several pages say "?" for deadspace), and the regions of the gas table and the site page
     merged (Calabash: Domain, Genesis, Placid, Solitude, Fountain, Essence, Syndicate, Outer Ring, Venal).
   - 47 Cytoserocin nebulae: `approximate` (dashed chip). Tooltip: clouds, rats, deadspace and the location (one
@@ -51,7 +51,7 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
     Gamboge/Chartreuse Cytoserocin (in no listed site, no market price). No Pochven gas sites are documented.
 - **K-space ore (54 sites, 33 with a value, counting the wormhole W-Space Blue A0 anomaly that belongs with them).** Contents from each site's EVE University page, read by a script that
   keeps a page only when every ore row adds up (units x the SDE volume = the m3 the page lists, within 2%).
-  - With a value (`approximate`, dashed; tooltip: "one player survey of the site; amounts and ore grades differ"):
+  - With a value (`approximate`, dashed; tooltip: "from one EVE University page (usually one player's scan of the site)"):
     high-sec Hidden Omber, Empire Border Rare Asteroids; low-sec Average Jaspet,
     Small/Average/Large/Hidden Gneiss, Small/Average/Hidden Dark Ochre and Gneiss, Small Crokite and Dark Ochre,
     Large/Hidden Crokite, Dark Ochre and Gneiss, Small/Average/Large Hedbergite, Hemorphite and Jaspet, Mordunium
@@ -59,7 +59,9 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
     Nocxite, Large Veldspar, Hezorime and Large Hezorime, Small/Average/Large Mercoxit, Interstitial Ore Deposit,
     Nullsec Blue A0 Rare Asteroids; wormhole W-Space Blue A0 Rare Asteroids. Each names its page date (2024-04 to 2026-06).
     Where a page marks single amounts with `{{verify}}` (Average Dark Ochre and Gneiss, Large Crokite, Dark Ochre and
-    Gneiss, Large Gneiss), the tooltip says which ones. Every ore page was checked for a page-wide "update" banner.
+    Gneiss, Large Gneiss), the tooltip says which ones. Where a page's summary counts the II/III-Grade ores in the
+    base-ore rows (Large Hezorime, Large Kylixium, Large Ueganite, Large Veldspar), the tooltip says they are valued as
+    the base ore; where a page also has a per-grade breakdown, the breakdown is used. Every ore page was checked for a page-wide "update" banner.
   - "?" with the reason (sites miners look for, but no usable figures): Small Kernite and Omber and Average Omber (their
     pages, edited after Catalyst brought the sites back in November 2025, carry the banner "Numbers need to be
     verified"), Small/Large Omber and Average/Large Kernite and Omber (figures from before Catalyst), Small Mordunium, Enormous Mercoxit and the
