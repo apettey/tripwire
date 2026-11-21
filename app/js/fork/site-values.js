@@ -10,6 +10,9 @@ const siteValues = {
 	// are expanded from sites.json families. Ruined sites get a live expected-salvage model ("~18M exp."), Forgotten
 	// wormhole relic sites their Sleeper rat loot ("~115M Sleeper loot"), other families a dated static range (dashed
 	// chip), and sites without a sourced figure a "?" with the reason. Wormhole "Unsecured ..." sites never get a chip.
+	// K-space gas and ore (changes/2026-11-21-all-gas-ore-site-values): Mykoserocin/Cytoserocin nebulae and k-space ore
+	// anomalies and signatures, same shape as the wormhole sites plus `where` and `note`. A contents row may give
+	// [typeID, [low, high]] units when the sources disagree: the chip then shows a range ("~120-240M").
 
 	DATA_URL: "site-values/sites.json",
 	PRICES_URL: "market_prices.php",
@@ -170,12 +173,13 @@ const siteValues = {
 	@param site an entry of sites.json
 	@param data the parsed sites.json (types, fallbackPrices)
 	@param live {typeID: ISK} from market_prices.php, or null
-	@return {status, total, lines: [{name, units, m3, price, isk}] (highest ISK first), live (every price live), missing (types without a price)} */
+	@return {status, total, low (= total unless a row gives [low, high] units), range (some row has a range), lines: [{name, units,
+	unitsLow, m3, price, isk, iskLow}] (highest ISK first), live (every price live), missing (types without a price)} */
 	estimate: function(site, data, live) {
 		const status = site && siteValues.STATUSES.indexOf(site.status) >= 0 ? site.status : "unverified";
 		if (site && status !== "unverified" && site.value === "model") { return siteValues.modelEstimate(site, data, live); }
 		if (site && status !== "unverified" && (site.value === "range" || site.value === "combat")) { return siteValues.staticEstimate(site); }
-		const out = { status: status, total: 0, lines: [], live: true, missing: [] };
+		const out = { status: status, total: 0, low: 0, range: false, lines: [], live: true, missing: [] };
 		if (!site || status === "unverified" || !Array.isArray(site.contents) || !data) {
 			out.status = "unverified";
 			out.live = false;
@@ -185,15 +189,21 @@ const siteValues = {
 		site.contents.forEach(function(row) {
 			if (!Array.isArray(row)) { return; }
 			const type = data.types && data.types[String(row[0])];
-			const units = Number(row[1]);
-			if (!type || !(units > 0)) { return; }
+			// [low, high] when the sources disagree
+			const pair = Array.isArray(row[1]) && row[1].length === 2 ? row[1].map(Number) : null;
+			const units = pair ? pair[1] : Number(row[1]);
+			const unitsLow = pair ? pair[0] : units;
+			if (!type || !(units > 0) || !(unitsLow > 0) || unitsLow > units) { return; }
 			// Ore is priced as its compressed form (priceAs), 1 unit for 1 unit: raw ore hardly trades
 			const p = siteValues.priceOf(type.priceAs || row[0], live, fallback);
 			if (!p) { out.missing.push(type.name); return; }
 			if (!p.live) { out.live = false; }
 			const isk = units * p.price;
-			out.lines.push({ name: String(type.name), units: units, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk, compressed: !!type.priceAs, live: p.live });
+			out.lines.push({ name: String(type.name), units: units, unitsLow: unitsLow, m3: units * (Number(type.m3) || 0), price: p.price, isk: isk,
+				iskLow: unitsLow * p.price, compressed: !!type.priceAs, live: p.live });
 			out.total += isk;
+			out.low += unitsLow * p.price;
+			if (unitsLow !== units) { out.range = true; }
 		});
 		if (!out.lines.length) { out.status = "unverified"; out.live = false; }
 		out.lines.sort(function(a, b) { return b.isk - a.isk; });
@@ -236,6 +246,7 @@ const siteValues = {
 		if (est.value === "model") { return "~" + siteValues.shortIsk(est.total) + " exp."; }
 		if (est.value === "combat") { return "~" + siteValues.rangeIsk(est.low, est.high) + " Sleeper loot"; }
 		if (est.value === "range") { return (est.low > 0 ? "~" : "") + siteValues.rangeIsk(est.low, est.high); }
+		if (est.range && est.low > 0) { return "~" + siteValues.rangeIsk(est.low, est.total); }
 		return "~" + siteValues.shortIsk(est.total);
 	},
 
@@ -330,24 +341,34 @@ const siteValues = {
 	tooltip: function(site, est, pricesDate) {
 		if (site && (site.kind === "relic" || site.kind === "data")) { return siteValues.relicTooltip(site, est, pricesDate); }
 		const e = siteValues.escape;
-		const head = "<b>" + e(site.name) + "</b> (" + e(site.kind || "site") + (site.classes ? ", " + e(site.classes) : "") + ")";
+		const where = site.where || site.classes;
+		const head = "<b>" + e(site.name) + "</b> (" + e(site.kind || "site") + (where ? ", " + e(where) : "") + ")";
 		if (!est || est.status === "unverified") {
 			return head + "<br>No value: the contents of this site couldn't be verified."
 				+ (site.reason ? "<br>" + e(site.reason) : "");
 		}
+		const span = function(low, high, fmt) { return low !== high ? fmt(low) + "-" + fmt(high) : fmt(high); };
 		const rows = est.lines.map(function(l) {
-			return "<tr><td>" + e(l.name) + "</td><td class=\"site-value-num\">" + siteValues.thousands(l.units) + " u</td>"
+			return "<tr><td>" + e(l.name) + "</td><td class=\"site-value-num\">" + span(l.unitsLow, l.units, siteValues.thousands) + " u</td>"
 				+ "<td class=\"site-value-num\">&times; " + siteValues.thousands(l.price) + "</td>"
-				+ "<td class=\"site-value-num\">" + siteValues.shortIsk(l.isk) + "</td></tr>";
+				+ "<td class=\"site-value-num\">" + (l.unitsLow !== l.units ? siteValues.rangeIsk(l.iskLow, l.isk) : siteValues.shortIsk(l.isk)) + "</td></tr>";
 		}).join("");
-		const total = "<tr class=\"site-value-total\"><td colspan=\"3\">Estimated value</td><td class=\"site-value-num\">~" + siteValues.shortIsk(est.total) + " ISK</td></tr>";
+		const total = "<tr class=\"site-value-total\"><td colspan=\"3\">Estimated value</td><td class=\"site-value-num\">~"
+			+ (est.range ? siteValues.rangeIsk(est.low, est.total) : siteValues.shortIsk(est.total)) + " ISK</td></tr>";
 		const notes = [];
-		if (site.kind === "gas") { notes.push("Two clouds; Sleepers usually arrive 15-20 min after the first ship lands."); }
-		if (est.status === "approximate") { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
+		const wormhole = !!site.classes;
+		if (site.note) { notes.push(e(site.note)); }
+		else if (site.kind === "gas" && wormhole) { notes.push("Two clouds; Sleepers usually arrive 15-20 min after the first ship lands."); }
+		if (est.status === "approximate") {
+			if (site.kind === "gas") { notes.push("Approximate: EVE University only, and some of its gas site pages weren't re-checked after CCP doubled booster gas in December 2021."); }
+			else if (wormhole) { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
+			else { notes.push("Approximate: from one EVE University page (usually one player's scan of the site)."); }
+		}
 		if (est.lines.some(function(l) { return l.compressed; })) { notes.push("Ore is valued at the compressed ore price (each mined unit compresses into one compressed unit)."); }
+		if (site.kind === "gas" && !wormhole) { notes.push("Gas is valued at the raw gas price (it trades well; compressed gas loses some when decompressed)."); }
 		if (est.missing.length) { notes.push("No price for " + e(est.missing.join(", ")) + "."); }
 		notes.push(siteValues.pricesNote(est.lines, pricesDate));
-		notes.push("Contents: EVE University wiki.");
+		notes.push("Contents: EVE University wiki" + (site.sourceDate ? " (" + e(site.sourceDate) + ")" : "") + ".");
 		return head + "<table class=\"site-value-table\">" + rows + total + "</table>"
 			+ "<div class=\"site-value-notes\">" + notes.join("<br>") + "</div>";
 	},

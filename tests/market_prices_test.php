@@ -37,6 +37,14 @@ $salvage = 0;
 for ($id = 25588; $id <= 25625; $id++) if (isset($types[$id])) $salvage++;
 check('types include every relic salvage type (T1 and T2)', $salvage, 38);
 check('types include Logic Circuit', isset($types[25619]), true);
+// k-space gas and ore (changes/2026-11-21-all-gas-ore-site-values): the 8 Mykoserocin and 8 Cytoserocin gases (priced raw), and
+// ore grades priced as their own compressed grade
+$gas = 0;
+foreach (array(28694, 28695, 28696, 28697, 28698, 28699, 28700, 28701, 25268, 25273, 25274, 25275, 25276, 25277, 25278, 25279) as $id) if (isset($types[$id])) $gas++;
+check('types include every Mykoserocin and Cytoserocin gas', $gas, 16);
+check('types include Compressed Arkonor III-Grade (Shattered Debris Field)', isset($types[62570]), true);
+check('types include Compressed Mercoxit', isset($types[62586]), true);
+check('types include Compressed Crokite II-Grade (low-sec ore sites)', isset($types[62561]), true);
 
 $file = tempnam(sys_get_temp_dir(), 'market-prices-test-');
 unlink($file);
