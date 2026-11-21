@@ -43,7 +43,9 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
     one cloud of 9,000, from before the 19.11 doubling; its summary box 1,000 + 2,000, which contradicts the
     walkthrough). Pale Nebula: page only (the table has an unknown cloud). Moth Nebula: table only (no page; its source
     is the gas table). Glistening Nebula: 6,000 (the table's total of 3,000 contradicts its own 3,000 + 3,000 clouds and
-    the page).
+    the page). Every gas site page's last-edit date was checked: Cheetah and Thick Nebula are the only pages last edited
+    before the doubling (2021-11-20) that nothing later confirms (the table only repeats them), so they show
+    1,000-2,000 (this or twice this) with that reason. All Mykoserocin pages were edited in 2022 or later.
   - Priced as **raw** gas: it trades well (Jita 2026-11-21: Viridian Mykoserocin ~41k units a day raw vs ~30k
     compressed), and compressed gas (1 unit per unit, 1/10 of the volume) loses some on decompression (EVE University,
     Compression). The tooltip says so.
@@ -57,7 +59,8 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
     Large/Hidden Crokite, Dark Ochre and Gneiss, Small/Average/Large Hedbergite, Hemorphite and Jaspet, Mordunium
     Deposit, Veiled Asteroid Field; null-sec Griemeer, Kylixium and Large Kylixium, Ueganite and Large Ueganite,
     Nocxite, Large Veldspar, Hezorime and Large Hezorime, Small/Average/Large Mercoxit, Interstitial Ore Deposit,
-    Nullsec Blue A0 Rare Asteroids; wormhole W-Space Blue A0 Rare Asteroids. Each names its page date (2024-04 to 2026-06).
+    Nullsec Blue A0 Rare Asteroids; wormhole W-Space Blue A0 Rare Asteroids. Each names its page date (2024-04 to 2026-06). Lifetimes in `where`: Interstitial Ore Deposit 24 h (its own page; the Asteroids and ore page says 6 h, the
+    tooltip says both), Veiled Asteroid Field 24 h (Asteroids and ore page).
     Where a page marks single amounts with `{{verify}}` (Average Dark Ochre and Gneiss, Large Crokite, Dark Ochre and
     Gneiss, Large Gneiss), the tooltip says which ones. Where a page's summary counts the II/III-Grade ores in the
     base-ore rows (Large Hezorime, Large Kylixium, Large Ueganite, Large Veldspar), the tooltip says they are valued as
