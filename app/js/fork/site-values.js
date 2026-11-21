@@ -360,7 +360,7 @@ const siteValues = {
 		if (site.note) { notes.push(e(site.note)); }
 		else if (site.kind === "gas" && wormhole) { notes.push("Two clouds; Sleepers usually arrive 15-20 min after the first ship lands."); }
 		if (est.status === "approximate") {
-			if (site.kind === "gas") { notes.push("Approximate: EVE University only, and some of its cytoserocin pages weren't re-checked after CCP doubled cytoserocin in December 2021."); }
+			if (site.kind === "gas") { notes.push("Approximate: EVE University only, and some of its gas site pages weren't re-checked after CCP doubled booster gas in December 2021."); }
 			else if (wormhole) { notes.push("Approximate: ore amounts change with the system class and more rocks spawn later."); }
 			else { notes.push("Approximate: from one EVE University page (usually one player's scan of the site)."); }
 		}

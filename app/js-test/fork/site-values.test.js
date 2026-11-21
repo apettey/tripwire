@@ -403,7 +403,9 @@ describe('K-space gas and ore site value', () => {
 			assert.ok(site.where && site.note && site.sourceDate, w + ' says where, what and when');
 		});
 		assert.strictEqual(kspace.filter(s => s.kind === 'gas').length, MYKO.length + CYTO.length);
-		MYKO.forEach(w => assert.strictEqual(index[siteValues.key(w + ' Nebula')].status, 'verified', w));
+		// Sunspark and Pipe: their pages ask for the quantities to be reviewed after 19.11, so approximate
+		MYKO.forEach(w => assert.strictEqual(index[siteValues.key(w + ' Nebula')].status, ['Sunspark', 'Pipe'].indexOf(w) >= 0 ? 'approximate' : 'verified', w));
+		['sunspark nebula', 'pipe nebula'].forEach(k => assert.ok(index[k].note.indexOf('asks for its quantities to be reviewed') > 0, k));
 		CYTO.forEach(w => assert.strictEqual(index[siteValues.key(w + ' Nebula')].status, 'approximate', w));
 		MYKO.forEach(w => assert.ok(/Mykoserocin$/.test(gasName(index[siteValues.key(w + ' Nebula')].contents[0][0])), w));
 	});

@@ -26,8 +26,11 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
 - **K-space gas (63 sites).** Contents from EVE University's [Gas cloud harvesting](https://wiki.eveuniversity.org/Gas_cloud_harvesting)
   table (revision of 2026-11-08) and each nebula's own page; gas type IDs and volumes (10 m3) from the SDE (ESI
   `/universe/types`).
-  - 16 Mykoserocin nebulae (small: 2 x 1,000 units; large: 3 x 2,000 units): `verified`. The table and every site
-    page agree, and every page was edited after CCP doubled the gas in December 2021 (2022-2026). Tooltip: clouds, "No rats" and "Not in deadspace" only where
+  - 16 Mykoserocin nebulae (small: 2 x 1,000 units; large: 3 x 2,000 units). The table and every site page agree.
+    14 are `verified`: their pages carry no "review quantities in clouds due to Version 19.11" banner (they were
+    edited in 2022-2026, though an edit is not necessarily a re-check of the amounts). Sunspark and Pipe Nebula are
+    `approximate`: their pages carry that banner, and the tooltip says so. Every gas page was checked for it; no
+    other banner appears on them. Tooltip: clouds, "No rats" and "Not in deadspace" only where
     the site page says so (several pages say "?" for deadspace), and the regions of the gas table and the site page
     merged (Calabash: Domain, Genesis, Placid, Solitude, Fountain, Essence, Syndicate, Outer Ring, Venal).
   - 47 Cytoserocin nebulae: `approximate` (dashed chip). Tooltip: clouds, rats, deadspace and the location (one
@@ -45,7 +48,7 @@ Tip: none. The chip is visible on the row and its tooltip explains it.
     is the gas table). Glistening Nebula: 6,000 (the table's total of 3,000 contradicts its own 3,000 + 3,000 clouds and
     the page). Every gas site page's last-edit date was checked: Cheetah and Thick Nebula are the only pages last edited
     before the doubling (2021-11-20) that nothing later confirms (the table only repeats them), so they show
-    1,000-2,000 (this or twice this) with that reason. All Mykoserocin pages were edited in 2022 or later.
+    1,000-2,000 (this or twice this) with that reason. All Mykoserocin pages were last edited in 2022 or later.
   - Priced as **raw** gas: it trades well (Jita 2026-11-21: Viridian Mykoserocin ~41k units a day raw vs ~30k
     compressed), and compressed gas (1 unit per unit, 1/10 of the volume) loses some on decompression (EVE University,
     Compression). The tooltip says so.
