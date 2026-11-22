@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 186,
+      "date": "2026-11-22",
+      "title": "Statics get the first letters",
+      "description": "Suggested hole names now keep the first letters for a system's statics: in a C5 with an H296 static the H296 is always A, and K162s and other holes start at B. A C2's two statics get A and B, and the same works deeper in the chain (AA for the static behind hole A). Pick the static's type in the Add or Edit Signature dialog and the Name follows.\n\nTurn it off in Settings > Signatures > Statics get the first letters.",
+      "images": [
+        { "src": "whats-new/img/pr-186-static-first-letters.png", "caption": "A K162 in a C5 with an H296 static is suggested B: A is kept for the static" }
+      ]
+    },
+    {
       "pr": 184,
       "date": "2026-11-21",
       "title": "Site value for k-space gas and ore",
