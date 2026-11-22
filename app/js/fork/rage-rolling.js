@@ -561,14 +561,21 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				// Then the old statics: only once the fill is saved
 				second = true;
 				const sendRemove = function() {
-					if (tripwire.xhr) { setTimeout(sendRemove, 100); return; }	// the fill's request is still finishing
-					const live = stillListed(fills);
-					const rb = rageRolling.fillPayload(live, leadsTo);
-					if (!rb.remove) { checking = false; done(live, true); return; }	// already gone: nothing to delete
-					next.call(tripwire, "refresh", rb.remove, function(res) {
-						if (ok(res)) { pushRemoveUndo(rb.undo, fillEntries); }
-						done(live, ok(res));
-					}, function() { checking = false; if (!finished) { done(live, false); } });	// no answer at all: as failed
+					let live = fills;
+					try {
+						if (tripwire.xhr) { setTimeout(sendRemove, 100); return; }	// the fill's request is still finishing
+						live = stillListed(fills);
+						const rb = rageRolling.fillPayload(live, leadsTo);
+						if (!rb.remove) { checking = false; done(live, true); return; }	// already gone: nothing to delete
+						next.call(tripwire, "refresh", rb.remove, function(res) {
+							if (ok(res)) { pushRemoveUndo(rb.undo, fillEntries); }
+							done(live, ok(res));
+						}, function() { checking = false; if (!finished) { done(live, false); } });	// no answer at all: as failed
+					} catch (e) {
+						console.warn("rage-rolling: could not delete the old static", e);
+						checking = false;
+						if (!finished) { done(live, false); }
+					}
 				};
 				setTimeout(sendRemove, 0);
 			}, function() { if (!second) { checking = false; } });
