@@ -13,7 +13,8 @@ const holeNaming = {
 	// static, so the first one named keeps it) is named like any other hole. Only when every other character is used are
 	// the reserved ones handed out. A static that is the hole we came in through (the incoming hole's type on this
 	// system's side is that static) reserves nothing: it already has its name on the way in. See staticSlots /
-	// reservation / incomingType / nextName.
+	// reservation / incomingType / nextName. Thera and the Drifter systems reserve nothing, other systems at most their
+	// first three statics (namingStatics).
 	LETTERS: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 	SMALL_DIGITS: "12345",
 	MEDIUM_DIGITS: "6789",
@@ -107,6 +108,17 @@ const holeNaming = {
 		return sizeClass === "small" ? [holeNaming.SMALL_DIGITS, holeNaming.LETTERS] :
 			sizeClass === "medium" ? [holeNaming.MEDIUM_DIGITS, holeNaming.LETTERS] :
 			[holeNaming.LETTERS];
+	},
+
+	/** Most statics that get a reserved character (shattered systems list up to 3) */
+	MAX_RESERVED_STATICS: 3,
+
+	/** The statics that get reserved characters: none in Thera (class 12) or the Drifter systems (classes 14-18), whose
+		long static lists would push every other hole far down the alphabet; otherwise the first MAX_RESERVED_STATICS. */
+	namingStatics: function(statics, systemClass) {
+		const cls = Number(systemClass);
+		if (cls === 12 || (cls >= 14 && cls <= 18)) { return []; }
+		return Array.isArray(statics) ? statics.slice(0, holeNaming.MAX_RESERVED_STATICS) : [];
 	},
 
 	/** Reserved characters of a system's statics below prefix: [{type, ch}] in the statics' data order. Each static
@@ -399,7 +411,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		/** Statics of a system in data order ([] when unknown) */
 		function staticsOf(systemID) {
-			try { return typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : []; } catch (e) { return []; }
+			try {
+				const statics = typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : [];
+				const system = (typeof appData !== "undefined" && appData.systems && appData.systems[systemID]) || {};
+				return holeNaming.namingStatics(statics, system["class"]);
+			} catch (e) { return []; }
 		}
 
 		/** The statics' reservation for a hole of thisSideType leaving systemID (see holeNaming.reservation), or null when

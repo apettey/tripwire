@@ -298,6 +298,16 @@ describe('Hole naming', () => {
 		it('Far side is only a return bookmark', () => assert.equal(holeNaming.suggestOnEdit('', '!B'), true));
 	});
 
+	describe('namingStatics (which statics reserve letters)', () => {
+		it('Thera reserves nothing', () => assert.deepEqual(holeNaming.namingStatics(['F135', 'T458', 'M164'], 12), []));
+		it('Drifter systems (C14-C18) reserve nothing', () => [14, 15, 16, 17, 18].forEach(c =>
+			assert.deepEqual(holeNaming.namingStatics(['Z647', 'D382', 'O477', 'Y683', 'N062', 'R474'], c), [], 'C' + c)));
+		it('shattered C2 with three statics keeps all three', () => assert.deepEqual(holeNaming.namingStatics(['A239', 'B274', 'O477'], 2), ['A239', 'B274', 'O477']));
+		it('at most three statics', () => assert.deepEqual(holeNaming.namingStatics(['A', 'B', 'C', 'D'], 3), ['A', 'B', 'C']));
+		it('one or two statics unchanged', () => { assert.deepEqual(holeNaming.namingStatics(['H296'], 5), ['H296']); assert.deepEqual(holeNaming.namingStatics(['B274', 'O477'], '2'), ['B274', 'O477']); });
+		it('no statics', () => { assert.deepEqual(holeNaming.namingStatics(undefined, 5), []); assert.deepEqual(holeNaming.namingStatics([], undefined), []); });
+	});
+
 	describe('statics get the first letters', () => {
 		// Wormhole sizes for the tests (jump mass): large, medium (C1-style 62kt) and small (frigate 5kt)
 		const WH = { H296: { jump: 2000000000 }, B274: { jump: 375000000 }, O477: { jump: 375000000 },
@@ -312,6 +322,11 @@ describe('Hole naming', () => {
 		it('Static named after other holes still gets A', () => assert.equal(name('', ['B', 'C'], 'H296', ['H296']), 'A'));
 		it('Two statics: A and B in data order', () => assert.deepEqual([name('', [], 'B274', ['B274', 'O477']), name('', [], 'O477', ['B274', 'O477'])], ['A', 'B']));
 		it('Two statics: other holes start at C', () => assert.equal(name('', ['A'], 'K162', ['B274', 'O477']), 'C'));
+		it('Three statics (shattered): A, B and C, other holes start at D', () => {
+			const st = ['A239', 'B274', 'O477'];
+			assert.deepEqual([name('', [], 'A239', st), name('', [], 'B274', st), name('', [], 'O477', st)], ['A', 'B', 'C']);
+			assert.equal(name('', [], 'K162', st), 'D');
+		});
 		it('Duplicate static type: the second is named like any other hole', () => assert.equal(name('', ['A'], 'H296', ['H296']), 'B'));
 		it('Duplicate static type with more holes: next free after the reserved range', () => assert.equal(name('', ['A', 'B', 'D'], 'H296', ['H296']), 'C'));
 		it('Reserved letter taken by an old non-static: the static gets the next free other name', () => assert.equal(name('', ['A', 'B'], 'H296', ['H296']), 'C'));

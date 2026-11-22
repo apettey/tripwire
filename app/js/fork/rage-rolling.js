@@ -5,7 +5,7 @@ const rageRolling = {
 	// dialog), each static slot that is empty gets the first new unknown wormhole of that same save: its type is set to
 	// the static (so the far side's class is known) and it is named with the static's letter (Statics get the first
 	// letters, hole-naming.js; the name only while "Suggest hole names" is on).
-	//  - Home system: the root of one of the user's chain tabs, with at least one static (sigQuickPicks.staticsFor).
+	//  - Home system: the root of one of the user's chain tabs, with at least one static (holeNaming.namingStatics: never Thera or a Drifter system).
 	//  - A slot's holder: a wormhole sig in the system with the static's type on its own side, or a sig of unknown type
 	//    holding the static's reserved name (A for the first static; with "Statics get the first letters" off only the
 	//    type counts). A K162 or another known type named A (old data) doesn't hold it. No holder: the slot is empty.
@@ -355,7 +355,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function on() { return rageRolling.isOn(opts(), Date.now()); }
 		function homes() { const o = opts(); return rageRolling.homeSystems(o && o.chain ? o.chain.tabs : []); }
 		function staticsOf(systemID) {
-			try { return typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : []; } catch (e) { return []; }
+			try { return holeNaming.namingStatics(typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : [], ((typeof appData !== "undefined" && appData.systems && appData.systems[systemID]) || {})["class"]); } catch (e) { return []; }
 		}
 		/** A home system with a static: where the chip shows and the mode acts */
 		function isHome(systemID) {
