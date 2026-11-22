@@ -1,23 +1,27 @@
 const rageRolling = {
 	// Fork-owned: "Rage rolling mode". While a group rolls its home static over and over, every roll leaves a new
-	// wormhole signature to scan and fill in. With the mode on, Tripwire takes the new hole for the new static:
-	// after this client's own save in a home system (a probe scanner paste, a paste preview's Apply, the Sig dialog),
-	// each static slot that is empty gets the first new unknown wormhole of that same save: its type is set to the
-	// static (so the far side's class is known) and it is named with the static's letter (Statics get the first letters,
-	// hole-naming.js; the name only while "Suggest hole names" is on).
+	// wormhole signature to scan and fill in. With the mode on, Tripwire takes the new hole for the new static: after
+	// this client's own save in a home system (a probe scanner paste, with or without the paste preview, or the Sig
+	// dialog), each static slot that is empty gets the first new unknown wormhole of that same save: its type is set to
+	// the static (so the far side's class is known) and it is named with the static's letter (Statics get the first
+	// letters, hole-naming.js; the name only while "Suggest hole names" is on).
 	//  - Home system: the root of one of the user's chain tabs, with at least one static (sigQuickPicks.staticsFor).
-	//  - A static slot is empty when no wormhole sig in the system has the static's type on its own side and no sig with
-	//    an unknown type (or the static's type) holds the static's reserved name (A for the first static; with "Statics
-	//    get the first letters" off only the type counts). A K162 or another known type named A (old data) doesn't hold it.
+	//  - A slot's holder: a wormhole sig in the system with the static's type on its own side, or a sig of unknown type
+	//    holding the static's reserved name (A for the first static; with "Statics get the first letters" off only the
+	//    type counts). A K162 or another known type named A (old data) doesn't hold it. No holder: the slot is empty.
+	//  - The static rolled: a probe scanner paste of this client whose scan doesn't have the holder's signature ID (and
+	//    is a full scan: it has another sig that is already listed, or the holders are the only sigs with an ID) empties
+	//    the slot. That paste's save then deletes the old static (it collapsed) and fills the slot in one request, which
+	//    is one Undo step. So the usual flow works: roll, rescan, paste (the paste preview's auto-save keeps gone sigs,
+	//    Apply may delete them; either way).
 	//  - Candidates: the wormhole sigs a save of ours added or turned into wormholes, in the order they were sent (= paste
 	//    order); only unnamed ones with no type on this side (not K162) and a far side that is still unknown. A candidate
-	//    counts only at the check right after its own save: when the slot was already empty, or that same save emptied it
-	//    (the paste preview's Apply deletes the old static and adds the new hole in one request). A hole pasted while the
-	//    old static was still listed is never filled later (it could be any K162 that came in meanwhile). The first
-	//    candidate fills the first empty slot, the next one the second; with more candidates than empty slots the toast
-	//    says it picked by paste order.
-	//  - Only the client that saved acts (its own candidates), so two clients never fight; the fill is one update request
-	//    (an Undo step too) and a toast with the hole's bookmark text.
+	//    counts only at the check right after its own save, so a hole pasted while the old static was still in the scan
+	//    is never filled later (it could be any K162 that came in meanwhile). The first candidate fills the first empty
+	//    slot, the next one the second. When it is a guess (more new holes than empty slots, or other unknown holes
+	//    listed in the system) the toast is yellow and says so.
+	//  - Only the client that saved acts (its own candidates), so two clients never fight. A toast gives the hole's
+	//    bookmark text.
 	// The mode is per user and off by default (it guesses): the "Rage roll" chip in the Signatures panel's header (shown
 	// in a home system with a static) or the command palette (Rage rolling on / off) switch it; it switches itself off
 	// after MODE_MS. Stored in options.rageRollingMode = {on, since}; Settings > Wormhole Jumps & Mass "Rage rolling
@@ -30,6 +34,7 @@ const rageRolling = {
 	// Wait this long after our save before the fill: the server keeps modifiedTime to the second, and an edit in the same
 	// second as the paste's add is never redrawn in the signature list (tripwire/parse.js compares modifiedTime)
 	SETTLE_MS: 1200,
+	SCAN_MS: 10 * 60000,		// a paste's scan waits this long for its save (the paste preview can wait for Apply)
 
 	/** The feature (the chip and the mode) is available: options.rageRolling.enabled, missing = on */
 	enabled: function(opts) {
@@ -83,73 +88,139 @@ const rageRolling = {
 		return !other || other.systemID === null || other.systemID === undefined || other.systemID === "";
 	},
 
+	/** Signature IDs in a probe scanner paste ("ABC-123" columns), lower case without the dash, in paste order */
+	scanIDs: function(text) {
+		const out = [];
+		String(text === undefined || text === null ? "" : text).split(/\r?\n/).forEach(function(row) {
+			row.split("\t").some(function(col) {
+				const m = /^([A-Za-z]{3})-(\d{3})$/.exec(col.trim());
+				if (m) { const id = (m[1] + m[2]).toLowerCase(); if (out.indexOf(id) < 0) { out.push(id); } return true; }
+				return false;
+			});
+		});
+		return out;
+	},
+
+	/** A real signature ID ("abc123"), not "???" or empty */
+	hasID: function(sig) {
+		return !!sig && /^[a-z]{3}\d{3}$/i.test(String(sig.signatureID || ""));
+	},
+
 	/**
 	 * Which new holes become which statics. args:
 	 *   systemID, statics (types in data order), signatures, wormholes (tripwire.client's),
 	 *   candidates: [{id} | {signatureID}] in the order they were saved,
 	 *   staticFirst (Statics get the first letters), naming (Suggest hole names), table (appData.wormholes, optional),
-	 *   skip: sig ids never to fill again (filled once already: an Undo of the fill must stay undone)
-	 * Returns [{systemID, sig, other, wormhole, type, name, parent, among, slots}] (name null when naming is off; parent:
-	 * the static's side, "initial" or "secondary"; among: how many new holes were eligible, slots: how many slots were
-	 * empty), at most one per empty static slot.
+	 *   skip: sig ids never to fill again (filled once already: an Undo of the fill must stay undone),
+	 *   scanIDs: optional, the signature IDs of the probe scanner paste this save came from (scanIDs()): a slot holder
+	 *     missing from a full scan collapsed, so its slot counts as empty and the fill replaces (deletes) it
+	 * Returns [{systemID, sig, other, wormhole, type, name, parent, replaces, among, others, slots}] (name null when naming
+	 * is off; parent: the static's side, "initial" or "secondary"; replaces: [{sig, other, wormhole}] holders the fill
+	 * deletes; among: eligible new holes, others: other unknown holes listed in the system, slots: empty slots), at most
+	 * one per empty static slot.
 	 */
 	plan: function(args) {
 		const a = args || {};
 		const signatures = a.signatures || {};
 		const wormholes = a.wormholes || {};
-		const local = Object.keys(signatures).map(function(k) { return signatures[k]; })
-			.filter(function(s) { return s && s.type === "wormhole" && s.systemID == a.systemID; });
+		const inSystem = Object.keys(signatures).map(function(k) { return signatures[k]; })
+			.filter(function(s) { return s && s.systemID == a.systemID; });
+		const local = inSystem.filter(function(s) { return s.type === "wormhole"; });
 		const slots = holeNaming.staticSlots(a.statics, "", a.table);
 		if (!slots.length || !local.length) { return []; }
 		const typeOf = {};
 		local.forEach(function(s) { typeOf[s.id] = rageRolling.sideType(s.id, rageRolling.wormholeOf(s.id, wormholes)); });
-
-		const empty = slots.filter(function(slot) {
-			return !local.some(function(s) {
+		const holders = function(slot) {
+			return local.filter(function(s) {
 				if (typeOf[s.id] === slot.type) { return true; }
-				// The reserved name holds the slot only on a hole that may be the static (unknown type, or that type)
+				// The reserved name holds the slot only on a hole that may be the static (unknown type)
 				return a.staticFirst && holeNaming.leadingToken(s.name) === slot.ch && typeOf[s.id] === "";
 			});
-		});
-		if (!empty.length) { return []; }
-
-		const seen = {};
-		const picks = [];
+		};
+		const skipped = function(sig) { return (a.skip || []).some(function(id) { return id == sig.id; }); };
+		// The candidates' sigs, in candidate order (each once)
+		const mine = [];
 		(a.candidates || []).forEach(function(c) {
 			if (!c) { return; }
 			const key = c.signatureID ? String(c.signatureID).toUpperCase() : null;
 			const sig = local.filter(function(s) {
 				return (c.id !== undefined && c.id !== null && s.id == c.id) || (key && String(s.signatureID || "").toUpperCase() === key);
 			})[0];
-			if (!sig || seen[sig.id] || (a.skip || []).some(function(id) { return id == sig.id; })) { return; }
-			seen[sig.id] = true;
-			const name = String(sig.name === undefined || sig.name === null ? "" : sig.name).trim();
-			if (name !== "" || typeOf[sig.id] !== "") { return; }	// named (also a return bookmark), K162 or a known type
-			const wormhole = rageRolling.wormholeOf(sig.id, wormholes);
-			if (!wormhole) { return; }
-			const otherID = wormhole.initialID == sig.id ? wormhole.secondaryID : wormhole.initialID;
-			const other = signatures[otherID] || null;
-			if (!other) { return; }	// no far side in the list: nothing to update (and nothing to undo)
-			if (!rageRolling.farUnknown(other) || holeNaming.leadingToken(other.name)) { return; }
-			picks.push({ sig: sig, other: other, wormhole: wormhole });
+			if (sig && mine.indexOf(sig) < 0) { mine.push(sig); }
 		});
 
-		const used = local.map(function(s) { return s.name; }).filter(Boolean);
+		// Holders missing from a full scan collapsed
+		const scan = Array.isArray(a.scanIDs) ? a.scanIDs.map(function(id) { return String(id).toLowerCase(); }) : null;
+		const inScan = function(sig) { return scan.indexOf(String(sig.signatureID || "").toLowerCase()) >= 0; };
+		const allHolders = [];
+		slots.forEach(function(slot) { holders(slot).forEach(function(h) { if (allHolders.indexOf(h) < 0) { allHolders.push(h); } }); });
+		// A full scan: it has a sig that was listed before (not a holder, not one this save added), or there is none such
+		const before = inSystem.filter(function(s) { return rageRolling.hasID(s) && allHolders.indexOf(s) < 0 && mine.indexOf(s) < 0; });
+		const full = !!scan && (before.some(inScan) || !before.length);
+		const gone = function(h) { return full && rageRolling.hasID(h) && !inScan(h); };
+
+		const empty = [];
+		slots.forEach(function(slot) {
+			const hs = holders(slot);
+			if (hs.every(gone)) { empty.push({ slot: slot, replaces: hs }); }
+		});
+		if (!empty.length) { return []; }
+		const replaced = [];
+		empty.forEach(function(e) { e.replaces.forEach(function(h) { replaced.push(h); }); });
+
+		/** An unnamed hole of unknown type whose far side is listed and still unknown */
+		const unknownHole = function(sig) {
+			const name = String(sig.name === undefined || sig.name === null ? "" : sig.name).trim();
+			if (name !== "" || typeOf[sig.id] !== "") { return null; }	// named (also a return bookmark), K162 or a known type
+			const wormhole = rageRolling.wormholeOf(sig.id, wormholes);
+			if (!wormhole) { return null; }
+			const otherID = wormhole.initialID == sig.id ? wormhole.secondaryID : wormhole.initialID;
+			const other = signatures[otherID] || null;
+			if (!other) { return null; }	// no far side in the list: nothing to update (and nothing to undo)
+			if (!rageRolling.farUnknown(other) || holeNaming.leadingToken(other.name)) { return null; }
+			return { sig: sig, other: other, wormhole: wormhole };
+		};
+
+		const seen = {};
+		const picks = [];
+		mine.forEach(function(sig) {
+			seen[sig.id] = true;
+			if (skipped(sig)) { return; }
+			const hole = unknownHole(sig);
+			if (hole) { picks.push(hole); }
+		});
+		// Other unknown holes already listed: the new one may not be the static (the toast says so)
+		const others = local.filter(function(s) {
+			return !seen[s.id] && !skipped(s) && replaced.indexOf(s) < 0 && !!unknownHole(s);
+		}).length;
+
+		const used = local.filter(function(s) { return replaced.indexOf(s) < 0; }).map(function(s) { return s.name; }).filter(Boolean);
 		const reserved = slots.map(function(s) { return s.ch; });
 		const fills = [];
-		empty.forEach(function(slot, i) {
+		empty.forEach(function(e, i) {
 			const pick = picks[i];
 			if (!pick) { return; }
 			let name = null;
 			if (a.naming) {
-				name = holeNaming.nextName("", used, holeNaming.sizeClass(slot.type, a.table),
-					a.staticFirst ? { reserved: reserved, own: slot.ch } : null);
+				name = holeNaming.nextName("", used, holeNaming.sizeClass(e.slot.type, a.table),
+					a.staticFirst ? { reserved: reserved, own: e.slot.ch } : null);
 				if (name) { used.push(name); }
 			}
-			fills.push({ systemID: a.systemID, sig: pick.sig, other: pick.other, wormhole: pick.wormhole, type: slot.type, name: name,
-				parent: pick.wormhole.initialID == pick.sig.id ? "initial" : "secondary", among: picks.length, slots: empty.length });
+			fills.push({ systemID: a.systemID, sig: pick.sig, other: pick.other, wormhole: pick.wormhole, type: e.slot.type, name: name,
+				parent: pick.wormhole.initialID == pick.sig.id ? "initial" : "secondary",
+				replaces: e.replaces.map(function(h) {
+					const wormhole = rageRolling.wormholeOf(h.id, wormholes);
+					const otherID = wormhole ? (wormhole.initialID == h.id ? wormhole.secondaryID : wormhole.initialID) : null;
+					return { sig: h, other: otherID !== null ? signatures[otherID] || null : null, wormhole: wormhole };
+				}),
+				among: picks.length, others: others, slots: empty.length });
 		});
 		return fills;
+	},
+
+	/** The fill is a guess the user should check: more new holes than empty slots, or other unknown holes listed */
+	ambiguous: function(fill) {
+		return !!fill && ((Number(fill.among) || 0) > (Number(fill.slots) || 1) || (Number(fill.others) || 0) > 0);
 	},
 
 	/** The new holes a save sends: [{systemID, id} | {systemID, signatureID}] in payload order (wormhole adds, and
@@ -188,12 +259,14 @@ const rageRolling = {
 		});
 	},
 
-	/** The update request for the fills (as the Sig dialog's update: wormhole type and parent, this side's name, the far
-		side's class) and the undo items per system ({wormhole, signatures: [this side, far side]} as they were).
+	/** The request for the fills (as the Sig dialog's update: wormhole type and parent, this side's name, the far side's
+		class; plus the removal of the collapsed old statics they replace) and the undo items per system: {update: [{wormhole,
+		signatures: [this side, far side]} as they were], remove: [the removed holes as they were]}.
 		leadsTo(type): the far side's system for a type (wormholeAnalysis.targetSystemID), or null. */
 	fillPayload: function(fills, leadsTo) {
 		const copy = function(v) { return v ? JSON.parse(JSON.stringify(v)) : v; };
 		const entries = [];
+		const removes = [];
 		const undo = {};
 		(fills || []).forEach(function(f) {
 			const thisSide = { id: f.sig.id };
@@ -203,9 +276,21 @@ const rageRolling = {
 			if (target !== null && target !== undefined) { farSide.systemID = target; }
 			entries.push({ wormhole: { id: f.wormhole.id, type: f.type, parent: f.parent, life: f.wormhole.life || "stable", mass: f.wormhole.mass || "stable" },
 				signatures: [thisSide, farSide] });
-			(undo[f.systemID] = undo[f.systemID] || []).push({ wormhole: copy(f.wormhole), signatures: [copy(f.sig), copy(f.other)] });
+			const u = undo[f.systemID] = undo[f.systemID] || { update: [], remove: [] };
+			u.update.push({ wormhole: copy(f.wormhole), signatures: [copy(f.sig), copy(f.other)] });
+			(f.replaces || []).forEach(function(r) {
+				if (r.wormhole) {
+					removes.push(copy(r.wormhole));	// as upstream's "delete missing sigs": the wormhole goes with both sides
+					u.remove.push({ wormhole: copy(r.wormhole), signatures: [copy(r.sig), copy(r.other)] });
+				} else {
+					removes.push(r.sig.id);
+					u.remove.push(copy(r.sig));
+				}
+			});
 		});
-		return { payload: { signatures: { update: entries } }, undo: undo };
+		const payload = { signatures: { update: entries } };
+		if (removes.length) { payload.signatures.remove = removes; }
+		return { payload: payload, undo: undo };
 	},
 
 	/** "QRS456" -> "QRS-456" */
@@ -216,10 +301,13 @@ const rageRolling = {
 
 	/** Toast text for one fill (plain text: escape it before showing) */
 	message: function(fill, bookmark) {
-		const among = Number(fill.among) || 0, slots = Number(fill.slots) || 1;
-		const guess = among > slots ? " (" + among + " new holes: " + (slots > 1 ? "picked in paste order, check them" : "picked the first, check it") + ")" : "";
+		const among = Number(fill.among) || 0, slots = Number(fill.slots) || 1, others = Number(fill.others) || 0;
+		const replaced = (fill.replaces || []).map(function(r) { return rageRolling.idText(r.sig && r.sig.signatureID); }).filter(Boolean);
+		const guess = others > 0 ? " (picked the newest hole, " + (among + others) + " unknown holes in this system, check it)"
+			: among > slots ? " (" + among + " new holes: " + (slots > 1 ? "picked in paste order, check them" : "picked the first, check it") + ")" : "";
 		return "Rage rolling: " + rageRolling.idText(fill.sig.signatureID) + " set as new static " + fill.type +
-			(fill.name ? " (" + fill.name + ")" : "") + guess + (bookmark ? ". Bookmark: " + bookmark : "");
+			(fill.name ? " (" + fill.name + ")" : "") + guess + (replaced.length ? ", old " + replaced.join(", ") + " deleted (not in the scan)" : "") +
+			(bookmark ? ". Bookmark: " + bookmark : "");
 	}
 };
 
@@ -231,6 +319,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		let pendingUntil = 0;
 		let savedAt = 0;	// our last save that brought candidates
 		const filled = [];	// sig ids filled in this session: never again (Undo brings them back unnamed and unknown)
+		let pendingScan = null;	// the last probe scanner paste of ours: {systemID, ids, at}, until its save
+		const scanFor = {};		// systemID -> the scan IDs of the save whose candidates wait for their check
 		let checking = false;
 
 		function opts() { return typeof options !== "undefined" ? options : undefined; }
@@ -255,7 +345,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			render();
 			if (value && !was && typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "turned_on"); }
 			if (!quiet) {
-				Notify.trigger(value ? "Rage rolling on: a new unknown wormhole you paste in a home system becomes the new static when the paste also removes the old one (paste preview: Apply). Off again in 3 hours."
+				Notify.trigger(value ? "Rage rolling on: paste a fresh scan after the roll; when the static's signature is gone from it, the old static is deleted and the new unknown wormhole becomes the new static. Off again in 3 hours."
 					: "Rage rolling off", value ? "green" : "blue", 6000);
 			}
 		}
@@ -279,8 +369,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			$chip.toggleClass("on", active).attr("aria-checked", active ? "true" : "false")
 				.text(active ? "Rage roll: on" : "Rage roll")
 				.attr("data-tooltip", active
-					? "Rage rolling is on (" + (left >= 60 ? Math.floor(left / 60) + " h " + (left % 60) + " min" : left + " min") + " left): a new unknown wormhole you paste becomes the new static when the paste also removes the old one. Click to turn it off."
-					: "Rage rolling: when you paste after rolling the static, the new unknown wormhole is set as the new static (type and name). Click to turn it on.");
+					? "Rage rolling is on (" + (left >= 60 ? Math.floor(left / 60) + " h " + (left % 60) + " min" : left + " min") + " left): paste a fresh scan after the roll; when the static's signature is gone from it, the new unknown wormhole becomes the new static. Click to turn it off."
+					: "Rage rolling: after rolling the static, paste a fresh scan: the old static (gone from the scan) is deleted and the new unknown wormhole is set as the new static (type and letter). Click to turn it on.");
 		}
 		rageRolling.render = render;
 
@@ -336,11 +426,15 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					systemID: systemID, statics: staticsOf(systemID),
 					signatures: tripwire.client.signatures, wormholes: tripwire.client.wormholes,
 					candidates: candidates.filter(function(c) { return String(c.systemID) === systemID; }),
-					staticFirst: holeNaming.staticFirst(o), naming: holeNaming.enabled(o), skip: filled
+					staticFirst: holeNaming.staticFirst(o), naming: holeNaming.enabled(o), skip: filled,
+					scanIDs: scanFor[systemID] || null
 				}));
 			});
 			// Every candidate in the list now was used or is out (see prune); the save below drops the used ones too
 			candidates = rageRolling.prune(candidates, tripwire.client.signatures, now, pendingUntil);
+			Object.keys(scanFor).forEach(function(systemID) {
+				if (!candidates.some(function(c) { return String(c.systemID) === systemID; })) { delete scanFor[systemID]; }
+			});
 			if (fills.length) { save(fills); }
 		}
 
@@ -361,9 +455,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			} catch (e) { return null; }
 		}
 
+		/** The fill and the removal of the old static it replaced: pushed together, so one Undo step (undo-history.js) */
 		function saveUndo(systemID, items) {
 			const stack = tripwire.signatures.undo[systemID] = tripwire.signatures.undo[systemID] || [];
-			stack.push({ action: "update", signatures: items });
+			if (items.update.length) { stack.push({ action: "update", signatures: items.update }); }
+			if (items.remove.length) { stack.push({ action: "remove", signatures: items.remove }); }
 			$("#undo").removeClass("disabled");
 			try { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } catch (e) { /* ignore */ }
 		}
@@ -390,13 +486,14 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				notes.forEach(function(n) {
 					if (typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "filled"); }
 					const text = rageRolling.message(n.fill, null);
-					if (!n.bookmark) { Notify.trigger(_.escape(text), n.fill.among > n.fill.slots ? "yellow" : "green", 10000); return; }
+					const colour = rageRolling.ambiguous(n.fill) ? "yellow" : "green";
+					if (!n.bookmark) { Notify.trigger(_.escape(text), colour, 10000); return; }
 					// Not inside a click or key press: the copy may be refused, then the bookmark is in the toast to copy by hand
 					const copier = typeof holeNaming.copyText === "function" ? holeNaming.copyText(n.bookmark) : Promise.resolve(false);
 					copier.then(function(ok) {
-						Notify.trigger(_.escape(ok ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), n.fill.among > n.fill.slots ? "yellow" : "green", 15000);
+						Notify.trigger(_.escape(ok ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), colour, 15000);
 					}, function() {
-						Notify.trigger(_.escape(rageRolling.message(n.fill, n.bookmark)), "green", 15000);
+						Notify.trigger(_.escape(rageRolling.message(n.fill, n.bookmark)), colour, 15000);
 					});
 				});
 			}, function() { checking = false; });
@@ -407,12 +504,22 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			let found = [];
 			try { found = rageRolling.payloadCandidates(data); } catch (e) { found = []; }
 			if (!found.length) { return next.apply(this, arguments); }
+			// The save of our last probe scanner paste (plain paste.js, or the paste preview's Apply / auto-save): its new
+			// sigs are in that scan. Its scan tells which old statics collapsed (rageRolling.plan, scanIDs).
+			let scan = null;
+			const ps = pendingScan;
+			if (ps && data.systemID == ps.systemID && Date.now() - ps.at < rageRolling.SCAN_MS &&
+				found.some(function(c) { return c.signatureID && ps.ids.indexOf(String(c.signatureID).toLowerCase()) >= 0; })) {
+				scan = ps.ids;
+				pendingScan = null;
+			}
 			const wrapped = function(result) {
 				const ret = successCallback ? successCallback.apply(this, arguments) : undefined;
 				try {
 					if (result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true) {
 						const now = Date.now();
 						found.forEach(function(c) { candidates.push(Object.assign({ at: now }, c)); });
+						if (scan) { scanFor[String(data.systemID)] = scan; }
 						pendingUntil = now + rageRolling.PENDING_MS;
 						savedAt = now;
 						scheduleCheck(rageRolling.SETTLE_MS);
@@ -423,6 +530,22 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			return next.call(this, mode, data, wrapped, alwaysCallback);
 		};
 		Object.keys(next).forEach(function(k) { tripwire.refresh[k] = next[k]; });	// other wrappers' markers
+
+		// The probe scanner paste: remember its signature IDs for its save (paste.js and the paste preview both go through
+		// parsePaste with the whole pasted text; the save follows at once, or at the preview's Apply / auto-save)
+		if (tripwire.pasteSignatures && typeof tripwire.pasteSignatures.parsePaste === "function") {
+			const parsePaste = tripwire.pasteSignatures.parsePaste;
+			const wrappedPaste = function(paste) {
+				try {
+					if (on() && typeof viewingSystemID !== "undefined") {
+						pendingScan = { systemID: String(viewingSystemID), ids: rageRolling.scanIDs(paste), at: Date.now() };
+					}
+				} catch (e) { pendingScan = null; }
+				return parsePaste.apply(this, arguments);
+			};
+			Object.keys(parsePaste).forEach(function(k) { wrappedPaste[k] = parsePaste[k]; });
+			tripwire.pasteSignatures.parsePaste = wrappedPaste;
+		}
 
 		// Our save's answer may come without the list (same second): check again when the list arrives
 		if (typeof tripwire.parse === "function") {
@@ -458,7 +581,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			section: "jumps", order: 22, id: "rageRolling-enabled", type: "checkbox", key: "rageRolling",
 			label: "Rage rolling button:",
 			text: "Show the Rage roll switch in the Signatures panel of a home system with a static",
-			hint: "Rage rolling sets a new unknown wormhole you paste as the new static when the same paste removes the old one. It is off until you switch it on, and switches itself off after 3 hours.",
+			hint: "Rage rolling: when a scan you paste no longer has the static's signature, the old static is deleted and the new unknown wormhole becomes the new static. It is off until you switch it on, and switches itself off after 3 hours.",
 			keywords: ["rage", "roll", "rolling", "static", "paste"],
 			get: function(o) { return rageRolling.enabled(o); },
 			set: function(o, value) { o.rageRolling = Object.assign({}, o.rageRolling || {}, { enabled: !!value }); },
@@ -480,8 +603,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					});
 				},
 				title: "Rolling your static?",
-				body: "Turn on Rage roll in the Signatures panel (or Ctrl+K, Rage rolling on): when you paste after the roll, the new "
-					+ "unknown wormhole is set as the new static, type and letter. Turn tips off in Settings > General.",
+				body: "Turn on Rage roll in the Signatures panel (or Ctrl+K, Rage rolling on): when you paste a fresh scan after the roll, "
+					+ "the old static (gone from the scan) is deleted and the new unknown wormhole is set as the new static, type and letter. "
+					+ "Turn tips off in Settings > General.",
 				action: { label: "Turn it on", run: function() { setMode(true); } },
 				priority: 45, maxShows: 2, cooldownHours: 72, ttlSeconds: 600
 			});

@@ -147,6 +147,66 @@ describe('Rage rolling', () => {
 		});
 	});
 
+	describe('the static rolled: its signature is missing from the pasted scan', () => {
+		// Old static A (old111, H296) still listed, a data site def789 listed; the paste has def789 and the new hole new111
+		const listed = (extra) => {
+			const p = pasted(10, 100, 'new111');
+			const w = world(p.sigs.concat([[20, HOME, 'old111', 'A'], [21, 7, null]]).concat(extra || []), [p.hole, [200, 20, 21, 'H296', 'initial']]);
+			w.signatures[30] = { id: 30, systemID: HOME, signatureID: 'def789', type: 'data', name: 'Site' };
+			return w;
+		};
+		it('scanIDs: the IDs of a probe scanner paste, lower case, in order', () =>
+			assert.deepEqual(rageRolling.scanIDs('NEW-111\tCosmic Signature\tWormhole\t\t100.0%\t8 km\r\nDEF-789\tCosmic Signature\tData Site\tX\t100.0%\t4 AU\nnot a row'), ['new111', 'def789']));
+		it('old static not in a full scan: deleted and replaced by the new hole, in one request', () => {
+			const w = listed();
+			const fills = plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'] });
+			assert.deepEqual(brief(fills), [['new111', 'H296', 'A', 'initial']]);
+			assert.deepEqual(fills[0].replaces.map(r => r.sig.signatureID), ['old111']);
+			assert.equal(rageRolling.message(fills[0]), 'Rage rolling: NEW-111 set as new static H296 (A), old OLD-111 deleted (not in the scan)');
+			const built = rageRolling.fillPayload(fills, () => 7);
+			assert.deepEqual(built.payload.signatures.remove, [w.wormholes[200]]);
+			assert.equal(built.payload.signatures.update.length, 1);
+			assert.deepEqual(built.undo[HOME].remove, [{ wormhole: w.wormholes[200], signatures: [w.signatures[20], w.signatures[21]] }]);
+			assert.equal(built.undo[HOME].update.length, 1);
+		});
+		it('old static still in the scan: nothing', () =>
+			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111', 'old111'] }), []));
+		it('a partial scan (nothing else that was listed is in it) is not trusted', () =>
+			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }], scanIDs: ['new111'] }), []));
+		it('the static was the only sig with an ID: a scan of just the new hole counts', () => {
+			const p = pasted(10, 100, 'new111');
+			const w = world(p.sigs.concat([[20, HOME, 'old111', 'A'], [21, 7, null]]), [p.hole, [200, 20, 21, 'H296', 'initial']]);
+			assert.equal(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['new111'] }).length, 1);
+		});
+		it('a holder without a signature ID (mapped by the automapper) is never taken for gone', () => {
+			const p = pasted(10, 100, 'new111');
+			const w = world(p.sigs.concat([[20, HOME, '???', 'A'], [21, 7, null]]), [p.hole, [200, 20, 21, 'H296', 'initial']]);
+			w.signatures[30] = { id: 30, systemID: HOME, signatureID: 'def789', type: 'data' };
+			assert.deepEqual(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'] }), []);
+		});
+		it('no new hole in the paste: nothing (the old static is left for the user)', () =>
+			assert.deepEqual(plan(listed(), { candidates: [], scanIDs: ['def789'] }), []));
+		it('without a scan (the Sig dialog) the listed static still holds the slot', () =>
+			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }] }), []));
+	});
+
+	describe('ambiguity', () => {
+		it('an old unknown hole listed, slot empty: the new hole still fills, but the toast is yellow and says so', () => {
+			const oldUnknown = pasted(40, 400, 'unk000');
+			const fresh = pasted(10, 100, 'new111');
+			const w = world(oldUnknown.sigs.concat(fresh.sigs), [oldUnknown.hole, fresh.hole]);
+			const fills = plan(w, { candidates: [{ signatureID: 'new111' }] });
+			assert.deepEqual(brief(fills), [['new111', 'H296', 'A', 'initial']]);
+			assert.equal(fills[0].others, 1);
+			assert.equal(rageRolling.ambiguous(fills[0]), true);
+			assert.equal(rageRolling.message(fills[0]), 'Rage rolling: NEW-111 set as new static H296 (A) (picked the newest hole, 2 unknown holes in this system, check it)');
+		});
+		it('a single new hole, nothing else unknown: not ambiguous', () => {
+			const p = pasted(10, 100, 'new111');
+			assert.equal(rageRolling.ambiguous(plan(world(p.sigs, [p.hole]), { candidates: [{ signatureID: 'new111' }] })[0]), false);
+		});
+	});
+
 	describe('stale candidates (prune)', () => {
 		const now = 1000000;
 		it('a hole pasted while the old static was listed is dropped, not filled when the static is deleted later', () => {
@@ -190,8 +250,9 @@ describe('Rage rolling', () => {
 				signatures: [{ id: 10, name: 'A' }, { id: 11, systemID: 7 }]
 			}] } });
 			assert.deepEqual(Object.keys(built.undo), [String(HOME)]);
-			assert.deepEqual(built.undo[HOME][0], { wormhole: w.wormholes[100], signatures: [w.signatures[10], w.signatures[11]] });
-			assert.notStrictEqual(built.undo[HOME][0].wormhole, w.wormholes[100], 'a copy');
+			assert.deepEqual(built.undo[HOME].update[0], { wormhole: w.wormholes[100], signatures: [w.signatures[10], w.signatures[11]] });
+			assert.deepEqual(built.undo[HOME].remove, []);
+			assert.notStrictEqual(built.undo[HOME].update[0].wormhole, w.wormholes[100], 'a copy');
 		});
 		it('no name when naming is off, no class when unknown', () => {
 			const p = pasted(10, 100, 'qrs456');
