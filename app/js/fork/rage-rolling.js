@@ -101,6 +101,23 @@ const rageRolling = {
 		return out;
 	},
 
+	MAX_SCANS: 5,	// recent pastes kept for their saves
+
+	/** Which recorded paste a save comes from: the newest scan of that system, younger than SCAN_MS, that has every new
+		signature ID of the save (a paste's save only adds sigs of its own scan; a paste the preview refused, because
+		one was open, doesn't have the open preview's new sigs). scans: [{systemID, ids, at}], oldest first. Returns its
+		index or -1. */
+	matchScan: function(scans, systemID, signatureIDs, now) {
+		const ids = (signatureIDs || []).map(function(id) { return String(id).toLowerCase(); });
+		if (!ids.length) { return -1; }
+		for (let i = (scans || []).length - 1; i >= 0; i--) {
+			const sc = scans[i];
+			if (!sc || String(sc.systemID) !== String(systemID) || now - sc.at >= rageRolling.SCAN_MS) { continue; }
+			if (ids.every(function(id) { return sc.ids.indexOf(id) >= 0; })) { return i; }
+		}
+		return -1;
+	},
+
 	/** A real signature ID ("abc123"), not "???" or empty */
 	hasID: function(sig) {
 		return !!sig && /^[a-z]{3}\d{3}$/i.test(String(sig.signatureID || ""));
@@ -113,7 +130,9 @@ const rageRolling = {
 	 *   staticFirst (Statics get the first letters), naming (Suggest hole names), table (appData.wormholes, optional),
 	 *   skip: sig ids never to fill again (filled once already: an Undo of the fill must stay undone),
 	 *   scanIDs: optional, the signature IDs of the probe scanner paste this save came from (scanIDs()): a slot holder
-	 *     missing from a full scan collapsed, so its slot counts as empty and the fill replaces (deletes) it
+	 *     missing from a full scan collapsed, so its slot counts as empty and the fill replaces (deletes) it,
+	 *   broken: wormhole ids marked broken (brokenHoles.ids, e.g. "Mark broken" in the paste preview): the user kept
+	 *     that hole, so it is never taken for gone
 	 * Returns [{systemID, sig, other, wormhole, type, name, parent, replaces, among, others, slots}] (name null when naming
 	 * is off; parent: the static's side, "initial" or "secondary"; replaces: [{sig, other, wormhole}] holders the fill
 	 * deletes; among: eligible new holes, others: other unknown holes listed in the system, slots: empty slots), at most
@@ -157,7 +176,12 @@ const rageRolling = {
 		// A full scan: it has a sig that was listed before (not a holder, not one this save added), or there is none such
 		const before = inSystem.filter(function(s) { return rageRolling.hasID(s) && allHolders.indexOf(s) < 0 && mine.indexOf(s) < 0; });
 		const full = !!scan && (before.some(inScan) || !before.length);
-		const gone = function(h) { return full && rageRolling.hasID(h) && !inScan(h); };
+		const broken = (a.broken || []).map(String);
+		const gone = function(h) {
+			if (!full || !rageRolling.hasID(h) || inScan(h)) { return false; }
+			const wh = rageRolling.wormholeOf(h.id, wormholes);
+			return !(wh && broken.indexOf(String(wh.id)) >= 0);	// marked broken: kept on purpose
+		};
 
 		const empty = [];
 		slots.forEach(function(slot) {
@@ -319,7 +343,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		let pendingUntil = 0;
 		let savedAt = 0;	// our last save that brought candidates
 		const filled = [];	// sig ids filled in this session: never again (Undo brings them back unnamed and unknown)
-		let pendingScan = null;	// the last probe scanner paste of ours: {systemID, ids, at}, until its save
+		let scans = [];		// our recent probe scanner pastes {systemID, ids, at}, oldest first, until their saves
 		const scanFor = {};		// systemID -> the scan IDs of the save whose candidates wait for their check
 		let checking = false;
 
@@ -427,7 +451,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					signatures: tripwire.client.signatures, wormholes: tripwire.client.wormholes,
 					candidates: candidates.filter(function(c) { return String(c.systemID) === systemID; }),
 					staticFirst: holeNaming.staticFirst(o), naming: holeNaming.enabled(o), skip: filled,
-					scanIDs: scanFor[systemID] || null
+					scanIDs: scanFor[systemID] || null,
+					broken: typeof brokenHoles !== "undefined" ? Object.keys(brokenHoles.ids || {}) : []
 				}));
 			});
 			// Every candidate in the list now was used or is out (see prune); the save below drops the used ones too
@@ -507,12 +532,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			// The save of our last probe scanner paste (plain paste.js, or the paste preview's Apply / auto-save): its new
 			// sigs are in that scan. Its scan tells which old statics collapsed (rageRolling.plan, scanIDs).
 			let scan = null;
-			const ps = pendingScan;
-			if (ps && data.systemID == ps.systemID && Date.now() - ps.at < rageRolling.SCAN_MS &&
-				found.some(function(c) { return c.signatureID && ps.ids.indexOf(String(c.signatureID).toLowerCase()) >= 0; })) {
-				scan = ps.ids;
-				pendingScan = null;
-			}
+			const added = found.filter(function(c) { return c.signatureID; }).map(function(c) { return c.signatureID; });
+			const at = data.systemID !== undefined ? rageRolling.matchScan(scans, data.systemID, added, Date.now()) : -1;
+			if (at >= 0) { scan = scans[at].ids; scans.splice(at, 1); }
 			const wrapped = function(result) {
 				const ret = successCallback ? successCallback.apply(this, arguments) : undefined;
 				try {
@@ -538,9 +560,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			const wrappedPaste = function(paste) {
 				try {
 					if (on() && typeof viewingSystemID !== "undefined") {
-						pendingScan = { systemID: String(viewingSystemID), ids: rageRolling.scanIDs(paste), at: Date.now() };
+						scans.push({ systemID: String(viewingSystemID), ids: rageRolling.scanIDs(paste), at: Date.now() });
+						scans = scans.slice(-rageRolling.MAX_SCANS);
 					}
-				} catch (e) { pendingScan = null; }
+				} catch (e) { /* no scan: the older rules still apply */ }
 				return parsePaste.apply(this, arguments);
 			};
 			Object.keys(parsePaste).forEach(function(k) { wrappedPaste[k] = parsePaste[k]; });

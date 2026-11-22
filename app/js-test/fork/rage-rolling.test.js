@@ -186,6 +186,21 @@ describe('Rage rolling', () => {
 		});
 		it('no new hole in the paste: nothing (the old static is left for the user)', () =>
 			assert.deepEqual(plan(listed(), { candidates: [], scanIDs: ['def789'] }), []));
+		it('a holder marked broken (the paste preview\'s Mark broken) is kept: nothing', () =>
+			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'], broken: ['200'] }), []));
+		it('matchScan: the save finds its own paste, not a later paste the preview refused', () => {
+			const now = 5000000;
+			const scans = [
+				{ systemID: String(HOME), ids: ['def789', 'new111'], at: now - 20000 },	// the open preview's paste
+				{ systemID: String(HOME), ids: ['def789', 'new222'], at: now - 5000 }		// refused: a preview was open
+			];
+			assert.equal(rageRolling.matchScan(scans, HOME, ['NEW111'], now), 0);
+			assert.equal(rageRolling.matchScan(scans, HOME, ['new222'], now), 1);
+			assert.equal(rageRolling.matchScan(scans, HOME, ['new111', 'zzz999'], now), -1, 'a sig not in the scan');
+			assert.equal(rageRolling.matchScan(scans, OTHER, ['new111'], now), -1, 'another system');
+			assert.equal(rageRolling.matchScan(scans, HOME, ['new111'], now + rageRolling.SCAN_MS), -1, 'too old');
+			assert.equal(rageRolling.matchScan(scans, HOME, [], now), -1, 'no new sigs');
+		});
 		it('without a scan (the Sig dialog) the listed static still holds the slot', () =>
 			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }] }), []));
 	});

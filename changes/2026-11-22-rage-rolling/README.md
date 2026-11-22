@@ -49,6 +49,9 @@ off, with "Turn it on". New hint event `rolling.marked` {wormholeID}, emitted fr
   sig that was listed before, or the holders are the only sigs with an ID; holders without an ID never count) empties
   its slot: the fill request also deletes it (as "Click to delete missing sigs" would). The fill and the delete are
   one Undo step.
+  A holder marked broken (`brokenHoles.ids`, e.g. Mark broken in the paste preview) is kept: the user chose to keep it.
+  Recent pastes are kept per paste (`rageRolling.matchScan`: a save takes the newest scan that has all its new sigs),
+  so a paste the preview refuses while one is open never takes the open preview's scan.
 - Candidates: the wormhole sigs one save of ours added (or turned into wormholes), in the order they were sent (= paste
   order); only unnamed, no type on this side (not K162), far side in the list and unknown. They count only at the check
   right after that save, so a hole pasted while the old static was still in the scan is never filled later (it could be
