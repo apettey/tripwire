@@ -3,6 +3,15 @@ const holeNaming = {
 	// system get the name of the hole leading into that system plus one character.
 	// Large holes use letters, small (frigate) holes digits 1-5, medium holes digits 6-9;
 	// the size digit is added only once along a path (see nextName).
+	// Statics first (Settings > Signatures "Statics get the first letters", options.holeNaming.staticFirst, missing = on):
+	// in a system with statics (data order) each static has a reserved character, the first one of its own size pool not
+	// reserved by an earlier static (the pool the hole would use after the path rule: letters for large statics, the first
+	// medium digit 6 for a medium one, the first small digit 1 for a small one). So a C5 with an H296 static keeps A for it,
+	// a C2 with two large statics A and B, a C3 behind hole A keeps AA. The static's hole gets its reserved name while that
+	// is free; every other hole (other types, K162, unknown) skips the reserved characters, so new holes in a single-static
+	// system start at B. A static whose name is taken (a second hole of the same type: we can't tell which one is the real
+	// static, so the first one named keeps it) is named like any other hole. Only when every other character is used are
+	// the reserved ones handed out. See staticSlots / reservation / nextName.
 	LETTERS: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 	SMALL_DIGITS: "12345",
 	MEDIUM_DIGITS: "6789",
@@ -51,8 +60,11 @@ const holeNaming = {
 	/** Next free name below the prefix: prefix + lowest unused character of the size class.
 		The size digit is skipped (letters used instead) when the prefix already marks that size or a smaller one.
 		usedNames are the (full) names of sibling holes; only those whose leading token is exactly
-		prefix + 1 character count. Digit classes fall back to letters; returns null if nothing is free. */
-	nextName: function(prefix, usedNames, sizeClass) {
+		prefix + 1 character count. Digit classes fall back to letters; returns null if nothing is free.
+		reservation (optional, from holeNaming.reservation): {reserved: [characters kept for statics], own: this hole's
+		reserved character or null}. The own character is used while it is free; otherwise the reserved characters are
+		skipped, and only handed out when nothing else is free. */
+	nextName: function(prefix, usedNames, sizeClass, reservation) {
 		if (prefix === null || prefix === undefined) { return null; }
 		prefix = String(prefix).toUpperCase();
 		const used = {};
@@ -62,20 +74,74 @@ const holeNaming = {
 				used[token.charAt(prefix.length)] = true;
 			}
 		});
-		// A size digit is only added when the hole is more restrictive than the path so far: past a small hole
-		// everything is letters, past a medium hole only a small hole gets a digit again (AB6 -> AB6A, AB61).
-		const pathSize = holeNaming.pathSize(prefix);
-		if (sizeClass === "medium" && pathSize !== "large") { sizeClass = "large"; }
-		if (sizeClass === "small" && pathSize === "small") { sizeClass = "large"; }
-		const pools = sizeClass === "small" ? [holeNaming.SMALL_DIGITS, holeNaming.LETTERS] :
-			sizeClass === "medium" ? [holeNaming.MEDIUM_DIGITS, holeNaming.LETTERS] :
-			[holeNaming.LETTERS];
-		for (let p = 0; p < pools.length; p++) {
-			for (let i = 0; i < pools[p].length; i++) {
-				if (!used[pools[p].charAt(i)]) { return prefix + pools[p].charAt(i); }
+		const reserved = {};
+		((reservation && reservation.reserved) || []).forEach(function(ch) { reserved[ch] = true; });
+		const own = reservation && reservation.own ? String(reservation.own) : "";
+		if (own && !used[own]) { return prefix + own; }
+		const pools = holeNaming.pools(holeNaming.effectiveSize(sizeClass, prefix));
+		for (let pass = 0; pass < 2; pass++) {
+			for (let p = 0; p < pools.length; p++) {
+				for (let i = 0; i < pools[p].length; i++) {
+					const ch = pools[p].charAt(i);
+					if (!used[ch] && (pass === 1 || !reserved[ch])) { return prefix + ch; }
+				}
 			}
 		}
 		return null;
+	},
+
+	/** The size class a hole below prefix is named in. A size digit is only added when the hole is more restrictive
+		than the path so far: past a small hole everything is letters, past a medium hole only a small hole gets a digit
+		again (AB6 -> AB6A, AB61). */
+	effectiveSize: function(sizeClass, prefix) {
+		const pathSize = holeNaming.pathSize(prefix);
+		if (sizeClass === "medium" && pathSize !== "large") { return "large"; }
+		if (sizeClass === "small" && pathSize === "small") { return "large"; }
+		return sizeClass === "small" || sizeClass === "medium" ? sizeClass : "large";
+	},
+
+	/** Character pools of a size class, in the order they are tried */
+	pools: function(sizeClass) {
+		return sizeClass === "small" ? [holeNaming.SMALL_DIGITS, holeNaming.LETTERS] :
+			sizeClass === "medium" ? [holeNaming.MEDIUM_DIGITS, holeNaming.LETTERS] :
+			[holeNaming.LETTERS];
+	},
+
+	/** Reserved characters of a system's statics below prefix: [{type, ch}] in the statics' data order. Each static
+		gets the first character of its own pool (after the path rule) that an earlier static didn't reserve. */
+	staticSlots: function(statics, prefix, wormholes) {
+		if (prefix === null || prefix === undefined) { return []; }
+		prefix = String(prefix).toUpperCase();
+		const taken = {};
+		const slots = [];
+		(Array.isArray(statics) ? statics : []).forEach(function(type) {
+			const key = String(type === undefined || type === null ? "" : type).toUpperCase();
+			if (!key) { return; }
+			const pool = holeNaming.pools(holeNaming.effectiveSize(holeNaming.sizeClass(key, wormholes), prefix))[0];
+			for (let i = 0; i < pool.length; i++) {
+				if (!taken[pool.charAt(i)]) {
+					taken[pool.charAt(i)] = true;
+					slots.push({ type: key, ch: pool.charAt(i) });
+					return;
+				}
+			}
+		});
+		return slots;
+	},
+
+	/** The reservation (see nextName) for a hole of this side's type in a system with these statics:
+		{reserved: [characters], own: the hole's reserved character when its type is a static, else null}.
+		thisSideType is the type of this side only (a K162 or unknown side is never a static). */
+	reservation: function(thisSideType, statics, prefix, wormholes) {
+		const slots = holeNaming.staticSlots(statics, prefix, wormholes);
+		const type = String(thisSideType === undefined || thisSideType === null ? "" : thisSideType).toUpperCase();
+		const mine = type && type !== "K162" ? slots.filter(function(s) { return s.type === type; })[0] : null;
+		return { reserved: slots.map(function(s) { return s.ch; }), own: mine ? mine.ch : null };
+	},
+
+	/** Settings > Signatures "Statics get the first letters" (a missing key means on) */
+	staticFirst: function(opts) {
+		return !(opts && opts.holeNaming && opts.holeNaming.staticFirst === false);
 	},
 
 	/** Name prefix for holes leaving a system.
@@ -164,15 +230,17 @@ const holeNaming = {
 		Only names in the scheme are touched: the leading token must be prefix + 1 character. The clashing character is
 		replaced with the lowest free one of the same kind (letter, small digit, medium digit), text after the token is
 		kept ("C - frig" -> "D - frig"). Returns null when there is no clash, the name isn't in the scheme, or nothing is free.
-		@param siblingNames names of the other wormhole sigs in the system */
-	resolveConflict: function(name, prefix, siblingNames) {
+		@param siblingNames names of the other wormhole sigs in the system
+		@param reservation optional (see nextName): the new name skips the statics' reserved characters (a static may take
+			its own) unless nothing else is free */
+	resolveConflict: function(name, prefix, siblingNames, reservation) {
 		if (prefix === null || prefix === undefined) { return null; }
 		prefix = String(prefix).toUpperCase();
 		const token = holeNaming.leadingToken(name);
 		if (token.length !== prefix.length + 1 || token.substring(0, prefix.length) !== prefix) { return null; }
 		const siblings = siblingNames || [];
 		if (!siblings.some(function(n) { return holeNaming.leadingToken(n) === token; })) { return null; }
-		const next = holeNaming.nextName(prefix, siblings.concat([token]), holeNaming.charSize(token.charAt(prefix.length)));
+		const next = holeNaming.nextName(prefix, siblings.concat([token]), holeNaming.charSize(token.charAt(prefix.length)), reservation);
 		if (!next) { return null; }
 		return next + String(name).trim().substring(token.length);
 	},
@@ -182,8 +250,9 @@ const holeNaming = {
 		one gets the next free name. Ids never change, so every client works this out the same way whatever was edited
 		since; each renames only its own and they never pick the same new name. On purpose this is the oldest hole, not the
 		first save: an old hole renamed by edit keeps a name a brand-new hole took in the same moment. Returns [{sig, name}]
-		(empty when there is no clash). */
-	raceRenames: function(signatures, systemID, prefix, token) {
+		(empty when there is no clash). reserved: optional, the statics' reserved characters (staticSlots), skipped by the
+		renames unless nothing else is free. */
+	raceRenames: function(signatures, systemID, prefix, token, reserved) {
 		const all = Object.keys(signatures || {}).map(function(k) { return signatures[k]; }).filter(function(sig) {
 			return sig && sig.type === "wormhole" && sig.systemID == systemID;
 		});
@@ -193,7 +262,8 @@ const holeNaming = {
 		if (group.length < 2) { return renames; }
 		const used = all.map(function(sig) { return sig.name; }).filter(Boolean);
 		group.slice(1).forEach(function(sig) {
-			const name = holeNaming.resolveConflict(sig.name, prefix, used.concat(renames.map(function(r) { return r.name; })));
+			const name = holeNaming.resolveConflict(sig.name, prefix, used.concat(renames.map(function(r) { return r.name; })),
+				{ reserved: reserved || [], own: null });
 			if (name) { renames.push({ sig: sig, name: name }); }
 		});
 		return renames;
@@ -286,11 +356,31 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				tripwire.client.wormholes, tripwire.client.signatures);
 		};
 
+		/** Statics of a system in data order ([] when unknown) */
+		function staticsOf(systemID) {
+			try { return typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : []; } catch (e) { return []; }
+		}
+
+		/** The statics' reservation for a hole of thisSideType leaving systemID (see holeNaming.reservation), or null when
+			"Statics get the first letters" is off (then nothing is reserved, as before) */
+		holeNaming.reservationFor = function(systemID, prefix, thisSideType) {
+			if (typeof options !== "undefined" && !holeNaming.staticFirst(options)) { return null; }
+			return holeNaming.reservation(thisSideType, staticsOf(systemID), prefix);
+		};
+
+		/** The statics' reserved characters below prefix in systemID ([] when the setting is off) */
+		function reservedChars(systemID, prefix) {
+			const r = holeNaming.reservationFor(systemID, prefix, null);
+			return r ? r.reserved : [];
+		}
+
 		holeNaming.suggestForDialog = function() {
 			const systemID = sigDialogVM.viewingSystemID;
 			const prefix = holeNaming.prefixForSystem(systemID);
 			const used = holeNaming.siblingNames(tripwire.client.signatures, systemID, sigDialogVM.sigId);
-			return holeNaming.nextName(prefix, used, holeNaming.sizeClass(effectiveType()));
+			// Only this side's own type makes the hole a static (a K162 here with a static on the far side is not ours)
+			const reservation = prefix === null ? null : holeNaming.reservationFor(systemID, prefix, field("wormholeType").val());
+			return holeNaming.nextName(prefix, used, holeNaming.sizeClass(effectiveType()), reservation);
 		};
 
 		/** Whether this dialog may get a suggestion: Add mode, or editing a sig that has no name yet */
@@ -335,7 +425,17 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			section: "signatures", order: 50, id: "holeNaming-enabled", type: "checkbox", key: "holeNaming",
 			label: "Suggest hole names:", text: "Fill in the Name of new and pasted wormholes (A, AB, AB6 ...)",
 			get: function(o) { return holeNaming.enabled(o); },
-			set: function(o, on) { o.holeNaming = { enabled: on }; }
+			// Keep the sibling keys (staticFirst) of options.holeNaming
+			set: function(o, on) { o.holeNaming = Object.assign({}, o.holeNaming || {}, { enabled: !!on }); }
+		});
+		forkSettings.register({
+			section: "signatures", order: 51, id: "holeNaming-staticFirst", type: "checkbox", key: "holeNaming",
+			label: "Statics get the first letters:",
+			text: "Keep A (and B for a second static) for a system's statics; other holes start after them",
+			hint: "A C5 with an H296 static: the H296 is named A, K162s and other holes B, C ... Deeper too: AA for the static behind hole A.",
+			keywords: ["static", "name", "letter", "order", "hole"],
+			get: function(o) { return holeNaming.staticFirst(o); },
+			set: function(o, on) { o.holeNaming = Object.assign({}, o.holeNaming || {}, { staticFirst: !!on }); }
 		});
 		$(document).on("input", dialogSel + " [name='wormholeName']", function() { userEdited = true; });
 		$(document).on("change input", dialogSel + " [name='wormholeType'], " + dialogSel + " [name='wormholeType2']", autoFill);
@@ -428,8 +528,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function resolveBeforeSave(entry) {
 			const sig = entry.signatures[0];
 			const prefix = holeNaming.prefixForSystem(sig.systemID);
+			const reservation = prefix === null ? null : holeNaming.reservationFor(sig.systemID, prefix, field("wormholeType").val());
 			const name = holeNaming.resolveConflict(sig.name, prefix,
-				holeNaming.siblingNames(tripwire.client.signatures, sig.systemID, sig.id));
+				holeNaming.siblingNames(tripwire.client.signatures, sig.systemID, sig.id), reservation);
 			if (!name) { return null; }
 			const from = String(sig.name).trim();
 			sig.name = name;
@@ -485,7 +586,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				// Not in the list yet, or the list still has the old name (a response without the list): wait, the watch expires anyway
 				if (!own || holeNaming.leadingToken(own.name) !== w.token) { continue; }
 				const prefix = holeNaming.prefixForSystem(w.systemID);
-				const rename = holeNaming.raceRenames(tripwire.client.signatures, w.systemID, prefix, w.token)
+				const rename = holeNaming.raceRenames(tripwire.client.signatures, w.systemID, prefix, w.token,
+					prefix === null ? [] : reservedChars(w.systemID, prefix))
 					.filter(function(r) { return r.sig.id == w.sigID; })[0];
 				if (!rename) { continue; }
 				const wormhole = wormholeOf(w.sigID);
