@@ -342,6 +342,7 @@ const holeRolling = {
 			setBy: eve ? eve.characterName : null, setAt: Math.floor(Date.now() / 1000), note: body.note });
 		const req = holeRolling.post(body);
 		if (req && typeof req.done === "function") { req.done(function() { if (typeof forkUsage !== "undefined") { forkUsage.track("rolling", "marked"); } }); }
+		if (typeof forkHints !== "undefined") { forkHints.emit("rolling.marked", { wormholeID: Number(wormholeID) }); }
 		return req;
 	},
 
