@@ -11,7 +11,9 @@ const holeNaming = {
 	// is free; every other hole (other types, K162, unknown) skips the reserved characters, so new holes in a single-static
 	// system start at B. A static whose name is taken (a second hole of the same type: we can't tell which one is the real
 	// static, so the first one named keeps it) is named like any other hole. Only when every other character is used are
-	// the reserved ones handed out. See staticSlots / reservation / nextName.
+	// the reserved ones handed out. A static that is the hole we came in through (the incoming hole's type on this
+	// system's side is that static) reserves nothing: it already has its name on the way in. See staticSlots /
+	// reservation / incomingType / nextName.
 	LETTERS: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 	SMALL_DIGITS: "12345",
 	MEDIUM_DIGITS: "6789",
@@ -108,15 +110,20 @@ const holeNaming = {
 	},
 
 	/** Reserved characters of a system's statics below prefix: [{type, ch}] in the statics' data order. Each static
-		gets the first character of its own pool (after the path rule) that an earlier static didn't reserve. */
-	staticSlots: function(statics, prefix, wormholes) {
+		gets the first character of its own pool (after the path rule) that an earlier static didn't reserve.
+		incomingType (optional): the type of the incoming hole on this system's side (incomingType()); the first static of
+		that type is the way in, so it reserves nothing. */
+	staticSlots: function(statics, prefix, wormholes, incomingType) {
 		if (prefix === null || prefix === undefined) { return []; }
 		prefix = String(prefix).toUpperCase();
+		let skip = String(incomingType === undefined || incomingType === null ? "" : incomingType).toUpperCase();
+		if (skip === "K162") { skip = ""; }
 		const taken = {};
 		const slots = [];
 		(Array.isArray(statics) ? statics : []).forEach(function(type) {
 			const key = String(type === undefined || type === null ? "" : type).toUpperCase();
 			if (!key) { return; }
+			if (skip && key === skip) { skip = ""; return; }
 			const pool = holeNaming.pools(holeNaming.effectiveSize(holeNaming.sizeClass(key, wormholes), prefix))[0];
 			for (let i = 0; i < pool.length; i++) {
 				if (!taken[pool.charAt(i)]) {
@@ -131,12 +138,46 @@ const holeNaming = {
 
 	/** The reservation (see nextName) for a hole of this side's type in a system with these statics:
 		{reserved: [characters], own: the hole's reserved character when its type is a static, else null}.
-		thisSideType is the type of this side only (a K162 or unknown side is never a static). */
-	reservation: function(thisSideType, statics, prefix, wormholes) {
-		const slots = holeNaming.staticSlots(statics, prefix, wormholes);
+		thisSideType is the type of this side only (a K162 or unknown side is never a static); incomingType: see staticSlots. */
+	reservation: function(thisSideType, statics, prefix, wormholes, incomingType) {
+		const slots = holeNaming.staticSlots(statics, prefix, wormholes, incomingType);
 		const type = String(thisSideType === undefined || thisSideType === null ? "" : thisSideType).toUpperCase();
 		const mine = type && type !== "K162" ? slots.filter(function(s) { return s.type === type; })[0] : null;
 		return { reserved: slots.map(function(s) { return s.ch; }), own: mine ? mine.ch : null };
+	},
+
+	/** The wormhole type on this signature's own side: the type ("H296"), "K162", or "" when unknown. The type is stored
+		once per wormhole, on the `parent` side; the other side is a K162 ("????" on the parent side = K162 there). */
+	sideType: function(sigID, wormhole) {
+		if (!wormhole) { return ""; }
+		const type = String(wormhole.type === undefined || wormhole.type === null ? "" : wormhole.type).toUpperCase();
+		const parentID = wormhole.parent === "initial" ? wormhole.initialID : wormhole.parent === "secondary" ? wormhole.secondaryID : null;
+		if (parentID === null || parentID === undefined) { return ""; }
+		if (parentID == sigID) { return type === "????" ? "" : type; }
+		return type ? "K162" : "";
+	},
+
+	/** Type on this system's side of the hole we came in through (the far side's name token is `prefix`, this side is
+		unnamed or a return bookmark, as incomingFromWormholes), or "" when unknown / none (home: prefix ""). */
+	incomingType: function(systemID, prefix, wormholes, signatures) {
+		const token = String(prefix === undefined || prefix === null ? "" : prefix).toUpperCase();
+		if (!token || !signatures) { return ""; }
+		let found = "";
+		Object.keys(wormholes || {}).some(function(key) {
+			const wormhole = wormholes[key];
+			if (!wormhole) { return false; }
+			const a = signatures[wormhole.initialID], b = signatures[wormhole.secondaryID];
+			let near, far;
+			if (a && a.systemID == systemID) { near = a; far = b; }
+			else if (b && b.systemID == systemID) { near = b; far = a; }
+			else { return false; }
+			if (!far || far.systemID == systemID || holeNaming.leadingToken(far.name) !== token) { return false; }
+			const nearName = String(near.name === undefined || near.name === null ? "" : near.name).trim();
+			if (nearName !== "" && !holeNaming.isReturnBookmark(nearName)) { return false; }
+			found = holeNaming.sideType(near.id, wormhole);
+			return true;
+		});
+		return found;
 	},
 
 	/** Settings > Signatures "Statics get the first letters" (a missing key means on) */
@@ -365,7 +406,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			"Statics get the first letters" is off (then nothing is reserved, as before) */
 		holeNaming.reservationFor = function(systemID, prefix, thisSideType) {
 			if (typeof options !== "undefined" && !holeNaming.staticFirst(options)) { return null; }
-			return holeNaming.reservation(thisSideType, staticsOf(systemID), prefix);
+			let incoming = "";
+			try { incoming = holeNaming.incomingType(systemID, prefix, tripwire.client.wormholes, tripwire.client.signatures); } catch (e) { incoming = ""; }
+			return holeNaming.reservation(thisSideType, staticsOf(systemID), prefix, undefined, incoming);
 		};
 
 		/** The statics' reserved characters below prefix in systemID ([] when the setting is off) */

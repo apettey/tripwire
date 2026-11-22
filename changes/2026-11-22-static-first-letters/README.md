@@ -29,6 +29,9 @@ Tip: none. The change shows in the Name field the user is already looking at whe
 - `holeNaming.staticSlots` / `holeNaming.reservation`: each static (data order) reserves the first character of its own
   size pool after the path rule (letters for large statics, 6 for a medium one, 1 for a small one), not already
   reserved by an earlier static. Applies below any prefix: AA for the static of the C3 behind hole A.
+- A static that is the hole we came in through (the incoming hole's type on this system's side is that static,
+  `holeNaming.incomingType`) reserves nothing: a system reached through its own U210 static via hole B names its
+  other holes from BA, not BB.
 - `holeNaming.nextName(prefix, used, size, reservation)`: a static gets its reserved character while free; everything
   else skips the reserved characters and only falls back to them when nothing else is free. Without a reservation it
   works exactly as before.
