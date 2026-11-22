@@ -66,7 +66,7 @@ outside Docker, in which case replace them with real config files.
 One container runs nginx, php-fpm (listening on `127.0.0.1:9000` only), busybox crond and the
 kill feed worker (see [Kill Reporting](#kill-reporting)) and the Discord notifications worker (see
 [Discord notifications](#discord-notifications)), all under supervisord.
-PHP is the official `php:<version>-fpm-alpine` image with the patch version pinned in `docker/Dockerfile` (8.5.12), so a
+PHP is the official `php:<version>-fpm-alpine` image with the patch version pinned in `docker/Dockerfile` (8.5.13), so a
 cached base layer can't ship an unpatched PHP. Dependabot opens a PR for each new patch release (it only bumps
 `docker/Dockerfile`: update the Discord mock image in `docker-compose.dev.yml` to the same version in that PR). CI's
 "PHP syntax" job reads the version from the Dockerfile, lints with `php:<version>-cli-alpine` and fails when the
