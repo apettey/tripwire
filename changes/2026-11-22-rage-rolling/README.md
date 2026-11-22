@@ -48,8 +48,10 @@ off, with "Turn it on". New hint event `rolling.marked` {wormholeID}, emitted fr
   preview's Apply / auto-save) takes that scan along. A holder whose signature ID is missing from a full scan empties
   its slot (full: every other listed hole and at least half of all other listed sigs are in it, or the holders are the
   only sigs with an ID; holders without an ID never count). Once the fill's update is saved, a second request deletes
-  the old static (as "Click to delete missing sigs" would); both are one Undo step. If that delete fails, the fill
-  keeps its own Undo step and a red toast says to delete the old static by hand.
+  the old static (as "Click to delete missing sigs" would). The fill's undo entry is pushed when the update is saved
+  and the delete's joins its Undo step (undo-history.js group) once that is saved. An old static someone else deleted
+  meanwhile is left out; if the delete fails, the fill keeps its own Undo step and a red toast says to delete the old
+  static by hand.
   A holder marked broken (`brokenHoles.ids`, e.g. Mark broken in the paste preview) or kept in the paste preview
   (unticked or "keep all"; `pastePreview.lastKept`, set at Apply, never sent) is kept: the user chose to keep it. The
   preview's auto-save makes no choice, so it keeps nothing.

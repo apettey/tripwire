@@ -175,7 +175,6 @@ const rageRolling = {
 		const inScan = function(sig) { return scan.indexOf(String(sig.signatureID || "").toLowerCase()) >= 0; };
 		const allHolders = [];
 		slots.forEach(function(slot) { holders(slot).forEach(function(h) { if (allHolders.indexOf(h) < 0) { allHolders.push(h); } }); });
-		// A full scan: it has a sig that was listed before (not a holder, not one this save added), or there is none such
 		// A full scan: every other listed hole (not a holder, not one this save added) is in it, and at least half of all
 		// other listed sigs; or the holders are the only sigs with an ID. A two-row paste of a busy system is not full.
 		const before = inSystem.filter(function(s) { return rageRolling.hasID(s) && allHolders.indexOf(s) < 0 && mine.indexOf(s) < 0; });
@@ -486,18 +485,59 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			} catch (e) { return null; }
 		}
 
-		/** The fill and the removal of the old static it replaced: pushed together, so one Undo step (undo-history.js) */
-		function saveUndo(systemID, items) {
-			const stack = tripwire.signatures.undo[systemID] = tripwire.signatures.undo[systemID] || [];
-			if (items.update.length) { stack.push({ action: "update", signatures: items.update }); }
-			if (items.remove.length) { stack.push({ action: "remove", signatures: items.remove }); }
+		function undoStack(systemID) {
+			return tripwire.signatures.undo[systemID] = tripwire.signatures.undo[systemID] || [];
+		}
+		function undoChanged() {
 			$("#undo").removeClass("disabled");
-			try { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } catch (e) { /* ignore */ }
+			try { if (typeof undoHistory === "undefined") { sessionStorage.setItem("tripwire_undo", JSON.stringify(tripwire.signatures.undo)); } } catch (e) { /* ignore */ }
+		}
+
+		/** The fill's undo entry, pushed as soon as the update is saved. Returns the entries by system. */
+		function pushFillUndo(undo) {
+			const out = {};
+			Object.keys(undo).forEach(function(systemID) {
+				if (!undo[systemID].update.length) { return; }
+				const entry = { action: "update", signatures: undo[systemID].update };
+				undoStack(systemID).push(entry);
+				out[systemID] = entry;
+			});
+			undoChanged();
+			return out;
+		}
+
+		/** The old statics' undo entry, once their delete is saved: in the fill's step (undo-history.js groups entries by
+			meta.group) while the fill is still the newest step; otherwise a step of its own. */
+		function pushRemoveUndo(undo, fillEntries) {
+			Object.keys(undo).forEach(function(systemID) {
+				if (!undo[systemID].remove.length) { return; }
+				const entry = { action: "remove", signatures: undo[systemID].remove };
+				const stack = undoStack(systemID);
+				const fill = fillEntries[systemID];
+				const ui = typeof undoHistory !== "undefined" ? undoHistory.ui : null;
+				const group = fill && fill.meta ? fill.meta.group : undefined;
+				if (ui && group !== undefined && stack[stack.length - 1] === fill && "openGroup" in ui) {
+					const previous = ui.openGroup;
+					ui.openGroup = group;	// annotate() takes the open group: the same step as the fill
+					try { stack.push(entry); } finally { ui.openGroup = previous; }
+				} else {
+					stack.push(entry);
+				}
+			});
+			undoChanged();
+		}
+
+		/** The fills with only the old statics still in the list (someone else may have deleted one meanwhile) */
+		function stillListed(fills) {
+			return fills.map(function(f) {
+				return Object.assign({}, f, { replaces: (f.replaces || []).filter(function(r) {
+					return r && r.sig && tripwire.client && tripwire.client.signatures && !!tripwire.client.signatures[r.sig.id];
+				}) });
+			});
 		}
 
 		function save(fills) {
 			const built = rageRolling.fillPayload(fills, leadsTo);
-			const undo = built.undo;
 			const notes = fills.map(function(f) { return { fill: f, bookmark: bookmarkOf(f, leadsTo(f.type)) }; });
 			// These sigs are used up, whatever the answer (a failed save must not be retried over and over)
 			const usedIDs = fills.map(function(f) { return String(f.sig.id); });
@@ -510,43 +550,49 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			checking = true;
 			let second = false;		// the old statics' delete was sent
 			let finished = false;	// done() ran
+			let fillEntries = {};
 			next.call(tripwire, "refresh", built.payload, function(result) {
 				if (!ok(result)) {
 					Notify.trigger("Rage rolling: couldn't set the new static. Fill it in by hand.", "red", 8000);
 					return;
 				}
-				if (!built.remove) { done(true); return; }
-				// Then the old statics: only once the fill is saved. Both undo entries are pushed together (one Undo step)
-				// once this answer is in; a failed delete keeps the fill's own undo.
+				fillEntries = pushFillUndo(built.undo);
+				if (!built.remove) { done(fills, true); return; }
+				// Then the old statics: only once the fill is saved
 				second = true;
 				const sendRemove = function() {
 					if (tripwire.xhr) { setTimeout(sendRemove, 100); return; }	// the fill's request is still finishing
-					next.call(tripwire, "refresh", built.remove, function(res) { done(ok(res)); },
-						function() { checking = false; if (!finished) { done(false); } });	// no answer at all: as failed
+					const live = stillListed(fills);
+					const rb = rageRolling.fillPayload(live, leadsTo);
+					if (!rb.remove) { checking = false; done(live, true); return; }	// already gone: nothing to delete
+					next.call(tripwire, "refresh", rb.remove, function(res) {
+						if (ok(res)) { pushRemoveUndo(rb.undo, fillEntries); }
+						done(live, ok(res));
+					}, function() { checking = false; if (!finished) { done(live, false); } });	// no answer at all: as failed
 				};
 				setTimeout(sendRemove, 0);
 			}, function() { if (!second) { checking = false; } });
 
-			function done(removed) {
+			function done(live, removed) {
 				finished = true;
-				Object.keys(undo).forEach(function(systemID) {
-					saveUndo(systemID, removed ? undo[systemID] : { update: undo[systemID].update, remove: [] });
-				});
+				let shown = live;
 				if (!removed) {
+					shown = stillListed(live);	// one deleted meanwhile is no failure
 					const old = [];
-					fills.forEach(function(f) { (f.replaces || []).forEach(function(r) { old.push(rageRolling.idText(r.sig.signatureID)); }); });
-					Notify.trigger(_.escape("Rage rolling: couldn't delete the old static " + old.join(", ") + ". Delete it by hand."), "red", 10000);
-					notes.forEach(function(n) { n.fill = Object.assign({}, n.fill, { replaces: [] }); });
+					shown.forEach(function(f) { f.replaces.forEach(function(r) { old.push(rageRolling.idText(r.sig.signatureID)); }); });
+					if (old.length) { Notify.trigger(_.escape("Rage rolling: couldn't delete the old static " + old.join(", ") + ". Delete it by hand."), "red", 10000); }
+					shown = shown.map(function(f) { return Object.assign({}, f, { replaces: [] }); });
 				}
-				notes.forEach(function(n) {
+				notes.forEach(function(n, i) {
+					n.fill = Object.assign({}, n.fill, { replaces: shown[i] ? shown[i].replaces : [] });
 					if (typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "filled"); }
 					const text = rageRolling.message(n.fill, null);
 					const colour = rageRolling.ambiguous(n.fill) ? "yellow" : "green";
 					if (!n.bookmark) { Notify.trigger(_.escape(text), colour, 10000); return; }
 					// Not inside a click or key press: the copy may be refused, then the bookmark is in the toast to copy by hand
 					const copier = typeof holeNaming.copyText === "function" ? holeNaming.copyText(n.bookmark) : Promise.resolve(false);
-					copier.then(function(ok) {
-						Notify.trigger(_.escape(ok ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), colour, 15000);
+					copier.then(function(copied) {
+						Notify.trigger(_.escape(copied ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), colour, 15000);
 					}, function() {
 						Notify.trigger(_.escape(rageRolling.message(n.fill, n.bookmark)), colour, 15000);
 					});
