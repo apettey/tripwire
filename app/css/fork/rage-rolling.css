@@ -1,0 +1,23 @@
+/* Rage rolling switch in the Signatures panel's header (fork-owned, see app/js/fork/rage-rolling.js) */
+#signaturesWidget > .controls .rage-rolling-chip {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border: 1px solid #555;
+	border-radius: 8px;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: bold;
+	color: #999;
+	cursor: pointer;
+	vertical-align: middle;
+	user-select: none;
+}
+#signaturesWidget > .controls .rage-rolling-chip:hover,
+#signaturesWidget > .controls .rage-rolling-chip:focus { color: #ddd; border-color: #888; outline: none; }
+#signaturesWidget > .controls .rage-rolling-chip.on {
+	color: #1a1a1a;
+	background: #e07b1a;
+	border-color: #e07b1a;
+}
+#signaturesWidget > .controls .rage-rolling-chip.on:hover { background: #f0902e; border-color: #f0902e; }

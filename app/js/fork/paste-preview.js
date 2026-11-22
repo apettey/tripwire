@@ -195,6 +195,16 @@ const pastePreview = {
 		return out;
 	},
 
+	/** Sig ids of the Gone rows the user chose to keep (unticked, or "keep all"). The countdown's auto-save made no
+		choice, so it keeps nothing on purpose: []. Read by rage-rolling.js (pastePreview.lastKept), never sent. */
+	keptIDs: function(groups, auto) {
+		if (auto) { return []; }
+		return ((groups && groups.gone) || []).filter(function(r) { return !r.on && r.sigId !== undefined && r.sigId !== null; })
+			.map(function(r) { return String(r.sigId); });
+	},
+
+	lastKept: null,	// {systemID, ids, at} of the last Apply (keptIDs), for rage-rolling.js
+
 	/** The groups with every Gone row unticked (what the countdown saves: nothing deleted or marked broken) */
 	keepGone: function(groups) {
 		const out = Object.assign({}, groups);
@@ -619,6 +629,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			}
 			const payload = plan.payload;
 			payload.systemID = s.systemID;
+			try { pp.lastKept = { systemID: String(s.systemID), ids: pp.keptIDs(s.groups, s.auto), at: Date.now() }; } catch (e) { pp.lastKept = null; }
 			const success = function(data) {
 				let entry = null;
 				try { entry = pushUndo(s.systemID, data, plan); } catch (e) { console.warn("paste-preview: undo", e); }
