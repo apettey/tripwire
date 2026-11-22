@@ -15,7 +15,7 @@ const maskDefaults = {
 	// MASKADMIN_DEFAULTS_ALLOW (maskadmin/maskadmin.inc.php); app/js-test/fork/mask-defaults.test.js checks both against
 	// the keys the forkSettings.register() calls use, so a new setting with a key has to be added to both.
 	ALLOWED: ["autoMass", "chainAlerts", "chainKillFeed", "commandPalette", "desktopNotify", "environmentTags", "favouritesCompact", "favouritesRouteStrip", "fightNow", "fleetMass", "highsecRegion", "holeNaming", "homeRegion", "intelScans", "jumpReturn", "jumpSigPrompt",
-		"killReporting", "killTags", "lifeStates", "lootBuyers", "mapLegend", "mapTargets", "pastePreview", "preserveMass", "regionMap", "returnSigPaste", "rollPlan", "rolling", "rollingCalc", "routeHoleFilters", "sigAge", "sigInline", "sigAnomalies", "sigExpiry", "siteValues", "campaignTags", "sizeTags", "skyhooksPanel", "smartNotes",
+		"killReporting", "killTags", "lifeStates", "lootBuyers", "mapLegend", "mapTargets", "pastePreview", "preserveMass", "rageRolling", "regionMap", "returnSigPaste", "rollPlan", "rolling", "rollingCalc", "routeHoleFilters", "sigAge", "sigInline", "sigAnomalies", "sigExpiry", "siteValues", "campaignTags", "sizeTags", "skyhooksPanel", "smartNotes",
 		"soundMute", "stagingScan", "structures", "systemKillFeed", "systemResidents", "systemThreat", "theraRoute", "watchlist"],
 
 	defaults: {},	// the active mask's defaults {optionsKey: value}

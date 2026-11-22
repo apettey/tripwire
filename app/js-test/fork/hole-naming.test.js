@@ -297,4 +297,97 @@ describe('Hole naming', () => {
 		it('Far side is a named hole: this is the way back', () => assert.equal(holeNaming.suggestOnEdit('', 'A - frig'), false));
 		it('Far side is only a return bookmark', () => assert.equal(holeNaming.suggestOnEdit('', '!B'), true));
 	});
+
+	describe('statics get the first letters', () => {
+		// Wormhole sizes for the tests (jump mass): large, medium (C1-style 62kt) and small (frigate 5kt)
+		const WH = { H296: { jump: 2000000000 }, B274: { jump: 375000000 }, O477: { jump: 375000000 },
+			U210: { jump: 375000000 }, M1: { jump: 62000000 }, S1: { jump: 5000000 } };
+		const name = (prefix, used, type, statics, size) =>
+			holeNaming.nextName(prefix, used, size || holeNaming.sizeClass(type, WH), holeNaming.reservation(type, statics, prefix, WH));
+
+		it('Single static: the static gets A', () => assert.equal(name('', [], 'H296', ['H296']), 'A'));
+		it('Single static: a K162 skips A', () => assert.equal(name('', [], 'K162', ['H296']), 'B'));
+		it('Single static: an unknown hole skips A', () => assert.deepEqual([name('', [], '????', ['H296']), name('', [], '', ['H296']), name('', [], undefined, ['H296'])], ['B', 'B', 'B']));
+		it('Single static: other types skip A', () => assert.equal(name('', ['B'], 'U210', ['H296']), 'C'));
+		it('Static named after other holes still gets A', () => assert.equal(name('', ['B', 'C'], 'H296', ['H296']), 'A'));
+		it('Two statics: A and B in data order', () => assert.deepEqual([name('', [], 'B274', ['B274', 'O477']), name('', [], 'O477', ['B274', 'O477'])], ['A', 'B']));
+		it('Two statics: other holes start at C', () => assert.equal(name('', ['A'], 'K162', ['B274', 'O477']), 'C'));
+		it('Duplicate static type: the second is named like any other hole', () => assert.equal(name('', ['A'], 'H296', ['H296']), 'B'));
+		it('Duplicate static type with more holes: next free after the reserved range', () => assert.equal(name('', ['A', 'B', 'D'], 'H296', ['H296']), 'C'));
+		it('Reserved letter taken by an old non-static: the static gets the next free other name', () => assert.equal(name('', ['A', 'B'], 'H296', ['H296']), 'C'));
+		it('Pool exhausted: a non-static falls back to the reserved letter', () => assert.equal(name('', holeNaming.LETTERS.substring(1).split(''), 'K162', ['H296']), 'A'));
+		it('Pool exhausted: fallback to the second reserved letter when the first is taken', () => assert.equal(name('', ['A'].concat(holeNaming.LETTERS.substring(2).split('')), 'K162', ['B274', 'O477']), 'B'));
+		it('Everything used gives null', () => assert.equal(name('', holeNaming.LETTERS.split(''), 'K162', ['H296']), null));
+		it('Deeper prefix: the static behind hole A gets AA', () => assert.equal(name('A', [], 'U210', ['U210']), 'AA'));
+		it('Deeper prefix: other holes there start at AB', () => assert.equal(name('A', ['AA'], 'K162', ['U210']), 'AB'));
+		it('Medium static reserves the first medium digit, not a letter', () => {
+			assert.equal(name('', [], 'M1', ['M1']), '6');
+			assert.equal(name('', [], 'O477', ['M1']), 'A');
+			assert.equal(name('', [], 'K162', ['M1'], 'medium'), '7');
+		});
+		it('Small static reserves the first small digit', () => {
+			assert.equal(name('', [], 'S1', ['S1', 'H296']), '1');
+			assert.equal(name('', [], 'H296', ['S1', 'H296']), 'A');
+			assert.equal(name('', [], 'K162', ['S1', 'H296'], 'small'), '2');
+		});
+		it('Medium static past a medium hole reserves a letter (path rule)', () => assert.deepEqual(holeNaming.staticSlots(['M1'], 'A6', WH), [{ type: 'M1', ch: 'A' }]));
+		it('Two statics of one size pool get consecutive characters', () => assert.deepEqual(holeNaming.staticSlots(['M1', 'H296', 'M2'], '', Object.assign({ M2: { jump: 62000000 } }, WH)),
+			[{ type: 'M1', ch: '6' }, { type: 'H296', ch: 'A' }, { type: 'M2', ch: '7' }]));
+		it('A static we came in through reserves nothing: X reached via "B" on its U210 static, holes start at BA', () => {
+			// Home sig 1 "B" -> X (31000880) sig 2 (unnamed); the hole's type U210 is on X's side (parent secondary)
+			const sigs = { 1: { id: 1, systemID: 31001880, name: 'B' }, 2: { id: 2, systemID: 31000880, name: '' } };
+			const holes = { 9: { id: 9, initialID: 1, secondaryID: 2, type: 'U210', parent: 'secondary' } };
+			const incoming = holeNaming.incomingType(31000880, 'B', holes, sigs);
+			assert.equal(incoming, 'U210');
+			assert.equal(holeNaming.nextName('B', [], 'large', holeNaming.reservation('K162', ['U210'], 'B', WH, incoming)), 'BA');
+			assert.equal(holeNaming.nextName('B', [], 'large', holeNaming.reservation('K162', ['U210'], 'B', WH, '')), 'BB', 'without the incoming type');
+		});
+		it('incomingType: K162 on our side (we came in on their static) keeps our static reserved', () => {
+			const sigs = { 1: { id: 1, systemID: 31001880, name: 'B' }, 2: { id: 2, systemID: 31000880, name: '!B' } };
+			const holes = { 9: { id: 9, initialID: 1, secondaryID: 2, type: 'H296', parent: 'initial' } };
+			const incoming = holeNaming.incomingType(31000880, 'B', holes, sigs);
+			assert.equal(incoming, 'K162');
+			assert.deepEqual(holeNaming.staticSlots(['U210'], 'B', WH, incoming), [{ type: 'U210', ch: 'A' }]);
+		});
+		it('incomingType: none at home, or no matching hole', () => {
+			assert.equal(holeNaming.incomingType(31001880, '', {}, {}), '');
+			assert.equal(holeNaming.incomingType(31000880, 'C', { 9: { initialID: 1, secondaryID: 2, type: 'U210', parent: 'secondary' } },
+				{ 1: { id: 1, systemID: 31001880, name: 'B' }, 2: { id: 2, systemID: 31000880, name: '' } }), '');
+		});
+		it('Two statics, came in through the first: the second takes the first letter', () =>
+			assert.deepEqual(holeNaming.staticSlots(['B274', 'O477'], 'A', WH, 'B274'), [{ type: 'O477', ch: 'A' }]));
+		it('sideType', () => {
+			const wh = { initialID: 1, secondaryID: 2, type: 'H296', parent: 'initial' };
+			assert.deepEqual([holeNaming.sideType(1, wh), holeNaming.sideType(2, wh)], ['H296', 'K162']);
+			assert.equal(holeNaming.sideType(1, { initialID: 1, secondaryID: 2, type: '????', parent: 'secondary' }), 'K162');
+			assert.equal(holeNaming.sideType(1, { initialID: 1, secondaryID: 2, type: null, parent: 'initial' }), '');
+			assert.equal(holeNaming.sideType(1, null), '');
+		});
+		it('A K162 is never a static', () => assert.deepEqual(holeNaming.reservation('K162', ['K162'], '', WH).own, null));
+		it('No statics (k-space): nothing reserved', () => assert.deepEqual(holeNaming.reservation('H296', [], '', WH), { reserved: [], own: null }));
+		it('Null prefix: nothing reserved', () => assert.deepEqual(holeNaming.staticSlots(['H296'], null, WH), []));
+		it('Toggle off (no reservation) = the old behaviour', () => {
+			assert.equal(holeNaming.nextName('', [], 'large', null), 'A');
+			assert.equal(holeNaming.nextName('', [], 'large'), 'A');
+		});
+		it('staticFirst: missing means on', () => {
+			assert.equal(holeNaming.staticFirst(undefined), true);
+			assert.equal(holeNaming.staticFirst({ holeNaming: { enabled: true } }), true);
+			assert.equal(holeNaming.staticFirst({ holeNaming: { staticFirst: false } }), false);
+		});
+		it('resolveConflict skips the reserved letter for a non-static', () =>
+			assert.equal(holeNaming.resolveConflict('B', '', ['B'], holeNaming.reservation('K162', ['H296'], '', WH)), 'C'));
+		it('resolveConflict gives a static its free reserved letter', () =>
+			assert.equal(holeNaming.resolveConflict('B', '', ['B'], holeNaming.reservation('H296', ['H296'], '', WH)), 'A'));
+		it('resolveConflict falls back to the reserved letter when nothing else is free', () =>
+			assert.equal(holeNaming.resolveConflict('B', '', holeNaming.LETTERS.substring(1).split(''), { reserved: ['A'], own: null }), 'A'));
+		it('raceRenames: the newer clashing hole skips the reserved letter', () => {
+			const sigs = {
+				1: { id: 1, systemID: 5, type: 'wormhole', name: 'B' },
+				2: { id: 2, systemID: 5, type: 'wormhole', name: 'B' }
+			};
+			assert.deepEqual(holeNaming.raceRenames(sigs, 5, '', 'B', ['A']).map(r => [r.sig.id, r.name]), [[2, 'C']]);
+			assert.deepEqual(holeNaming.raceRenames(sigs, 5, '', 'B').map(r => [r.sig.id, r.name]), [[2, 'A']], 'without reservation as before');
+		});
+	});
 });

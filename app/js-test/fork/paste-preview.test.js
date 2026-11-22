@@ -250,4 +250,10 @@ describe('pastePreview: text', () => {
 		assert.strictEqual(pastePreview.typeFrom(w, 2), 'K162');
 		assert.strictEqual(pastePreview.typeFrom(Object.assign({}, w, { type: '????' }), 2), '????');
 	});
+	describe('keptIDs (read by rage rolling)', () => {
+		const groups = { gone: [{ sigId: 5, on: false }, { sigId: 6, on: true }, { sigId: 7, on: false }] };
+		it('the gone rows the user unticked', () => assert.deepEqual(pastePreview.keptIDs(groups, false), ['5', '7']));
+		it('the auto-save made no choice: nothing kept', () => assert.deepEqual(pastePreview.keptIDs(pastePreview.keepGone(groups), true), []));
+		it('no groups', () => assert.deepEqual(pastePreview.keptIDs(undefined, false), []));
+	});
 });
