@@ -1,18 +1,21 @@
 const rageRolling = {
 	// Fork-owned: "Rage rolling mode". While a group rolls its home static over and over, every roll leaves a new
 	// wormhole signature to scan and fill in. With the mode on, Tripwire takes the new hole for the new static:
-	// after this client's own save in a home system (a probe scanner paste, a paste preview's Apply, the Sig dialog,
-	// deleting the old static), each static slot that is empty gets the first new unknown wormhole of this client's
-	// recent saves there: its type is set to the static (so the far side's class is known) and it is named with the
-	// static's letter (Statics get the first letters, hole-naming.js; the name only while "Suggest hole names" is on).
+	// after this client's own save in a home system (a probe scanner paste, a paste preview's Apply, the Sig dialog),
+	// each static slot that is empty gets the first new unknown wormhole of that same save: its type is set to the
+	// static (so the far side's class is known) and it is named with the static's letter (Statics get the first letters,
+	// hole-naming.js; the name only while "Suggest hole names" is on).
 	//  - Home system: the root of one of the user's chain tabs, with at least one static (sigQuickPicks.staticsFor).
-	//  - A static slot is empty when no wormhole sig in the system has the static's type on its own side and no sig
-	//    holds the static's reserved name (A for the first static; with "Statics get the first letters" off only the
-	//    type counts). So nothing happens while the old static is still listed: delete it (the paste preview's Gone
-	//    group, "Click to delete missing sigs" or Delete) and the new hole is filled in then.
-	//  - Candidates: wormhole sigs this client's saves added or turned into wormholes in the last CANDIDATE_MS, in the
-	//    order they were sent (= paste order); only unnamed ones with no type on this side (not K162) and a far side
-	//    that is still unknown. The first candidate fills the first empty slot, the next one the second, and so on.
+	//  - A static slot is empty when no wormhole sig in the system has the static's type on its own side and no sig with
+	//    an unknown type (or the static's type) holds the static's reserved name (A for the first static; with "Statics
+	//    get the first letters" off only the type counts). A K162 or another known type named A (old data) doesn't hold it.
+	//  - Candidates: the wormhole sigs a save of ours added or turned into wormholes, in the order they were sent (= paste
+	//    order); only unnamed ones with no type on this side (not K162) and a far side that is still unknown. A candidate
+	//    counts only at the check right after its own save: when the slot was already empty, or that same save emptied it
+	//    (the paste preview's Apply deletes the old static and adds the new hole in one request). A hole pasted while the
+	//    old static was still listed is never filled later (it could be any K162 that came in meanwhile). The first
+	//    candidate fills the first empty slot, the next one the second; with more candidates than empty slots the toast
+	//    says it picked by paste order.
 	//  - Only the client that saved acts (its own candidates), so two clients never fight; the fill is one update request
 	//    (an Undo step too) and a toast with the hole's bookmark text.
 	// The mode is per user and off by default (it guesses): the "Rage roll" chip in the Signatures panel's header (shown
@@ -22,8 +25,8 @@ const rageRolling = {
 	// Keep `const rageRolling` on the first line: the test helper strips it to define a global.
 
 	MODE_MS: 3 * 3600000,		// the mode switches itself off after 3 hours
-	CANDIDATE_MS: 15 * 60000,	// a new hole of ours stays a candidate this long
-	PENDING_MS: 15000,			// after our save, check again when the next list arrives (a save whose answer had no list)
+	CANDIDATE_MS: 60000,		// safety: a candidate never outlives this (it is used or dropped at the first check)
+	PENDING_MS: 15000,			// a candidate not in the list yet (an answer without the list) waits this long for it
 	// Wait this long after our save before the fill: the server keeps modifiedTime to the second, and an edit in the same
 	// second as the paste's add is never redrawn in the signature list (tripwire/parse.js compares modifiedTime)
 	SETTLE_MS: 1200,
@@ -70,14 +73,9 @@ const rageRolling = {
 		return null;
 	},
 
-	/** The wormhole type on this signature's own side: the type ("H296"), "K162", or "" when unknown */
+	/** The wormhole type on this signature's own side: the type ("H296"), "K162", or "" when unknown (holeNaming.sideType) */
 	sideType: function(sigID, wormhole) {
-		if (!wormhole) { return ""; }
-		const type = String(wormhole.type === undefined || wormhole.type === null ? "" : wormhole.type).toUpperCase();
-		const parentID = wormhole.parent === "initial" ? wormhole.initialID : wormhole.parent === "secondary" ? wormhole.secondaryID : null;
-		if (parentID === null || parentID === undefined) { return ""; }
-		if (parentID == sigID) { return type === "????" ? "" : type; }
-		return type ? "K162" : "";	// the type (or "????" for "K162 here") is on the far side
+		return holeNaming.sideType(sigID, wormhole);
 	},
 
 	/** The far side's system is still unknown (a pasted hole has none) */
@@ -91,8 +89,9 @@ const rageRolling = {
 	 *   candidates: [{id} | {signatureID}] in the order they were saved,
 	 *   staticFirst (Statics get the first letters), naming (Suggest hole names), table (appData.wormholes, optional),
 	 *   skip: sig ids never to fill again (filled once already: an Undo of the fill must stay undone)
-	 * Returns [{sig, other, wormhole, type, name, parent}] (name null when naming is off; parent: the static's side,
-	 * "initial" or "secondary"), at most one per empty static slot.
+	 * Returns [{systemID, sig, other, wormhole, type, name, parent, among, slots}] (name null when naming is off; parent:
+	 * the static's side, "initial" or "secondary"; among: how many new holes were eligible, slots: how many slots were
+	 * empty), at most one per empty static slot.
 	 */
 	plan: function(args) {
 		const a = args || {};
@@ -107,7 +106,9 @@ const rageRolling = {
 
 		const empty = slots.filter(function(slot) {
 			return !local.some(function(s) {
-				return typeOf[s.id] === slot.type || (a.staticFirst && holeNaming.leadingToken(s.name) === slot.ch);
+				if (typeOf[s.id] === slot.type) { return true; }
+				// The reserved name holds the slot only on a hole that may be the static (unknown type, or that type)
+				return a.staticFirst && holeNaming.leadingToken(s.name) === slot.ch && typeOf[s.id] === "";
 			});
 		});
 		if (!empty.length) { return []; }
@@ -128,7 +129,8 @@ const rageRolling = {
 			if (!wormhole) { return; }
 			const otherID = wormhole.initialID == sig.id ? wormhole.secondaryID : wormhole.initialID;
 			const other = signatures[otherID] || null;
-			if (!rageRolling.farUnknown(other) || (other && holeNaming.leadingToken(other.name))) { return; }
+			if (!other) { return; }	// no far side in the list: nothing to update (and nothing to undo)
+			if (!rageRolling.farUnknown(other) || holeNaming.leadingToken(other.name)) { return; }
 			picks.push({ sig: sig, other: other, wormhole: wormhole });
 		});
 
@@ -144,8 +146,8 @@ const rageRolling = {
 					a.staticFirst ? { reserved: reserved, own: slot.ch } : null);
 				if (name) { used.push(name); }
 			}
-			fills.push({ sig: pick.sig, other: pick.other, wormhole: pick.wormhole, type: slot.type, name: name,
-				parent: pick.wormhole.initialID == pick.sig.id ? "initial" : "secondary" });
+			fills.push({ systemID: a.systemID, sig: pick.sig, other: pick.other, wormhole: pick.wormhole, type: slot.type, name: name,
+				parent: pick.wormhole.initialID == pick.sig.id ? "initial" : "secondary", among: picks.length, slots: empty.length });
 		});
 		return fills;
 	},
@@ -167,10 +169,43 @@ const rageRolling = {
 		return out;
 	},
 
-	/** Whether a save removes something (the old static may be gone now) */
-	removes: function(data) {
-		const r = data && data.signatures && data.signatures.remove;
-		return Array.isArray(r) ? r.length > 0 : !!r;
+	/** Whether a candidate's sig is in the list yet (in its system, by id or signature ID) */
+	resolved: function(c, signatures) {
+		const key = c && c.signatureID ? String(c.signatureID).toUpperCase() : null;
+		return Object.keys(signatures || {}).some(function(k) {
+			const s = signatures[k];
+			if (!s || (c.systemID !== undefined && c.systemID !== null && s.systemID != c.systemID)) { return false; }
+			return (c.id !== undefined && c.id !== null && s.id == c.id) || (key && String(s.signatureID || "").toUpperCase() === key);
+		});
+	},
+
+	/** The candidates left after a check: one that is in the list was used or is out (its slot was full: it must not
+		be filled when the slot empties later). One whose sig isn't in the list yet (the save's answer came without the
+		list) waits for the list until pendingUntil. */
+	prune: function(candidates, signatures, now, pendingUntil) {
+		return (candidates || []).filter(function(c) {
+			return now < pendingUntil && now - c.at < rageRolling.CANDIDATE_MS && !rageRolling.resolved(c, signatures);
+		});
+	},
+
+	/** The update request for the fills (as the Sig dialog's update: wormhole type and parent, this side's name, the far
+		side's class) and the undo items per system ({wormhole, signatures: [this side, far side]} as they were).
+		leadsTo(type): the far side's system for a type (wormholeAnalysis.targetSystemID), or null. */
+	fillPayload: function(fills, leadsTo) {
+		const copy = function(v) { return v ? JSON.parse(JSON.stringify(v)) : v; };
+		const entries = [];
+		const undo = {};
+		(fills || []).forEach(function(f) {
+			const thisSide = { id: f.sig.id };
+			if (f.name) { thisSide.name = f.name; }
+			const farSide = { id: f.other.id };
+			const target = typeof leadsTo === "function" ? leadsTo(f.type) : null;
+			if (target !== null && target !== undefined) { farSide.systemID = target; }
+			entries.push({ wormhole: { id: f.wormhole.id, type: f.type, parent: f.parent, life: f.wormhole.life || "stable", mass: f.wormhole.mass || "stable" },
+				signatures: [thisSide, farSide] });
+			(undo[f.systemID] = undo[f.systemID] || []).push({ wormhole: copy(f.wormhole), signatures: [copy(f.sig), copy(f.other)] });
+		});
+		return { payload: { signatures: { update: entries } }, undo: undo };
 	},
 
 	/** "QRS456" -> "QRS-456" */
@@ -181,8 +216,10 @@ const rageRolling = {
 
 	/** Toast text for one fill (plain text: escape it before showing) */
 	message: function(fill, bookmark) {
+		const among = Number(fill.among) || 0, slots = Number(fill.slots) || 1;
+		const guess = among > slots ? " (" + among + " new holes: " + (slots > 1 ? "picked in paste order, check them" : "picked the first, check it") + ")" : "";
 		return "Rage rolling: " + rageRolling.idText(fill.sig.signatureID) + " set as new static " + fill.type +
-			(fill.name ? " (" + fill.name + ")" : "") + (bookmark ? ". Bookmark: " + bookmark : "");
+			(fill.name ? " (" + fill.name + ")" : "") + guess + (bookmark ? ". Bookmark: " + bookmark : "");
 	}
 };
 
@@ -192,7 +229,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		let candidates = [];	// {systemID, id | signatureID, at}
 		let pendingUntil = 0;
-		let savedAt = 0;	// our last save that brought candidates or removed something
+		let savedAt = 0;	// our last save that brought candidates
 		const filled = [];	// sig ids filled in this session: never again (Undo brings them back unnamed and unknown)
 		let checking = false;
 
@@ -300,8 +337,10 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					signatures: tripwire.client.signatures, wormholes: tripwire.client.wormholes,
 					candidates: candidates.filter(function(c) { return String(c.systemID) === systemID; }),
 					staticFirst: holeNaming.staticFirst(o), naming: holeNaming.enabled(o), skip: filled
-				}).map(function(f) { f.systemID = systemID; return f; }));
+				}));
 			});
+			// Every candidate in the list now was used or is out (see prune); the save below drops the used ones too
+			candidates = rageRolling.prune(candidates, tripwire.client.signatures, now, pendingUntil);
 			if (fills.length) { save(fills); }
 		}
 
@@ -330,21 +369,9 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		}
 
 		function save(fills) {
-			const copy = function(v) { return v ? JSON.parse(JSON.stringify(v)) : v; };
-			const entries = [];
-			const undo = {};
-			const notes = [];
-			fills.forEach(function(f) {
-				const thisSide = { id: f.sig.id };
-				if (f.name) { thisSide.name = f.name; }
-				const farSide = { id: f.other ? f.other.id : null };
-				const target = leadsTo(f.type);
-				if (target !== null && target !== undefined && f.other) { farSide.systemID = target; }
-				entries.push({ wormhole: { id: f.wormhole.id, type: f.type, parent: f.parent, life: f.wormhole.life || "stable", mass: f.wormhole.mass || "stable" },
-					signatures: [thisSide, farSide] });
-				(undo[f.systemID] = undo[f.systemID] || []).push({ wormhole: copy(f.wormhole), signatures: [copy(f.sig), copy(f.other)] });
-				notes.push({ fill: f, bookmark: bookmarkOf(f, target) });
-			});
+			const built = rageRolling.fillPayload(fills, leadsTo);
+			const undo = built.undo;
+			const notes = fills.map(function(f) { return { fill: f, bookmark: bookmarkOf(f, leadsTo(f.type)) }; });
 			// These sigs are used up, whatever the answer (a failed save must not be retried over and over)
 			const usedIDs = fills.map(function(f) { return String(f.sig.id); });
 			usedIDs.forEach(function(id) { filled.push(id); });
@@ -353,7 +380,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				return !(c.id !== undefined && usedIDs.indexOf(String(c.id)) >= 0) && !(c.signatureID && usedKeys.indexOf(String(c.signatureID).toUpperCase()) >= 0);
 			});
 			checking = true;
-			next.call(tripwire, "refresh", { signatures: { update: entries } }, function(result) {
+			next.call(tripwire, "refresh", built.payload, function(result) {
 				checking = false;
 				if (!(result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true)) {
 					Notify.trigger("Rage rolling: couldn't set the new static. Fill it in by hand.", "red", 8000);
@@ -363,11 +390,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 				notes.forEach(function(n) {
 					if (typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "filled"); }
 					const text = rageRolling.message(n.fill, null);
-					if (!n.bookmark) { Notify.trigger(_.escape(text), "green", 10000); return; }
+					if (!n.bookmark) { Notify.trigger(_.escape(text), n.fill.among > n.fill.slots ? "yellow" : "green", 10000); return; }
 					// Not inside a click or key press: the copy may be refused, then the bookmark is in the toast to copy by hand
 					const copier = typeof holeNaming.copyText === "function" ? holeNaming.copyText(n.bookmark) : Promise.resolve(false);
 					copier.then(function(ok) {
-						Notify.trigger(_.escape(ok ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), "green", 15000);
+						Notify.trigger(_.escape(ok ? text + ". Copied " + n.bookmark : rageRolling.message(n.fill, n.bookmark)), n.fill.among > n.fill.slots ? "yellow" : "green", 15000);
 					}, function() {
 						Notify.trigger(_.escape(rageRolling.message(n.fill, n.bookmark)), "green", 15000);
 					});
@@ -378,9 +405,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		tripwire.refresh = function(mode, data, successCallback, alwaysCallback) {
 			if (!data || !data.signatures || !on()) { return next.apply(this, arguments); }
 			let found = [];
-			let removing = false;
-			try { found = rageRolling.payloadCandidates(data); removing = rageRolling.removes(data); } catch (e) { found = []; }
-			if (!found.length && !removing) { return next.apply(this, arguments); }
+			try { found = rageRolling.payloadCandidates(data); } catch (e) { found = []; }
+			if (!found.length) { return next.apply(this, arguments); }
 			const wrapped = function(result) {
 				const ret = successCallback ? successCallback.apply(this, arguments) : undefined;
 				try {

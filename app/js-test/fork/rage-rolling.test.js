@@ -122,6 +122,24 @@ describe('Rage rolling', () => {
 			const p = pasted(10, 100, 'qrs456');
 			assert.deepEqual(plan(world(p.sigs, [p.hole]), { candidates: [{ signatureID: 'qrs456' }], skip: ['10'] }), []);
 		});
+		it('a K162 or another known type named A (old data) does not hold the slot', () => {
+			const p = pasted(10, 100, 'qrs456');
+			const k162 = world(p.sigs.concat([[20, HOME, 'abc123', 'A'], [21, OTHER, null]]), [p.hole, [200, 20, 21, 'U210', 'secondary']]);
+			const typed = world(p.sigs.concat([[20, HOME, 'abc123', 'A'], [21, null, null]]), [p.hole, [200, 20, 21, 'U210', 'initial']]);
+			// A is taken, so the new static is named like any other hole
+			assert.deepEqual(brief(plan(k162, { candidates: [{ signatureID: 'qrs456' }] })), [['qrs456', 'H296', 'B', 'initial']]);
+			assert.deepEqual(brief(plan(typed, { candidates: [{ signatureID: 'qrs456' }] })), [['qrs456', 'H296', 'B', 'initial']]);
+		});
+		it('a candidate whose far side is not in the list is skipped', () => {
+			const w = world([[10, HOME, 'qrs456', null]], [[100, 10, 11, null, 'initial']]);
+			assert.deepEqual(plan(w, { candidates: [{ signatureID: 'qrs456' }] }), []);
+		});
+		it('several eligible new holes: the first is picked and the fill says how many there were', () => {
+			const a = pasted(10, 100, 'zzz999'), b = pasted(30, 300, 'aaa111');
+			const fills = plan(world(a.sigs.concat(b.sigs), [a.hole, b.hole]), { candidates: [{ signatureID: 'zzz999' }, { signatureID: 'aaa111' }] });
+			assert.deepEqual(fills.map(f => [f.sig.signatureID, f.among, f.slots]), [['zzz999', 2, 1]]);
+			assert.equal(rageRolling.message(fills[0]), 'Rage rolling: ZZZ-999 set as new static H296 (A) (2 new holes: picked the first, check it)');
+		});
 		it('the same candidate listed twice is used once', () => {
 			const a = pasted(10, 100, 'aaa111');
 			const w = world(a.sigs, [a.hole]);
@@ -129,7 +147,60 @@ describe('Rage rolling', () => {
 		});
 	});
 
-	describe('payloadCandidates and removes', () => {
+	describe('stale candidates (prune)', () => {
+		const now = 1000000;
+		it('a hole pasted while the old static was listed is dropped, not filled when the static is deleted later', () => {
+			// t=0: old static A listed, our paste adds an unknown hole (an incoming K162 nobody has typed yet)
+			const p = pasted(10, 100, 'k16299');
+			const before = world(p.sigs.concat([[20, HOME, 'old111', 'A'], [21, null, null]]), [p.hole, [200, 20, 21, 'H296', 'initial']]);
+			let candidates = [{ systemID: HOME, signatureID: 'k16299', at: now }];
+			assert.deepEqual(plan(before, { candidates }), [], 'slot full');
+			candidates = rageRolling.prune(candidates, before.signatures, now + 1500, now + 15000);
+			assert.deepEqual(candidates, [], 'dropped at the first check');
+			// t=6 min: A deleted (a save with no new holes): nothing to fill
+			const after = world(p.sigs, [p.hole]);
+			assert.deepEqual(plan(after, { candidates }), []);
+		});
+		it('the same save that deletes the old static and adds the new hole fills it', () => {
+			const p = pasted(10, 100, 'new111');
+			const after = world(p.sigs, [p.hole]);	// the list after the paste preview's Apply
+			assert.equal(plan(after, { candidates: [{ systemID: HOME, signatureID: 'new111', at: now }] }).length, 1);
+		});
+		it('a candidate not in the list yet waits for it until pendingUntil', () => {
+			const c = [{ systemID: HOME, signatureID: 'zzz000', at: now }];
+			assert.equal(rageRolling.prune(c, {}, now + 1500, now + 15000).length, 1);
+			assert.equal(rageRolling.prune(c, {}, now + 16000, now + 15000).length, 0);
+		});
+		it('resolved: by id or signature ID, in its own system', () => {
+			const sigs = { 5: { id: 5, systemID: HOME, signatureID: 'abc123' } };
+			assert.equal(rageRolling.resolved({ systemID: HOME, signatureID: 'ABC123' }, sigs), true);
+			assert.equal(rageRolling.resolved({ systemID: HOME, id: 5 }, sigs), true);
+			assert.equal(rageRolling.resolved({ systemID: OTHER, signatureID: 'abc123' }, sigs), false);
+		});
+	});
+
+	describe('fillPayload', () => {
+		it('the Sig dialog\'s update shape: wormhole id/type/parent/life/mass, this side id + name, far side id + class', () => {
+			const p = pasted(10, 100, 'qrs456');
+			const w = world(p.sigs, [p.hole]);
+			const fills = plan(w, { candidates: [{ signatureID: 'qrs456' }] });
+			const built = rageRolling.fillPayload(fills, type => (type === 'H296' ? 7 : null));
+			assert.deepEqual(built.payload, { signatures: { update: [{
+				wormhole: { id: 100, type: 'H296', parent: 'initial', life: 'stable', mass: 'stable' },
+				signatures: [{ id: 10, name: 'A' }, { id: 11, systemID: 7 }]
+			}] } });
+			assert.deepEqual(Object.keys(built.undo), [String(HOME)]);
+			assert.deepEqual(built.undo[HOME][0], { wormhole: w.wormholes[100], signatures: [w.signatures[10], w.signatures[11]] });
+			assert.notStrictEqual(built.undo[HOME][0].wormhole, w.wormholes[100], 'a copy');
+		});
+		it('no name when naming is off, no class when unknown', () => {
+			const p = pasted(10, 100, 'qrs456');
+			const fills = plan(world(p.sigs, [p.hole]), { candidates: [{ signatureID: 'qrs456' }], naming: false });
+			assert.deepEqual(rageRolling.fillPayload(fills, () => null).payload.signatures.update[0].signatures, [{ id: 10 }, { id: 11 }]);
+		});
+	});
+
+	describe('payloadCandidates', () => {
 		it('wormhole adds by signature ID in order, wormhole updates by id; sites left out', () => {
 			const data = { signatures: {
 				add: [{ wormhole: {}, signatures: [{ signatureID: 'AAA111', systemID: HOME }, {}] }, { signatureID: 'SIT111', systemID: HOME, type: 'data' },
@@ -142,11 +213,6 @@ describe('Rage rolling', () => {
 		it('nothing to see', () => {
 			assert.deepEqual(rageRolling.payloadCandidates(undefined), []);
 			assert.deepEqual(rageRolling.payloadCandidates({ signatures: {} }), []);
-		});
-		it('removes', () => {
-			assert.equal(rageRolling.removes({ signatures: { remove: [1] } }), true);
-			assert.equal(rageRolling.removes({ signatures: { remove: [] } }), false);
-			assert.equal(rageRolling.removes({ signatures: { add: [] } }), false);
 		});
 	});
 
