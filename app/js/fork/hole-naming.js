@@ -13,7 +13,8 @@ const holeNaming = {
 	// static, so the first one named keeps it) is named like any other hole. Only when every other character is used are
 	// the reserved ones handed out. A static that is the hole we came in through (the incoming hole's type on this
 	// system's side is that static) reserves nothing: it already has its name on the way in. See staticSlots /
-	// reservation / incomingType / nextName.
+	// reservation / incomingType / nextName. Thera and the Drifter systems reserve nothing, other systems at most their
+	// first three statics (namingStatics).
 	LETTERS: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 	SMALL_DIGITS: "12345",
 	MEDIUM_DIGITS: "6789",
