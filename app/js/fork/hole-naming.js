@@ -109,6 +109,17 @@ const holeNaming = {
 			[holeNaming.LETTERS];
 	},
 
+	/** Most statics that get a reserved character (shattered systems list up to 3) */
+	MAX_RESERVED_STATICS: 3,
+
+	/** The statics that get reserved characters: none in Thera (class 12) or the Drifter systems (classes 14-18), whose
+		long static lists would push every other hole far down the alphabet; otherwise the first MAX_RESERVED_STATICS. */
+	namingStatics: function(statics, systemClass) {
+		const cls = Number(systemClass);
+		if (cls === 12 || (cls >= 14 && cls <= 18)) { return []; }
+		return Array.isArray(statics) ? statics.slice(0, holeNaming.MAX_RESERVED_STATICS) : [];
+	},
+
 	/** Reserved characters of a system's statics below prefix: [{type, ch}] in the statics' data order. Each static
 		gets the first character of its own pool (after the path rule) that an earlier static didn't reserve.
 		incomingType (optional): the type of the incoming hole on this system's side (incomingType()); the first static of
@@ -399,7 +410,11 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 
 		/** Statics of a system in data order ([] when unknown) */
 		function staticsOf(systemID) {
-			try { return typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : []; } catch (e) { return []; }
+			try {
+				const statics = typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : [];
+				const system = (typeof appData !== "undefined" && appData.systems && appData.systems[systemID]) || {};
+				return holeNaming.namingStatics(statics, system["class"]);
+			} catch (e) { return []; }
 		}
 
 		/** The statics' reservation for a hole of thisSideType leaving systemID (see holeNaming.reservation), or null when

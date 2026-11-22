@@ -355,7 +355,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 		function on() { return rageRolling.isOn(opts(), Date.now()); }
 		function homes() { const o = opts(); return rageRolling.homeSystems(o && o.chain ? o.chain.tabs : []); }
 		function staticsOf(systemID) {
-			try { return typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : []; } catch (e) { return []; }
+			try { return holeNaming.namingStatics(typeof sigQuickPicks !== "undefined" ? sigQuickPicks.staticsFor(systemID) : [], ((typeof appData !== "undefined" && appData.systems && appData.systems[systemID]) || {})["class"]); } catch (e) { return []; }
 		}
 		/** A home system with a static: where the chip shows and the mode acts */
 		function isHome(systemID) {

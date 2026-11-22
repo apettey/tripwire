@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-22 | [Statics first: skip Thera and Drifter systems](2026-11-22-static-letters-skip-thera-drifter/README.md) | Thera and the Drifter systems (C14-C18) hold no static letters, other systems at most three (shattered: A, B, C) |
 | 2026-11-22 | [Rage rolling mode](2026-11-22-rage-rolling/README.md) | A "Rage roll" switch in the Signatures panel of a home system with a static (and Ctrl+K Rage rolling on / off; off by default, off again after 3 hours): when a pasted scan no longer has the old static's signature, the old static is deleted and the new unknown wormhole is set as the new static (type, far-side class, static letter) with its bookmark text; Settings > Wormhole Jumps & Mass > Rage rolling button hides it |
 | 2026-11-22 | [Statics get the first letters](2026-11-22-static-first-letters/README.md) | Suggested hole names keep the first letters for a system's statics (H296 static of a C5 = A, other holes B, C ...; a C2's two statics A and B; per size pool and below any prefix); Settings > Signatures > Statics get the first letters, on by default |
 | 2026-11-22 | [PHP 8.5.13, nginx 1.30.7 and OpenSSL fixes](2026-11-22-php-8-5-13-nginx-1-30-7/README.md) | Image on PHP 8.5.13; the rebuild takes Alpine's nginx 1.30.7 (18 Nov security release), OpenSSL 3.5.9-r1 and libxml2 fixes |
