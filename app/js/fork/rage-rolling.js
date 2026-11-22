@@ -132,7 +132,9 @@ const rageRolling = {
 	 *   scanIDs: optional, the signature IDs of the probe scanner paste this save came from (scanIDs()): a slot holder
 	 *     missing from a full scan collapsed, so its slot counts as empty and the fill replaces (deletes) it,
 	 *   broken: wormhole ids marked broken (brokenHoles.ids, e.g. "Mark broken" in the paste preview): the user kept
-	 *     that hole, so it is never taken for gone
+	 *     that hole, so it is never taken for gone,
+	 *   kept: sig ids the user kept in the paste preview (unticked Gone rows, "keep all"; pastePreview.lastKept): the
+	 *     same (the preview's auto-save makes no choice, so it keeps nothing)
 	 * Returns [{systemID, sig, other, wormhole, type, name, parent, replaces, among, others, slots}] (name null when naming
 	 * is off; parent: the static's side, "initial" or "secondary"; replaces: [{sig, other, wormhole}] holders the fill
 	 * deletes; among: eligible new holes, others: other unknown holes listed in the system, slots: empty slots), at most
@@ -174,11 +176,15 @@ const rageRolling = {
 		const allHolders = [];
 		slots.forEach(function(slot) { holders(slot).forEach(function(h) { if (allHolders.indexOf(h) < 0) { allHolders.push(h); } }); });
 		// A full scan: it has a sig that was listed before (not a holder, not one this save added), or there is none such
+		// A full scan: every other listed hole (not a holder, not one this save added) is in it, and at least half of all
+		// other listed sigs; or the holders are the only sigs with an ID. A two-row paste of a busy system is not full.
 		const before = inSystem.filter(function(s) { return rageRolling.hasID(s) && allHolders.indexOf(s) < 0 && mine.indexOf(s) < 0; });
-		const full = !!scan && (before.some(inScan) || !before.length);
+		const full = !!scan && (!before.length || (before.filter(function(s) { return s.type === "wormhole"; }).every(inScan) &&
+			before.filter(inScan).length * 2 >= before.length));
+		const kept = (a.kept || []).map(String);
 		const broken = (a.broken || []).map(String);
 		const gone = function(h) {
-			if (!full || !rageRolling.hasID(h) || inScan(h)) { return false; }
+			if (!full || !rageRolling.hasID(h) || inScan(h) || kept.indexOf(String(h.id)) >= 0) { return false; }	// kept in the paste preview
 			const wh = rageRolling.wormholeOf(h.id, wormholes);
 			return !(wh && broken.indexOf(String(wh.id)) >= 0);	// marked broken: kept on purpose
 		};
@@ -283,9 +289,10 @@ const rageRolling = {
 		});
 	},
 
-	/** The request for the fills (as the Sig dialog's update: wormhole type and parent, this side's name, the far side's
-		class; plus the removal of the collapsed old statics they replace) and the undo items per system: {update: [{wormhole,
-		signatures: [this side, far side]} as they were], remove: [the removed holes as they were]}.
+	/** The requests for the fills: payload (as the Sig dialog's update: wormhole type and parent, this side's name, the far
+		side's class) and remove (the collapsed old statics they replace, or null; sent only after the update worked), and
+		the undo items per system: {update: [{wormhole, signatures: [this side, far side]} as they were], remove: [the
+		removed holes as they were]}.
 		leadsTo(type): the far side's system for a type (wormholeAnalysis.targetSystemID), or null. */
 	fillPayload: function(fills, leadsTo) {
 		const copy = function(v) { return v ? JSON.parse(JSON.stringify(v)) : v; };
@@ -312,9 +319,7 @@ const rageRolling = {
 				}
 			});
 		});
-		const payload = { signatures: { update: entries } };
-		if (removes.length) { payload.signatures.remove = removes; }
-		return { payload: payload, undo: undo };
+		return { payload: { signatures: { update: entries } }, remove: removes.length ? { signatures: { remove: removes } } : null, undo: undo };
 	},
 
 	/** "QRS456" -> "QRS-456" */
@@ -451,7 +456,8 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 					signatures: tripwire.client.signatures, wormholes: tripwire.client.wormholes,
 					candidates: candidates.filter(function(c) { return String(c.systemID) === systemID; }),
 					staticFirst: holeNaming.staticFirst(o), naming: holeNaming.enabled(o), skip: filled,
-					scanIDs: scanFor[systemID] || null,
+					scanIDs: scanFor[systemID] ? scanFor[systemID].ids : null,
+					kept: scanFor[systemID] ? scanFor[systemID].kept : [],
 					broken: typeof brokenHoles !== "undefined" ? Object.keys(brokenHoles.ids || {}) : []
 				}));
 			});
@@ -500,14 +506,38 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			candidates = candidates.filter(function(c) {
 				return !(c.id !== undefined && usedIDs.indexOf(String(c.id)) >= 0) && !(c.signatureID && usedKeys.indexOf(String(c.signatureID).toUpperCase()) >= 0);
 			});
+			const ok = function(result) { return !!(result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true); };
 			checking = true;
+			let second = false;		// the old statics' delete was sent
+			let finished = false;	// done() ran
 			next.call(tripwire, "refresh", built.payload, function(result) {
-				checking = false;
-				if (!(result && result.resultSet && result.resultSet[0] && result.resultSet[0].result == true)) {
+				if (!ok(result)) {
 					Notify.trigger("Rage rolling: couldn't set the new static. Fill it in by hand.", "red", 8000);
 					return;
 				}
-				Object.keys(undo).forEach(function(systemID) { saveUndo(systemID, undo[systemID]); });
+				if (!built.remove) { done(true); return; }
+				// Then the old statics: only once the fill is saved. Both undo entries are pushed together (one Undo step)
+				// once this answer is in; a failed delete keeps the fill's own undo.
+				second = true;
+				const sendRemove = function() {
+					if (tripwire.xhr) { setTimeout(sendRemove, 100); return; }	// the fill's request is still finishing
+					next.call(tripwire, "refresh", built.remove, function(res) { done(ok(res)); },
+						function() { checking = false; if (!finished) { done(false); } });	// no answer at all: as failed
+				};
+				setTimeout(sendRemove, 0);
+			}, function() { if (!second) { checking = false; } });
+
+			function done(removed) {
+				finished = true;
+				Object.keys(undo).forEach(function(systemID) {
+					saveUndo(systemID, removed ? undo[systemID] : { update: undo[systemID].update, remove: [] });
+				});
+				if (!removed) {
+					const old = [];
+					fills.forEach(function(f) { (f.replaces || []).forEach(function(r) { old.push(rageRolling.idText(r.sig.signatureID)); }); });
+					Notify.trigger(_.escape("Rage rolling: couldn't delete the old static " + old.join(", ") + ". Delete it by hand."), "red", 10000);
+					notes.forEach(function(n) { n.fill = Object.assign({}, n.fill, { replaces: [] }); });
+				}
 				notes.forEach(function(n) {
 					if (typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "filled"); }
 					const text = rageRolling.message(n.fill, null);
@@ -521,7 +551,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 						Notify.trigger(_.escape(rageRolling.message(n.fill, n.bookmark)), colour, 15000);
 					});
 				});
-			}, function() { checking = false; });
+			}
 		}
 
 		tripwire.refresh = function(mode, data, successCallback, alwaysCallback) {
@@ -534,7 +564,12 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			let scan = null;
 			const added = found.filter(function(c) { return c.signatureID; }).map(function(c) { return c.signatureID; });
 			const at = data.systemID !== undefined ? rageRolling.matchScan(scans, data.systemID, added, Date.now()) : -1;
-			if (at >= 0) { scan = scans[at].ids; scans.splice(at, 1); }
+			if (at >= 0) { scan = { ids: scans[at].ids, kept: [] }; scans.splice(at, 1); }
+			// The paste preview's Apply records what the user kept (pastePreview.lastKept) just before it sends this save
+			try {
+				const lk = typeof pastePreview !== "undefined" ? pastePreview.lastKept : null;
+				if (scan && lk && String(lk.systemID) === String(data.systemID) && Date.now() - lk.at < 5000) { scan.kept = lk.ids.slice(); }
+			} catch (e) { /* nothing kept */ }
 			const wrapped = function(result) {
 				const ret = successCallback ? successCallback.apply(this, arguments) : undefined;
 				try {

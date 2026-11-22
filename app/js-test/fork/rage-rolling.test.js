@@ -164,7 +164,8 @@ describe('Rage rolling', () => {
 			assert.deepEqual(fills[0].replaces.map(r => r.sig.signatureID), ['old111']);
 			assert.equal(rageRolling.message(fills[0]), 'Rage rolling: NEW-111 set as new static H296 (A), old OLD-111 deleted (not in the scan)');
 			const built = rageRolling.fillPayload(fills, () => 7);
-			assert.deepEqual(built.payload.signatures.remove, [w.wormholes[200]]);
+			assert.deepEqual(built.remove, { signatures: { remove: [w.wormholes[200]] } }, 'a second request, after the fill');
+			assert.deepEqual(Object.keys(built.payload.signatures), ['update']);
 			assert.equal(built.payload.signatures.update.length, 1);
 			assert.deepEqual(built.undo[HOME].remove, [{ wormhole: w.wormholes[200], signatures: [w.signatures[20], w.signatures[21]] }]);
 			assert.equal(built.undo[HOME].update.length, 1);
@@ -186,6 +187,19 @@ describe('Rage rolling', () => {
 		});
 		it('no new hole in the paste: nothing (the old static is left for the user)', () =>
 			assert.deepEqual(plan(listed(), { candidates: [], scanIDs: ['def789'] }), []));
+		it('a holder the user kept in the paste preview (unticked, keep all) is kept: nothing', () =>
+			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'], kept: ['20'] }), []));
+		it('a two-row paste of a busy system is not a full scan', () => {
+			// Listed besides the static: another hole and three sites; the paste has only one site and the new hole
+			const w = listed([[50, HOME, 'whk111', 'B'], [51, null, null]]);
+			w.wormholes[500] = { id: 500, initialID: 50, secondaryID: 51, type: 'U210', parent: 'initial' };
+			w.signatures[31] = { id: 31, systemID: HOME, signatureID: 'sit111', type: 'data' };
+			w.signatures[32] = { id: 32, systemID: HOME, signatureID: 'sit222', type: 'relic' };
+			assert.deepEqual(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'] }), [], 'two rows');
+			assert.deepEqual(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'sit111', 'new111'] }), [], 'the other hole is missing');
+			assert.deepEqual(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['whk111', 'new111'] }), [], 'under half of the other sigs');
+			assert.equal(plan(w, { candidates: [{ signatureID: 'new111' }], scanIDs: ['whk111', 'def789', 'new111'] }).length, 1, 'every hole and half the sigs');
+		});
 		it('a holder marked broken (the paste preview\'s Mark broken) is kept: nothing', () =>
 			assert.deepEqual(plan(listed(), { candidates: [{ signatureID: 'new111' }], scanIDs: ['def789', 'new111'], broken: ['200'] }), []));
 		it('matchScan: the save finds its own paste, not a later paste the preview refused', () => {

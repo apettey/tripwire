@@ -45,11 +45,14 @@ off, with "Turn it on". New hint event `rolling.marked` {wormholeID}, emitted fr
   data) doesn't hold the slot.
 - The static rolled: `tripwire.pasteSignatures.parsePaste` (plain paste and paste preview both pass through it with the
   whole pasted text) records the scan's signature IDs; the save that carries the paste's new sigs (at once, or at the
-  preview's Apply / auto-save) takes that scan along. A holder whose signature ID is missing from a full scan (it has a
-  sig that was listed before, or the holders are the only sigs with an ID; holders without an ID never count) empties
-  its slot: the fill request also deletes it (as "Click to delete missing sigs" would). The fill and the delete are
-  one Undo step.
-  A holder marked broken (`brokenHoles.ids`, e.g. Mark broken in the paste preview) is kept: the user chose to keep it.
+  preview's Apply / auto-save) takes that scan along. A holder whose signature ID is missing from a full scan empties
+  its slot (full: every other listed hole and at least half of all other listed sigs are in it, or the holders are the
+  only sigs with an ID; holders without an ID never count). Once the fill's update is saved, a second request deletes
+  the old static (as "Click to delete missing sigs" would); both are one Undo step. If that delete fails, the fill
+  keeps its own Undo step and a red toast says to delete the old static by hand.
+  A holder marked broken (`brokenHoles.ids`, e.g. Mark broken in the paste preview) or kept in the paste preview
+  (unticked or "keep all"; `pastePreview.lastKept`, set at Apply, never sent) is kept: the user chose to keep it. The
+  preview's auto-save makes no choice, so it keeps nothing.
   Recent pastes are kept per paste (`rageRolling.matchScan`: a save takes the newest scan that has all its new sigs),
   so a paste the preview refuses while one is open never takes the open preview's scan.
 - Candidates: the wormhole sigs one save of ours added (or turned into wormholes), in the order they were sent (= paste
