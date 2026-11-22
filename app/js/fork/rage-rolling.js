@@ -255,7 +255,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			render();
 			if (value && !was && typeof forkUsage !== "undefined") { forkUsage.track("rageRolling", "turned_on"); }
 			if (!quiet) {
-				Notify.trigger(value ? "Rage rolling on: a new unknown wormhole in a home system becomes the new static once the old one is gone. Off again in 3 hours."
+				Notify.trigger(value ? "Rage rolling on: a new unknown wormhole you paste in a home system becomes the new static when the paste also removes the old one (paste preview: Apply). Off again in 3 hours."
 					: "Rage rolling off", value ? "green" : "blue", 6000);
 			}
 		}
@@ -279,7 +279,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			$chip.toggleClass("on", active).attr("aria-checked", active ? "true" : "false")
 				.text(active ? "Rage roll: on" : "Rage roll")
 				.attr("data-tooltip", active
-					? "Rage rolling is on (" + (left >= 60 ? Math.floor(left / 60) + " h " + (left % 60) + " min" : left + " min") + " left): a new unknown wormhole you paste becomes the new static once the old one is gone. Click to turn it off."
+					? "Rage rolling is on (" + (left >= 60 ? Math.floor(left / 60) + " h " + (left % 60) + " min" : left + " min") + " left): a new unknown wormhole you paste becomes the new static when the paste also removes the old one. Click to turn it off."
 					: "Rage rolling: when you paste after rolling the static, the new unknown wormhole is set as the new static (type and name). Click to turn it on.");
 		}
 		rageRolling.render = render;
@@ -458,7 +458,7 @@ if (typeof window !== "undefined" && typeof jQuery !== "undefined" && jQuery.fn 
 			section: "jumps", order: 22, id: "rageRolling-enabled", type: "checkbox", key: "rageRolling",
 			label: "Rage rolling button:",
 			text: "Show the Rage roll switch in the Signatures panel of a home system with a static",
-			hint: "Rage rolling sets a new unknown wormhole you paste as the new static once the old one is gone. It is off until you switch it on, and switches itself off after 3 hours.",
+			hint: "Rage rolling sets a new unknown wormhole you paste as the new static when the same paste removes the old one. It is off until you switch it on, and switches itself off after 3 hours.",
 			keywords: ["rage", "roll", "rolling", "static", "paste"],
 			get: function(o) { return rageRolling.enabled(o); },
 			set: function(o, value) { o.rageRolling = Object.assign({}, o.rageRolling || {}, { enabled: !!value }); },
