@@ -14,7 +14,12 @@ const path = require('path');
 const { Transform } = require('stream');
 let glob = null;
 let globParent = null;
-try { glob = require('glob'); globParent = require('glob-parent'); } catch (e) { /* not installed: keep upstream behaviour */ }
+try {
+	glob = require('glob');
+	// glob-parent 7 is an ES module: require() returns its namespace, the function is the default export
+	const globParentModule = require('glob-parent');
+	globParent = typeof globParentModule === 'function' ? globParentModule : globParentModule.default;
+} catch (e) { /* not installed: keep upstream behaviour */ }
 const src = gulp.src;
 gulp.src = function(globs, options) {
 	if (!glob || !globParent || !Array.isArray(globs) || !globs.every(g => typeof g === 'string' && g[0] !== '!')
