@@ -197,6 +197,14 @@ updateWormhole($w5, $mysql);
 holestats_flush();
 $stmt->execute([MASK_A, (int) $h5[2]->id]);
 check('a less known save keeps the known home type', $stmt->fetch(PDO::FETCH_NUM), ['H296', 'K162', C5A]);
+// a correction on an exact row replaces both ends: home re-typed as a K162 with the origin not known
+list(, $w5) = fetchWormhole($h5[2]->id, $mysql);
+$w5->type = '????';
+$w5->parent = 'initial';   // the far end (initial here) typed, not known: home is the K162
+updateWormhole($w5, $mysql);
+holestats_flush();
+$stmt->execute([MASK_A, (int) $h5[2]->id]);
+check('an exact correction replaces both types (no stale far type)', $stmt->fetch(PDO::FETCH_NUM), ['K162', '', C5A]);
 delete_hole($h5);
 $db->prepare('DELETE FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?')->execute([MASK_A, (int) $h5[2]->id]);
 // first seen = when the home signature was created, not when the hole was first touched after deploy
@@ -210,6 +218,16 @@ holestats_flush();
 $stmt = $db->prepare('SELECT firstSeen FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?');
 $stmt->execute([MASK_A, (int) $h6[2]->id]);
 check('first seen from the home signature\'s creation', abs(strtotime($stmt->fetchColumn() . ' UTC') - (time() - 5 * 3600)) < 5, true);
+// lastUpdated follows what was learned when, firstSeen stays at the creation
+list(, $f6) = fetchSignature($h6[1]->id, $mysql);
+$f6->systemID = C5A;
+updateSignature($f6, $mysql);
+holestats_flush(time() + 3 * 3600);
+$stmt = $db->prepare('SELECT firstSeen, lastUpdated, farSystemID FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?');
+$stmt->execute([MASK_A, (int) $h6[2]->id]);
+$t6 = $stmt->fetch(PDO::FETCH_NUM);
+check('far side found later: lastUpdated moves on, firstSeen stays', [abs(strtotime($t6[0] . ' UTC') - (time() - 5 * 3600)) < 5, abs(strtotime($t6[1] . ' UTC') - (time() + 3 * 3600)) < 5, (int) $t6[2]],
+    [true, true, C5A]);
 delete_hole($h6);
 $db->prepare('DELETE FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?')->execute([MASK_A, (int) $h6[2]->id]);
 
@@ -238,6 +256,14 @@ check('a guess never replaces exact types', $db->query('SELECT homeType FROM for
 $id2 = holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => 'H296', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-10 00:00:00', ['wormholeID' => 900030]);
 holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => C5B, 'farSig' => 'hij123', 'farType' => 'K162'], '2026-02-10 01:00:00', ['wormholeID' => 900030]);
 check('fields fill in one by one', $db->query('SELECT homeType, farType, farSystemID, farSig FROM fork_hole_log WHERE id = ' . (int) $id2)->fetch(PDO::FETCH_NUM), ['H296', 'K162', C5B, 'hij123']);
+// exact views: a far-only K162 keeps a known home type, but not a home K162 (that end was the inbound side)
+$id3 = holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'klm456', 'homeType' => 'K162', 'farSystemID' => HS, 'farSig' => '', 'farType' => 'M555'], '2026-02-12 00:00:00', ['wormholeID' => 900040]);
+holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'klm456', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => 'K162'], '2026-02-12 01:00:00', ['wormholeID' => 900040]);
+check('exact: home K162 re-entered as the far K162', $db->query('SELECT homeType, farType FROM fork_hole_log WHERE id = ' . (int) $id3)->fetch(PDO::FETCH_NUM), ['', 'K162']);
+// guessed views still fill in field by field
+$id4 = holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'nop789', 'homeType' => 'H296', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-13 00:00:00', ['source' => 'backfill', 'guessed' => true]);
+holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'nop789', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => 'K162'], '2026-02-13 01:00:00', ['source' => 'backfill', 'guessed' => true]);
+check('guessed: fill in field by field', $db->query('SELECT homeType, farType, guessed FROM fork_hole_log WHERE id = ' . (int) $id4)->fetch(PDO::FETCH_NUM), ['H296', 'K162', 1]);
 // firstSeen only moves earlier (a hole touched after deploy, then backfilled with its real first sighting)
 holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-09 08:00:00', ['source' => 'backfill']);
 holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-10 05:00:00', ['wormholeID' => 900030]);
@@ -359,6 +385,39 @@ $db->prepare("UPDATE fork_hole_log_backfill SET doneAt = DATE_SUB(UTC_TIMESTAMP(
 $again = holestats_backfill($db, MASK_A, HOME);
 check('a stale claim is taken over and finished', [is_array($again), $again['capped'] ?? null, count(log_rows())], [true, false, count($r)]);
 check('stamp done', $db->query("SELECT state FROM fork_hole_log_backfill WHERE maskID = '" . MASK_A . "'")->fetchColumn(), 'done');
+
+// Live recording before the first backfill: audit holes merge into their live rows, nothing is counted twice, and audit
+// holes inside the live period that were never recorded live (added and deleted) are still backfilled
+$db->prepare('DELETE FROM fork_hole_log WHERE maskID = ?')->execute([MASK_A]);
+$db->prepare('DELETE FROM fork_hole_log_backfill WHERE maskID = ?')->execute([MASK_A]);
+$db->prepare('DELETE FROM fork_audit_log WHERE maskID = ?')->execute([MASK_A]);
+// a hole from before the deploy (old audit row: no wh, no parent), touched after it: a live row first seen 3 h ago
+$hp = add_hole(['pre111', HOME], ['', 7], 'H296', 'initial');
+$db->prepare('UPDATE signatures SET lifeTime = ? WHERE id = ?')->execute([date('Y-m-d H:i:s', time() - 3 * 3600), $hp[0]->id]);
+holestats_flush();
+$db->prepare('DELETE FROM fork_audit_log WHERE maskID = ?')->execute([MASK_A]);
+$ins->execute([MASK_A, gmdate('Y-m-d H:i:s', time() - 3 * 3600), MEMBER, 'Test Member', 'wormhole', 'add', HOME, 7, 'H296', json_encode(['type' => 'H296', 'life' => 'stable', 'mass' => 'stable', 'from' => 'PRE111'])]);
+// a hole recorded live since: its audit rows carry wh
+$hw = add_hole(['whl222', HOME], ['', 7], 'H296', 'initial');
+holestats_flush();
+// a hole added and deleted 30 minutes ago that live recording never saw (audit rows only)
+$ins->execute([MASK_A, gmdate('Y-m-d H:i:s', time() - 1800), MEMBER, 'Test Member', 'wormhole', 'add', HOME, C5A, 'H296', json_encode(['type' => 'H296', 'life' => 'stable', 'mass' => 'stable', 'parent' => 'initial', 'from' => 'INW333', 'wh' => 999001])]);
+$ins->execute([MASK_A, gmdate('Y-m-d H:i:s', time() - 1700), MEMBER, 'Test Member', 'wormhole', 'delete', HOME, C5A, 'H296', json_encode(['type' => 'H296', 'life' => 'stable', 'mass' => 'stable', 'parent' => 'initial', 'from' => 'INW333', 'wh' => 999001])]);
+holestats_backfill($db, MASK_A, HOME);
+$stmt = $db->prepare("SELECT homeSig, source, wormholeID, homeType FROM fork_hole_log WHERE maskID = ? AND homeSig IN ('pre111', 'whl222', 'inw333') ORDER BY homeSig");
+$stmt->execute([MASK_A]);
+check('backfill after live recording: one row per hole, live rows kept, the unseen hole added', array_map(function ($x) { return [$x[0], $x[1], (int) $x[2], $x[3]]; }, $stmt->fetchAll(PDO::FETCH_NUM)), [
+    ['inw333', 'backfill', 999001, 'H296'],
+    ['pre111', 'live', (int) $hp[2]->id, 'H296'],
+    ['whl222', 'live', (int) $hw[2]->id, 'H296'],
+]);
+$db->prepare('DELETE FROM fork_hole_log_backfill WHERE maskID = ?')->execute([MASK_A]);
+holestats_backfill($db, MASK_A, HOME);
+$stmt->execute([MASK_A]);
+check('... and a re-run adds nothing', count($stmt->fetchAll(PDO::FETCH_NUM)), 3);
+delete_hole($hp);
+delete_hole($hw);
+$r = log_rows();
 
 // ---- 5. public/hole_stats.php ----
 $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?, ?, 1373)')->execute([MASK_A, 'Hole stats A', OTHER]);

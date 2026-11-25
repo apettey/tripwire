@@ -739,9 +739,11 @@ viewing home) and Ctrl+K; everyone on the mask can read it.
   home (a mistake corrected) is removed. Recording is mask-wide and does not depend on anyone's Settings; it never fails a
   save (errors go to the PHP error log).
 - **Backfill.** The first time the window is opened for a mask and home, the holes of home are read once from the
-  [audit log](#audit-log) (`AUDIT_LOG_DAYS` of history; only rows older than the first live row, only rows with an end
-  in home plus signature-level updates, at most the newest 50,000) and from the map as it is now (first seen = when the
-  home signature was created). `fork_hole_log_backfill` stamps it: claimed as running, done at the end, a run that died
+  [audit log](#audit-log) (`AUDIT_LOG_DAYS` of history; only rows with an end in home plus signature-level updates, at
+  most the newest 50,000) and from the map as it is now (first seen = when the home signature was created). Holes
+  already recorded live are merged, not added again: by wormhole id (audit rows written since this feature carry it) or
+  by home signature id within 48 hours (older rows; a hole that existed at the update with no complete home signature
+  id and was touched afterwards may be counted twice). `fork_hole_log_backfill` stamps it: claimed as running, done at the end, a run that died
   is taken over after 10 minutes (delete the stamp to run it again: rows are merged, never duplicated). Since this
   feature the audit log's wormhole rows keep `parent` and the wormhole id (`wh`), so holes are followed exactly. Older
   rows are matched by signature ids (both, else the home end's id while the far end had none, as after a paste), and

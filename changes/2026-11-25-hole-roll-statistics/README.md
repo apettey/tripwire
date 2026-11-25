@@ -38,7 +38,8 @@ Tip: none. The feature has a visible link in the System info panel of home and a
 - **Backfill** once per mask and home, the first time the window opens (stamp in `fork_hole_log_backfill`, marked done
   only at the end, a dead run taken over after 10 minutes; a re-run never duplicates): from the audit log's wormhole rows
   (adds, type/parent changes, far side found and its id set, signature id corrections, deletes, holes moved away; only
-  rows that can concern home, newest 50,000) and the holes on the map now. Old audit rows don't record which end had the
+  rows that can concern home, newest 50,000) and the holes on the map now; holes already recorded live are merged into
+  their rows by wormhole id or home signature id, never added twice. Old audit rows don't record which end had the
   type: worked out from where the type can spawn and lead, else guessed (and flagged). Not reconstructable: anything
   older than the audit log's retention (60 days by default), holes added elsewhere and moved to home later, and on old
   rows a far end given its first id or system with no wormhole change while another hole of home also had no far id.

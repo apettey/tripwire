@@ -34,7 +34,23 @@ if ($clear) {
         $db->prepare('DELETE FROM fork_hole_log WHERE maskID = ?')->execute([$mask]);
         $db->prepare('DELETE FROM fork_hole_log_backfill WHERE maskID = ?')->execute([$mask]);
     });
-    try { $db->prepare("DELETE FROM discord_settings WHERE maskID = ? AND updatedBy = 'seed-hole-stats'")->execute([$mask]); } catch (PDOException $e) { }
+    // the home goes again: the row if the seed made it, else only homeSystemID in it
+    try {
+        $stmt = $db->prepare('SELECT settings, updatedBy FROM discord_settings WHERE maskID = ?');
+        $stmt->execute([$mask]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $settings = json_decode((string) $row['settings'], true) ?: [];
+            unset($settings['homeSystemID']);
+            if ($row['updatedBy'] === 'seed-hole-stats' && !$settings) {
+                $db->prepare('DELETE FROM discord_settings WHERE maskID = ?')->execute([$mask]);
+            } else {
+                $db->prepare('UPDATE discord_settings SET settings = ? WHERE maskID = ?')->execute([json_encode((object) $settings), $mask]);
+            }
+        }
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S02') throw $e;
+    }
     echo "Cleared the seeded holes of mask $mask\n";
     exit(0);
 }
