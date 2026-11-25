@@ -29,11 +29,15 @@ CREATE TABLE IF NOT EXISTS `fork_hole_log` (
   KEY `mask_sig` (`maskID`, `homeSystemID`, `homeSig`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- The backfill ran for this mask and home (once; deleting the row lets it run again, which never duplicates rows)
+-- The backfill of this mask and home: state 'running' while it runs ('done' at the end; a 'running' row older than
+-- 10 minutes died and is taken over), capped = 1 when it read only the newest audit rows. Once per mask and home;
+-- deleting the row lets it run again, which never duplicates rows.
 CREATE TABLE IF NOT EXISTS `fork_hole_log_backfill` (
   `maskID` decimal(12,1) NOT NULL,
   `homeSystemID` int NOT NULL,
   `doneAt` datetime NOT NULL,
   `rows` int NOT NULL DEFAULT 0,
+  `state` varchar(8) NOT NULL DEFAULT 'done',
+  `capped` tinyint NOT NULL DEFAULT 0,
   PRIMARY KEY (`maskID`, `homeSystemID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

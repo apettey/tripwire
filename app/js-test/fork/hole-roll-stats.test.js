@@ -170,6 +170,10 @@ describe('Hole statistics', () => {
 		assert.ok(/H296 static to C5/.test(html));
 		assert.ok(/N = \d+ C5 systems/.test(html));
 		assert.ok(/2026-11/.test(html));
+		assert.ok(!/only its newest rows/.test(html));
+		const capped = h.render({ home: HOME, rows: [row('2026-11-01 10:00:00', 'H296', C5a)], backfill: { doneAt: '2026-11-25 10:00:00', rows: 1, capped: true } },
+			state, appData.systems, appData.wormholes);
+		assert.ok(/only its newest rows were read/.test(capped));
 	});
 
 	it('is on unless switched off', () => {

@@ -394,7 +394,8 @@ const holeRollStats = {
 			+ "A static whose far side was never found counts as a roll; repeats use only rolls with a known destination. "
 			+ "\"Other\" holes have no type on the home side, or a type that is neither a static nor K162.");
 		if (data.backfill) {
-			notes.push("Holes before " + h.escape(String(data.backfill.doneAt).slice(0, 10)) + " were read once from the audit log (its history only) and the map.");
+			notes.push("Holes before " + h.escape(String(data.backfill.doneAt).slice(0, 10)) + " were read once from the audit log (its history only) and the map"
+				+ (data.backfill.capped ? "; the audit log was long, so only its newest rows were read." : "."));
 		}
 		if (guessed) { notes.push(guessed + " of these older holes didn't record which end had the type: it was worked out from where the type can lead, or guessed."); }
 		if (data.capped) { notes.push("Only the newest " + Number(data.max) + " holes are shown."); }

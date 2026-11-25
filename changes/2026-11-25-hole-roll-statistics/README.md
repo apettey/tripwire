@@ -35,12 +35,18 @@ Tip: none. The feature has a visible link in the System info panel of home and a
   merged). Rows are kept for ever. Classification (static roll / inbound / other) happens when the statistics are read.
 - **Home** is the mask's home system of Mask Admin > Discord > Home system (no second setting); its help text there now
   says it is also Hole statistics' home.
-- **Backfill** once per mask and home, the first time the window opens (stamp in `fork_hole_log_backfill`; a re-run never
-  duplicates): from the audit log's wormhole rows (adds, type/parent changes, far side found, signature id corrections,
-  deletes, holes moved away) and the holes on the map now. Old audit rows don't record which end had the type: worked out
-  from where the type can spawn and lead, else guessed (and flagged). Not reconstructable: anything older than the audit
-  log's retention (60 days by default), holes added elsewhere and moved to home later. From now on the audit log's
-  wormhole rows also keep `parent`, so later backfills need no guess.
+- **Backfill** once per mask and home, the first time the window opens (stamp in `fork_hole_log_backfill`, marked done
+  only at the end, a dead run taken over after 10 minutes; a re-run never duplicates): from the audit log's wormhole rows
+  (adds, type/parent changes, far side found and its id set, signature id corrections, deletes, holes moved away; only
+  rows that can concern home, newest 50,000) and the holes on the map now. Old audit rows don't record which end had the
+  type: worked out from where the type can spawn and lead, else guessed (and flagged). Not reconstructable: anything
+  older than the audit log's retention (60 days by default), holes added elsewhere and moved to home later, and on old
+  rows a far end given its first id or system with no wormhole change while another hole of home also had no far id.
+  From now on the audit log's wormhole rows also keep `parent` and the wormhole id (`wh`), so later backfills follow
+  each hole exactly and need no guess.
+- A hole's type is read as entered: a real type or `????` on one end makes the other end the K162, a typed `K162` is that
+  end only, and a hole with no type (pastes, the automapper) is unknown on both ends, whichever end is home. A hole's
+  first sighting is its home signature's creation, and only ever moves earlier.
 - **Read endpoint** `public/hole_stats.php` (GET, session mask only, every member): the home and its rows (at most 20,000).
 - **Window** (`app/js/fork/hole-roll-stats.js`, `app/css/fork/hole-roll-stats.css`): per static: rolls, known
   destinations, distinct, repeats and expected repeats if random (N = systems of the static's destination class: exact

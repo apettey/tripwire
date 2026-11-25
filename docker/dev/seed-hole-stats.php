@@ -7,20 +7,37 @@
 // H296). Sets the mask's home (Mask Admin > Discord > Home system), replaces that home's rows with ~900 holes (static rolls
 // to random C5 systems, some never followed; inbound K162s from a few favourite origins) and stamps the backfill as done.
 // Deterministic (fixed random seed). Never run against production data.
+//
+//   docker compose -f docker-compose.dev.yml exec -T app php /opt/app/docker/dev/seed-hole-stats.php --clear [mask]
+//
+// removes the seeded holes and the Discord settings row the seed made: the Discord flow tests in tests/ expect the dev
+// mask to have none, so run it before docker/dev/run-php-tests.sh.
 if (php_sapi_name() !== 'cli') { http_response_code(404); exit(); }
 require_once(__DIR__ . '/../../holestats/holestats.inc.php');
 
 $db = new PDO('mysql:host=' . getenv('DB_HOST') . ';port=' . (getenv('DB_PORT') ?: '3306') . ';dbname=' . getenv('DB_NAME') . ';charset=utf8mb4', getenv('DB_USER'), getenv('DB_PASSWORD'));
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-$mask = $argv[1] ?? null;
+$clear = in_array('--clear', $argv, true);
+$args = array_values(array_filter(array_slice($argv, 1), function ($a) { return $a !== '--clear'; }));
+$mask = $args[0] ?? null;
 if (!$mask) {
     $corp = $db->query("SELECT corporationID FROM characters c JOIN accounts a ON a.id = c.userID WHERE a.username = 'dev' LIMIT 1")->fetchColumn();
     if (!$corp) { fwrite(STDERR, "No dev character: run docker/dev-seed.sh first, or pass a mask\n"); exit(1); }
     $mask = $corp . '.2';
 }
-$home = (int) ($argv[2] ?? 31002012);
+$home = (int) ($args[1] ?? 31002012);
 if (!holestats_mask_ok($mask)) { fwrite(STDERR, "Not a mask id: $mask\n"); exit(1); }
+
+if ($clear) {
+    holestats_run($db, function () use ($db, $mask) {
+        $db->prepare('DELETE FROM fork_hole_log WHERE maskID = ?')->execute([$mask]);
+        $db->prepare('DELETE FROM fork_hole_log_backfill WHERE maskID = ?')->execute([$mask]);
+    });
+    try { $db->prepare("DELETE FROM discord_settings WHERE maskID = ? AND updatedBy = 'seed-hole-stats'")->execute([$mask]); } catch (PDOException $e) { }
+    echo "Cleared the seeded holes of mask $mask\n";
+    exit(0);
+}
 
 // The mask's home: merged into its Discord settings (created if needed)
 $db->exec("CREATE TABLE IF NOT EXISTS `discord_settings` (`maskID` decimal(12,1) NOT NULL, `settings` mediumtext NOT NULL, `updatedBy` varchar(100) NOT NULL DEFAULT '',

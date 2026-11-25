@@ -739,12 +739,17 @@ viewing home) and Ctrl+K; everyone on the mask can read it.
   home (a mistake corrected) is removed. Recording is mask-wide and does not depend on anyone's Settings; it never fails a
   save (errors go to the PHP error log).
 - **Backfill.** The first time the window is opened for a mask and home, the holes of home are read once from the
-  [audit log](#audit-log) (`AUDIT_LOG_DAYS` of history; only rows older than the first live row) and from the map as it
-  is now; `fork_hole_log_backfill` stamps it (delete the stamp to run it again: rows are merged, never duplicated). Audit
-  rows from before this feature don't say which end carried the type: it is worked out from where the type can spawn and
-  lead (e.g. M555 only leads into a C5 from high-sec), else guessed (home's static type as the static, `????` as a K162 on
-  the end the hole was added from) and the row is flagged `guessed`. Not reconstructable: holes older than the audit log's
-  retention, and holes whose home end was added elsewhere and moved to home later.
+  [audit log](#audit-log) (`AUDIT_LOG_DAYS` of history; only rows older than the first live row, only rows with an end
+  in home plus signature-level updates, at most the newest 50,000) and from the map as it is now (first seen = when the
+  home signature was created). `fork_hole_log_backfill` stamps it: claimed as running, done at the end, a run that died
+  is taken over after 10 minutes (delete the stamp to run it again: rows are merged, never duplicated). Since this
+  feature the audit log's wormhole rows keep `parent` and the wormhole id (`wh`), so holes are followed exactly. Older
+  rows are matched by signature ids (both, else the home end's id while the far end had none, as after a paste), and
+  don't say which end carried the type: it is worked out from where the type can spawn and lead (e.g. M555 only leads
+  into a C5 from high-sec), else guessed (home's static type as the static, `????` or `K162` as a K162 on the end the
+  hole was added from) and the row is flagged `guessed`. Not reconstructable: holes older than the audit log's retention,
+  holes whose home end was added elsewhere and moved to home later, and (old rows only) a far end given its first
+  signature id or system in a save with no wormhole change while another hole of home also had no far id.
 - **Statistics.** Computed in the browser from the rows (at most 20,000, newest first): static rolls per static (rolls,
   known destinations, distinct destinations, repeats, and the repeats expected if every roll picked one of the N systems
   of the static's destination class at random), inbound K162s by origin type and system, and counts per ISO week, month,
@@ -753,7 +758,8 @@ viewing home) and Ctrl+K; everyone on the mask can read it.
 - Settings > Wormhole Jumps & Mass > Hole statistics button hides the link and the command (recording goes on).
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/hole_stats_test.php`. Dev data for screenshots:
   `docker compose -f docker-compose.dev.yml exec -T app php /opt/app/docker/dev/seed-hole-stats.php` (sets the dev
-  character's corporation mask's home to J163701 and writes a year of made-up holes).
+  character's corporation mask's home to J163701 and writes a year of made-up holes; `--clear` removes them again, do so
+  before running the PHP tests: the Discord flow tests expect the dev mask to have no Discord settings).
 
 ### Product analytics
 

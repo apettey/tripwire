@@ -95,6 +95,14 @@ check('view: no end in home', holestats_view(['aSystem' => C5A, 'bSystem' => C5B
 check('view: no home', holestats_view($w, 0), null);
 check('view: real far system kept', holestats_view(['bSystem' => C5A] + $w, HOME)['farSystemID'], C5A);
 check('sig complete', [holestats_sig_complete('abc123'), holestats_sig_complete('abc'), holestats_sig_complete('abc12?')], [true, false, false]);
+// unknown holes as paste.js and the automapper add them: no type, parent 'initial'. Neither end is known, whichever is home.
+$unknown = ['type' => null, 'parent' => 'initial'] + $w;
+check('view: no type with a parent, home initial: nothing known', [holestats_view($unknown, HOME)['homeType'], holestats_view($unknown, HOME)['farType']], ['', '']);
+check('view: no type with a parent, home secondary (jumped into home): not a K162', [holestats_view(['aSystem' => C5A, 'bSystem' => HOME] + $unknown, HOME)['homeType'], holestats_view(['aSystem' => C5A, 'bSystem' => HOME] + $unknown, HOME)['farType']], ['', '']);
+check('view: empty type with a parent', holestats_view(['type' => '', 'parent' => 'secondary'] + $w, HOME)['homeType'], '');
+// a literal K162 type: that end is the K162, the other end is not known
+check('view: K162 typed on the home side', [holestats_view(['type' => 'K162'] + $w, HOME)['homeType'], holestats_view(['type' => 'K162'] + $w, HOME)['farType']], ['K162', '']);
+check('view: K162 typed on the far side', [holestats_view(['type' => 'k162', 'parent' => 'secondary'] + $w, HOME)['homeType'], holestats_view(['type' => 'k162', 'parent' => 'secondary'] + $w, HOME)['farType']], ['', 'K162']);
 
 // ---- 2. live recording ----
 check('no home: holestats_home is 0', holestats_home($db, MASK_A, true), 0);
@@ -168,6 +176,43 @@ check('mask B: only its own home', brief(log_rows(MASK_B)), [['stu901', 'H296', 
 check('mask A untouched', count(log_rows(MASK_A)), 3);
 $_SESSION['mask'] = MASK_A;
 
+// the automapper maps an unscanned hole into home (home is the secondary end, no type): recorded, but not as inbound
+$h5 = add_hole(['', C5A], ['', HOME], null, 'initial');
+holestats_flush();
+$stmt = $db->prepare('SELECT homeType, farType, farSystemID FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?');
+$stmt->execute([MASK_A, (int) $h5[2]->id]);
+check('automapped unknown hole into home: types not known', $stmt->fetch(PDO::FETCH_NUM), ['', '', C5A]);
+// it turns out to be home's static, typed on home's end later: an exact type fills in
+list(, $w5) = fetchWormhole($h5[2]->id, $mysql);
+$w5->type = 'H296';
+$w5->parent = 'secondary';
+updateWormhole($w5, $mysql);
+holestats_flush();
+$stmt->execute([MASK_A, (int) $h5[2]->id]);
+check('typed later: a static roll', $stmt->fetch(PDO::FETCH_NUM), ['H296', 'K162', C5A]);
+// an unknown type sent again later never wipes what is known
+list(, $w5) = fetchWormhole($h5[2]->id, $mysql);
+$w5->type = '????';
+updateWormhole($w5, $mysql);
+holestats_flush();
+$stmt->execute([MASK_A, (int) $h5[2]->id]);
+check('a less known save keeps the known home type', $stmt->fetch(PDO::FETCH_NUM), ['H296', 'K162', C5A]);
+delete_hole($h5);
+$db->prepare('DELETE FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?')->execute([MASK_A, (int) $h5[2]->id]);
+// first seen = when the home signature was created, not when the hole was first touched after deploy
+$h6 = add_hole(['bcd234', HOME], ['', 7], 'H296', 'initial');
+$db->prepare('UPDATE signatures SET lifeTime = ? WHERE id = ?')->execute([date('Y-m-d H:i:s', time() - 5 * 3600), $h6[0]->id]);
+$db->prepare('DELETE FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?')->execute([MASK_A, (int) $h6[2]->id]);
+list(, $w6) = fetchWormhole($h6[2]->id, $mysql);
+$w6->mass = 'destab';
+updateWormhole($w6, $mysql);
+holestats_flush();
+$stmt = $db->prepare('SELECT firstSeen FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?');
+$stmt->execute([MASK_A, (int) $h6[2]->id]);
+check('first seen from the home signature\'s creation', abs(strtotime($stmt->fetchColumn() . ' UTC') - (time() - 5 * 3600)) < 5, true);
+delete_hole($h6);
+$db->prepare('DELETE FROM fork_hole_log WHERE maskID = ? AND wormholeID = ?')->execute([MASK_A, (int) $h6[2]->id]);
+
 // ---- 3. upsert: merge window and value rules ----
 $view = ['homeSig' => 'vwx234', 'homeType' => 'H296', 'farSystemID' => 0, 'farSig' => '', 'farType' => 'K162'];
 holestats_upsert($db, MASK_A, HOME, $view, '2026-01-01 00:00:00', ['wormholeID' => 900001]);
@@ -189,6 +234,14 @@ $row = $db->query('SELECT homeType, farSystemID, guessed, source FROM fork_hole_
 check('exact types replace a guess (and the far system fills in)', [$row['homeType'], (int) $row['farSystemID'], (int) $row['guessed'], $row['source']], ['H296', C5A, 0, 'backfill']);
 holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'yza567', 'homeType' => 'K162', 'farSystemID' => 0, 'farSig' => '', 'farType' => 'H296'], '2026-02-01 06:00:00', ['guessed' => true]);
 check('a guess never replaces exact types', $db->query('SELECT homeType FROM fork_hole_log WHERE id = ' . (int) $id)->fetchColumn(), 'H296');
+// what is known fills in, field by field
+$id2 = holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => 'H296', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-10 00:00:00', ['wormholeID' => 900030]);
+holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => C5B, 'farSig' => 'hij123', 'farType' => 'K162'], '2026-02-10 01:00:00', ['wormholeID' => 900030]);
+check('fields fill in one by one', $db->query('SELECT homeType, farType, farSystemID, farSig FROM fork_hole_log WHERE id = ' . (int) $id2)->fetch(PDO::FETCH_NUM), ['H296', 'K162', C5B, 'hij123']);
+// firstSeen only moves earlier (a hole touched after deploy, then backfilled with its real first sighting)
+holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-09 08:00:00', ['source' => 'backfill']);
+holestats_upsert($db, MASK_A, HOME, ['homeSig' => 'efg890', 'homeType' => '', 'farSystemID' => 0, 'farSig' => '', 'farType' => ''], '2026-02-10 05:00:00', ['wormholeID' => 900030]);
+check('firstSeen moves earlier, never later', $db->query('SELECT firstSeen, lastUpdated FROM fork_hole_log WHERE id = ' . (int) $id2)->fetch(PDO::FETCH_NUM), ['2026-02-09 08:00:00', '2026-02-10 05:00:00']);
 $db->prepare("DELETE FROM fork_hole_log WHERE maskID = ? AND firstSeen < '2026-03-01'")->execute([MASK_A]);
 
 // ---- 4. backfill ----
@@ -236,6 +289,44 @@ check('backfill plan', $planBrief, [
 ]);
 check('backfill plan times', [$plan[0]['at'], $plan[0]['lastAt'], $plan[3]['lastAt']], ['2026-10-01 10:00:00', '2026-10-01 11:00:00', '2026-10-04 12:00:00']);
 
+// A pasted hole (no far signature id) filled in later by the Sig dialog, as the audit log wrote it before it kept `wh`:
+// the far signature update has no old id, the wormhole update names the far id the plan never saw
+$pasted = [
+    $audit(21, '2026-10-07 10:00:00', 'add', HOME, 11, '', ['type' => '', 'life' => 'stable', 'mass' => 'stable', 'from' => 'ABC123']),
+    $audit(22, '2026-10-07 10:05:00', 'update', C5A, 0, 'XYZ789', ['id' => 'XYZ789', 'changes' => ['signatureID' => ['', 'xyz789'], 'systemID' => [11, C5A]]]),
+    $audit(23, '2026-10-07 10:05:00', 'update', HOME, C5A, 'H296', ['from' => 'ABC123', 'to' => 'XYZ789', 'changes' => ['type' => ['', 'H296'], 'parent' => ['', 'initial']]]),
+];
+$p = holestats_backfill_plan($pasted, HOME, ['H296'], $data);
+check('plan: paste in home, then the dialog fills far sig, leads-to and type', [$p[0]['view'], $p[0]['guessed'], $p[0]['lastAt']],
+    [['homeSig' => 'abc123', 'homeType' => 'H296', 'farSystemID' => C5A, 'farSig' => 'xyz789', 'farType' => 'K162'], false, '2026-10-07 10:05:00']);
+// the same without the signature row (only the wormhole row): the far system comes from the wormhole row's systems
+$p = holestats_backfill_plan([$pasted[0], $pasted[2]], HOME, ['H296'], $data);
+check('plan: the wormhole row alone gives the far id and system', [$p[0]['view']['farSig'], $p[0]['view']['farSystemID'], $p[0]['view']['homeType']], ['xyz789', C5A, 'H296']);
+// leads-to set with no far id and no wormhole change: applied when only one hole of home lacks a far id ...
+$p = holestats_backfill_plan([$pasted[0], $audit(24, '2026-10-07 11:00:00', 'update', C5A, 0, '', ['id' => '', 'changes' => ['systemID' => [11, C5A]]])], HOME, ['H296'], $data);
+check('plan: leads-to without a far id, one candidate', $p[0]['view']['farSystemID'], C5A);
+// ... and left alone when it is ambiguous
+$two = [$pasted[0], $audit(25, '2026-10-07 10:30:00', 'add', HOME, 11, '', ['type' => '', 'from' => 'DEF456']),
+    $audit(26, '2026-10-07 11:00:00', 'update', C5A, 0, '', ['id' => '', 'changes' => ['systemID' => [11, C5A]]])];
+$p = holestats_backfill_plan($two, HOME, ['H296'], $data);
+check('plan: leads-to without a far id, two candidates: not applied', [$p[0]['view']['farSystemID'], $p[1]['view']['farSystemID']], [0, 0]);
+// rows that carry the wormhole id (`wh`) are followed by it, even with no signature ids at all
+$withWh = [
+    $audit(31, '2026-10-08 10:00:00', 'add', C5B, HOME, '', ['type' => '', 'parent' => 'initial', 'wh' => 501]),   // automapped into home
+    $audit(32, '2026-10-08 10:01:00', 'add', HOME, 11, '', ['type' => '', 'parent' => 'initial', 'from' => 'GHI789', 'wh' => 502]),
+    $audit(33, '2026-10-08 11:00:00', 'update', HOME, 0, 'JKL012', ['id' => 'JKL012', 'changes' => ['signatureID' => ['', 'jkl012']], 'wh' => 501]),
+    $audit(34, '2026-10-08 11:00:00', 'update', C5B, HOME, 'H296', ['from' => '', 'to' => 'JKL012', 'changes' => ['type' => ['', 'H296'], 'parent' => ['initial', 'secondary']], 'wh' => 501]),
+    $audit(35, '2026-10-08 12:00:00', 'update', HS, 0, 'MNO345', ['id' => 'MNO345', 'changes' => ['signatureID' => ['', 'mno345'], 'systemID' => [11, HS]], 'wh' => 502]),
+    $audit(36, '2026-10-08 12:00:00', 'update', HOME, HS, 'M555', ['from' => 'GHI789', 'to' => 'MNO345', 'changes' => ['type' => ['', 'M555'], 'parent' => ['initial', 'secondary']], 'wh' => 502]),
+];
+$p = holestats_backfill_plan($withWh, HOME, ['H296'], $data);
+check('plan: followed by wormhole id', array_map(function ($x) { return [$x['view']['homeSig'], $x['view']['homeType'], $x['view']['farSystemID'], $x['view']['farType'], $x['guessed']]; }, $p),
+    [['jkl012', 'H296', C5B, 'K162', false], ['ghi789', 'K162', HS, 'M555', false]]);
+// new audit rows with parent 'initial' and no type (a paste): nothing known, not a K162
+$p = holestats_backfill_plan([$audit(41, '2026-10-09 10:00:00', 'add', C5A, HOME, '', ['type' => '', 'parent' => 'initial', 'from' => 'PQR678', 'to' => 'STU901'])], HOME, ['H296'], $data);
+check('plan: a typeless hole with a parent is not inbound', [$p[0]['view']['homeType'], $p[0]['view']['farType']], ['', '']);
+check('guess: a literal K162 with no parent is taken as the initial end', holestats_guess_side('K162', 'b', C5A, HOME, ['H296'], $data), ['a', true]);
+
 $db->prepare("DELETE FROM fork_hole_log WHERE maskID = ?")->execute([MASK_A]);
 // audit rows in the database for the real backfill: a static (exact parent) and an inbound K162, plus one already on the map
 $ins = $db->prepare('INSERT INTO fork_audit_log (maskID, at, characterID, characterName, entity, action, systemID, toSystemID, subject, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -261,6 +352,13 @@ $db->exec("DELETE FROM fork_hole_log_backfill WHERE maskID = '" . MASK_A . "'");
 holestats_backfill($db, MASK_A, HOME);
 check('a re-run (stamp deleted) never duplicates', count(log_rows()), count($r));
 check('no home: no backfill', holestats_backfill($db, MASK_A, 0), null);
+// the stamp: a backfill still running is left alone; one that died (stale claim) is run again by the next open
+$db->prepare("UPDATE fork_hole_log_backfill SET state = 'running', doneAt = UTC_TIMESTAMP() WHERE maskID = ?")->execute([MASK_A]);
+check('a running backfill: no second one, no stamp to show', holestats_backfill($db, MASK_A, HOME), null);
+$db->prepare("UPDATE fork_hole_log_backfill SET doneAt = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 11 MINUTE) WHERE maskID = ?")->execute([MASK_A]);
+$again = holestats_backfill($db, MASK_A, HOME);
+check('a stale claim is taken over and finished', [is_array($again), $again['capped'] ?? null, count(log_rows())], [true, false, count($r)]);
+check('stamp done', $db->query("SELECT state FROM fork_hole_log_backfill WHERE maskID = '" . MASK_A . "'")->fetchColumn(), 'done');
 
 // ---- 5. public/hole_stats.php ----
 $db->prepare('INSERT INTO masks (maskID, name, ownerID, ownerType) VALUES (?, ?, ?, 1373)')->execute([MASK_A, 'Hole stats A', OTHER]);
