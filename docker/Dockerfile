@@ -37,7 +37,7 @@ RUN npx gulp --gulpfile docker/gulpfile.dev.js --cwd . js css
 # - upstream's analytics.inc.php / donation_panel.inc (replaced by docker/ versions below) and
 #   public/donate.html (unlinked upstream PayPal redirect page)
 # - .docker/ except mysql/tripwire.sql, which the entrypoint imports
-FROM --platform=$BUILDPLATFORM php:8.5.13-fpm-alpine3.24 AS src
+FROM --platform=$BUILDPLATFORM php:8.6.0-fpm-alpine3.24 AS src
 
 WORKDIR /src
 COPY . .
@@ -68,9 +68,9 @@ RUN defines=$(grep -o 'define(' settings.php | wc -l) \
 # PHP security release (Dependabot proposes them). CI's "PHP syntax" job reads the version from here and fails
 # when docker-compose.dev.yml's PHP image differs
 ############################################################
-FROM php:8.5.13-fpm-alpine3.24 AS runtime
+FROM php:8.6.0-fpm-alpine3.24 AS runtime
 
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.3/install-php-extensions /usr/local/bin/
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.13.4/install-php-extensions /usr/local/bin/
 # apk upgrade: take Alpine security fixes (OpenSSL, musl, ...) released since the PHP base image was built;
 # nginx and the other packages below come from the Alpine repo at build time, so every release picks up their fixes
 RUN apk upgrade --no-cache \
