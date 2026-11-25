@@ -1,0 +1,603 @@
+<?php
+// Fork-owned: Hole statistics, the research log of the holes of a mask's home system (see docker/README.md#hole-statistics).
+//
+// One row per wormhole seen with one end in the mask's home system (Mask Admin > Discord > Home system, the only home a
+// mask has): home's statics going out and the holes coming in. A row holds what is known of the hole (the home-side
+// signature id and type, the far system and type) and fills in as people do: the type set later, the far side found
+// later. Nothing is classified here: Hole statistics in the browser (app/js/fork/hole-roll-stats.js) decides at read time
+// what is a static roll (home-side type is one of home's statics), an inbound hole (home side is a K162) or neither.
+//
+// Recording: signatures.php calls holestats_touch_wormhole / holestats_touch_signature after each wormhole write (dialog
+// adds and edits, pastes, the automapper, undo/redo), and the holes a request touched are read and saved once, when the
+// request ends (holestats_flush). So no client has to be open and nothing depends on a setting. A hole deleted and added
+// again (a re-paste) is the same hole: the same home-side signature id within HOLESTATS_MERGE_HOURS of its first sighting
+// is merged into its row. Rows are kept for ever (they are small, and they are the research data).
+//
+// Backfill: the first time Hole statistics is opened for a mask and home, the holes of home are read once from the audit
+// log (fork_audit_log, AUDIT_LOG_DAYS of history) and from the map as it is now; a stamp per mask and home makes it run
+// once, and re-running never duplicates (the audit row id is unique per mask, and the merge rule above).
+//
+// Never breaks a save: every hook catches everything and only logs to the PHP error log (like the audit log).
+
+const HOLESTATS_DDL = "CREATE TABLE IF NOT EXISTS `fork_hole_log` (
+      `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+      `maskID` decimal(12,1) NOT NULL,
+      `homeSystemID` int NOT NULL,
+      `wormholeID` int NOT NULL DEFAULT 0,
+      `auditID` bigint unsigned NULL DEFAULT NULL,
+      `homeSig` varchar(10) NOT NULL DEFAULT '',
+      `homeType` varchar(12) NOT NULL DEFAULT '',
+      `farSystemID` int NOT NULL DEFAULT 0,
+      `farSig` varchar(10) NOT NULL DEFAULT '',
+      `farType` varchar(12) NOT NULL DEFAULT '',
+      `firstSeen` datetime NOT NULL,
+      `lastUpdated` datetime NOT NULL,
+      `source` varchar(8) NOT NULL DEFAULT 'live',
+      `guessed` tinyint NOT NULL DEFAULT 0,
+      PRIMARY KEY (`id`),
+      UNIQUE KEY `mask_audit` (`maskID`, `auditID`),
+      KEY `mask_home` (`maskID`, `homeSystemID`, `firstSeen`),
+      KEY `mask_wormhole` (`maskID`, `wormholeID`),
+      KEY `mask_sig` (`maskID`, `homeSystemID`, `homeSig`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci";
+
+const HOLESTATS_BACKFILL_DDL = "CREATE TABLE IF NOT EXISTS `fork_hole_log_backfill` (
+      `maskID` decimal(12,1) NOT NULL,
+      `homeSystemID` int NOT NULL,
+      `doneAt` datetime NOT NULL,
+      `rows` int NOT NULL DEFAULT 0,
+      `state` varchar(8) NOT NULL DEFAULT 'done',
+      `capped` tinyint NOT NULL DEFAULT 0,
+      PRIMARY KEY (`maskID`, `homeSystemID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci";
+
+const HOLESTATS_MERGE_HOURS = 48;     // same home-side signature id within this long of the first sighting = same hole
+const HOLESTATS_READ_MAX = 20000;     // rows the read endpoint returns (newest first)
+const HOLESTATS_AUDIT_MAX = 50000;    // audit rows the backfill reads (the newest; only rows that can concern home)
+const HOLESTATS_AUDIT_PAGE = 5000;    // ... read this many at a time
+const HOLESTATS_BACKFILL_STALE_MINUTES = 10;   // a backfill still 'running' after this long died (e.g. out of memory): run it again
+const HOLESTATS_TOUCH_MAX = 500;      // wormholes / signatures one request may queue
+// app/js/tripwire/genericSystemTypes.js: a signature whose far side isn't known stores the index into this list as systemID
+const HOLESTATS_GENERIC = ['Null-Sec', 'Low-Sec', 'High-Sec', 'Class-1', 'Class-2', 'Class-3', 'Class-4', 'Class-5', 'Class-6', 'Class-13',
+    'Triglavian', 'Unknown', 'Unknown (small)', 'Dangerous', 'Class-14', 'Class-15', 'Class-16', 'Class-17', 'Class-18'];
+
+/** Run $fn; create the tables and run it again when one is missing */
+function holestats_run(PDO $db, callable $fn) {
+    try {
+        return $fn();
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S02') throw $e;
+        $db->exec(HOLESTATS_DDL);
+        $db->exec(HOLESTATS_BACKFILL_DDL);
+        return $fn();
+    }
+}
+
+function holestats_mask_ok($mask) {
+    return is_string($mask) && preg_match('/^[0-9]{1,10}\.[0-3]$/', $mask) === 1;
+}
+
+/** The mask's home system id (Mask Admin > Discord > Home system), 0 when none. $fresh: skip the per-request cache. */
+function holestats_home(PDO $db, $mask, $fresh = false) {
+    static $cache = [];
+    $mask = (string) $mask;
+    if (!$fresh && array_key_exists($mask, $cache)) return $cache[$mask];
+    $home = 0;
+    try {
+        $stmt = $db->prepare('SELECT settings FROM discord_settings WHERE maskID = ?');
+        $stmt->execute([$mask]);
+        $json = $stmt->fetchColumn();
+        $settings = is_string($json) ? json_decode($json, true) : null;
+        $value = is_array($settings) && isset($settings['homeSystemID']) ? $settings['homeSystemID'] : 0;
+        $home = is_numeric($value) && (int) $value >= 30000000 && (int) $value < 33000000 ? (int) $value : 0;
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S02') error_log('holestats: ' . $e->getMessage());   // no Discord table yet: no home
+    }
+    return $cache[$mask] = $home;
+}
+
+/** A signature id as stored ('abc123'), '' for none */
+function holestats_sig($value) {
+    $s = strtolower(trim((string) $value));
+    return preg_match('/^[a-z0-9?]{1,10}$/', $s) === 1 ? $s : '';
+}
+
+/** Whether a signature id is complete (3 letters, 3 digits): only those can identify a hole again */
+function holestats_sig_complete($sig) {
+    return is_string($sig) && preg_match('/^[a-z]{3}[0-9]{3}$/', $sig) === 1;
+}
+
+function holestats_type($value) {
+    $t = strtoupper(trim((string) $value));
+    if ($t === '' || $t === '????' || preg_match('/^[A-Z0-9?]{1,12}$/', $t) !== 1) return '';
+    return $t;
+}
+
+/**
+ * What a hole looks like from home (pure), or null when neither end is in home.
+ * $w: ['type', 'parent' ('initial'|'secondary'|null), 'aSystem', 'bSystem', 'aSig', 'bSig'] (a = initial signature).
+ * The side named by parent has the type that was entered: a real type or '????' (one end was entered as K162, the other
+ * not typed): the other side is the K162; 'K162': that side is the K162, the other is not known; no type (paste.js and
+ * the automapper add unknown holes with parent 'initial' and no type) or no parent: neither side is known.
+ * Returns ['homeSig', 'homeType', 'farSystemID' (a real system or 0), 'farSig', 'farType'].
+ */
+function holestats_view(array $w, $homeID) {
+    $homeID = (int) $homeID;
+    if ($homeID <= 0) return null;
+    $a = (int) ($w['aSystem'] ?? 0);
+    $b = (int) ($w['bSystem'] ?? 0);
+    if ($a === $homeID) $home = 'a';
+    else if ($b === $homeID) $home = 'b';
+    else return null;
+    $far = $home === 'a' ? 'b' : 'a';
+    $parent = $w['parent'] ?? null;
+    $typed = $parent === 'initial' ? 'a' : ($parent === 'secondary' ? 'b' : null);
+    $raw = strtoupper(trim((string) ($w['type'] ?? '')));
+    $sideType = function ($side) use ($typed, $raw) {
+        if ($typed === null || $raw === '') return '';
+        if ($raw === 'K162') return $typed === $side ? 'K162' : '';
+        return $typed === $side ? holestats_type($raw) : 'K162';
+    };
+    $farSystem = $far === 'a' ? $a : $b;
+    return [
+        'homeSig' => holestats_sig($w[$home . 'Sig'] ?? ''),
+        'homeType' => $sideType($home),
+        'farSystemID' => $farSystem >= 30000000 ? $farSystem : 0,
+        'farSig' => holestats_sig($w[$far . 'Sig'] ?? ''),
+        'farType' => $sideType($far),
+    ];
+}
+
+/**
+ * Save what is known of one hole of home: the row of this wormhole, else (a re-added hole) the row with the same complete
+ * home-side signature id first seen within HOLESTATS_MERGE_HOURS of $at, else a new row. Known values win over unknown ones
+ * ('' / 0 never overwrite what a row has); firstSeen only moves earlier, lastUpdated only later. $at: UTC 'Y-m-d H:i:s',
+ * when it was first seen. $opts: wormholeID, auditID, source, guessed, updatedAt (UTC, when this was learned; default $at).
+ * Returns the row id (0 when a backfill row of that audit id exists already).
+ */
+function holestats_upsert(PDO $db, $mask, $homeID, array $view, $at, array $opts = []) {
+    $wormholeID = (int) ($opts['wormholeID'] ?? 0);
+    $auditID = isset($opts['auditID']) ? (int) $opts['auditID'] : null;
+    $source = ($opts['source'] ?? 'live') === 'backfill' ? 'backfill' : 'live';
+    $guessed = !empty($opts['guessed']) ? 1 : 0;
+    $updatedAt = isset($opts['updatedAt']) ? (string) $opts['updatedAt'] : $at;   // when this was learned (lastUpdated)
+    return holestats_run($db, function () use ($db, $mask, $homeID, $view, $at, $updatedAt, $wormholeID, $auditID, $source, $guessed) {
+        $row = null;
+        if ($auditID) {
+            $stmt = $db->prepare('SELECT id FROM fork_hole_log WHERE maskID = ? AND auditID = ?');
+            $stmt->execute([$mask, $auditID]);
+            if ($stmt->fetchColumn()) return 0;   // backfilled already
+        }
+        if ($wormholeID > 0) {
+            $stmt = $db->prepare('SELECT * FROM fork_hole_log WHERE maskID = ? AND homeSystemID = ? AND wormholeID = ? ORDER BY id DESC LIMIT 1');
+            $stmt->execute([$mask, (int) $homeID, $wormholeID]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+        if (!$row && holestats_sig_complete($view['homeSig'])) {
+            $stmt = $db->prepare('SELECT * FROM fork_hole_log WHERE maskID = ? AND homeSystemID = ? AND homeSig = ?
+                AND firstSeen BETWEEN DATE_SUB(?, INTERVAL ' . HOLESTATS_MERGE_HOURS . ' HOUR) AND DATE_ADD(?, INTERVAL ' . HOLESTATS_MERGE_HOURS . ' HOUR)
+                ORDER BY ABS(TIMESTAMPDIFF(SECOND, firstSeen, ?)), id DESC LIMIT 1');
+            $stmt->execute([$mask, (int) $homeID, $view['homeSig'], $at, $at, $at]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+        if (!$row) {
+            $stmt = $db->prepare('INSERT INTO fork_hole_log (maskID, homeSystemID, wormholeID, auditID, homeSig, homeType, farSystemID, farSig, farType, firstSeen, lastUpdated, source, guessed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([$mask, (int) $homeID, $wormholeID, $auditID, $view['homeSig'], $view['homeType'], (int) $view['farSystemID'], $view['farSig'], $view['farType'], $at, max($at, $updatedAt), $source, $guessed]);
+            return (int) $db->lastInsertId();
+        }
+        $pick = function ($new, $old) { return $new !== '' && $new !== 0 ? $new : $old; };
+        // Types: a view that knows nothing never wipes known types; guessed types never replace exact ones. An exact view
+        // (the hole as it is now) replaces the types whole: a home type it knows decides both ends; when only its far end
+        // is known (a K162 there, home not typed yet) a known home type stays, unless it was the K162 the far end now is.
+        // Guessed views (old audit rows) fill in field by field.
+        $newKnown = $view['homeType'] !== '' || $view['farType'] !== '';
+        $oldKnown = $row['homeType'] !== '' || $row['farType'] !== '';
+        $oldGuessed = (int) $row['guessed'] === 1;
+        if (!$newKnown || ($guessed && $oldKnown && !$oldGuessed)) {
+            $types = [$row['homeType'], $row['farType'], (int) $oldGuessed];
+        } else if (!$guessed) {
+            $home = $view['homeType'] !== '' ? $view['homeType'] : ($row['homeType'] !== 'K162' ? $row['homeType'] : '');
+            $types = [$home, $view['farType'], 0];
+        } else {
+            $types = [$pick($view['homeType'], $row['homeType']), $pick($view['farType'], $row['farType']), $guessed && ($oldGuessed || !$oldKnown) ? 1 : 0];
+        }
+        $stmt = $db->prepare('UPDATE fork_hole_log SET wormholeID = ?, homeSig = ?, homeType = ?, farSystemID = ?, farSig = ?, farType = ?,
+            firstSeen = LEAST(firstSeen, ?), lastUpdated = GREATEST(lastUpdated, ?), guessed = ? WHERE id = ?');
+        $stmt->execute([
+            $wormholeID > 0 ? $wormholeID : (int) $row['wormholeID'],
+            $pick($view['homeSig'], $row['homeSig']),
+            $types[0],
+            $pick((int) $view['farSystemID'], (int) $row['farSystemID']),
+            $pick($view['farSig'], $row['farSig']),
+            $types[1],
+            $at,
+            $updatedAt,
+            $types[2],
+            (int) $row['id'],
+        ]);
+        return (int) $row['id'];
+    });
+}
+
+// ---- live recording (hooks in signatures.php) ----
+
+function &holestats_request_state() {
+    static $state = ['wormholes' => [], 'signatures' => [], 'db' => null, 'mask' => null, 'registered' => false];
+    return $state;
+}
+
+function holestats_queue(PDO $db, $kind, $id) {
+    try {
+        $id = (int) $id;
+        $mask = isset($_SESSION['mask']) ? (string) $_SESSION['mask'] : '';
+        if ($id <= 0 || !holestats_mask_ok($mask)) return;
+        $state = &holestats_request_state();
+        if ($state['mask'] !== null && $state['mask'] !== $mask) holestats_flush();   // never mix masks
+        if (count($state[$kind]) >= HOLESTATS_TOUCH_MAX) return;
+        $state['db'] = $db;
+        $state['mask'] = $mask;
+        $state[$kind][$id] = true;
+        if (!$state['registered']) { $state['registered'] = true; register_shutdown_function('holestats_flush'); }
+    } catch (Throwable $e) { error_log('holestats: ' . $e->getMessage()); }
+}
+
+/** A wormhole was added or changed (type, parent) */
+function holestats_touch_wormhole(PDO $db, $wormholeID) { holestats_queue($db, 'wormholes', $wormholeID); }
+
+/** A wormhole-type signature changed (its id, or where it is: the far side found) */
+function holestats_touch_signature(PDO $db, $signature) {
+    if (is_object($signature) && $signature->type === 'wormhole') holestats_queue($db, 'signatures', $signature->id);
+}
+
+/** Save the holes this request touched (runs when the request ends; tests call it directly). Never throws. */
+function holestats_flush($now = null) {
+    $state = &holestats_request_state();
+    $wormholes = array_keys($state['wormholes']);
+    $signatures = array_keys($state['signatures']);
+    $db = $state['db'];
+    $mask = $state['mask'];
+    $state['wormholes'] = [];
+    $state['signatures'] = [];
+    $state['mask'] = null;
+    if (!$db || (!$wormholes && !$signatures)) return 0;
+    try {
+        $home = holestats_home($db, $mask);
+        if ($home <= 0) return 0;
+        $now = $now === null ? time() : (int) $now;
+        $in = function ($ids) { return $ids ? implode(',', array_map('intval', $ids)) : '0'; };
+        $stmt = $db->prepare('SELECT w.id, w.type, w.parent, a.systemID AS aSystem, b.systemID AS bSystem, a.signatureID AS aSig, b.signatureID AS bSig,
+                a.lifeTime AS aTime, b.lifeTime AS bTime
+            FROM wormholes w LEFT JOIN signatures a ON a.id = w.initialID LEFT JOIN signatures b ON b.id = w.secondaryID
+            WHERE w.maskID = ? AND (w.id IN (' . $in($wormholes) . ') OR w.initialID IN (' . $in($signatures) . ') OR w.secondaryID IN (' . $in($signatures) . '))');
+        $stmt->execute([$mask]);
+        $saved = 0;
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $w) {
+            $view = holestats_view($w, $home);
+            if ($view === null) {
+                // no end in home (any more): a hole that was put in home by mistake and moved is not home's
+                holestats_run($db, function () use ($db, $mask, $home, $w) {
+                    $db->prepare("DELETE FROM fork_hole_log WHERE maskID = ? AND homeSystemID = ? AND wormholeID = ? AND source = 'live'")->execute([$mask, $home, (int) $w['id']]);
+                });
+                continue;
+            }
+            if (holestats_upsert($db, $mask, $home, $view, holestats_first_seen($w, $home, $now), ['wormholeID' => (int) $w['id'], 'updatedAt' => gmdate('Y-m-d H:i:s', $now)])) $saved++;
+        }
+        return $saved;
+    } catch (Throwable $e) {
+        error_log('holestats: ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/** When a hole of home was first seen (UTC): its home signature's creation (lifeTime, PHP's local time), never after $now */
+function holestats_first_seen(array $w, $homeID, $now) {
+    $t = strtotime((string) ((int) ($w['aSystem'] ?? 0) === (int) $homeID ? ($w['aTime'] ?? '') : ($w['bTime'] ?? '')));
+    return gmdate('Y-m-d H:i:s', $t ? min($t, (int) $now) : (int) $now);
+}
+
+// ---- backfill (once per mask and home) ----
+
+/** The game data the backfill needs: systems (class, security, factionID, statics) and wormhole types (from, leadsTo). $set replaces it (tests). */
+function holestats_game_data(?array $set = null) {
+    static $data = null;
+    if ($set !== null) $data = $set;
+    if ($data !== null) return $data;
+    $path = __DIR__ . '/../public/js/combine.js';
+    $text = is_readable($path) ? (string) file_get_contents($path) : '';
+    $start = strpos($text, '{');
+    $app = $start === false ? null : json_decode(substr($text, $start), true);
+    unset($text);
+    $data = ['systems' => [], 'wormholes' => []];
+    if (!is_array($app)) { error_log('holestats: cannot read appData'); return $data; }
+    foreach ($app['systems'] ?? [] as $id => $s) {
+        if (!is_array($s)) continue;
+        $class = is_array($s['class'] ?? null) ? ($s['class'][0] ?? null) : ($s['class'] ?? null);
+        $data['systems'][(int) $id] = ['class' => $class ? (int) $class : 0, 'security' => (float) ($s['security'] ?? 0),
+            'factionID' => (int) ($s['factionID'] ?? 0), 'statics' => is_array($s['statics'] ?? null) ? array_values($s['statics']) : []];
+    }
+    foreach ($app['wormholes'] ?? [] as $type => $w) {
+        if (!is_array($w)) continue;
+        $from = $w['from'] ?? [];
+        $data['wormholes'][strtoupper((string) $type)] = ['from' => array_values(array_map('strval', is_array($from) ? $from : [$from])), 'leadsTo' => (string) ($w['leadsTo'] ?? '')];
+    }
+    return $data;
+}
+
+/** The kind of space of a system as wormhole types name it ('Class-5', 'High-Sec', 'Triglavian'...), '' when not known */
+function holestats_space($systemID, array $data) {
+    $systemID = (int) $systemID;
+    if ($systemID >= 0 && $systemID < count(HOLESTATS_GENERIC)) {
+        $g = HOLESTATS_GENERIC[$systemID];
+        return in_array($g, ['Unknown', 'Unknown (small)', 'Dangerous'], true) ? '' : $g;   // several classes: not known
+    }
+    $s = $data['systems'][$systemID] ?? null;
+    if (!$s) return '';
+    if (!empty($s['class'])) return 'Class-' . (int) $s['class'];
+    if ((int) $s['factionID'] === 500026) return 'Triglavian';
+    return $s['security'] >= 0.45 ? 'High-Sec' : ($s['security'] > 0.0 ? 'Low-Sec' : 'Null-Sec');
+}
+
+/**
+ * Which side has the real type of a backfilled hole whose audit rows never said (rows from before the audit log kept
+ * `parent`). Pure. Returns [side ('a'|'b'|null), guessed (bool)].
+ *  - no type: neither side is known (null, not a guess);
+ *  - '????' (one side was a K162, the other not typed) or 'K162': the K162 is taken to be on the initial side, the system
+ *    the hole was added from (how the Sig dialog and pastes are used: you scan the K162 where you are) - a guess;
+ *  - a real type: the side where it can spawn and lead (wormhole from / leadsTo against both ends' space); when both
+ *    sides fit, home's static type is taken as home's static, any other type as typed on the initial side - a guess.
+ */
+function holestats_guess_side($type, $homeSide, $aSystem, $bSystem, array $statics, array $data) {
+    $type = strtoupper(trim((string) $type));
+    if ($type === '') return [null, false];
+    if ($type === '????') return ['b', true];
+    if ($type === 'K162') return ['a', true];   // entered as K162 on one end: taken as the initial end (where it was scanned)
+    $farSide = $homeSide === 'a' ? 'b' : 'a';
+    $home = holestats_space($homeSide === 'a' ? $aSystem : $bSystem, $data);
+    $far = holestats_space($homeSide === 'a' ? $bSystem : $aSystem, $data);
+    $wh = $data['wormholes'][$type] ?? null;
+    if (!$wh) return [in_array($type, $statics, true) ? $homeSide : 'a', true];
+    $fits = function ($space, array $list) { return $space === '' || in_array($space, $list, true); };
+    $out = $fits($home, $wh['from']) && $fits($far, [$wh['leadsTo']]);   // typed in home, leading out
+    $in = $fits($far, $wh['from']) && $fits($home, [$wh['leadsTo']]);    // typed on the far side, leading into home
+    if ($out && !$in) return [$homeSide, false];
+    if ($in && !$out) return [$farSide, false];
+    if (in_array($type, $statics, true)) return [$homeSide, true];
+    return ['a', true];
+}
+
+/**
+ * The holes of home in the audit log's wormhole rows (pure). $rows: fork_audit_log rows (id, at, action, systemID,
+ * toSystemID, subject, detail) of entity 'wormhole', oldest first. Returns a list of
+ * ['auditID', 'wh' (wormhole id, 0 on old rows), 'at', 'lastAt', 'view' => holestats_view()-like, 'guessed' => bool].
+ * Reconstructed: the add (both systems, both signature ids, type), later type / parent changes, where the far side leads
+ * once found and its signature id once set (signature updates; wormhole updates carry both ends' systems), signature id
+ * corrections, deletes, holes moved out of home. Rows written since the audit log keeps the wormhole id (`wh`) are matched
+ * by it; older rows by signature ids: by both, else by the home end's id when the far end had none yet (a pasted hole).
+ * Not reconstructable: which side carried the type when no row says `parent` (guessed, see holestats_guess_side); on old
+ * rows (no `wh`), a far end that got its first signature id or system in a save with no wormhole change while another
+ * hole of home also had no far id (ambiguous: not applied); holes whose home end was added elsewhere and moved to home
+ * later; anything older than the audit log's retention.
+ */
+function holestats_backfill_plan(array $rows, $homeID, array $statics, array $data) {
+    $homeID = (int) $homeID;
+    $holes = [];
+    $open = [];   // index into $holes of holes not deleted yet
+    $find = function ($test) use (&$holes, &$open) {
+        for ($i = count($open) - 1; $i >= 0; $i--) if ($test($holes[$open[$i]])) return $i;
+        return -1;
+    };
+    $homeSide = function ($h) use ($homeID) { return $h['aSystem'] === $homeID ? 'a' : 'b'; };
+    $other = function ($side) { return $side === 'a' ? 'b' : 'a'; };
+    foreach ($rows as $r) {
+        $d = is_array($r['detail']) ? $r['detail'] : json_decode((string) $r['detail'], true);
+        if (!is_array($d)) $d = [];
+        $at = (string) $r['at'];
+        $wh = isset($d['wh']) ? (int) $d['wh'] : 0;
+        $hasEnds = array_key_exists('from', $d) || array_key_exists('to', $d);
+        $from = holestats_sig($d['from'] ?? '');
+        $to = holestats_sig($d['to'] ?? '');
+        if ($r['action'] === 'add') {
+            $a = (int) $r['systemID'];
+            $b = (int) $r['toSystemID'];
+            if ($a !== $homeID && $b !== $homeID) continue;
+            $holes[] = ['auditID' => (int) $r['id'], 'wh' => $wh, 'at' => $at, 'lastAt' => $at, 'aSystem' => $a, 'bSystem' => $b, 'aSig' => $from, 'bSig' => $to,
+                'type' => isset($d['type']) ? (string) $d['type'] : (string) $r['subject'], 'parent' => $d['parent'] ?? null, 'gone' => false];
+            $open[] = count($holes) - 1;
+            continue;
+        }
+        if ($hasEnds) {
+            // a wormhole row (update / delete): by wormhole id, by both signature ids, else by the home end's id
+            $i = $wh ? $find(function ($h) use ($wh) { return $h['wh'] === $wh; }) : -1;
+            if ($i < 0) $i = $find(function ($h) use ($from, $to) { return $h['aSig'] === $from && $h['bSig'] === $to; });
+            $rowHome = (int) $r['systemID'] === $homeID ? 'a' : ((int) $r['toSystemID'] === $homeID ? 'b' : null);
+            if ($i < 0 && $rowHome !== null) {
+                $sigs = ['a' => $from, 'b' => $to];
+                $mine = $sigs[$rowHome];
+                $theirs = $sigs[$other($rowHome)];
+                $far = $other($rowHome);
+                if ($mine !== '') $i = $find(function ($h) use ($homeSide, $rowHome, $far, $mine, $theirs) {
+                    return $homeSide($h) === $rowHome && $h[$rowHome . 'Sig'] === $mine && ($h[$far . 'Sig'] === '' || $h[$far . 'Sig'] === $theirs);
+                });
+            }
+            if ($i < 0) continue;
+            $k = $open[$i];
+            if ($from !== '') $holes[$k]['aSig'] = $from;
+            if ($to !== '') $holes[$k]['bSig'] = $to;
+            if ($rowHome !== null && $rowHome === $homeSide($holes[$k])) {
+                // the row has both ends' systems as they were then: the far end's is where it leads
+                $far = $other($rowHome);
+                $holes[$k][$far . 'System'] = (int) ($far === 'a' ? $r['systemID'] : $r['toSystemID']);
+            }
+            $holes[$k]['lastAt'] = $at;
+            if ($r['action'] === 'delete') { array_splice($open, $i, 1); continue; }
+            $changes = is_array($d['changes'] ?? null) ? $d['changes'] : [];
+            if (isset($changes['type']) && is_array($changes['type']) && array_key_exists(1, $changes['type'])) $holes[$k]['type'] = (string) $changes['type'][1];
+            if (isset($changes['parent'][1]) && in_array($changes['parent'][1], ['initial', 'secondary'], true)) $holes[$k]['parent'] = $changes['parent'][1];
+            continue;
+        }
+        if ($r['action'] === 'update' && isset($d['id'])) {
+            // one wormhole signature changed: its id, or its system (where the far side leads)
+            $changes = is_array($d['changes'] ?? null) ? $d['changes'] : [];
+            $was = isset($changes['signatureID']) && is_array($changes['signatureID']) ? holestats_sig($changes['signatureID'][0] ?? '') : holestats_sig($d['id']);
+            $new = isset($changes['signatureID'][1]) ? holestats_sig($changes['signatureID'][1]) : holestats_sig($d['id']);
+            $oldSystem = isset($changes['systemID'][0]) ? (int) $changes['systemID'][0] : null;
+            $i = -1;
+            $side = null;
+            if ($wh) {
+                $i = $find(function ($h) use ($wh) { return $h['wh'] === $wh; });
+                if ($i >= 0) {
+                    $h = $holes[$open[$i]];
+                    if ($was !== '' && $h['aSig'] === $was) $side = 'a';
+                    else if ($was !== '' && $h['bSig'] === $was) $side = 'b';
+                    else if ($oldSystem !== null && $h['aSystem'] === $oldSystem && $h['bSystem'] !== $oldSystem) $side = 'a';
+                    else if ($oldSystem !== null && $h['bSystem'] === $oldSystem && $h['aSystem'] !== $oldSystem) $side = 'b';
+                    else if ($oldSystem === null && $h['aSystem'] === (int) $r['systemID'] && $h['bSystem'] !== (int) $r['systemID']) $side = 'a';   // where it is
+                    else if ($oldSystem === null && $h['bSystem'] === (int) $r['systemID'] && $h['aSystem'] !== (int) $r['systemID']) $side = 'b';
+                    else if ($h['aSig'] === '' && $h['bSig'] !== '') $side = 'a';
+                    else if ($h['bSig'] === '' && $h['aSig'] !== '') $side = 'b';
+                    if ($side === null) $i = -1;
+                }
+            }
+            if ($i < 0 && $was !== '') {
+                $i = $find(function ($h) use ($was) { return $h['aSig'] === $was || $h['bSig'] === $was; });
+                if ($i >= 0) $side = $holes[$open[$i]]['aSig'] === $was ? 'a' : 'b';
+            }
+            if ($i < 0 && $was === '') {
+                // the far end had no id yet: only when exactly one open hole of home fits (no far id, the same far system before)
+                $fits = [];
+                foreach ($open as $n => $k) {
+                    $far = $other($homeSide($holes[$k]));
+                    if ($holes[$k][$far . 'Sig'] === '' && ($oldSystem === null || $holes[$k][$far . 'System'] === $oldSystem)) $fits[] = $n;
+                }
+                if (count($fits) === 1) { $i = $fits[0]; $side = $other($homeSide($holes[$open[$i]])); }
+            }
+            if ($i < 0 || $side === null) continue;
+            $k = $open[$i];
+            if ($new !== '') $holes[$k][$side . 'Sig'] = $new;
+            if (isset($changes['systemID'][1])) {
+                $moved = (int) $changes['systemID'][1];
+                if ($side === $homeSide($holes[$k]) && $moved !== $homeID) { $holes[$k]['gone'] = true; array_splice($open, $i, 1); continue; }   // moved away from home
+                if ($side !== $homeSide($holes[$k])) $holes[$k][$side . 'System'] = $moved;
+            }
+            $holes[$k]['lastAt'] = $at;
+        }
+    }
+    $out = [];
+    foreach ($holes as $h) {
+        if ($h['gone']) continue;
+        $guessed = false;
+        $parent = $h['parent'];
+        if (!in_array($parent, ['initial', 'secondary'], true)) {
+            [$side, $guessed] = holestats_guess_side($h['type'], $homeSide($h), $h['aSystem'], $h['bSystem'], $statics, $data);
+            $parent = $side === 'a' ? 'initial' : ($side === 'b' ? 'secondary' : null);
+        }
+        $view = holestats_view(['type' => $h['type'], 'parent' => $parent, 'aSystem' => $h['aSystem'], 'bSystem' => $h['bSystem'], 'aSig' => $h['aSig'], 'bSig' => $h['bSig']], $homeID);
+        if ($view === null) continue;
+        $out[] = ['auditID' => $h['auditID'], 'wh' => $h['wh'], 'at' => $h['at'], 'lastAt' => $h['lastAt'], 'view' => $view, 'guessed' => $guessed];
+    }
+    return $out;
+}
+
+/**
+ * Backfill the holes of home once per mask and home: from the audit log, then the map as it is now (exact types, merged
+ * into the audit rows by signature id). Returns ['doneAt', 'rows', 'capped'] of the finished stamp, or null (no home, or a
+ * backfill is running right now). Never throws. The stamp is claimed as 'running' and only marked 'done' at the end; a
+ * claim older than HOLESTATS_BACKFILL_STALE_MINUTES (the request died, e.g. out of memory) is taken over by the next open.
+ */
+function holestats_backfill(PDO $db, $mask, $homeID, $now = null) {
+    $homeID = (int) $homeID;
+    if ($homeID <= 0 || !holestats_mask_ok((string) $mask)) return null;
+    $now = $now === null ? time() : (int) $now;
+    try {
+        $claimed = holestats_run($db, function () use ($db, $mask, $homeID) {
+            $stmt = $db->prepare("INSERT IGNORE INTO fork_hole_log_backfill (maskID, homeSystemID, doneAt, `rows`, state) VALUES (?, ?, UTC_TIMESTAMP(), 0, 'running')");
+            $stmt->execute([$mask, $homeID]);
+            if ($stmt->rowCount() > 0) return true;
+            $stmt = $db->prepare("UPDATE fork_hole_log_backfill SET doneAt = UTC_TIMESTAMP() WHERE maskID = ? AND homeSystemID = ? AND state = 'running'
+                AND doneAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL " . HOLESTATS_BACKFILL_STALE_MINUTES . ' MINUTE)');
+            $stmt->execute([$mask, $homeID]);
+            return $stmt->rowCount() > 0;
+        });
+        if ($claimed) {
+            // Live recording may have run before the first backfill: audit holes merge into their live rows by wormhole id
+            // (audit rows written since this feature carry it) or by home signature id within 48 h (older rows)
+            // Only rows that can concern home: wormhole rows with an end in home, and signature-level updates (toSystemID 0:
+            // a far end found or renamed). Newest first, in pages, at most HOLESTATS_AUDIT_MAX.
+            $rows = [];
+            $capped = false;
+            try {
+                $stmt = $db->prepare("SELECT id, at, action, systemID, toSystemID, subject, detail FROM fork_audit_log
+                    WHERE maskID = ? AND entity = 'wormhole' AND id < ? AND (systemID = ? OR toSystemID = ? OR (action = 'update' AND toSystemID = 0))
+                    ORDER BY id DESC LIMIT " . HOLESTATS_AUDIT_PAGE);
+                $before = PHP_INT_MAX;
+                while (true) {
+                    $stmt->execute([$mask, $before, $homeID, $homeID]);
+                    $page = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($page as $row) {
+                        if (count($rows) >= HOLESTATS_AUDIT_MAX) { $capped = true; break 2; }
+                        $rows[] = $row;
+                        $before = (int) $row['id'];
+                    }
+                    if (count($page) < HOLESTATS_AUDIT_PAGE) break;
+                }
+            } catch (PDOException $e) {
+                if ($e->getCode() !== '42S02') throw $e;   // no audit log yet: nothing to read
+            }
+            if ($capped) error_log('holestats: backfill of mask ' . $mask . ' read only the newest ' . HOLESTATS_AUDIT_MAX . ' audit rows');
+            if ($rows) {
+                $data = holestats_game_data();
+                $statics = array_map('strtoupper', $data['systems'][$homeID]['statics'] ?? []);
+                $plan = holestats_backfill_plan(array_reverse($rows), $homeID, $statics, $data);   // oldest first
+                $rows = [];
+                foreach ($plan as $h) {
+                    holestats_upsert($db, $mask, $homeID, $h['view'], $h['at'],
+                        ['auditID' => $h['auditID'], 'wormholeID' => $h['wh'], 'source' => 'backfill', 'guessed' => $h['guessed'], 'updatedAt' => $h['lastAt']]);
+                }
+            }
+            // the holes on the map now (exact: parent is known), first seen when their home signature was created
+            $stmt = $db->prepare('SELECT w.id, w.type, w.parent, a.systemID AS aSystem, b.systemID AS bSystem, a.signatureID AS aSig, b.signatureID AS bSig,
+                    a.lifeTime AS aTime, b.lifeTime AS bTime
+                FROM wormholes w JOIN signatures a ON a.id = w.initialID JOIN signatures b ON b.id = w.secondaryID
+                WHERE w.maskID = ? AND (a.systemID = ? OR b.systemID = ?)');
+            $stmt->execute([$mask, $homeID, $homeID]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $w) {
+                $view = holestats_view($w, $homeID);
+                if ($view === null) continue;
+                holestats_upsert($db, $mask, $homeID, $view, holestats_first_seen($w, $homeID, $now), ['wormholeID' => (int) $w['id'], 'source' => 'backfill']);
+            }
+            $stmt = $db->prepare("SELECT COUNT(*) FROM fork_hole_log WHERE maskID = ? AND homeSystemID = ? AND source = 'backfill'");
+            $stmt->execute([$mask, $homeID]);
+            $db->prepare("UPDATE fork_hole_log_backfill SET `rows` = ?, capped = ?, state = 'done', doneAt = UTC_TIMESTAMP() WHERE maskID = ? AND homeSystemID = ?")
+                ->execute([(int) $stmt->fetchColumn(), $capped ? 1 : 0, $mask, $homeID]);
+        }
+        $stmt = $db->prepare("SELECT doneAt, `rows`, capped FROM fork_hole_log_backfill WHERE maskID = ? AND homeSystemID = ? AND state = 'done'");
+        $stmt->execute([$mask, $homeID]);
+        $stamp = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $stamp ? ['doneAt' => $stamp['doneAt'], 'rows' => (int) $stamp['rows'], 'capped' => (int) $stamp['capped'] === 1] : null;
+    } catch (Throwable $e) {
+        error_log('holestats: backfill ' . $e->getMessage());
+        // let the next open try again (what was saved is merged, never duplicated)
+        try { $db->prepare('DELETE FROM fork_hole_log_backfill WHERE maskID = ? AND homeSystemID = ?')->execute([$mask, $homeID]); } catch (Throwable $e2) { }
+        return null;
+    }
+}
+
+// ---- reading ----
+
+/** The rows of the mask's current home, newest first (at most HOLESTATS_READ_MAX), and whether there were more */
+function holestats_rows(PDO $db, $mask, $homeID) {
+    return holestats_run($db, function () use ($db, $mask, $homeID) {
+        $stmt = $db->prepare('SELECT id, wormholeID, homeSig, homeType, farSystemID, farSig, farType, firstSeen, lastUpdated, source, guessed
+            FROM fork_hole_log WHERE maskID = ? AND homeSystemID = ? ORDER BY firstSeen DESC, id DESC LIMIT ' . (HOLESTATS_READ_MAX + 1));
+        $stmt->execute([$mask, (int) $homeID]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $capped = count($rows) > HOLESTATS_READ_MAX;
+        $rows = array_slice($rows, 0, HOLESTATS_READ_MAX);
+        foreach ($rows as &$r) {
+            foreach (['id', 'wormholeID', 'farSystemID', 'guessed'] as $k) $r[$k] = (int) $r[$k];
+        }
+        unset($r);
+        return ['rows' => $rows, 'capped' => $capped];
+    });
+}

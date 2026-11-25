@@ -722,6 +722,47 @@ or deleted which signature or wormhole on the mask, newest first, with before/af
   (either end of a wormhole), character, kind and date range (UTC); 50 per page.
 - Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/audit_log_test.php`.
 
+### Hole statistics
+
+Hole statistics (`public/hole_stats.php`, `holestats/holestats.inc.php`, `app/js/fork/hole-roll-stats.js`): research data
+on how wormholes roll, for the mask's home system. Opened from "Hole statistics" in the System info panel's links (while
+viewing home) and Ctrl+K; everyone on the mask can read it.
+
+- **Home.** The mask's home system is the one set in Mask Admin > Discord > Home system (corporation masks, set by the
+  corporation's Tripwire admins); there is no second home setting. No home: nothing is recorded and the window says how to
+  set it. Changing home starts a new set of rows (rows keep the home they were recorded for).
+- **Recording.** `signatures.php` queues the wormholes a request adds or changes (3 added lines) and, when the request
+  ends, every hole with one end in home is saved to `fork_hole_log` (created on first use; `docker/sql/hole-log.sql` is the
+  reference): home-side signature id and type (a static such as H296, `K162`, or not known), far system and type, first
+  seen / last updated (UTC). Rows fill in as people do (type set later, far side found later). The same home-side
+  signature id within 48 hours of the first sighting is the same hole (a re-paste is not a new roll). A hole moved out of
+  home (a mistake corrected) is removed. Recording is mask-wide and does not depend on anyone's Settings; it never fails a
+  save (errors go to the PHP error log).
+- **Backfill.** The first time the window is opened for a mask and home, the holes of home are read once from the
+  [audit log](#audit-log) (`AUDIT_LOG_DAYS` of history; only rows with an end in home plus signature-level updates, at
+  most the newest 50,000) and from the map as it is now (first seen = when the home signature was created). Holes
+  already recorded live are merged, not added again: by wormhole id (audit rows written since this feature carry it) or
+  by home signature id within 48 hours (older rows; a hole that existed at the update with no complete home signature
+  id and was touched afterwards may be counted twice). `fork_hole_log_backfill` stamps it: claimed as running, done at the end, a run that died
+  is taken over after 10 minutes (delete the stamp to run it again: rows are merged, never duplicated). Since this
+  feature the audit log's wormhole rows keep `parent` and the wormhole id (`wh`), so holes are followed exactly. Older
+  rows are matched by signature ids (both, else the home end's id while the far end had none, as after a paste), and
+  don't say which end carried the type: it is worked out from where the type can spawn and lead (e.g. M555 only leads
+  into a C5 from high-sec), else guessed (home's static type as the static, `????` or `K162` as a K162 on the end the
+  hole was added from) and the row is flagged `guessed`. Not reconstructable: holes older than the audit log's retention,
+  holes whose home end was added elsewhere and moved to home later, and (old rows only) a far end given its first
+  signature id or system in a save with no wormhole change while another hole of home also had no far id.
+- **Statistics.** Computed in the browser from the rows (at most 20,000, newest first): static rolls per static (rolls,
+  known destinations, distinct destinations, repeats, and the repeats expected if every roll picked one of the N systems
+  of the static's destination class at random), inbound K162s by origin type and system, and counts per ISO week, month,
+  quarter, half-year or year. Download CSV writes the rows in the browser.
+- **Retention.** Kept for ever: a row is a few hundred bytes (a busy home with 5 holes a day is about 0.5 MB a year).
+- Settings > Wormhole Jumps & Mass > Hole statistics button hides the link and the command (recording goes on).
+- Test: `docker compose -f docker-compose.dev.yml exec -T app php tests/hole_stats_test.php`. Dev data for screenshots:
+  `docker compose -f docker-compose.dev.yml exec -T app php /opt/app/docker/dev/seed-hole-stats.php` (sets the dev
+  character's corporation mask's home to J163701 and writes a year of made-up holes; `--clear` removes them again, do so
+  before running the PHP tests: the Discord flow tests expect the dev mask to have no Discord settings).
+
 ### Product analytics
 
 First-party usage statistics, so we know which fork features are used, by how many people and how often they are turned

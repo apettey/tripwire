@@ -1,6 +1,7 @@
 <?php
 
 require_once(__DIR__ . '/audit/audit.inc.php');   // fork: audit log of who changed what
+require_once(__DIR__ . '/holestats/holestats.inc.php');   // fork: Hole statistics (holes of the mask's home)
 
 class signature {
     protected $id = null;
@@ -270,6 +271,7 @@ function addWormhole($wormhole, $mysql) {
 
     if ($success) {
         audit_wormhole_added($mysql, $wormhole);
+        holestats_touch_wormhole($mysql, $wormhole->id);
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_added) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_added = wormholes_added + 1';
@@ -319,6 +321,7 @@ function updateSignature(signature $signature, $mysql) {
 
     if ($success) {
         audit_signature_updated($mysql, $auditBefore, $signature);
+        holestats_touch_signature($mysql, $signature);
         // Log the user stats
         if ($signature->type != 'wormhole') {
             $query = 'INSERT INTO statistics (userID, characterID, maskID, signatures_updated) VALUES (:userID, :characterID, :maskID, 1)
@@ -350,6 +353,7 @@ function updateWormhole(wormhole $wormhole, $mysql) {
 
     if ($success) {
         audit_wormhole_updated($mysql, $auditBefore, $wormhole);
+        holestats_touch_wormhole($mysql, $wormhole->id);
         // Log the user stats
         $query = 'INSERT INTO statistics (userID, characterID, maskID, wormholes_updated) VALUES (:userID, :characterID, :maskID, 1)
             ON DUPLICATE KEY UPDATE wormholes_updated = wormholes_updated + 1';

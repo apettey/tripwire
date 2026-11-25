@@ -247,8 +247,16 @@ function audit_signature_updated(PDO $db, $before, $signature) {
         $fields = $bothHoles ? ['signatureID', 'systemID', 'name'] : AUDIT_SIGNATURE_FIELDS;
         $changes = audit_changes($before, $after, $fields);
         if (!$changes) return;
+        $detail = ['id' => audit_clip(strtoupper((string) $after['signatureID']), 10), 'changes' => $changes];
+        if ($bothHoles) {
+            // the wormhole it belongs to: Hole statistics' backfill follows a hole by it (a far end found has no old id)
+            $stmt = $db->prepare('SELECT id FROM wormholes WHERE (initialID = ? OR secondaryID = ?) AND maskID = ? LIMIT 1');
+            $stmt->execute([(int) $after['id'], (int) $after['id'], audit_session_mask()]);
+            $wh = (int) $stmt->fetchColumn();
+            if ($wh > 0) $detail['wh'] = $wh;
+        }
         audit_record($db, audit_session_mask(), audit_session_who(), $bothHoles ? 'wormhole' : 'signature', 'update', (int) $after['systemID'], 0,
-            strtoupper((string) $after['signatureID']), ['id' => audit_clip(strtoupper((string) $after['signatureID']), 10), 'changes' => $changes]);
+            strtoupper((string) $after['signatureID']), $detail);
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }
 
@@ -270,8 +278,10 @@ function audit_signature_removed(PDO $db, $signature, $rows = 1, $hole = null) {
 
 function audit_wormhole_summary(array $w) {
     $d = ['type' => audit_clip($w['type']), 'life' => audit_clip($w['life']), 'mass' => audit_clip($w['mass'])];
+    if (!empty($w['parent'])) $d['parent'] = audit_clip($w['parent']);   // which end has the type (the other is the K162): Hole statistics' backfill reads it
     if (!empty($w['fromSig'])) $d['from'] = audit_clip(strtoupper($w['fromSig']), 10);
     if (!empty($w['toSig'])) $d['to'] = audit_clip(strtoupper($w['toSig']), 10);
+    if (!empty($w['id'])) $d['wh'] = (int) $w['id'];   // the wormhole: Hole statistics' backfill follows a hole by it
     return $d;
 }
 
@@ -293,7 +303,7 @@ function audit_wormhole_updated(PDO $db, $before, $wormhole) {
         $changes = audit_changes($before, $after, AUDIT_WORMHOLE_FIELDS);
         if (!$changes) return;
         audit_record($db, audit_session_mask(), audit_session_who(), 'wormhole', 'update', (int) $before['fromSystem'], (int) $before['toSystem'], audit_clip($after['type'], 40),
-            ['from' => audit_clip(strtoupper((string) $before['fromSig']), 10), 'to' => audit_clip(strtoupper((string) $before['toSig']), 10), 'changes' => $changes]);
+            ['from' => audit_clip(strtoupper((string) $before['fromSig']), 10), 'to' => audit_clip(strtoupper((string) $before['toSig']), 10), 'changes' => $changes, 'wh' => (int) $before['id']]);
     } catch (Throwable $e) { error_log('audit: ' . $e->getMessage()); }
 }
 
