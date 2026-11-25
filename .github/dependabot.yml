@@ -31,3 +31,9 @@ updates:
       docker:
         patterns: ["*"]
         update-types: [minor, patch]
+    # PHP: patch (security) releases only. A new PHP minor (8.6 ...) is a manual upgrade: its first tags are
+    # release candidates (8.6.0RC7 broke main), and docker-php-extension-installer and the dev compose
+    # images must move with it
+    ignore:
+      - dependency-name: php
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

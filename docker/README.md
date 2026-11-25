@@ -68,7 +68,9 @@ kill feed worker (see [Kill Reporting](#kill-reporting)) and the Discord notific
 [Discord notifications](#discord-notifications)), all under supervisord.
 PHP is the official `php:<version>-fpm-alpine` image with the patch version pinned in `docker/Dockerfile` (8.5.13), so a
 cached base layer can't ship an unpatched PHP. Dependabot opens a PR for each new patch release (it only bumps
-`docker/Dockerfile`: update the Discord mock image in `docker-compose.dev.yml` to the same version in that PR). CI's
+`docker/Dockerfile`: update the Discord mock image in `docker-compose.dev.yml` to the same version in that PR). A new
+PHP minor (8.6 ...) is a manual upgrade: `.github/dependabot.yml` ignores PHP minor and major updates, because their
+first tags are release candidates and docker-php-extension-installer has to support them first. CI's
 "PHP syntax" job reads the version from the Dockerfile, lints with `php:<version>-cli-alpine` and fails when the
 compose file's PHP differs.
 Cron runs `/etc/crontabs/www-data` as `www-data` (`system_activity` hourly, `account_update` every
