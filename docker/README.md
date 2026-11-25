@@ -560,6 +560,8 @@ wormhole signature leading into the system, on the far side of the hole (`discor
 a wormhole of the mask whose far-side signature has a name starting with a letter or digit and whose near-side signature is unnamed or a return
 bookmark `!...` (or the older `<...`); reached more than once, the shortest leading name token wins, then the lowest wormhole id; empty for
 home or a system without a named hole). `{labelSystem}` is "AABCA · J152820", or only "J152820" without a label.
+New k-space messages name the hole with `{name}` (the new system's label, else the signature ID): the default text says
+"Hole **AAA** in J124526" and the embed's Hole field "AAA B274 in J124526"; the earlier default with `{sig}` is upgraded.
 The legacy `DISCORD_WEB_HOOK` rally posts show the label the same way. Labels are signature names (user text), escaped
 like game data.
 Kill messages name the system with its label on the mask when it has one: the default texts use `{labelSystem}`

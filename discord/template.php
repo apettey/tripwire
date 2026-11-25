@@ -24,7 +24,8 @@ function discord_placeholders() {
         'labelSystem' => 'label and system, e.g. "AABCA · J123456", or only the system without a label'];
     return [
         'kspace'    => $common + $label + ['jumps' => 'e.g. "4 jumps from Jita"', 'hub' => 'closest ping system', 'hubjumps' => 'jumps to it',
-            'hubs' => 'every ping system in range, e.g. "Jita 4, Amarr 9"', 'sig' => 'signature ID of the hole', 'hole' => 'wormhole type',
+            'hubs' => 'every ping system in range, e.g. "Jita 4, Amarr 9"', 'name' => 'the hole\'s name: the chain label of the new system, e.g. AAA (its signature ID when it has none)',
+            'sig' => 'signature ID of the hole', 'hole' => 'wormhole type',
             'from' => 'system the hole is in', 'mapper' => 'who mapped it'],
         'chainKill' => $common + $label + $kill,
         'corpKill'  => $common + $label + $kill,
@@ -155,7 +156,7 @@ function discord_security_text($security) {
 /** Default templates per type */
 function discord_default_templates() {
     return [
-        'kspace'    => '{pings} New k-space connection: **{system}** ({class} {security}, {region}), {jumps}. Hole {sig} in {from}, mapped by {mapper}.',
+        'kspace'    => '{pings} New k-space connection: **{system}** ({class} {security}, {region}), {jumps}. Hole **{name}** in {from}, mapped by {mapper}.',
         'chainKill' => '{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
         'corpKill'  => '{pings} Corp kill: {victim} ({corp}) lost a {ship} in {labelSystem}, {isk} ISK, {attackers} pilots. {zkill}',
         'corpLoss'  => '{pings} Corp loss: {victim} lost a {ship} in {labelSystem}, {isk} ISK. {zkill}',
@@ -182,6 +183,8 @@ function discord_default_templates() {
     time (nobody customised it), so it is replaced by today's default (discord_template_upgrade) */
 function discord_retired_templates() {
     return [
+        // New k-space before the hole's name ({sig}, not {name})
+        'kspace' => ['template' => ['{pings} New k-space connection: **{system}** ({class} {security}, {region}), {jumps}. Hole {sig} in {from}, mapped by {mapper}.']],
         // Kills before the chain label ({system}, not {labelSystem})
         'chainKill' => ['template' => ['{pings} Kill in the chain: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK. {zkill}']],
         'corpKill'  => ['template' => ['{pings} Corp kill: {victim} ({corp}) lost a {ship} in {system}, {isk} ISK, {attackers} pilots. {zkill}']],
@@ -282,7 +285,11 @@ function discord_payload(array $ctx) {
     if ($kind === 'kspace') {
         $hubs = $ctx['hubs'] ?? [];
         $first = $hubs[0] ?? null;
+        // The hole's name, as the chain map shows it (the new system's chain label), else its signature ID
+        $sig = (string) ($ctx['sig'] ?? '');
+        $name = (string) ($ctx['label'] ?? '') !== '' ? (string) $ctx['label'] : ($sig !== '' && $sig !== '???' ? $sig : '?');
         $values += [
+            'name' => $name,
             'jumps' => $first ? $first[1] . ' jump' . ($first[1] == 1 ? '' : 's') . ' from ' . $first[0] : '',
             'hub' => $first ? $first[0] : '', 'hubjumps' => $first ? (string) $first[1] : '',
             'hubs' => implode(', ', array_map(function ($h) { return $h[0] . ' ' . $h[1]; }, $hubs)),
@@ -294,7 +301,7 @@ function discord_payload(array $ctx) {
             'title' => discord_truncate('New k-space: ' . ($ctx['system'] ?? '?'), 256),
             'description' => $where,
             'fields' => [
-                discord_field('Hole', discord_escape(trim(($ctx['sig'] ?? '') . ' ' . ($ctx['hole'] ?? '')) . ' in ' . ($ctx['from'] ?? '?'))),
+                discord_field('Hole', discord_escape(trim($name . ' ' . ($ctx['hole'] ?? '')) . ' in ' . ($ctx['from'] ?? '?'))),
                 discord_field('Mapped by', discord_escape($ctx['mapper'] ?? '')),
                 discord_field('Safe jumps', $table === '' ? '-' : "```\n" . str_replace('`', "'", $table) . "\n```", false),
                 discord_field('Links', '[Tripwire](' . ($ctx['map'] ?? '') . ') · [Dotlan](' . ($ctx['dotlan'] ?? '') . ')', false),

@@ -98,7 +98,13 @@ $kp = discord_payload(['kind' => 'kspace', 'template' => discord_default_templat
     'system' => 'Dodixie', 'security' => 0.87, 'class' => 'HS', 'region' => 'Sinq Laison', 'map' => 'https://tw.example/?system=Dodixie',
     'dotlan' => 'https://evemaps.dotlan.net/map/Sinq_Laison/Dodixie', 'hubs' => [['Jita', 6], ['Amarr', 9]], 'sig' => 'ABC-123',
     'hole' => 'K162', 'from' => 'J123456', 'mapper' => 'Some_Pilot', 'time' => 1791633600]);
-check('payload: k-space content', $kp['content'], 'New k-space connection: **Dodixie** (HS 0.9, Sinq Laison), 6 jumps from Jita. Hole ABC\\-123 in J123456, mapped by Some\\_Pilot.');
+check('payload: k-space content, signature ID without a hole name', $kp['content'], 'New k-space connection: **Dodixie** (HS 0.9, Sinq Laison), 6 jumps from Jita. Hole **ABC\\-123** in J123456, mapped by Some\\_Pilot.');
+$kn = discord_payload(['kind' => 'kspace', 'template' => discord_default_templates()['kspace'], 'ping' => '', 'system' => 'Kaaputenen',
+    'security' => 0.8, 'class' => 'HS', 'region' => 'The Citadel', 'hubs' => [['Jita', 5]], 'sig' => 'PQY-801', 'hole' => 'B274',
+    'from' => 'J124526', 'mapper' => 'Pilot', 'label' => 'AAA', 'time' => 1791633600]);
+check('payload: k-space content names the hole', $kn['content'], 'New k-space connection: **Kaaputenen** (HS 0.8, The Citadel), 5 jumps from Jita. Hole **AAA** in J124526, mapped by Pilot.');
+check('payload: k-space embed hole field', $kn['embeds'][0]['fields'][0]['value'], 'AAA B274 in J124526');
+check('k-space: the old default text is upgraded', discord_template_upgrade('kspace', 'template', discord_retired_templates()['kspace']['template'][0]), discord_default_templates()['kspace']);
 check('payload: k-space jumps table', strpos($kp['embeds'][0]['fields'][2]['value'], "Jita                   6\nAmarr                  9") !== false, true);
 
 // --- routes: the safe-route rule on a small graph ---

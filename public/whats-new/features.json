@@ -1,6 +1,12 @@
 {
   "features": [
     {
+      "pr": 193,
+      "date": "2026-11-26",
+      "title": "Discord: k-space messages name the hole",
+      "description": "The Discord message for a new k-space connection now names the hole the way your chain map does, for example \"Hole AAA in J124526\" instead of its signature ID, so you can find it on the map straight away. Holes without a name still show the signature ID.\n\nAdmins who changed the message text can add the new {name} placeholder in Mask Admin > Discord > New k-space near a ping system."
+    },
+    {
       "pr": 191,
       "date": "2026-11-25",
       "title": "Hole statistics",
