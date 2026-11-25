@@ -99,7 +99,7 @@ check('wormhole signatures alone write nothing', count_rows(), $before);
 list($ok, $wh) = addWormhole(['initialID' => $s1->id, 'secondaryID' => $s2->id, 'type' => 'h296', 'parent' => 'initial', 'life' => 'stable', 'mass' => 'stable'], $mysql);
 $r = rows(MASK_A, "entity = 'wormhole'");
 check('wormhole add: one row with both systems', [count($r), $r[0]['action'], $r[0]['systemID'], $r[0]['toSystemID'], $r[0]['subject']], [1, 'add', $A, $C, 'H296']);
-check('wormhole add: detail', $r[0]['detail'], ['type' => 'H296', 'life' => 'stable', 'mass' => 'stable', 'from' => 'XYZ789', 'to' => 'DEF456']);
+check('wormhole add: detail', $r[0]['detail'], ['type' => 'H296', 'life' => 'stable', 'mass' => 'stable', 'parent' => 'initial', 'from' => 'XYZ789', 'to' => 'DEF456']);
 
 list($ok, $w) = fetchWormhole($wh->id, $mysql);
 $w->life = 'critical';

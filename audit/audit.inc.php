@@ -270,6 +270,7 @@ function audit_signature_removed(PDO $db, $signature, $rows = 1, $hole = null) {
 
 function audit_wormhole_summary(array $w) {
     $d = ['type' => audit_clip($w['type']), 'life' => audit_clip($w['life']), 'mass' => audit_clip($w['mass'])];
+    if (!empty($w['parent'])) $d['parent'] = audit_clip($w['parent']);   // which end has the type (the other is the K162): Hole statistics' backfill reads it
     if (!empty($w['fromSig'])) $d['from'] = audit_clip(strtoupper($w['fromSig']), 10);
     if (!empty($w['toSig'])) $d['to'] = audit_clip(strtoupper($w['toSig']), 10);
     return $d;

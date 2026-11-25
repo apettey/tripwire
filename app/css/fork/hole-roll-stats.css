@@ -1,0 +1,49 @@
+/* Hole statistics (fork-owned, see app/js/fork/hole-roll-stats.js) */
+
+.dialog-hole-stats .ui-dialog-content { padding: 0; overflow: hidden; }
+.dialog-hole-stats .hrs-wrap { display: flex; flex-direction: column; height: 100%; font-size: 12px; text-align: left; color: #ccc; }
+.dialog-hole-stats .hrs-head { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: #151515; border-bottom: 1px solid #333; }
+.dialog-hole-stats .hrs-head input, .dialog-hole-stats .hrs-head select { background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 1px 4px; font-size: 12px; color-scheme: dark; }
+.dialog-hole-stats .hrs-head button { background: #222; color: #ccc; border: 1px solid #444; border-radius: 3px; padding: 3px 9px; cursor: pointer; font-size: 12px; }
+.dialog-hole-stats .hrs-head button:hover:not(:disabled) { background: #333; border-color: #777; }
+.dialog-hole-stats .hrs-head button:disabled { opacity: 0.5; cursor: default; }
+.dialog-hole-stats .hrs-spacer { flex: 1 1 auto; }
+.dialog-hole-stats .hrs-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 6px 10px 12px; }
+
+.dialog-hole-stats h4 { margin: 14px 0 6px; font-size: 13px; color: #ddd; border-bottom: 1px solid #333; font-weight: normal; }
+.dialog-hole-stats h5 { margin: 6px 0 4px; font-size: 12px; color: #aaa; font-weight: normal; }
+.dialog-hole-stats .hrs-sub { margin: 6px 0; color: #aaa; }
+.dialog-hole-stats .hrs-empty { margin: 8px 0; color: #888; font-style: italic; }
+.dialog-hole-stats .hrs-nohome { font-style: normal; color: #c9b77a; }
+.dialog-hole-stats .hrs-warn { margin: 4px 0; color: #e8a33d; }
+.dialog-hole-stats .hrs-dim { color: #888; font-size: 11px; }
+.dialog-hole-stats .hrs-notes { margin-top: 14px; padding-top: 4px; border-top: 1px solid #2a2a2a; color: #888; font-size: 11px; }
+.dialog-hole-stats .hrs-notes p { margin: 3px 0; }
+
+.dialog-hole-stats .hrs-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.dialog-hole-stats .hrs-tile { min-width: 110px; padding: 6px 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; }
+.dialog-hole-stats .hrs-tile-v { font-size: 20px; color: #fff; }
+.dialog-hole-stats .hrs-tile-l { font-size: 11px; color: #999; }
+
+.dialog-hole-stats .hrs-cols > div { margin-bottom: 8px; overflow-x: auto; }
+
+.dialog-hole-stats .hrs-table { border-collapse: collapse; width: 100%; }
+.dialog-hole-stats .hrs-table th { background: #181818; text-align: left; color: #aaa; font-weight: normal; border-bottom: 1px solid #444; padding: 3px 6px; white-space: nowrap; }
+.dialog-hole-stats .hrs-table td { padding: 2px 6px; border-bottom: 1px solid #262626; vertical-align: middle; }
+.dialog-hole-stats .hrs-table tbody tr:hover td { background: #1b2230; }
+.dialog-hole-stats .hrs-metrics { width: auto; min-width: 320px; }
+.dialog-hole-stats .hrs-metrics th { background: none; border-bottom: 1px solid #262626; }
+.dialog-hole-stats .hrs-num { text-align: right; white-space: nowrap; }
+.dialog-hole-stats .hrs-nowrap { white-space: nowrap; }
+.dialog-hole-stats tr.hrs-hot td { color: #f0c674; }
+.dialog-hole-stats th.hrs-sortable { cursor: pointer; user-select: none; }
+.dialog-hole-stats th.hrs-sortable:hover { color: #fff; }
+.dialog-hole-stats th.hrs-sorted-desc::after { content: " \25BE"; color: #8fb3e0; }
+.dialog-hole-stats th.hrs-sorted-asc::after { content: " \25B4"; color: #8fb3e0; }
+
+.dialog-hole-stats .hrs-bar { display: flex; width: 160px; height: 11px; background: #1d1d1d; border: 1px solid #333; border-radius: 2px; overflow: hidden; vertical-align: middle; }
+.dialog-hole-stats .hrs-bar > span { display: block; height: 100%; }
+.dialog-hole-stats .hrs-bar-static { background: #4f86c0; }
+.dialog-hole-stats .hrs-bar-inbound { background: #c08a3e; }
+.dialog-hole-stats .hrs-bar-other { background: #555; }
+.dialog-hole-stats .hrs-key { display: inline-block; width: 9px; height: 9px; margin: 0 2px 0 6px; vertical-align: middle; }
