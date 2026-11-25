@@ -60,7 +60,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["rageRolling.on", "rageRolling.off"], "panels": [],
       "use": ["turned_on", "filled"], "exposed": "#rage-rolling-toggle",
       "success": "turned on by >=30% of users who mark a home static as rolling, by day 28; >=70% of turn-ons fill at least one static" },
-    { "id": "holeRollStats", "try": "holeRollStats.open", "title": "Hole statistics", "section": "jumps", "prs": [], "settingsKey": "holeRollStats",
+    { "id": "holeRollStats", "try": "holeRollStats.open", "title": "Hole statistics", "section": "jumps", "prs": [191], "settingsKey": "holeRollStats",
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["holeRollStats.open"], "panels": [], "use": ["opened", "csv"],
       "exposed": "#infoLinks .hrs-info-link",
       "success": "opened by >=25% of active users of masks with a home system by day 28; >=30% of openers open it again within 30 days; turned off by <10%" },

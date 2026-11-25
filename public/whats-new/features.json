@@ -1,6 +1,15 @@
 {
   "features": [
     {
+      "pr": 191,
+      "date": "2026-11-25",
+      "title": "Hole statistics",
+      "description": "See how your home static rolls: open Hole statistics from the System info panel while viewing your home system, or press Ctrl+K and type Hole statistics. It counts every static roll, how often a new static landed in a system you had seen before (and how often pure chance would), which holes open into home by origin type and system, per week, month, quarter, half-year or year, and lets you download the holes as a CSV.\n\nTripwire now records the holes of the mask's home system (set in Mask Admin > Discord > Home system) for everyone on the mask, and fills in the last weeks from the audit log. Hide the button in Settings > Wormhole Jumps & Mass > Hole statistics button.",
+      "images": [
+        { "src": "whats-new/img/pr-191-hole-roll-stats.png", "caption": "Hole statistics of J163701: 661 static rolls, 200 repeats against 202.8 if random" }
+      ]
+    },
+    {
       "pr": 187,
       "date": "2026-11-22",
       "title": "Rage rolling mode",
