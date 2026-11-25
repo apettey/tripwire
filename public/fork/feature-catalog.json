@@ -193,7 +193,7 @@
     { "id": "killReporting", "title": "Kill Reporting", "section": "killReporting", "prs": [16, 112], "settingsKey": "killReporting",
       "stage": "core", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["clicked"], "exposed": ".kill-toast-text" },
 
-    { "id": "discordNotifications", "title": "Discord notifications", "section": "maskAdmin", "prs": [27, 45, 46, 56, 60], "settingsKey": null,
+    { "id": "discordNotifications", "title": "Discord notifications", "section": "maskAdmin", "prs": [27, 45, 46, 56, 60, 193], "settingsKey": null,
       "stage": "admin", "audience": "maskAdmin", "kind": "active", "commands": [], "panels": [], "use": ["configured"] },
     { "id": "fightHereDiscord", "title": "Fight here to Discord", "section": "markers", "prs": [28, 30, 31, 33], "settingsKey": "rallyDiscord",
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": [] },
