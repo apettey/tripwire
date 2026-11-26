@@ -86,12 +86,13 @@ const regionMapSov = {
 		return "Faction warfare: " + who + ", " + what;
 	},
 
-	/** The label under the box: "Amarr", "Minmatar 37%", "Amarr VULN", "Caldari CAPT" */
+	/** The label under the box: "Amarr", "Minmatar 37%", "Vulnerable", "Captured" (the last two in the occupier's colour:
+	"Minmatar Vulnerable" would run into the neighbouring labels; the card and tooltip name the factions) */
 	fwLabel: function(info, factions) {
 		const name = regionMapSov.factionShort(info.occupier, factions);
 		if (info.state === "contested") { return name + " " + regionMapSov.percentText(info); }
-		if (info.state === "vulnerable") { return name + " VULN"; }
-		if (info.state === "captured") { return name + " CAPT"; }
+		if (info.state === "vulnerable") { return "Vulnerable"; }
+		if (info.state === "captured") { return "Captured"; }
 		return name;
 	},
 
@@ -221,7 +222,18 @@ const regionMapSov = {
 		return now - entry.at >= me.REFRESH_MS;
 	},
 
-	/** The bar's status note: "" when all is well */
+	/** Whether a region could have faction warfare systems: any low-sec system, or a system of an empire faction.
+	@param systems appData.systems (security); data region_sov.php's answer or null */
+	fwPossible: function(ids, systems, data) {
+		return (ids || []).some(function(id) {
+			const s = systems && systems[id], sec = s ? Number(s.security) : NaN;
+			if (isFinite(sec) && sec > 0 && Math.round(sec * 10) / 10 < 0.5) { return true; }
+			const row = data && data.systems && data.systems[id];
+			return !!row && regionMapSov.isEmpire(row.f);
+		});
+	},
+
+	/** The bar's status note: "" when all is well. fwLoaded: the FW list is loaded, or the region can't have FW anyway */
 	statusText: function(data, fwLoaded) {
 		if (!data) { return ""; }
 		const notes = [];

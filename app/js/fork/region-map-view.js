@@ -287,10 +287,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			});
 		}
 
-		/** null when the overlay is off and no system is selected (the card's line needs the data too), else {on, data, ...} */
+		/** null when the overlay is off (nothing is fetched or shown then), else {on, data, ...} */
 		function sovContext(layout) {
 			const on = rm.settings(options).overlays.sov;
-			if (!rv || (!on && !state.sel)) { return null; }
+			if (!rv || !on) { return null; }
 			ensureSov(state.regionID);
 			const entry = state.sov[state.regionID] || {}, data = entry.data || null, fws = sovFw();
 			const factions = (typeof appData !== "undefined" && appData.factions) || {};
@@ -312,15 +312,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 						width: rm.BOX_W - 8, height: h.label ? 3 : 2, rx: 1.5, fill: h.colour }, L.sov);
 				}
 				if (h.label) {
-					// "you" sits under the box's left end: the label moves to the right end there
+					// "you" (a pill under the box's left end, down to bottom + 17) pushes the label below it
 					const you = pilots && pilots[s.id] && pilots[s.id].you;
-					el("text", { "class": "rm-sov-label rm-sov-" + h.kind + (h.state ? " rm-fw-" + h.state : ""), fill: h.colour, y: (bottom + 14).toFixed(1),
-						x: (you ? s.x + rm.BOX_W / 2 : s.x).toFixed(1), "text-anchor": you ? "end" : "middle" }, L.sov, h.label);
+					el("text", { "class": "rm-sov-label rm-sov-" + h.kind + (h.state ? " rm-fw-" + h.state : ""), fill: h.colour, y: (bottom + (you ? 29 : 14)).toFixed(1),
+						x: s.x.toFixed(1), "text-anchor": "middle" }, L.sov, h.label);
 				}
 				const i = sv.inc[s.id];
 				if (i) {
 					outline(L.sov, s, "rm-inc-ring", i.staging ? 2.5 : 1.5);
-					const g = el("g", { "class": "rm-inc" + (i.staging ? " rm-inc-staging" : ""), "data-id": s.id, transform: "translate(" + (s.x + rm.BOX_W / 2 + 1).toFixed(1) + " " + s.y.toFixed(1) + ")" }, L.sov);
+					const g = el("g", { "class": "rm-inc" + (i.staging ? " rm-inc-staging" : ""), "data-id": s.id, transform: "translate(" + (s.x + rm.BOX_W / 2 + 3).toFixed(1) + " " + (s.y - rm.BOX_H / 2).toFixed(1) + ")" }, L.sov);
 					el("circle", { r: i.staging ? 9 : 7 }, g);
 					el("text", { y: i.staging ? 4 : 3.5, "text-anchor": "middle" }, g, i.staging ? "\u2605" : "S");
 					el("title", null, g).textContent = rv.incursionText(i, sv.factions);
@@ -375,7 +375,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 					}).join(", "));
 				}
 			}
-			const note = sv.data ? rv.statusText(sv.data, !!sv.fw) : (!sv.fw ? "Faction warfare unavailable." : "");
+			const fwOk = !!sv.fw || !rv.fwPossible(sv.ids, appData.systems, sv.data);
+			const note = sv.data ? rv.statusText(sv.data, fwOk) : (!fwOk ? "Faction warfare unavailable." : "");
 			if (note) { parts.push("<span class='rm-vwarn'>" + e(note) + "</span>"); }
 			const html = "<span class='rm-vlabel'>Sovereignty:</span> " + parts.join(" <span class='rm-vsep'>\u00b7</span> ");
 			const $info = $bar.find(".rm-vinfo");
@@ -1027,7 +1028,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$d.on("change", "input[data-ov]", function() {
 				saveSetting({ overlay: { name: $(this).attr("data-ov"), on: this.checked } });
 				if (this.checked && $(this).attr("data-ov") === "skyhooks" && typeof forkUsage !== "undefined") { forkUsage.track("skyhooks", "opened"); }
-				if (this.checked && $(this).attr("data-ov") === "sov" && typeof forkUsage !== "undefined") { forkUsage.track("regionMapSov", "opened"); }
+				if ($(this).attr("data-ov") === "sov" && typeof forkUsage !== "undefined") { if (this.checked) { forkUsage.track("regionMapSov", "opened"); } else { forkUsage.track("regionMapSov", "turned_off"); } }
 				paint(true);
 			});
 			$d.on("change", ".rm-heat", function() { saveSetting({ heat: this.value }); paint(true); });

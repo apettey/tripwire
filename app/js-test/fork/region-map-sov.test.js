@@ -51,8 +51,8 @@ describe('Region map sovereignty', () => {
 		it('labels the box', () => {
 			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[5]), factions), 'Minmatar 37%');
 			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[6]), factions), 'Caldari');
-			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[8]), factions), 'Caldari VULN');
-			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[9]), factions), 'Minmatar CAPT');
+			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[8]), factions), 'Vulnerable');
+			assert.strictEqual(rv.fwLabel(rv.fwInfo(fwSystems[9]), factions), 'Captured');
 			const little = { owner_faction_id: 500001, occupier_faction_id: 500001, contested: 'contested', victory_points: 300, victory_points_threshold: 75000 };
 			assert.strictEqual(rv.fwLabel(rv.fwInfo(little), factions), 'Caldari <1%');
 			assert.strictEqual(rv.fwLabel(rv.fwInfo(Object.assign({}, little, { victory_points: 0 })), factions), 'Caldari 0%');
@@ -153,6 +153,15 @@ describe('Region map sovereignty', () => {
 			assert.strictEqual(rv.needsFetch({ data: { pending: true }, at: t, pendingTries: 1 }, t + rv.PENDING_MS), true);
 			assert.strictEqual(rv.needsFetch({ data: { pending: true }, at: t, pendingTries: 1 }, t + 1000), false);
 			assert.strictEqual(rv.needsFetch({ data: { pending: true }, at: t, pendingTries: rv.PENDING_MAX }, t + rv.PENDING_MS), false);
+		});
+		it('knows where faction warfare can be: low-sec or empire faction space', () => {
+			const systems = { 1: { security: -0.4 }, 2: { security: 0.3 }, 3: { security: 0.46 }, 4: { security: 0.04 } };
+			assert.strictEqual(rv.fwPossible([1], systems, data), false);
+			assert.strictEqual(rv.fwPossible([1, 2], systems, data), true);
+			assert.strictEqual(rv.fwPossible([3], systems, null), false, '0.46 shows as 0.5: high-sec');
+			assert.strictEqual(rv.fwPossible([4], systems, null), true, '0.04 shows as 0.1: low-sec');
+			assert.strictEqual(rv.fwPossible([5], {}, data), true, 'Amarr faction space');
+			assert.strictEqual(rv.fwPossible([4], {}, data), false, 'Guristas space');
 		});
 		it('says when data is missing or old', () => {
 			assert.strictEqual(rv.statusText(data, true), '');
