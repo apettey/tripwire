@@ -8,7 +8,7 @@ const regionMap = {
 	BOX_W: 74, BOX_H: 22,	// a system's box
 	STUB_LEN: 54,			// length of a gate leaving the region, from the edge of the box
 	MIN_ZOOM: 0.2, MAX_ZOOM: 6,
-	OVERLAYS: ["exits", "pilots", "fight", "route", "constellations", "skyhooks", "targets"],	// toggles in the panel header; all on by default
+	OVERLAYS: ["exits", "pilots", "fight", "route", "constellations", "skyhooks", "targets", "sov"],	// toggles in the panel header; all on by default
 	SIDE_LISTS: ["targets", "skyhooks"],	// collapsible lists in the side panel (options.regionMap.collapsed[name]; missing = open)
 	HEAT: {
 		none: { label: "No heat" },
@@ -26,7 +26,7 @@ const regionMap = {
 
 	// ---- Settings (options.regionMap) ----
 
-	/** {enabled, overlays: {exits, pilots, fight, route, constellations, skyhooks, targets}, heat, collapsed: {targets, skyhooks}}; a missing key
+	/** {enabled, overlays: {exits, pilots, fight, route, constellations, skyhooks, targets, sov}, heat, collapsed: {targets, skyhooks}}; a missing key
 	means the default (on / none / open) */
 	settings: function(opts) {
 		const o = (opts && opts.regionMap && typeof opts.regionMap === "object") ? opts.regionMap : {};
