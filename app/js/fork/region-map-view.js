@@ -5,6 +5,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 	(function() {
 		let rj = null;		// regionMapJumps (region-map-jumps.js), looked up at DOM ready like rm
 		let rs = null;		// regionMapSkyhooks (region-map-skyhooks.js), looked up at DOM ready like rm
+		let rv = null;		// regionMapSov (region-map-sov.js), looked up at DOM ready like rm
 		let rm = null;		// regionMap (region-map.js sorts after this file in the bundle, so it is looked up at DOM ready)
 		const NS = "http://www.w3.org/2000/svg";
 		const DIALOG_ID = "dialog-regionMap";
@@ -15,7 +16,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		const state = {
 			layout: null, regionID: null, sel: null, t: { k: 1, x: 0, y: 0 }, view: { w: 800, h: 500 },
 			cache: {}, loading: null, signature: "", timer: null, jumpOn: false, sessionOrigin: null, reach: { key: "", rows: {} }, jumpData: null, jumpLoading: null, jumpFailed: 0,
-			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}, skyTick: 0
+			activity: null, activityAt: 0, activityBusy: false, activityFailedAt: 0, nodes: {}, layers: {}, skyTick: 0,
+			sov: {}		// region_sov.php answers per region: {regionID: {data, at, failedAt, busy, pendingTries}}
 		};
 
 		// ---- Live data (read from Tripwire's own globals; nothing here calls a third party) ----
@@ -100,7 +102,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			while (svg.firstChild) { svg.removeChild(svg.firstChild); }
 			const world = el("g", { "class": "rm-world" }, svg);
 			const layers = { world: world };
-			["hulls", "labels", "edges", "route", "stubs", "heat", "systems", "tags"].forEach(function(name) {
+			["hulls", "labels", "edges", "route", "stubs", "heat", "systems", "sov", "tags"].forEach(function(name) {
 				layers[name] = el("g", { "class": "rm-layer rm-layer-" + name }, world);
 			});
 			state.layers = layers;
@@ -257,7 +259,137 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			ctx.jump = jumpContext(layout);
 			ctx.sky = skyContext(layout, ctx.me);
 			ctx.targets = targetsContext();
+			ctx.sov = sovContext(layout);
 			return ctx;
+		}
+
+		// ---- Sovereignty overlay (region_sov.php: one server-side copy of ESI's sovereignty map and incursions for
+		// everyone; faction warfare from app/js/fw.js's list, which Tripwire already loads) ----
+
+		/** fw.systems once app/js/fw.js has loaded the faction warfare list, else null */
+		function sovFw() { return typeof fw !== "undefined" && fw && fw.data ? fw.systems : null; }
+
+		/** Ask region_sov.php for a region when it is due (first use, every 10 min, sooner while alliances are being named) */
+		function ensureSov(regionID) {
+			const entry = state.sov[regionID];
+			if (!regionID || !rv.needsFetch(entry, Date.now())) { return; }
+			const e = state.sov[regionID] = entry || {};
+			e.busy = true;
+			$.ajax({ url: rv.URL, data: { region: regionID }, dataType: "json", cache: false }).done(function(data) {
+				if (!data || typeof data !== "object" || !data.systems) { e.failedAt = Date.now(); return; }
+				e.pendingTries = data.pending ? (e.pendingTries || 0) + 1 : 0;
+				e.data = data;
+				e.at = Date.now();
+				e.failedAt = 0;
+			}).fail(function() { e.failedAt = Date.now(); }).always(function() {
+				e.busy = false;
+				if (state.regionID === regionID) { paint(true); }
+			});
+		}
+
+		/** null when the overlay is off (nothing is fetched or shown then), else {on, data, ...} */
+		function sovContext(layout) {
+			const on = rm.settings(options).overlays.sov;
+			if (!rv || !on) { return null; }
+			ensureSov(state.regionID);
+			const entry = state.sov[state.regionID] || {}, data = entry.data || null, fws = sovFw();
+			const factions = (typeof appData !== "undefined" && appData.factions) || {};
+			const ids = layout.systems.map(function(s) { return s.id; });
+			return {
+				on: on, data: data, loading: !data && !entry.failedAt, failed: !data && !!entry.failedAt, fw: fws, factions: factions, ids: ids,
+				inc: rv.incursionIndex(data && data.incursions),
+				sig: rv.signature(ids, data, fws, factions) + "#" + (data ? [data.sov && data.sov.fetched, data.incursionsStatus && data.incursionsStatus.fetched].join("/") : "") + "#" + !!fws
+			};
+		}
+
+		/** The holder's bar and label under each box, and the incursion badge on its right edge */
+		function drawSov(L, layout, sv, pilots) {
+			if (!sv || !sv.on) { return; }
+			layout.systems.forEach(function(s) {
+				const h = rv.holder(s.id, sv.data, sv.fw, sv.factions), bottom = s.y + rm.BOX_H / 2;
+				if (h.bar) {
+					el("rect", { "class": "rm-sov-bar" + (h.label ? "" : " rm-sov-thin"), x: (s.x - rm.BOX_W / 2 + 4).toFixed(1), y: (bottom + 1.5).toFixed(1),
+						width: rm.BOX_W - 8, height: h.label ? 3 : 2, rx: 1.5, fill: h.colour }, L.sov);
+				}
+				if (h.label) {
+					// "you" (a pill under the box's left end, down to bottom + 17) pushes the label below it
+					const you = pilots && pilots[s.id] && pilots[s.id].you;
+					el("text", { "class": "rm-sov-label rm-sov-" + h.kind + (h.state ? " rm-fw-" + h.state : ""), fill: h.colour, y: (bottom + (you ? 29 : 14)).toFixed(1),
+						x: s.x.toFixed(1), "text-anchor": "middle" }, L.sov, h.label);
+				}
+				const i = sv.inc[s.id];
+				if (i) {
+					outline(L.sov, s, "rm-inc-ring", i.staging ? 2.5 : 1.5);
+					const g = el("g", { "class": "rm-inc" + (i.staging ? " rm-inc-staging" : ""), "data-id": s.id, transform: "translate(" + (s.x + rm.BOX_W / 2 + 3).toFixed(1) + " " + (s.y - rm.BOX_H / 2).toFixed(1) + ")" }, L.sov);
+					el("circle", { r: i.staging ? 9 : 7 }, g);
+					el("text", { y: i.staging ? 4 : 3.5, "text-anchor": "middle" }, g, i.staging ? "\u2605" : "S");
+					el("title", null, g).textContent = rv.incursionText(i, sv.factions);
+				}
+			});
+		}
+
+		/** The Sovereignty bar: the region's main holders, faction warfare, incursions here and elsewhere, data problems */
+		function paintSovBar(sv) {
+			const $bar = $("#" + DIALOG_ID + " .rm-vbar");
+			$bar.toggle(!!sv && sv.on);
+			if (!sv || !sv.on) { return; }
+			const e = rm.escape, parts = [];
+			if (sv.loading) { parts.push("<span class='rm-muted'>Loading sovereignty\u2026</span>"); }
+			else if (sv.failed) { parts.push("<span class='rm-vwarn'>Could not load the sovereignty data.</span>"); }
+			const legend = sv.data ? rv.legend(sv.ids, sv.data, sv.fw) : [];
+			const fws = rv.fwSummary(sv.ids, sv.fw);
+			if (legend.length) {
+				parts.push(legend.slice(0, rv.LEGEND_MAX).map(function(x) {
+					const label = x.ticker ? "[" + x.ticker + "]" : rv.shorten(x.name || "Alliance " + x.allianceID, 16);
+					return "<span class='rm-vchip' style='color:" + e(x.colour) + "' title='" + e((x.name || "Alliance " + x.allianceID) + ": " + x.count + " system" + (x.count === 1 ? "" : "s")) + "'>"
+						+ "<i style='background:" + e(x.colour) + "'></i>" + e(label) + " " + x.count + "</span>";
+				}).join("") + (legend.length > rv.LEGEND_MAX ? "<span class='rm-muted'>+" + (legend.length - rv.LEGEND_MAX) + " more</span>" : ""));
+			}
+			const npc = sv.data ? rv.factionLegend(sv.ids, sv.data, sv.fw) : [];
+			if (npc.length) {
+				parts.push(npc.slice(0, rv.LEGEND_MAX).map(function(x) {
+					const c = rv.factionColour(x.factionID);
+					return "<span class='rm-vchip' style='color:" + e(c) + "' title='" + e(rv.factionName(x.factionID, sv.factions) + ": " + x.count + " system" + (x.count === 1 ? "" : "s")) + "'>"
+						+ "<i style='background:" + e(c) + "'></i>" + e(rv.factionShort(x.factionID, sv.factions)) + " " + x.count + "</span>";
+				}).join(""));
+			}
+			if (sv.data && !legend.length && !npc.length && !fws.systems && !(sv.data.sov || {}).unavailable) { parts.push("<span class='rm-muted'>Nobody holds sovereignty here</span>"); }
+			if (fws.systems) {
+				parts.push("<span title='Faction warfare systems in this region, by occupier'>FW:</span> " + fws.occupiers.map(function(x) {
+					const c = rv.factionColour(x.factionID);
+					return "<span class='rm-vchip' style='color:" + e(c) + "' title='" + e("Occupied by " + rv.factionName(x.factionID, sv.factions) + ": " + x.count + " system" + (x.count === 1 ? "" : "s")) + "'>"
+						+ "<i style='background:" + e(c) + "'></i>" + e(rv.factionShort(x.factionID, sv.factions)) + " " + x.count + "</span>";
+				}).join("") + (fws.contested || fws.vulnerable ? "(" + [fws.contested ? fws.contested + " contested" : "", fws.vulnerable ? "<b class='rm-vwarn'>" + fws.vulnerable + " vulnerable</b>" : ""].filter(Boolean).join(", ") + ")" : ""));
+			}
+			if (sv.data) {
+				const ri = rv.regionIncursions(sv.data.incursions, sv.ids, appData.systems);
+				ri.here.forEach(function(inc) {
+					const c = state.layout.constellations.filter(function(x) { return Number(x.id) === Number(inc.constellationID); })[0];
+					parts.push("<span class='rm-vinc' title='" + e(rv.incursionText({ incursion: inc, staging: false }, sv.factions)) + "'>\u25cf Incursion in " + e(c ? c.name : "this region")
+						+ ": " + e(inc.state) + (inc.boss ? ", mothership" : "") + "</span>");
+				});
+				if (ri.elsewhere.length) {
+					const seen = {};
+					parts.push("<span class='rm-muted'>Incursions elsewhere:</span> " + ri.elsewhere.filter(function(x) { return !seen[x.regionID] && (seen[x.regionID] = true); }).map(function(x) {
+						return "<a href='#' class='rm-vregion' data-region='" + x.regionID + "' title='" + e(rv.incursionText({ incursion: x.incursion, staging: false }, sv.factions)) + "'>" + e(regionName(x.regionID)) + "</a>";
+					}).join(", "));
+				}
+			}
+			const fwOk = !!sv.fw || !rv.fwPossible(sv.ids, appData.systems, sv.data);
+			const note = sv.data ? rv.statusText(sv.data, fwOk) : (!fwOk ? "Faction warfare unavailable." : "");
+			if (note) { parts.push("<span class='rm-vwarn'>" + e(note) + "</span>"); }
+			const html = "<span class='rm-vlabel'>Sovereignty:</span> " + parts.join(" <span class='rm-vsep'>\u00b7</span> ");
+			const $info = $bar.find(".rm-vinfo");
+			if ($info.attr("data-html") !== html) { $info.html(html).attr("data-html", html); }
+		}
+
+		/** The holder and incursion lines of a system (card and tooltip) */
+		function sovLines(sv, id) {
+			if (!sv) { return []; }
+			const lines = [], h = rv.holder(id, sv.data, sv.fw, sv.factions);
+			if (h.text) { lines.push(h.text); } else if (sv.loading) { lines.push("Sov: loading\u2026"); }
+			if (sv.inc[id]) { lines.push(rv.incursionText(sv.inc[id], sv.factions)); }
+			return lines;
 		}
 
 		// ---- Targets (mask-wide, map-targets.js keeps the list: public/map_targets.php, polled every 30 s while this paints) ----
@@ -570,7 +702,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const sig = JSON.stringify([ctx.cfg, ctx.exits, ctx.pilots, ctx.fight, ctx.heat.values, ctx.route && ctx.route.path, state.sel,
 				ctx.jump && [ctx.jump.loading, ctx.jump.failed, ctx.jump.error, ctx.jump.originID, ctx.jump.cfg, ctx.jump.res && ctx.jump.res.rows],
 				sky && [sky.loading, sky.error, sky.cfg, sky.sig, sky.origins, !!sky.planets, sky.data && sky.data.fetched],
-				ctx.targets && [ctx.targets.loaded, ctx.targets.error, ctx.targets.sig]]);
+				ctx.targets && [ctx.targets.loaded, ctx.targets.error, ctx.targets.sig],
+				ctx.sov && [ctx.sov.on, ctx.sov.loading, ctx.sov.failed, ctx.sov.sig]]);
 			state.lastSky = sky;
 			state.lastTargets = ctx.targets;
 			// Countdowns (skyhook windows, target expiries) tick every 30 s
@@ -583,7 +716,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			state.skyTick = tick;
 			state.signature = sig;
 			const L = state.layers;
-			["heat", "tags", "route"].forEach(function(name) { while (L[name].firstChild) { L[name].removeChild(L[name].firstChild); } });
+			["heat", "tags", "route", "sov"].forEach(function(name) { while (L[name].firstChild) { L[name].removeChild(L[name].firstChild); } });
 			$(L.hulls).toggle(ctx.cfg.overlays.constellations);
 			$(L.labels).toggle(ctx.cfg.overlays.constellations);
 
@@ -653,6 +786,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			layout.systems.forEach(function(s) { state.nodes[s.id].sky = null; state.nodes[s.id].tnum = null; });
 			drawSky(L, layout, sky, ctx.fight, ctx.exits);
 			drawTargets(L, layout, ctx.targets);
+			drawSov(L, layout, ctx.sov, ctx.pilots);
 			if (state.sel && layout.byId[state.sel]) { outline(L.tags, layout.byId[state.sel], "rm-selected", 2.5); }
 
 			// Jump range: in range ringed, the rest dimmed, the origin marked
@@ -666,6 +800,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$("#" + DIALOG_ID + " .rm-svg").toggleClass("rm-jumping", !!jc);
 			paintJumpBar(ctx.jump);
 			paintSkyBar(sky);
+			paintSovBar(ctx.sov);
 			texts(ctx);
 		}
 
@@ -674,7 +809,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const layout = state.layout, sky = ctx.sky;
 			const jc = ctx.jump && ctx.jump.res && !ctx.jump.error ? ctx.jump : null;
 			layout.systems.forEach(function(s) {
-				let parts = [s.name + " (" + rm.secText(secOf(s)) + ")"];
+				let parts = [s.name + " (" + rm.secText(secOf(s)) + ")"].concat(ctx.sov && ctx.sov.on ? sovLines(ctx.sov, s.id) : []);
 				if (jc && jc.res.rows[s.id]) { parts.push(jumpLine(jc, s.id)); }
 				const a = activityNow() && activityNow()[s.id];
 				if (a && (a.npcKills || a.shipKills || a.shipJumps)) {
@@ -718,6 +853,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			const constellation = state.layout.constellations.filter(function(c) { return c.ids.indexOf(id) >= 0; })[0];
 			const lines = [];
 			lines.push("<div class='rm-card-sub'>" + e(constellation ? constellation.name + " · " : "") + e(state.layout.name) + "</div>");
+			sovLines(ctx.sov, id).forEach(function(t) { lines.push("<div class='rm-card-row " + (t.indexOf("Incursion") === 0 ? "rm-card-inc" : "rm-card-sov") + "'>" + e(t) + "</div>"); });
 			const hasActivity = activityNow();
 			lines.push("<div class='rm-card-row'>" + (hasActivity
 				? "Last hour: " + (a.npcKills || 0) + " NPC kills · " + (a.shipKills || 0) + " ship kills · " + (a.shipJumps || 0) + " jumps"
@@ -892,6 +1028,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 			$d.on("change", "input[data-ov]", function() {
 				saveSetting({ overlay: { name: $(this).attr("data-ov"), on: this.checked } });
 				if (this.checked && $(this).attr("data-ov") === "skyhooks" && typeof forkUsage !== "undefined") { forkUsage.track("skyhooks", "opened"); }
+				if ($(this).attr("data-ov") === "sov" && typeof forkUsage !== "undefined") { if (this.checked) { forkUsage.track("regionMapSov", "opened"); } else { forkUsage.track("regionMapSov", "turned_off"); } }
 				paint(true);
 			});
 			$d.on("change", ".rm-heat", function() { saveSetting({ heat: this.value }); paint(true); });
@@ -939,6 +1076,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				select(id);
 				centreOnSystem(id, Math.max(1, state.t.k));
 			});
+			$d.on("click", ".rm-vregion", function(e) { e.preventDefault(); show(Number($(this).attr("data-region")), null); });
 			$d.on("click", ".rm-snb", function(e) { e.preventDefault(); show(Number($(this).attr("data-region")), null); });
 			$d.on("click", ".rm-smark", function(e) { e.preventDefault(); markSkyhookTargets(); });
 
@@ -1003,8 +1141,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				if (moved) { return; }
 				show(Number($(this).attr("data-region")), Number($(this).attr("data-system")));
 			});
-			$d.on("click", ".rm-sky[data-id]", function(e) { if (moved) { return; } e.stopPropagation(); select($(this).attr("data-id")); });
-			$d.on("click", ".rm-svg", function(e) { if (!moved && !$(e.target).closest(".rm-sys, .rm-stub, .rm-sky").length) { select(null); } });
+			$d.on("click", ".rm-sky[data-id], .rm-inc[data-id]", function(e) { if (moved) { return; } e.stopPropagation(); select($(this).attr("data-id")); });
+			$d.on("click", ".rm-svg", function(e) { if (!moved && !$(e.target).closest(".rm-sys, .rm-stub, .rm-sky, .rm-inc").length) { select(null); } });
 
 			// Pan (drag) and zoom (wheel)
 			let drag = null;
@@ -1045,14 +1183,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 		}
 
 		function buildDialog() {
-			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"], ["skyhooks", "Skyhooks"], ["targets", "Targets"]];
+			const toggles = [["exits", "Chain exits"], ["pilots", "Pilots"], ["fight", "Fight here"], ["route", "Route"], ["constellations", "Constellations"], ["skyhooks", "Skyhooks"], ["targets", "Targets"], ["sov", "Sovereignty"]];
 			$("body").append(
 				"<div id='" + DIALOG_ID + "' class='hidden'><div class='rm-wrap'>"
 				+ "<div class='rm-bar'>"
 				+ "<select class='rm-region' title='Region'></select> "
 				+ "<input type='text' class='rm-goto' placeholder='Go to system or region' autocomplete='off' /> "
 				+ "<span class='rm-toggles'>" + toggles.map(function(t) {
-					return "<label><input type='checkbox' data-ov='" + t[0] + "' /> " + t[1] + "</label>";
+					return "<label" + (t[0] === "sov" ? " title='Who holds each system: alliance sovereignty, NPC factions, faction warfare and Sansha incursions'" : "") + "><input type='checkbox' data-ov='" + t[0] + "' /> " + t[1] + "</label>";
 				}).join("") + "<label title='Which systems a jump ship can reach in one jump'><input type='checkbox' data-jump /> Jump range</label></span> "
 				+ "<select class='rm-heat' title='Last hour, from the data Tripwire already loads'>" + Object.keys(rm.HEAT).map(function(k) {
 					return "<option value='" + k + "'>" + (k === "none" ? "Heat: off" : "Heat: " + rm.HEAT[k].label) + "</option>";
@@ -1072,6 +1210,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				+ "<label><input type='checkbox' data-sky='low' /> Low-sec</label>"
 				+ "<label><input type='checkbox' data-sky='null' /> Null-sec</label> <span class='rm-sinfo'></span>"
 				+ "</div>"
+				+ "<div class='rm-vbar' style='display:none'><span class='rm-vinfo'></span></div>"
 				+ "<div class='rm-stage'><svg class='rm-svg' xmlns='" + NS + "'></svg><div class='rm-side hidden'></div><div class='rm-card hidden'></div>"
 				+ "<div class='rm-hint'>Drag to pan · wheel to zoom · click a system · Shift+click marks a target · double-click opens it in Tripwire · click a gate label to cross into that region</div></div>"
 				+ "</div></div>");
@@ -1205,6 +1344,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof j
 				rm = regionMap;
 				rj = regionMapJumps;
 				rs = typeof regionMapSkyhooks !== "undefined" ? regionMapSkyhooks : null;
+				rv = typeof regionMapSov !== "undefined" ? regionMapSov : null;
 				rm.openJumps = openJumps;
 				rm.openSkyhooks = openSkyhooks;
 				if (tStore()) {

@@ -5,6 +5,7 @@ Every change to this fork gets an entry here. See [AGENTS.md](../AGENTS.md) for 
 
 | Date | Feature | Summary |
 | --- | --- | --- |
+| 2026-11-26 | [Region map: sovereignty, faction warfare and incursions](2026-11-26-region-map-sovereignty/README.md) | A "Sovereignty" overlay on the region map (on by default): alliance tickers in a stable colour per alliance, NPC faction space, FW occupier and contest %, Sansha incursions (infested ringed, staging starred); bar with the region's main holders; card line; one server-side cache of ESI's sov map (1 h) and incursions (10 min) for everyone via `region_sov.php`, alliance names resolved there |
 | 2026-11-26 | [PHP 8.6.0](2026-11-26-php-8-6-0/README.md) | Image on PHP 8.6.0 (ZTS build) with docker-php-extension-installer 2.13.4; the dev Discord mock matches |
 | 2026-11-25 | [New k-space Discord message names the hole](2026-11-25-kspace-discord-hole-name/README.md) | The new k-space Discord message and its embed name the hole by its chain label (e.g. AAA) instead of the signature ID; `{name}` placeholder, old default text upgraded |
 | 2026-11-25 | [Fix main: PHP 8.5.13, glob-parent 7](2026-11-25-fix-main-php-rc-glob-parent/README.md) | Image back on PHP 8.5.13 (Dependabot's 8.6.0RC7 failed the extension install and CI's PHP version check); the bundle build reads glob-parent 7's default export; Dependabot proposes only PHP patch releases |

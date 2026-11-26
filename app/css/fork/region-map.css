@@ -145,3 +145,28 @@
 .dialog-regionMap .rm-card-target .rm-tline { color: #f3a6e4; }
 .dialog-regionMap .rm-card-target input.rm-tnote { width: 120px; background: #0d0d0d; color: #ddd; border: 1px solid #444; padding: 1px 4px; font-size: 12px; }
 .dialog-regionMap .rm-card-target select { background: #0d0d0d; color: #ddd; border: 1px solid #444; font-size: 11px; max-width: 120px; }
+
+/* Sovereignty overlay (region-map-sov.js): the holder's colour bar and label under the box (alliance ticker, NPC faction,
+   faction warfare occupier and contest), a Sansha badge on infested systems, and the bar with the region's main holders */
+.dialog-regionMap .rm-layer-sov { pointer-events: none; }
+.dialog-regionMap .rm-layer-sov .rm-inc { pointer-events: auto; cursor: help; }
+.dialog-regionMap .rm-sov-thin { opacity: 0.55; }
+.dialog-regionMap .rm-sov-label { font-size: 10px; font-weight: bold; paint-order: stroke; stroke: #07090d; stroke-width: 3px; stroke-linejoin: round; }
+.dialog-regionMap .rm-sov-faction { font-style: italic; }
+.dialog-regionMap .rm-fw-contested, .dialog-regionMap .rm-fw-vulnerable { font-size: 11px; }
+.dialog-regionMap .rm-fw-vulnerable, .dialog-regionMap .rm-fw-captured { text-decoration: underline; }
+.dialog-regionMap .rm-inc-ring { stroke: #8ee05a; stroke-dasharray: 4 3; opacity: 0.85; }
+.dialog-regionMap .rm-inc circle { fill: #1d3a10; stroke: #8ee05a; stroke-width: 1.5; }
+.dialog-regionMap .rm-inc text { fill: #b8ff8a; font-size: 9px; font-weight: bold; }
+.dialog-regionMap .rm-inc-staging circle { fill: #8ee05a; stroke: #fff; stroke-width: 1.5; }
+.dialog-regionMap .rm-inc-staging text { fill: #10240a; font-size: 11px; }
+.dialog-regionMap .rm-vbar { flex: 0 0 auto; padding: 4px 8px; background: #11141b; border-bottom: 1px solid #2f3a4c; font-size: 12px; color: #bcc6d4; line-height: 18px; }
+.dialog-regionMap .rm-vlabel { color: #dfe8f5; font-weight: bold; margin-right: 2px; }
+.dialog-regionMap .rm-vchip { display: inline-block; margin-right: 9px; font-weight: bold; white-space: nowrap; cursor: help; }
+.dialog-regionMap .rm-vchip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+.dialog-regionMap .rm-vsep { color: #556; margin: 0 4px; }
+.dialog-regionMap .rm-vinc { color: #a8f07a; cursor: help; }
+.dialog-regionMap .rm-vbar a.rm-vregion { color: #9fc3ff; }
+.dialog-regionMap .rm-vwarn { color: #ffb070; }
+.dialog-regionMap .rm-card-sov { color: #dfe8f5; }
+.dialog-regionMap .rm-card-inc { color: #a8f07a; }

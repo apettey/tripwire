@@ -273,6 +273,12 @@ describe('regionMap settings', function() {
 		assert.strictEqual(regionMap.settings({}).overlays.skyhooks, true);
 		assert.strictEqual(regionMap.withSetting({}, { overlay: { name: 'skyhooks', on: false } }).overlays.skyhooks, false);
 	});
+	it('sovereignty overlay: on by default, can be turned off, kept when something else changes', function() {
+		assert.strictEqual(regionMap.settings({}).overlays.sov, true);
+		const off = { regionMap: regionMap.withSetting({}, { overlay: { name: 'sov', on: false } }) };
+		assert.strictEqual(off.regionMap.overlays.sov, false);
+		assert.strictEqual(regionMap.withSetting(off, { heat: 'npc' }).overlays.sov, false);
+	});
 	it('side lists: open by default, collapsed state kept when something else changes', function() {
 		assert.deepStrictEqual(regionMap.settings({}).collapsed, { targets: false, skyhooks: false });
 		const c = regionMap.withSetting({}, { collapsed: { name: 'skyhooks', on: true } });
