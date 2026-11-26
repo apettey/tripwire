@@ -1,6 +1,16 @@
 {
   "features": [
     {
+      "pr": 195,
+      "date": "2026-11-26",
+      "title": "Region map: sovereignty, faction warfare and incursions",
+      "description": "The region map now shows who holds each system: the sov-holding alliance's ticker under each box in its own colour, NPC faction space, faction warfare occupiers with how far each system is contested, and Sansha incursions (infested systems ringed in green, the staging system starred). A bar above the map lists the region's main holders and the regions with incursions; click a system to see its holder on the card.\n\nOpen the region map from a k-space system's right-click menu, the System info panel or Ctrl+K. Turn it off with the Sovereignty checkbox in the region map header.",
+      "images": [
+        { "src": "whats-new/img/pr-195-region-map-sov.png", "caption": "Delve: alliance tickers under the systems and the region's main holders in the bar" },
+        { "src": "whats-new/img/pr-195-region-map-sov-incursion.png", "caption": "Detorid: a Sansha incursion, infested systems ringed, the staging system starred" }
+      ]
+    },
+    {
       "pr": 193,
       "date": "2026-11-26",
       "title": "Discord: k-space messages name the hole",

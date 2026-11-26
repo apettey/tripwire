@@ -159,7 +159,7 @@
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.open"], "panels": [], "use": ["opened"] },
     { "id": "regionMapJumps", "title": "Jump range on the region map", "section": "routes", "prs": [100], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "active", "commands": ["regionmap.jumps"], "panels": [], "use": ["shown_range"] },
-    { "id": "regionMapSov", "title": "Sovereignty on the region map", "section": "routes", "prs": [], "settingsKey": null,
+    { "id": "regionMapSov", "title": "Sovereignty on the region map", "section": "routes", "prs": [195], "settingsKey": null,
       "stage": "intermediate", "audience": "all", "kind": "passive", "commands": [], "panels": [], "use": ["opened"], "events": ["turned_off"],
       "exposed": ".rm-vbar .rm-vlabel",
       "success": "Sovereignty bar shown (regionMapSov.shown) to >=50% of region map users (regionMap.opened) by day 28; regionMapSov.turned_off by <15% of them" },
